@@ -4000,6 +4000,14 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [auctionId,   setAuctionId]   = useState<string | null>(null)
   const [lots,         setLots]         = useState<PLot[]>([])
   const [excludedCount, setExcludedCount] = useState<number | null>(null)
+  // ⚠ Whether the sale has SAVED PROGRESS, independent of how many lots the filters left on
+  // screen. A finished sale loads ZERO lots (every one is already described and hidden), and
+  // ↺ Reset Progress used to be gated on lots.length > 0 — so the one control that lets you
+  // start the sale again vanished exactly when you needed it, and a completed run could never
+  // be re-run (Jordan, 2026-08-19, on F109).
+  const [hasSavedRun, setHasSavedRun] = useState(false)
+  // Why a load came back with nothing, so an empty screen can explain itself.
+  const [loadNote, setLoadNote] = useState<{ total: number; noPhotos: number; described: number } | null>(null)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState<string | null>(null)
   const [running,     setRunning]     = useState(false)
@@ -4168,6 +4176,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     const upper = code.trim().toUpperCase()
     if (!upper) return
     setLoading(true); setError(null); setLots([]); setAuctionId(null); setLog([]); setStage("batch"); setProgress(null); setExcludedCount(null)
+    setHasSavedRun(false); setLoadNote(null)
     try {
       // Load catalogue lots
       const catRes = await fetch(`/api/auction-ai/catalogue-lots?code=${encodeURIComponent(upper)}`)
@@ -4226,6 +4235,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (skipHasDesc && described > 0)    notes.push(`${described} already described`)
       const hiddenNote = notes.length ? ` (${notes.join(", ")} hidden)` : ""
       setLots(shown)
+      setHasSavedRun(!!savedRun)
+      setLoadNote({ total: mapped.length, noPhotos, described })
       if (savedRun) {
         const needApply = shown.filter(l => l.kpRevised && (l.kpRevised ?? "").trim() !== (l.appliedDesc ?? "").trim()).length
         addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${shown.length} lots${hiddenNote}`)
@@ -4829,7 +4840,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     })))
     setLog([])
     setProgress(null)
-    addLog("↺ Pipeline reset")
+    setHasSavedRun(false)
+    addLog("↺ Pipeline reset — load the auction again to start it from the beginning")
   }
 
   // ── Review & apply ──────────────────────────────────────────────────────────
@@ -5139,13 +5151,40 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             className="px-5 py-2 bg-[#C8A96E] hover:bg-[#b8945a] disabled:opacity-40 text-black font-semibold text-sm rounded-lg transition-colors">
             {loading ? "Loading…" : "Load Auction"}
           </button>
-          {lots.length > 0 && !running && (
+          {/* ⚠ NOT gated on lots.length — see hasSavedRun. A finished sale shows no lots. */}
+          {(lots.length > 0 || hasSavedRun) && !running && (
             <button onClick={handleReset}
               className="px-4 py-2 text-xs border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-red-500 hover:text-red-400 rounded-lg transition-colors">
               ↺ Reset Progress
             </button>
           )}
         </div>
+
+        {/* ⚠ "Nothing happened" must never look like success (RULES.md). A finished sale loads
+            ZERO lots because every one is already described and the skip toggle hides them, and
+            the screen simply went blank — leaving no way to tell a sale that is done from one
+            that failed to load, and no clue how to run it again. */}
+        {loadNote && lots.length === 0 && !running && (
+          <div className="rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3">
+            <p className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">
+              No lots to run{loadNote.total > 0 ? " — everything in this sale is filtered out" : " — this sale has no lots"}
+            </p>
+            {loadNote.total > 0 && (
+              <p className="text-sm text-blue-800/90 dark:text-blue-200/80">
+                Of {loadNote.total} lots
+                {loadNote.described > 0 && skipHasDesc && <> · <strong>{loadNote.described} already have a description</strong>, hidden by “Skip lots that already have a description”</>}
+                {loadNote.noPhotos > 0 && onlyWithPhotos && <> · {loadNote.noPhotos} without photos, hidden by “Only lots with photos”</>}
+                .
+              </p>
+            )}
+            {loadNote.described > 0 && skipHasDesc && (
+              <p className="text-sm text-blue-800/90 dark:text-blue-200/80 mt-2">
+                To run this sale again, untick <strong>“Skip lots that already have a description”</strong> and load it once more
+                {hasSavedRun && <> — and press <strong>↺ Reset Progress</strong> first, or the stages will treat every lot as already done</>}.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* A stale page can't write to the catalogue at all, and no amount of
             pressing Apply will change that — so this gets a full banner with the

@@ -865,6 +865,16 @@ Fix (he asked for exactly this: "detects those 10 didnt get ran last time and le
 
 - **Existing runs are not repaired.** The fix only covers runs from here; F103/F106 etc. still have null \`appliedDesc\` and will still show a large Review & Apply list. A one-off backfill (mark applied where the pipeline text already matches the catalogue) was offered and **not built — awaiting Jordan's word.**
 - \`POST /api/auction-ai/pipeline/lot\` spreads arbitrary client-supplied fields straight into \`prisma.pipelineLot.upsert\` (mass assignment). Session-gated and the model is innocuous, so a smell rather than a live hole.
+
+## ⚠⚠ 2026-08-19 — A FINISHED SALE COULD NOT BE RE-RUN: THE RESET BUTTON HID ITSELF
+
+Jordan, on F109: "I cant mark runs as uncomplete anyway so I can reset the progress so like the run pictured I cant start it again if I want to run it again". The screen showed "Pipeline complete — all descriptions applied for F109" and the log line "Loaded saved pipeline — stage: complete · 0 lots (1 without photos, 463 already described hidden)".
+
+A ↺ Reset Progress button ALREADY EXISTED, with DELETE /api/auction-ai/pipeline behind it — but it was rendered under \`lots.length > 0 && !running\`. A finished sale loads ZERO lots, because "Skip lots that already have a description" hides every described lot. So THE ONE CONTROL THAT LETS YOU START OVER DISAPPEARED EXACTLY WHEN IT WAS NEEDED. A catch-22, not a missing feature.
+
+Two fixes: (1) a \`hasSavedRun\` state set from pipeData.run on load, with the button gated on \`(lots.length > 0 || hasSavedRun)\` — ⚠ never re-gate this on lots.length alone, that IS the bug; (2) a zero-lot load now EXPLAINS ITSELF (RULES.md design rule 7 — never let "nothing happened" look like success), because it previously just went blank and a finished sale looked identical to one that failed to load. The panel names the numbers (total / already described / no photos), says which toggle hid them, and spells out the ORDER.
+
+⚠ THAT ORDER IS THE NON-OBVIOUS HALF. Unticking the skip toggle alone is NOT enough: handleLoad maps the saved PipelineLot statuses back onto the lots and runBatchStage filters on \`!l.batchStatus\`, so every lot arrives already carrying batchStatus "ok" and the run does nothing. BOTH steps are needed — reset AND untick — which is why the panel says so rather than leaving it to be discovered. Reset also clears hasSavedRun and its log line now names the next step.
 `,
   },
   {
