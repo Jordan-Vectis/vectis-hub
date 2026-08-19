@@ -14,6 +14,32 @@ import { prisma } from "@/lib/prisma"
 // array has changed since (or was never run) the hashes differ → pending.
 
 const MIGRATIONS = [
+  // JORDAN.SYS CV workshop (personal, /jordan) — profiles + their applications.
+  `CREATE TABLE IF NOT EXISTS "JordanCvProfile" (
+    "id"         TEXT NOT NULL PRIMARY KEY,
+    "name"       TEXT NOT NULL,
+    "data"       JSONB NOT NULL DEFAULT '{}',
+    "rawText"    TEXT NOT NULL DEFAULT '',
+    "sourceName" TEXT NOT NULL DEFAULT '',
+    "createdAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS "JordanCvApplication" (
+    "id"          TEXT NOT NULL PRIMARY KEY,
+    "profileId"   TEXT NOT NULL,
+    "jobTitle"    TEXT NOT NULL DEFAULT '',
+    "company"     TEXT NOT NULL DEFAULT '',
+    "jobText"     TEXT NOT NULL DEFAULT '',
+    "coverLetter" TEXT NOT NULL DEFAULT '',
+    "tailoredCv"  JSONB NOT NULL DEFAULT '{}',
+    "notes"       TEXT NOT NULL DEFAULT '',
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "JordanCvApplication_profileId_fkey" FOREIGN KEY ("profileId")
+      REFERENCES "JordanCvProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanCvApplication_profileId_idx" ON "JordanCvApplication"("profileId")`,
+  `CREATE INDEX IF NOT EXISTS "JordanCvApplication_createdAt_idx" ON "JordanCvApplication"("createdAt")`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "extraDetails" TEXT`,
   `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "appliedDesc" TEXT`,
   `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "favourite" BOOLEAN NOT NULL DEFAULT FALSE`,

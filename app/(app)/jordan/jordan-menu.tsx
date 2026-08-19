@@ -72,8 +72,12 @@ export default function JordanMenu() {
               <span>04 &nbsp;MCOC <span className="opacity-50">— counters, roster, deck builder, war planner &amp; champion DB</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
+            <Link href="/jordan/cv" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+              <span>05 &nbsp;CV WORKSHOP <span className="opacity-50">— upload a CV, edit it, tailor it to a job + covering letter</span></span>
+              <span className="shrink-0 font-bold">[ OPEN ]</span>
+            </Link>
             <div className={`${row} opacity-40 select-none`}>
-              <span>05 &nbsp;????????????</span>
+              <span>06 &nbsp;????????????</span>
               <span className="shrink-0">[ LOCKED ]</span>
             </div>
 

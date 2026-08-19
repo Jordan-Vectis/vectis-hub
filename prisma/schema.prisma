@@ -37,36 +37,36 @@ enum LogisticsType {
 }
 
 model User {
-  id              String      @id @default(cuid())
-  name            String
-  email           String      @unique
-  username        String?     @unique
-  password        String
-  role            String      @default("COLLECTIONS") // "ADMIN" or any custom role name from RoleDefault
-  allowedApps     String[]    @default([])
-  appPermissions  Json?
-  showScanTimer   Boolean     @default(true) // the "away / activity" prompt (long-gap check)
-  showLotTimer    Boolean     @default(false) // the little blue count-up timer shown while cataloguing a lot
-  timerYellowMins Int         @default(4)
-  timerRedMins    Int         @default(30) // "warn after" mins — house default
-  isITStaff       Boolean     @default(false) // can be assigned IT Job Board jobs
+  id                 String      @id @default(cuid())
+  name               String
+  email              String      @unique
+  username           String?     @unique
+  password           String
+  role               String      @default("COLLECTIONS") // "ADMIN" or any custom role name from RoleDefault
+  allowedApps        String[]    @default([])
+  appPermissions     Json?
+  showScanTimer      Boolean     @default(true) // the "away / activity" prompt (long-gap check)
+  showLotTimer       Boolean     @default(false) // the little blue count-up timer shown while cataloguing a lot
+  timerYellowMins    Int         @default(4)
+  timerRedMins       Int         @default(30) // "warn after" mins — house default
+  isITStaff          Boolean     @default(false) // can be assigned IT Job Board jobs
   // This person writes their descriptions themselves, so EVERY lot they create is marked
   // aiExcluded — enforced server-side in the lot-creation paths, not left to them ticking a
   // box. The wizard also hides Key Points for them and goes straight to the description.
   // ⚠ Added because cataloguers were typing a description and forgetting the tick, leaving
   // hand-written lots open to being overwritten by an AI run.
-  manualDescriptions Boolean  @default(false)
+  manualDescriptions Boolean     @default(false)
   // Lot Wizard "remember last" fields — follow the user across devices (e.g. shared iPads)
-  lastTote        String?
-  lastVendor      String?
-  lastReceipt     String?
-  departmentId    String?
-  department      Department? @relation(fields: [departmentId], references: [id])
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  lastTote           String?
+  lastVendor         String?
+  lastReceipt        String?
+  departmentId       String?
+  department         Department? @relation(fields: [departmentId], references: [id])
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  assignedSubmissions Submission[]             @relation("AssignedCataloguer")
-  createdSubmissions  Submission[]             @relation("CreatedBy")
+  assignedSubmissions Submission[]                @relation("AssignedCataloguer")
+  createdSubmissions  Submission[]                @relation("CreatedBy")
   valuations          Valuation[]
   contactLogs         ContactLog[]
   bcToken             BCToken?
@@ -325,11 +325,11 @@ model PipelineRun {
 // code), which is what makes a slice resumable: a tick processes what it can,
 // saves, and the next tick carries on from the same place.
 model PipelineQueueItem {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   code      String // auction code, e.g. "BE0126"
   auctionId String?
-  position  Int    @default(0)
-  status    String @default("QUEUED") // QUEUED | RUNNING | PAUSED | DONE | CANCELLED
+  position  Int     @default(0)
+  status    String  @default("QUEUED") // QUEUED | RUNNING | PAUSED | DONE | CANCELLED
 
   // Settings, per sale — these mirror the Auto Pipeline tab's own controls.
   preset         String  @default("")
@@ -438,7 +438,7 @@ model CatalogueAuctionFavourite {
   auctionId String
   createdAt DateTime @default(now())
 
-  user    User             @relation(fields: [userId],    references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   auction CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
 
   @@id([userId, auctionId])
@@ -446,26 +446,26 @@ model CatalogueAuctionFavourite {
 }
 
 model CatalogueAuction {
-  id                  String                   @id @default(cuid())
-  code                String                   @unique
+  id                  String                      @id @default(cuid())
+  code                String                      @unique
   name                String
   auctionDate         DateTime?
-  auctionType         String                   @default("GENERAL")
+  auctionType         String                      @default("GENERAL")
   eventName           String?
-  locked              Boolean                  @default(false)
-  finished            Boolean                  @default(false)
-  complete            Boolean                  @default(false)
-  catalogued          Boolean                  @default(false)
-  addedToBC           Boolean                  @default(false)
-  photography         Boolean                  @default(false)
-  aiRan               Boolean                  @default(false)
-  published           Boolean                  @default(false)
+  locked              Boolean                     @default(false)
+  finished            Boolean                     @default(false)
+  complete            Boolean                     @default(false)
+  catalogued          Boolean                     @default(false)
+  addedToBC           Boolean                     @default(false)
+  photography         Boolean                     @default(false)
+  aiRan               Boolean                     @default(false)
+  published           Boolean                     @default(false)
   // Review tab key point matching: "strict" (exact wording) or "relaxed"
   // (reworded facts allowed — hard tokens still exact). Set in Auction Settings.
-  reviewKpMode        String                   @default("strict")
+  reviewKpMode        String                      @default("strict")
   notes               String?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
   lots                CatalogueLot[]
   photoSessions       CataloguePhotoSession[]
   timingLogs          CatalogueTimingLog[]
@@ -614,16 +614,16 @@ model DeployChange {
 // for handing to a manager. Kept rather than regenerated so the wording someone
 // actually sent can be found again.
 model ChangeReport {
-  id         String   @id @default(cuid())
-  title      String
-  periodFrom DateTime
-  periodTo   DateTime
-  body       String   @db.Text
-  changeCount Int     @default(0)
-  model      String? // which AI wrote the first draft
-  createdBy  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  title       String
+  periodFrom  DateTime
+  periodTo    DateTime
+  body        String   @db.Text
+  changeCount Int      @default(0)
+  model       String? // which AI wrote the first draft
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([createdAt])
 }
@@ -1680,21 +1680,21 @@ model MarketingFavourite {
 // refreshed, so the PDF always shows the numbers the plan was actually based on
 // rather than whatever GA says on the day it is printed.
 model MarketingPlan {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
   periodLabel String? // free text, e.g. "Q4 2026" or "Oct–Dec"
-  status      String   @default("DRAFT") // DRAFT | ACTIVE | ARCHIVED
-  rangeKey    String   @default("28d") // GaRange the snapshot was taken over
-  ukOnly      Boolean  @default(false)
-  excludeBots Boolean  @default(false)
+  status      String    @default("DRAFT") // DRAFT | ACTIVE | ARCHIVED
+  rangeKey    String    @default("28d") // GaRange the snapshot was taken over
+  ukOnly      Boolean   @default(false)
+  excludeBots Boolean   @default(false)
   summary     String? // exec summary / where we are now, in words
   audience    String? // who we're targeting
   competitors String? // competitor notes
   snapshot    Json? // PlanSnapshot — the GA figures frozen at snapshotAt
   snapshotAt  DateTime?
   createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   objectives MarketingPlanObjective[]
   actions    MarketingPlanAction[]
@@ -2405,4 +2405,51 @@ model SavedAiFlag {
   @@index([batchId])
   @@index([auctionId])
   @@index([savedAt])
+}
+
+// ─── JORDAN.SYS — CV workshop (personal, /jordan) ────────────────────────────
+// Private to the secret menu: every route is behind isJordan(). Several PROFILES
+// so more than one person's CV can live here, each with ONE master CV plus the
+// applications tailored from it.
+//
+// ⚠ The CV itself is a JSON blob, not a table per section. This is a personal
+// tool and the shape of a CV is genuinely freeform — four more tables and their
+// joins would buy nothing, and a JSON column lets the parser add a section type
+// nobody thought of without a migration.
+model JordanCvProfile {
+  id         String   @id @default(cuid())
+  name       String // whose CV this is — "Me", "Kate"
+  // The structured CV: { name, headline, email, phone, location, links[],
+  // summary, experience[], education[], skills[], extras[] }.
+  data       Json     @default("{}")
+  // What was read out of the uploaded file, kept so a re-parse never needs the
+  // original again and so the AI can be shown the wording actually written.
+  rawText    String   @default("") @db.Text
+  sourceName String   @default("") // the uploaded file's name, for reference
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  applications JordanCvApplication[]
+}
+
+model JordanCvApplication {
+  id        String          @id @default(cuid())
+  profileId String
+  profile   JordanCvProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  jobTitle String @default("")
+  company  String @default("")
+  jobText  String @default("") @db.Text // the advert, as pasted
+
+  coverLetter String @default("") @db.Text
+  // The tailored CV, same shape as JordanCvProfile.data.
+  tailoredCv  Json   @default("{}")
+  // One line on what the AI changed and why, so an old application explains itself.
+  notes       String @default("") @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([createdAt])
 }
