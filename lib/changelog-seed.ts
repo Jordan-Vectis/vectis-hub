@@ -14,6 +14,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"3273b4f01c848d0c4e5286944978c1224157f566","author":"Jordan Orange","date":"2026-08-19T12:10:16+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"adb99e50b774e9094f159e3a3e0cdda819e3c259","author":"Jordan Orange","date":"2026-08-19T12:10:14+01:00","subject":"Add a Where it is card to the Admin Centre barcode search"},
+  {"sha":"86926e18dd21f889d8bdc345831b66bafbcb43c4","author":"Jack Collings","date":"2026-08-19T11:50:34+01:00","subject":"Refresh changelog seed"},
   {"sha":"c01b71d90e83b68c5bec355aaed768495c34577b","author":"Jack Collings","date":"2026-08-19T11:49:20+01:00","subject":"Never set a practice task the screen cannot answer"},
   {"sha":"0d38b6a78ac37e55bc0cbb091619efc8cc07d4a5","author":"Jordan Orange","date":"2026-08-19T11:45:55+01:00","subject":"Refresh changelog seed"},
   {"sha":"a8a1589a2cb20379120ccd5b145ef1599a9eb672","author":"Jordan Orange","date":"2026-08-19T11:45:53+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
