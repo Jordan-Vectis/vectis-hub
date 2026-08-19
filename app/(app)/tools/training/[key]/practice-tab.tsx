@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { accent, CARD, INPUT } from "@/lib/training-ui"
+import { panelLabel } from "@/lib/training"
 import { embedFor } from "../panel-embeds"
 import type { TrainingExerciseRow } from "@/lib/training-data"
 
@@ -189,7 +190,8 @@ function TaskPane({
     } finally { setMarking(false) }
   }
 
-  const Embed = task ? embedFor(moduleKey, task.panel) : null
+  const Embed = embedFor(moduleKey)
+  const useButton = task ? panelLabel(task.panel) : ""
 
   return (
     <div className={`grid gap-5 ${Embed && canOpenPanel ? "xl:grid-cols-[minmax(380px,460px)_minmax(0,1fr)]" : ""} items-start`}>
@@ -215,6 +217,14 @@ function TaskPane({
             </div>
 
             <p className="text-lg text-gray-700 dark:text-gray-200 leading-relaxed">{task.brief}</p>
+
+            {/* Which of the five buttons to press. The Admin Centre is one page with a single
+                search, so this is a nudge rather than a different screen to open. */}
+            {useButton && (
+              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                Use the <strong className="text-gray-700 dark:text-gray-200">{useButton}</strong> option
+              </p>
+            )}
 
             {/* ⚠ An environment with no matching data says so, rather than asking a question
                 about nothing and letting the trainee think they got it wrong. */}

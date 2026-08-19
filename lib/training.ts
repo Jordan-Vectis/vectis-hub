@@ -56,12 +56,26 @@ export function isLiveKind(v: string): boolean {
   return EXERCISE_KINDS.find(k => k.key === v)?.live === true
 }
 
-/** The Admin Centre's three tabs, so an exercise can open the right one beside itself. */
+/**
+ * The Admin Centre's five search options — the buttons under "1 · What have you got?".
+ *
+ * ⚠ These are MODES on one page, not tabs. Jordan rebuilt the panel on 2026-08-18 ("combine all
+ * the options… a single page… as simple and idiot proof as possible"), so an exercise's `panel`
+ * is now a HINT telling the trainee which button to press, not a choice of which screen to open
+ * beside them. Keys match `Mode` in app/(app)/tools/lot-lookup/lookup-client.tsx.
+ */
 export const ADMIN_CENTRE_PANELS = [
-  { key: "find", icon: "🔎", label: "Find a customer's lots" },
-  { key: "who",  icon: "👤", label: "Who catalogued this lot?" },
-  { key: "sale", icon: "🔨", label: "Who catalogued this sale?" },
+  { key: "receipt", icon: "🧾", label: "Receipt number" },
+  { key: "tote",    icon: "📦", label: "Tote number" },
+  { key: "vendor",  icon: "👤", label: "Customer number" },
+  { key: "sale",    icon: "🔨", label: "Sale and lot number" },
+  { key: "code",    icon: "🏷️", label: "Barcode" },
 ] as const
+
+export function panelLabel(key: string | null | undefined): string {
+  const p = ADMIN_CENTRE_PANELS.find(x => x.key === key)
+  return p ? `${p.icon} ${p.label}` : ""
+}
 
 /** What a lookup exercise searches by — mirrors the Admin Centre's own three modes. */
 export const LOOKUP_TYPES = ["receipt", "tote", "vendor"] as const
