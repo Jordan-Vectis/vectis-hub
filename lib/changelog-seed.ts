@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"e614dcb2e13785aa0ede0aae18b4314feb1846e1","author":"Jordan Orange","date":"2026-08-19T11:21:54+01:00","subject":"Add Conditions puts the condition on a new line"},
   {"sha":"d6bb57f302b927cdc063ea7a8ffc91df4ac50361","author":"Jack Collings","date":"2026-08-19T10:59:33+01:00","subject":"Refresh changelog seed"},
   {"sha":"830f7cb68b173f841ed6e015a861d34af71fd52f","author":"Jack Collings","date":"2026-08-19T10:58:10+01:00","subject":"Rewrite the Admin Centre deck in plain language, around why and how"},
   {"sha":"47644ed6835e1542e2d0737af536e89d623a4769","author":"Jordan Orange","date":"2026-08-19T10:54:16+01:00","subject":"Refresh changelog seed"},

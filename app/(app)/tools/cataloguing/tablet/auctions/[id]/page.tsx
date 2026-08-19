@@ -61,6 +61,7 @@ export default async function TabletAuctionDetailPage({
         brand: l.brand,
         notes: l.notes,
         status:        l.status,
+        aiExcluded:    l.aiExcluded,
         imageUrls:     l.imageUrls,
         createdAt:     l.createdAt.toISOString(),
         createdByName: l.createdByName ?? null,

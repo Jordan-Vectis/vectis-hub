@@ -46,6 +46,7 @@ interface Lot {
   brand: string | null
   notes: string | null
   status: string
+  aiExcluded: boolean
   imageUrls: string[]
   createdAt: string   // ISO string
   createdByName: string | null
@@ -492,6 +493,13 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
   // Parcel
   const [parcel, setParcel] = useState(lot?.notes ?? "")
 
+  // Excluded from AI — for a cataloguer who decides part-way through to write this
+  // lot themselves. ⚠ Held in state and always written into the FormData below:
+  // extractLotData reads `formData.get("aiExcluded") === "true"`, so a form that
+  // omits the field silently saves FALSE. Before this existed, every save from the
+  // tablet quietly un-excluded the lot.
+  const [aiExcluded, setAiExcluded] = useState(lot?.aiExcluded ?? false)
+
   // Category
   const [mainCat, setMainCat] = useState(lot?.category ?? "")
   const [subCat,  setSubCat]  = useState(lot?.subCategory ?? "")
@@ -547,6 +555,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
     fd.set("category", mainCat)
     fd.set("subCategory", subCat)
     fd.set("brand", brand)
+    fd.set("aiExcluded", aiExcluded ? "true" : "false")
     start(async () => {
       await updateLot(lot.id, auctionId, fd)
       setSaved(true)
@@ -641,6 +650,32 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
             className={`${inp} resize-none`}
           />
         </div>
+        {/* Exclude from AI — sits with the Description because that is what it governs. */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setAiExcluded(v => !v)}
+            style={{ touchAction: "manipulation" }}
+            className={`w-full flex items-center gap-3 rounded-xl border px-4 py-4 text-left transition-colors ${
+              aiExcluded ? "border-amber-500 bg-amber-500/15" : "border-gray-700 bg-[#2C2C2E]"
+            }`}
+          >
+            <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border-2 text-sm font-bold ${
+              aiExcluded ? "border-amber-500 bg-amber-500 text-[#1C1C1E]" : "border-gray-600 text-transparent"
+            }`}>✓</span>
+            <span className="min-w-0">
+              <span className={`block text-base font-semibold ${aiExcluded ? "text-amber-400" : "text-gray-300"}`}>
+                Exclude from AI
+              </span>
+              <span className="block text-sm text-gray-500">
+                {aiExcluded
+                  ? "You are writing this description yourself — the AI will skip this lot."
+                  : "The AI will write this lot's description."}
+              </span>
+            </span>
+          </button>
+        </div>
+
         {/* Description */}
         <div>
           <label className={lbl}>Description</label>
