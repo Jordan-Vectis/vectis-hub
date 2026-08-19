@@ -1587,6 +1587,45 @@ const MIGRATIONS = [
      CONSTRAINT "TrainingProgress_pkey" PRIMARY KEY ("userId", "moduleId")
    )`,
   `CREATE INDEX IF NOT EXISTS "TrainingProgress_moduleId_idx" ON "TrainingProgress"("moduleId")`,
+  // ── Admin → Saved AI Flags ──
+  // A frozen copy of the Review tab's flagged lots, taken before an AI run overwrites them.
+  // No foreign keys on purpose — an archive must outlive the lot and the sale.
+  `CREATE TABLE IF NOT EXISTS "SavedAiFlag" (
+     "id"              TEXT NOT NULL,
+     "batchId"         TEXT NOT NULL,
+     "label"           TEXT NOT NULL DEFAULT '',
+     "auctionId"       TEXT NOT NULL,
+     "auctionCode"     TEXT NOT NULL DEFAULT '',
+     "auctionName"     TEXT NOT NULL DEFAULT '',
+     "lotId"           TEXT NOT NULL,
+     "barcode"         TEXT,
+     "receiptUniqueId" TEXT,
+     "title"           TEXT NOT NULL DEFAULT '',
+     "keyPoints"       TEXT,
+     "description"     TEXT,
+     "condition"       TEXT,
+     "category"        TEXT,
+     "subCategory"     TEXT,
+     "brand"           TEXT,
+     "estimateLow"     INTEGER,
+     "estimateHigh"    INTEGER,
+     "aiEstimateLow"   INTEGER,
+     "aiEstimateHigh"  INTEGER,
+     "imageUrls"       TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+     "cataloguedBy"    TEXT,
+     "aiFlagNote"      TEXT,
+     "reviewFlag"      TEXT,
+     "reviewFlaggedBy" TEXT,
+     "reviewFlaggedAt" TIMESTAMP(3),
+     "kpFixNote"       TEXT,
+     "savedAt"         TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "savedById"       TEXT,
+     "savedByName"     TEXT NOT NULL DEFAULT '',
+     CONSTRAINT "SavedAiFlag_pkey" PRIMARY KEY ("id")
+   )`,
+  `CREATE INDEX IF NOT EXISTS "SavedAiFlag_batchId_idx" ON "SavedAiFlag"("batchId")`,
+  `CREATE INDEX IF NOT EXISTS "SavedAiFlag_auctionId_idx" ON "SavedAiFlag"("auctionId")`,
+  `CREATE INDEX IF NOT EXISTS "SavedAiFlag_savedAt_idx" ON "SavedAiFlag"("savedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

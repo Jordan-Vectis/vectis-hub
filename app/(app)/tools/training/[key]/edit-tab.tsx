@@ -7,6 +7,7 @@ import {
   saveTrainingExercise, deleteTrainingExercise, saveTrainingModule, restoreBuiltInCourse,
 } from "@/lib/actions/training"
 import { SLIDE_LAYOUTS, SLIDE_GRAPHICS, EXERCISE_KINDS, ADMIN_CENTRE_PANELS, parseParams } from "@/lib/training"
+import { BUILT_IN_COURSES } from "@/lib/training-seed"
 import { CARD } from "@/lib/training-ui"
 import type { TrainingModuleRow, TrainingSlideRow, TrainingExerciseRow } from "@/lib/training-data"
 
@@ -168,7 +169,7 @@ export default function EditTab({
           undoing somebody's edits. The flip side is that an environment seeded months ago can
           never pick up a lesson improved since — so refreshing is this button, deliberate and
           confirmed, rather than something a deploy does behind your back. */}
-      {m.key === "LOT_LOOKUP" && (
+      {!!BUILT_IN_COURSES[m.key] && (
         <div className={`${CARD} p-6 border-2 border-amber-300 dark:border-amber-500/40`}>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Restore the built-in course</h2>
           <p className="text-sm text-gray-600 dark:text-gray-300 max-w-3xl leading-relaxed mb-4">
