@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { setLotReviewFlag, saveLotDescription, saveAiFlagNote, resolveKeyPointsMistake, clearKeyPointsMistake, applyFlagFixes } from "@/lib/actions/catalogue"
+import { saveAiFlagSnapshot } from "@/lib/actions/saved-ai-flags"
+import LotPhotoViewer from "@/components/lot-photo-viewer"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 // ⚠ The one title rule, shared with the Generate Titles action — never re-derive it here.
 import { titleFromDescription } from "@/lib/lot-title"
@@ -91,6 +93,7 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [flaggedOnly, setFlaggedOnly]       = useState(false)
   const [aiFlaggedOnly, setAiFlaggedOnly]   = useState(false)
   const [cataloguer, setCataloguer]   = useState("")
+  const [savingFlags, setSavingFlags] = useState(false)
   type IssueFilter = "all" | "attention" | "wording" | "issues" | "good"
   const [issueFilter, setIssueFilter] = useState<IssueFilter>("all")
   const [photoLot, setPhotoLot] = useState<ReviewLot | null>(null)
@@ -98,7 +101,7 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [flagText, setFlagText]     = useState("")
   const [editDescId, setEditDescId] = useState<string | null>(null)
   const [editDescText, setEditDescText] = useState("")
-  const [fullscreenImg, setFullscreenImg] = useState<string | null>(null)
+  const [photoIndex, setPhotoIndex] = useState(0)
   const [fixingId, setFixingId] = useState<string | null>(null)
   const [kpFixId, setKpFixId]     = useState<string | null>(null)
   const [kpFixText, setKpFixText] = useState("")
@@ -132,6 +135,25 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
 
   const flaggedCount = lots.filter(l => l.reviewFlag).length
   const aiFlagCount  = lots.filter(l => l.aiFlagNote).length
+
+  // Freeze this sale's flags into Admin → Saved Flagged Lots before an AI run replaces them.
+  async function saveFlagsSnapshot() {
+    if (savingFlags) return
+    setSavingFlags(true)
+    setError(null)
+    try {
+      const res = await saveAiFlagSnapshot(auctionId, `Review tab — ${new Date().toLocaleDateString("en-GB")}`)
+      if (res.ok) {
+        alert(`Saved ${res.saved} flagged lot${res.saved === 1 ? "" : "s"}.
+
+Read them back any time at Admin → Saved Flagged Lots.`)
+      } else {
+        setError(res.error)
+      }
+    } catch (e: any) {
+      setError(e?.message ?? "Could not save the flags")
+    } finally { setSavingFlags(false) }
+  }
 
   const cataloguers = useMemo(() =>
     [...new Set(lots.map(l => l.createdByName).filter(Boolean))].sort() as string[],
@@ -524,6 +546,19 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
                 ✨ Fix all AI-flagged ({aiFlagCount})
               </button>
             )}
+            {/* ⚠ Re-running the AI overwrites every aiFlagNote with a bare update that does not
+                reach the lot change log, so the previous run's flags are gone with no trace.
+                This freezes them first — read them back at Admin → Saved Flagged Lots. */}
+            {(aiFlagCount > 0 || lots.some(l => l.reviewFlag)) && (
+              <button
+                onClick={saveFlagsSnapshot}
+                disabled={savingFlags}
+                title="Freeze the flags on this sale before the AI overwrites them. Kept in Admin → Saved Flagged Lots."
+                className="px-3 py-2 text-sm font-semibold rounded-lg border border-orange-500 bg-orange-600/10 text-orange-600 dark:text-orange-400 hover:bg-orange-600/20 disabled:opacity-40 transition-colors whitespace-nowrap"
+              >
+                {savingFlags ? "Saving…" : "💾 Save these flags"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -670,7 +705,7 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
               {/* Photo */}
               <div>
                 {lot.imageUrls.length > 0 ? (
-                  <button onClick={() => setPhotoLot(lot)} className="relative block w-full">
+                  <button onClick={() => { setPhotoIndex(0); setPhotoLot(lot) }} className="relative block w-full">
                     <img
                       src={proxyUrl(lot.imageUrls[0])}
                       alt={lot.barcode ?? "Lot photo"}
@@ -1046,34 +1081,19 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
         </div>
       )}
 
-      {/* Fullscreen image overlay */}
-      {fullscreenImg && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/95" onClick={() => setFullscreenImg(null)}>
-          <button onClick={() => setFullscreenImg(null)} className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl leading-none px-3">✕</button>
-          <img src={fullscreenImg} alt="Fullscreen photo" className="max-w-full max-h-full object-contain" onClick={e => e.stopPropagation()} />
-        </div>
+      {/* Photos — enlarge and zoom, shared with Admin → Saved Flagged Lots so the two cannot
+          drift. Replaced a grid-then-fullscreen pair that could not zoom, which is what you
+          actually need to check a product code against the description. */}
+      {photoLot && (
+        <LotPhotoViewer
+          images={photoLot.imageUrls}
+          label={photoLot.barcode ?? photoLot.receiptUniqueId ?? ""}
+          index={photoIndex}
+          onIndex={setPhotoIndex}
+          onClose={() => setPhotoLot(null)}
+        />
       )}
 
-      {/* Photo viewer */}
-      {photoLot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setPhotoLot(null)}>
-          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl p-4 max-w-2xl w-full max-h-[90vh] overflow-y-auto space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <span className="font-mono font-semibold text-gray-900 dark:text-white">{photoLot.barcode ?? photoLot.receiptUniqueId}</span>
-              <button onClick={() => setPhotoLot(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl leading-none px-2">✕</button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {photoLot.imageUrls.map((key, i) => (
-                <button key={key} onClick={() => setFullscreenImg(proxyUrl(key))} className="relative group block w-full text-left">
-                  <img src={proxyUrl(key)} alt={`Photo ${i + 1}`} loading="lazy"
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 object-contain" />
-                  <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs px-2 py-1 rounded-lg">⛶ Fullscreen</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

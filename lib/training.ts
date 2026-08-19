@@ -29,6 +29,9 @@ export const EXERCISE_KINDS = [
   { key: "LOT_RECEIPT",      label: "Which receipt did this lot come in on?", blurb: "Picks a real lot; the answer is its receipt number.",        live: true,  panel: "code" },
   { key: "LOT_TOTE",         label: "Which tote was this lot made from?",  blurb: "Picks a real lot; the answer is the tote on the lot card.",     live: true,  panel: "code" },
   { key: "LOT_LOCATION",     label: "Where is this lot physically?",       blurb: "Picks a lot BC has a location for; the answer is that location.", live: true, panel: "code" },
+  { key: "BC_SALE",          label: "Which sale does BC have this in?",    blurb: "Picks a real BC item; the answer is its auction code.",         live: true,  panel: null },
+  { key: "BC_LOT_NO",        label: "What lot number does BC give it?",    blurb: "Picks a real BC item; the answer is its lot number.",           live: true,  panel: null },
+  { key: "BC_TOTE",          label: "Which tote is this BC item in?",      blurb: "Picks a real BC item; the answer is its tote number.",          live: true,  panel: null },
   { key: "BC_NAME",          label: "Who is this BC code / username?",     blurb: "Picks a real BC record; the answer is the person behind the code.", live: true, panel: "code" },
   // ── A receipt, tote or customer in ──
   { key: "LOT_COUNT",        label: "How many lots on this receipt / tote / customer?", blurb: "⚠ Counts HUB lots only; the screen also lists BC-only rows, so it has two answers.", live: true, panel: "receipt" },

@@ -79,8 +79,23 @@ export const MODULE_SEEDS: SeedModule[] = APP_CARD_DEFS
     return a.title.localeCompare(b.title)
   })
 
-// ─── The Admin Centre course ─────────────────────────────────────────────────
-// Lives in its own file — it is the biggest single piece of content in here, and a course per
-// panel means this file would otherwise become a directory's worth of prose in one module.
-// Re-exported so callers keep one import.
-export { ADMIN_CENTRE_SLIDES, ADMIN_CENTRE_EXERCISES } from "@/lib/training-admin-centre"
+// ─── The courses that ship written ───────────────────────────────────────────
+// Each lives in its own file — a course per panel would otherwise turn this module into a
+// directory's worth of prose. Keyed by module key, so seeding and "restore the built-in course"
+// both work for any course added here without either of them knowing its name.
+
+import { ADMIN_CENTRE_SLIDES, ADMIN_CENTRE_EXERCISES } from "@/lib/training-admin-centre"
+import { BC_WAREHOUSE_SLIDES, BC_WAREHOUSE_EXERCISES } from "@/lib/training-bc-warehouse"
+
+export { ADMIN_CENTRE_SLIDES, ADMIN_CENTRE_EXERCISES }
+
+export type BuiltInCourse = { slides: SeedSlide[]; exercises: SeedExercise[] }
+
+export const BUILT_IN_COURSES: Record<string, BuiltInCourse> = {
+  LOT_LOOKUP:   { slides: ADMIN_CENTRE_SLIDES, exercises: ADMIN_CENTRE_EXERCISES },
+  BC_WAREHOUSE: { slides: BC_WAREHOUSE_SLIDES, exercises: BC_WAREHOUSE_EXERCISES },
+}
+
+export function builtInCourse(moduleKey: string): BuiltInCourse | null {
+  return BUILT_IN_COURSES[moduleKey] ?? null
+}

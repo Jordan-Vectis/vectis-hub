@@ -142,6 +142,25 @@ export async function pickSubject(kind: string, rawParams: unknown): Promise<Mat
         return hit ? { subject: hit, display: hit } : null
       }
 
+      // Read one field off Business Central's own item row — the columns the BC Warehouse
+      // search puts on screen. Picked from the synced copy, which is what that screen reads.
+      case "BC_SALE":
+      case "BC_LOT_NO":
+      case "BC_TOTE": {
+        const need =
+          kind === "BC_SALE"   ? { auctionCode: { not: null } } :
+          kind === "BC_LOT_NO" ? { OR: [{ currentLotNo: { not: null } }, { lotNo: { not: null } }] } :
+                                 { toteNo: { not: null } }
+        const rows = await prisma.warehouseItem.findMany({
+          where:   { barcode: { not: null }, ...need },
+          orderBy: { updatedAt: "desc" },
+          take:    PICK_POOL,
+          select:  { barcode: true },
+        })
+        const hit = sample(rows.map(r => r.barcode).filter((b): b is string => !!b))
+        return hit ? { subject: hit, display: hit } : null
+      }
+
       case "BC_NAME": {
         // Needs SOMETHING recorded against it, or there is no person to name.
         const rows = await prisma.warehouseItem.findMany({
@@ -328,6 +347,24 @@ export async function markAnswer(
       case "LOT_TOTE":
         return markLotField(subject, l => l.tote, codeMatches, said)
 
+      case "BC_SALE":
+      case "BC_LOT_NO":
+      case "BC_TOTE": {
+        const rows = await prisma.warehouseItem.findMany({
+          where:  { barcode: { equals: subject, mode: "insensitive" } },
+          select: { auctionCode: true, currentLotNo: true, lotNo: true, toteNo: true },
+          take:   5,
+        })
+        const pick = (r: typeof rows[number]) =>
+          kind === "BC_SALE"   ? r.auctionCode :
+          kind === "BC_LOT_NO" ? (r.currentLotNo || r.lotNo) :
+                                 r.toteNo
+        // ⚠ "0" is BC's not-numbered-yet lot number, not an answer.
+        const values = [...new Set(rows.map(pick).filter((v): v is string => !!v && v !== "0"))]
+        if (!values.length) return { correct: false, answer: "—", unavailable: true }
+        return { correct: values.some(v => codeMatches(said, v)), answer: values.join(" or ") }
+      }
+
       case "LOT_LOCATION": {
         const rows = await prisma.warehouseItem.findMany({
           where:  { barcode: { equals: subject, mode: "insensitive" }, location: { not: null } },
@@ -338,6 +375,7 @@ export async function markAnswer(
         if (!places.length) return { correct: false, answer: "—", unavailable: true }
         return { correct: places.some(p => codeMatches(said, p)), answer: places.join(" or ") }
       }
+
 
       case "BC_NAME": {
         const row = await prisma.warehouseItem.findFirst({

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { isSlideLayout, isSlideGraphic, isExerciseKind } from "@/lib/training"
-import { MODULE_SEEDS, ADMIN_CENTRE_SLIDES, ADMIN_CENTRE_EXERCISES } from "@/lib/training-seed"
+import { MODULE_SEEDS, BUILT_IN_COURSES, builtInCourse } from "@/lib/training-seed"
 
 // IT & Admin → Training.
 //
@@ -82,15 +82,16 @@ export async function ensureTrainingSeed(): Promise<void> {
         })
       }
 
-      // The one course that ships written. Guarded on the module having NO slides rather than
-      // on the module being new, so an environment seeded before this content existed still
-      // gets it — but one where somebody has already written a slide is never touched.
-      const admin = await tx.trainingModule.findUnique({ where: { key: "LOT_LOOKUP" }, select: { id: true } })
-      if (admin) {
-        if ((await tx.trainingSlide.count({ where: { moduleId: admin.id } })) === 0) {
+      // The courses that ship written. Guarded on the module having NO slides rather than on
+      // the module being new, so an environment seeded before a course existed still picks it
+      // up — but one where somebody has already written a slide is never touched.
+      for (const [key, course] of Object.entries(BUILT_IN_COURSES)) {
+        const mod = await tx.trainingModule.findUnique({ where: { key }, select: { id: true } })
+        if (!mod) continue
+        if ((await tx.trainingSlide.count({ where: { moduleId: mod.id } })) === 0 && course.slides.length) {
           await tx.trainingSlide.createMany({
-            data: ADMIN_CENTRE_SLIDES.map((sl, i) => ({
-              moduleId: admin.id,
+            data: course.slides.map((sl, i) => ({
+              moduleId: mod.id,
               title: sl.title, subtitle: sl.subtitle ?? null, body: sl.body ?? null,
               layout: sl.layout ?? "CONTENT", graphic: sl.graphic ?? "NONE",
               tryHref: sl.tryHref ?? null, tryLabel: sl.tryLabel ?? null,
@@ -98,10 +99,10 @@ export async function ensureTrainingSeed(): Promise<void> {
             })),
           })
         }
-        if ((await tx.trainingExercise.count({ where: { moduleId: admin.id } })) === 0) {
+        if ((await tx.trainingExercise.count({ where: { moduleId: mod.id } })) === 0 && course.exercises.length) {
           await tx.trainingExercise.createMany({
-            data: ADMIN_CENTRE_EXERCISES.map((ex, i) => ({
-              moduleId: admin.id,
+            data: course.exercises.map((ex, i) => ({
+              moduleId: mod.id,
               title: ex.title, brief: ex.brief, panel: ex.panel ?? null, kind: ex.kind,
               params: (ex.params ?? {}) as object,
               expected: ex.expected ?? null, hint: ex.hint ?? null, explain: ex.explain ?? null,
@@ -132,9 +133,9 @@ export async function ensureTrainingSeed(): Promise<void> {
 export async function restoreBuiltInCourse(moduleKey: string): Promise<Res> {
   try {
     await requireAdmin()
-    if (moduleKey !== "LOT_LOOKUP") {
-      return { ok: false, error: "There is no built-in course for this panel yet — only the Admin Centre ships written." }
-    }
+    const course = builtInCourse(moduleKey)
+    if (!course) return { ok: false, error: "There is no built-in course for this panel — nothing to restore to." }
+
     const mod = await prisma.trainingModule.findUnique({ where: { key: moduleKey }, select: { id: true } })
     if (!mod) return { ok: false, error: "That course no longer exists" }
 
@@ -142,7 +143,7 @@ export async function restoreBuiltInCourse(moduleKey: string): Promise<Res> {
       await tx.trainingSlide.deleteMany({ where: { moduleId: mod.id } })
       await tx.trainingExercise.deleteMany({ where: { moduleId: mod.id } })
       await tx.trainingSlide.createMany({
-        data: ADMIN_CENTRE_SLIDES.map((sl, i) => ({
+        data: course.slides.map((sl, i) => ({
           moduleId: mod.id,
           title: sl.title, subtitle: sl.subtitle ?? null, body: sl.body ?? null,
           layout: sl.layout ?? "CONTENT", graphic: sl.graphic ?? "NONE",
@@ -151,7 +152,7 @@ export async function restoreBuiltInCourse(moduleKey: string): Promise<Res> {
         })),
       })
       await tx.trainingExercise.createMany({
-        data: ADMIN_CENTRE_EXERCISES.map((ex, i) => ({
+        data: course.exercises.map((ex, i) => ({
           moduleId: mod.id,
           title: ex.title, brief: ex.brief, panel: ex.panel ?? null, kind: ex.kind,
           params: (ex.params ?? {}) as object,

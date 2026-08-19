@@ -14,6 +14,16 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"3752862de571110f05bdb6bdbb7850541a4a1536","author":"Jack Collings","date":"2026-08-19T13:18:45+01:00","subject":"Photo viewer on the live Review tab, plus the fixes an adversarial review turned up"},
+  {"sha":"f82d964cd1d7fe2c93bb04a3e764652807d5ff12","author":"Jack Collings","date":"2026-08-19T13:04:02+01:00","subject":"Refresh changelog seed"},
+  {"sha":"1d967b7075c67cc0974ff2ed123bd2273018064b","author":"Jack Collings","date":"2026-08-19T13:04:01+01:00","subject":"Saved Flagged Lots: the real key-point analysis, and a photo viewer you can zoom"},
+  {"sha":"25a8ccadd696bd3be31f8d71a422a157ae1febce","author":"Jack Collings","date":"2026-08-19T12:55:19+01:00","subject":"Refresh changelog seed"},
+  {"sha":"4f6fbb28534b9db64bba2ab443f6d5d9e15bbc7e","author":"Jack Collings","date":"2026-08-19T12:55:17+01:00","subject":"Make Saved Flagged Lots correct at production scale"},
+  {"sha":"8900a179c314db6236315db38172a387ddb27cdd","author":"Jack Collings","date":"2026-08-19T12:46:08+01:00","subject":"Refresh changelog seed"},
+  {"sha":"b55b9ead7c64ad9267bb0a610f5fce66799a203e","author":"Jack Collings","date":"2026-08-19T12:46:06+01:00","subject":"Saved Flagged Lots — freeze the Review tab's flags before an AI run overwrites them"},
+  {"sha":"3806cd33d3458cc3f9ecf9e51ccda51ea356d153","author":"Jack Collings","date":"2026-08-19T12:35:57+01:00","subject":"Refresh changelog seed"},
+  {"sha":"432fb41fb7271eb87cddd3e696bee0a6ed247890","author":"Jack Collings","date":"2026-08-19T12:34:44+01:00","subject":"Add the BC Warehouse training course"},
+  {"sha":"5df888fe91ac7f180c477d74f847e6aa79cdb532","author":"Jordan Orange","date":"2026-08-19T12:30:32+01:00","subject":"Refresh changelog seed"},
   {"sha":"7b10ac999327160cec698967b2451486a8838b8a","author":"Jordan Orange","date":"2026-08-19T12:30:23+01:00","subject":"Record the AI instruction house style in the shared memory record"},
   {"sha":"c90e5b7133eea1f350b56ad83a7da60c4a9bdd69","author":"Jordan Orange","date":"2026-08-19T12:12:45+01:00","subject":"Refresh changelog seed"},
   {"sha":"3273b4f01c848d0c4e5286944978c1224157f566","author":"Jordan Orange","date":"2026-08-19T12:10:16+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},

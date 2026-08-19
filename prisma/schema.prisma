@@ -2344,3 +2344,65 @@ model TrainingProgress {
   @@id([userId, moduleId])
   @@index([moduleId])
 }
+
+// ─── Admin → Saved AI Flags ──────────────────────────────────────────────────
+// A frozen copy of the Review tab's flagged lots, taken before an AI run overwrites them.
+//
+// ⚠ WHY THIS EXISTS. The pipeline writes CatalogueLot.aiFlagNote with a bare update
+// (lib/pipeline-runner.ts) rather than through updateLotLogged, so re-running the AI silently
+// replaces the previous flag and NOTHING records what it said. Jack, 2026-08-19: "we are about
+// to overwrite them but we cant loose the data".
+//
+// ⚠ DELIBERATELY NO FOREIGN KEY to CatalogueLot or CatalogueAuction, and every displayed value
+// is copied onto the row rather than joined. An archive whose contents change when the live lot
+// changes is not an archive — same reasoning as InductionSignature and TermsAcceptance.
+model SavedAiFlag {
+  id      String @id @default(cuid())
+  // One save = one batchId, so a snapshot can be listed, opened and deleted as a unit.
+  batchId String
+  label   String @default("")
+
+  auctionId   String
+  auctionCode String @default("")
+  auctionName String @default("")
+
+  lotId           String
+  barcode         String?
+  receiptUniqueId String?
+  title           String   @default("")
+  keyPoints       String?  @db.Text
+  description     String?  @db.Text
+  condition       String?
+  category        String?
+  subCategory     String?
+  brand           String?
+  estimateLow     Int?
+  estimateHigh    Int?
+  aiEstimateLow   Int?
+  aiEstimateHigh  Int?
+  // R2 keys, copied as they were. ⚠ If the photos are later deleted from R2 the archive keeps
+  // the keys but the images stop loading — the flag text and everything else still reads.
+  imageUrls       String[] @default([])
+  cataloguedBy    String?
+
+  aiFlagNote      String?   @db.Text
+  reviewFlag      String?   @db.Text
+  reviewFlaggedBy String?
+  reviewFlaggedAt DateTime?
+  kpFixNote       String?   @db.Text
+  kpFixedBy       String?
+  kpFixedAt       DateTime?
+  // ⚠ The auction's key-point matching mode at save time. analyseKeyPoints is pure — given the
+  // same description, key points and mode it returns the same verdict — so storing this is what
+  // lets the archive redraw the Review tab's ticks and crosses exactly as they were, rather
+  // than recomputing them under whatever mode the sale uses today.
+  kpMode          String    @default("strict")
+
+  savedAt     DateTime @default(now())
+  savedById   String?
+  savedByName String   @default("")
+
+  @@index([batchId])
+  @@index([auctionId])
+  @@index([savedAt])
+}

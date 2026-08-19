@@ -23,6 +23,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
       { href: "/admin/categories",        label: "Cataloguing Categories", description: "Add, rename, reorder or remove the categories and subcategories cataloguers pick from when entering lots.", icon: "🏷️" },
       { href: "/admin/condition-wording", label: "Condition Wording",      description: "Manage the box/packaging wording presets (e.g. \"Box is\", \"Carded Back is\") used in the separate condition.", icon: "📦" },
       { href: "/admin/lot-log",           label: "Lot Change Log",         description: "Full audit trail of every field changed on every lot — who changed what, when, and what it was before.", icon: "📋" },
+      { href: "/admin/saved-flagged-lots", label: "Saved Flagged Lots",    description: "Frozen copies of the Review tab's AI-flagged and flagged lots, photos and all. Take one before an AI run overwrites the flags — nothing else keeps a record of what they said.", icon: "🗂️" },
       { href: "/admin/activity-timer",    label: "Cataloguer Activity Timer", description: "Configure the activity popup — add or remove reasons, change wording, set timing thresholds.", icon: "⏱️" },
       { href: "/admin/unaccounted-time",  label: "Unaccounted Time",       description: "Working-hours gaps between a cataloguer's lot saves that were never accounted for with an activity reason — the tamper-proof backstop to the popup.", icon: "🕵️" },
     ],
