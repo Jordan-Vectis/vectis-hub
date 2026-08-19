@@ -33,6 +33,10 @@ export type Marked = {
 // hundreds of thousands of lots by ordering randomly would be a sequential scan every time.
 const PICK_POOL = 200
 
+// The panel's own cap on a sale (app/api/lot-lookup/sale/route.ts MAX_ITEMS). Mirrored so the
+// marker reads the same slice of a big sale that the trainee is looking at.
+const MAX_SALE_ITEMS = 5000
+
 /** "15 Aug 2026" — the format the panel itself prints sale dates in. */
 function formatDate(d: Date): string {
   return d.toLocaleDateString("en-GB", {
@@ -206,8 +210,24 @@ export async function pickSubject(kind: string, rawParams: unknown): Promise<Mat
           take:    PICK_POOL,
           select:  { code: true, _count: { select: { lots: true } } },
         })
-        const hit = sample(sales.filter(s => s.code && s._count.lots >= min))
-        return hit ? { subject: hit.code, display: hit.code } : null
+        const candidates = sales.filter(s => s.code && s._count.lots >= min).map(s => s.code)
+        if (!candidates.length) return null
+
+        // ⚠⚠ THE SALE MUST EXIST IN BOTH SYSTEMS. The panel's sale view is driven by BUSINESS
+        // CENTRAL — it lists BC's items for that auction code and joins the Hub's cataloguer
+        // onto each one. So a sale the Hub knows about but BC does not shows an EMPTY screen,
+        // and a sale BC has but nobody catalogued in the Hub shows rows with no cataloguer at
+        // all. Either way the question has no answer the trainee can find.
+        // Jack, 2026-08-19: "You cant ask for hub queries when nothing is catalogued through the
+        // hub for F111."
+        const inBc = await prisma.warehouseItem.findMany({
+          where:    { auctionCode: { in: candidates } },
+          select:   { auctionCode: true },
+          distinct: ["auctionCode"],
+        })
+        const bcHas = new Set(inBc.map(r => (r.auctionCode ?? "").toUpperCase()).filter(Boolean))
+        const hit = sample(candidates.filter(c => bcHas.has(c.toUpperCase())))
+        return hit ? { subject: hit, display: hit } : null
       }
 
       default:
@@ -430,29 +450,48 @@ export async function markAnswer(
       }
 
       case "SALE_TOP": {
-        const sale = await prisma.catalogueAuction.findFirst({
-          where:  { code: { equals: subject, mode: "insensitive" } },
-          select: { id: true, name: true },
+        // ⚠ Marked the way the PANEL builds its list, not from the Hub's own auction row.
+        // The sale view starts from BUSINESS CENTRAL's items for that auction code and joins
+        // each one back to a Hub lot on the barcode or unique ID. Counting every Hub lot in the
+        // auction instead would give a different answer from the screen the trainee is reading
+        // — the Hub can hold lots BC has not got, and BC can hold lots nobody catalogued here.
+        const bc = await prisma.warehouseItem.findMany({
+          where:  { auctionCode: { equals: subject, mode: "insensitive" } },
+          select: { barcode: true, uniqueId: true },
+          take:   MAX_SALE_ITEMS,
         })
-        if (!sale) return { correct: false, answer: "—", unavailable: true }
-        const grouped = await prisma.catalogueLot.groupBy({
-          by:      ["createdByName"],
-          where:   { auctionId: sale.id, createdByName: { not: null } },
-          _count:  { _all: true },
-          orderBy: { _count: { createdByName: "desc" } },
-          take:    20,
-        })
-        const clean = grouped.filter(g => g.createdByName && g.createdByName !== "null")
-        if (!clean.length) return { correct: false, answer: "—", unavailable: true }
-        const top = clean[0]
+        if (!bc.length) return { correct: false, answer: "—", unavailable: true }
+
+        const ids = [...new Set(bc.flatMap(b => [b.barcode, b.uniqueId]).filter((v): v is string => !!v))]
+        const lots = ids.length
+          ? await prisma.catalogueLot.findMany({
+              where: {
+                createdByName: { not: null },
+                OR: [{ barcode: { in: ids } }, { receiptUniqueId: { in: ids } }],
+              },
+              select: { createdByName: true },
+              take:   MAX_SALE_ITEMS,
+            })
+          : []
+
+        const tally = new Map<string, number>()
+        for (const l of lots) {
+          const n = l.createdByName
+          if (!n || n === "null") continue
+          tally.set(n, (tally.get(n) ?? 0) + 1)
+        }
+        // Nothing in this sale was catalogued in the Hub — the panel shows a cataloguer column
+        // with nothing in it, so there is no answer to give.
+        if (!tally.size) return { correct: false, answer: "—", unavailable: true }
+
+        const best = Math.max(...tally.values())
         // A genuine tie has more than one right answer, and marking the second one wrong is
         // marking the data, not the trainee.
-        const tied = clean.filter(g => g._count._all === top._count._all)
-        const correct = tied.some(g => nameMatches(said, g.createdByName!))
+        const tied = [...tally.entries()].filter(([, n]) => n === best).map(([name]) => name)
         return {
-          correct,
-          answer: tied.map(g => g.createdByName).join(" or "),
-          detail: `${top._count._all} lot${top._count._all === 1 ? "" : "s"} in ${subject}`,
+          correct: tied.some(n => nameMatches(said, n)),
+          answer:  tied.join(" or "),
+          detail:  `${best} lot${best === 1 ? "" : "s"} in ${subject}`,
         }
       }
 
