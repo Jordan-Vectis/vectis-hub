@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4f6fbb28534b9db64bba2ab443f6d5d9e15bbc7e","author":"Jack Collings","date":"2026-08-19T12:55:17+01:00","subject":"Make Saved Flagged Lots correct at production scale"},
+  {"sha":"8900a179c314db6236315db38172a387ddb27cdd","author":"Jack Collings","date":"2026-08-19T12:46:08+01:00","subject":"Refresh changelog seed"},
   {"sha":"b55b9ead7c64ad9267bb0a610f5fce66799a203e","author":"Jack Collings","date":"2026-08-19T12:46:06+01:00","subject":"Saved Flagged Lots — freeze the Review tab's flags before an AI run overwrites them"},
   {"sha":"3806cd33d3458cc3f9ecf9e51ccda51ea356d153","author":"Jack Collings","date":"2026-08-19T12:35:57+01:00","subject":"Refresh changelog seed"},
   {"sha":"432fb41fb7271eb87cddd3e696bee0a6ed247890","author":"Jack Collings","date":"2026-08-19T12:34:44+01:00","subject":"Add the BC Warehouse training course"},
