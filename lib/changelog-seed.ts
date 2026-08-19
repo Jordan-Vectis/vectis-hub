@@ -14,6 +14,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"445c0d818b5b22e6195cbc982a516e31d055bfc1","author":"Jordan Orange","date":"2026-08-19T10:53:53+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"9176555e98fa4a440481b3fe34b0a13b8a856e0f","author":"Jordan Orange","date":"2026-08-19T10:53:38+01:00","subject":"Record the maker-first correction in the shared memory record"},
+  {"sha":"e9707bddd99f40c1634d03b637eb48dd2fab626c","author":"Jack Collings","date":"2026-08-19T10:51:25+01:00","subject":"Refresh changelog seed"},
   {"sha":"fe2eaefe86794bddb38a493389877ce69ef21ec1","author":"Jack Collings","date":"2026-08-19T10:51:19+01:00","subject":"Reframe the Admin Centre course around why BC's lot information is wrong"},
   {"sha":"b9aeb5bbe7c9375178f06ad8370f2899a800b9e3","author":"Jack Collings","date":"2026-08-19T10:28:36+01:00","subject":"Refresh changelog seed"},
   {"sha":"51c3ac79549be37be1e74f8b155a32aa024b648b","author":"Jack Collings","date":"2026-08-19T10:26:57+01:00","subject":"Flesh out the Admin Centre course: 35 slides, 23 scenarios, and how names differ between systems"},
