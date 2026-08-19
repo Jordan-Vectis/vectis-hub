@@ -245,6 +245,16 @@ export default function SavedFlagsClient({
                 </div>
               </div>
 
+              {/* ⚠ The archive page is capped. Say so — a partial archive that looks complete is
+                  worse than no archive, because nobody goes looking for the rest (design rule 7).
+                  Nothing is missing from the SAVE; this is only what is being shown. */}
+              {batch && batch.lots > rows.length && (
+                <div className="mb-4 rounded-xl border-2 border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                  Showing the first {rows.length.toLocaleString()} of {batch.lots.toLocaleString()} saved lots.
+                  All {batch.lots.toLocaleString()} are safely stored — this page just does not render them all at once.
+                </div>
+              )}
+
               {shown.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400 py-10 text-center">
                   {rows.length === 0 ? "This archive is empty." : "No lots match that filter."}

@@ -18,36 +18,74 @@ export const metadata = { title: "Saved Flagged Lots" }
 
 async function loadBatches(): Promise<SavedBatch[]> {
   try {
-    const rows = await prisma.savedAiFlag.findMany({
-      orderBy: { savedAt: "desc" },
-      take:    2000,
-      select: {
-        batchId: true, label: true, savedAt: true, savedByName: true,
-        auctionCode: true, auctionName: true, aiFlagNote: true,
-      },
+    // ⚠ Grouped in SQL, not by fetching rows and counting them here. An earlier version pulled
+    // 2,000 rows and tallied them in memory, which is fine on staging and silently WRONG on
+    // production data: one save of a big sale can exceed the cap, and the list would then
+    // under-report how many lots it holds — on the one screen whose entire job is telling you
+    // your data is safe.
+    const grouped = await prisma.savedAiFlag.groupBy({
+      by:      ["batchId"],
+      _count:  { _all: true },
+      _max:    { savedAt: true },
+      orderBy: { _max: { savedAt: "desc" } },
+      take:    100,
     })
-    const map = new Map<string, SavedBatch>()
-    for (const r of rows) {
-      const b = map.get(r.batchId) ?? {
-        batchId: r.batchId, label: r.label, savedAt: r.savedAt.toISOString(),
-        savedByName: r.savedByName, sales: [], lots: 0, aiFlags: 0,
-      }
-      b.lots += 1
-      if (r.aiFlagNote) b.aiFlags += 1
-      const sale = [r.auctionCode, r.auctionName].filter(Boolean).join(" — ")
-      if (sale && !b.sales.includes(sale)) b.sales.push(sale)
-      map.set(r.batchId, b)
+    if (!grouped.length) return []
+    const ids = grouped.map(g => g.batchId)
+
+    const [meta, aiCounts, sales] = await Promise.all([
+      prisma.savedAiFlag.findMany({
+        where:    { batchId: { in: ids } },
+        distinct: ["batchId"],
+        select:   { batchId: true, label: true, savedByName: true, savedAt: true },
+      }),
+      prisma.savedAiFlag.groupBy({
+        by:     ["batchId"],
+        where:  { batchId: { in: ids }, aiFlagNote: { not: null } },
+        _count: { _all: true },
+      }),
+      prisma.savedAiFlag.findMany({
+        where:    { batchId: { in: ids } },
+        distinct: ["batchId", "auctionCode"],
+        select:   { batchId: true, auctionCode: true, auctionName: true },
+        take:     2000,
+      }),
+    ])
+
+    const metaBy  = new Map(meta.map(m => [m.batchId, m]))
+    const aiBy    = new Map(aiCounts.map(a => [a.batchId, a._count._all]))
+    const salesBy = new Map<string, string[]>()
+    for (const row of sales) {
+      const label = [row.auctionCode, row.auctionName].filter(Boolean).join(" — ")
+      if (!label) continue
+      const arr = salesBy.get(row.batchId) ?? []
+      if (!arr.includes(label)) arr.push(label)
+      salesBy.set(row.batchId, arr)
     }
-    return [...map.values()]
+
+    return grouped.map(g => {
+      const m = metaBy.get(g.batchId)
+      return {
+        batchId:     g.batchId,
+        label:       m?.label ?? "",
+        savedAt:     (g._max.savedAt ?? m?.savedAt ?? new Date()).toISOString(),
+        savedByName: m?.savedByName ?? "",
+        sales:       salesBy.get(g.batchId) ?? [],
+        lots:        g._count._all,
+        aiFlags:     aiBy.get(g.batchId) ?? 0,
+      }
+    })
   } catch { return [] }
 }
+
+const BATCH_PAGE = 2000
 
 async function loadBatch(batchId: string): Promise<SavedFlagRow[]> {
   try {
     const rows = await prisma.savedAiFlag.findMany({
       where:   { batchId },
       orderBy: [{ auctionCode: "asc" }, { barcode: "asc" }],
-      take:    5000,
+      take:    BATCH_PAGE,
     })
     return rows.map(r => ({
       id: r.id, lotId: r.lotId,
