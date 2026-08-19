@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"830f7cb68b173f841ed6e015a861d34af71fd52f","author":"Jack Collings","date":"2026-08-19T10:58:10+01:00","subject":"Rewrite the Admin Centre deck in plain language, around why and how"},
+  {"sha":"47644ed6835e1542e2d0737af536e89d623a4769","author":"Jordan Orange","date":"2026-08-19T10:54:16+01:00","subject":"Refresh changelog seed"},
   {"sha":"445c0d818b5b22e6195cbc982a516e31d055bfc1","author":"Jordan Orange","date":"2026-08-19T10:53:53+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"9176555e98fa4a440481b3fe34b0a13b8a856e0f","author":"Jordan Orange","date":"2026-08-19T10:53:38+01:00","subject":"Record the maker-first correction in the shared memory record"},
   {"sha":"e9707bddd99f40c1634d03b637eb48dd2fab626c","author":"Jack Collings","date":"2026-08-19T10:51:25+01:00","subject":"Refresh changelog seed"},
