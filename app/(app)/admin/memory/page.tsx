@@ -16,6 +16,42 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "ai_instruction_house_style.md",
+    content: `---
+name: AI instruction house style - the one shape all three follow
+purpose: The shared shape every Vectis description instruction now uses, and the per-category decisions for Dolls & Bears, Modern Diecast & Tinplate and TV & Film. Read before writing or revising any instruction.
+metadata:
+  type: reference
+---
+
+Three instructions were written to ONE shape over a single session with Jordan (2026-08-19). Follow it for any new category rather than inventing a fourth layout.
+
+⚠ THEY LIVE IN THE DB, NOT IN CODE. All three were delivered as text in chat for Jordan to paste into Auction AI -> Instructions. lib/auction-ai-presets.ts is STARTER DEFAULTS ONLY. Never "add" an instruction by editing that file.
+⚠ NAMING: "Vectis Strict: X" = one continuous paragraph. "Vectis Free: X" = an opening summary then a breakdown of the lot. Both new ones are Free - Jordan: "I more want a Vectis Free kind of instructions".
+
+THE SHARED SHAPE:
+1. LAYOUT - one item gets a short paragraph, no bullet; two or more get an opening sentence, "The lot comprises:", then one bullet per item in key-point order with a blank line between. Over ~15 items, group the repeats. Estimate on its own line last.
+2. THE MAKER IS THE FIRST WORD, with the forbidden openers listed explicitly ("A", "A group", "A collection", "A pair", "A lot", "Lot") and an instruction to rewrite if the sentence starts with one.
+3. THE COUNT COVERS THE WHOLE LOT - "a trio of teddy bears and a golly" reads as four items when there are three. Words, never "x three".
+4. BULLET ORDER, EVERY TIME: Maker -> item name -> catalogue/product number (omitted ENTIRELY when the key points give none - never invented, completed or corrected) -> description with POSITIVES FIRST -> NEGATIVES LAST, bracketed -> SIZE/SCALE at the very end.
+5. The EDITION never opens a bullet - lead with what the item IS, weave the edition in after.
+6. The NEGATIVE may not restate the positive - "(fraying to ends)" once the ribbon is described.
+7. ONLY WHAT YOU KNOW block - everything from the key points or plainly visible in the photos; a short entry beats a guessed one; never invent a code, edition, year, designer or maker; packaging only from the key points; don't claim a mechanism works.
+8. NO CONDITION, EVER. A completeness note from the key points ("swing label bent", "aerial absent") is a fact, not a grade - keep it, at the end.
+9. FLAG IS ONLY FOR A SUSPECTED KEY-POINT MISTAKE - never for the AI to comment on its own wording. It had been doing exactly that, which in a real run writes an aiFlagNote and puts an amber Review-tab banner in front of a cataloguer over a fault that is not theirs.
+10. The full estimate ladder, £0-£49 through £10,000+.
+
+⚠⚠ THE LESSON THAT COST A ROUND TRIP: A RULE STATED ONCE, IN A DIFFERENT SECTION FROM THE EXAMPLES, DOES NOT SURVIVE. The Dolls & Bears LAYOUT said "Start with the maker", the OPENING section never repeated it, and no example demonstrated it - so the model quietly dropped it and opened "A trio of Merrythought teddy bears...". Every rule that matters must be repeated IN THE SECTION WHERE IT APPLIES and SHOWN IN AN EXAMPLE.
+⚠ Keep them LEAN - the prompt goes in on every lot, so verbosity costs money AND makes the model follow fewer rules.
+
+MODERN DIECAST & TINPLATE ("Vectis Free: Modern Diecast & Tinplate"): ONE combined instruction, not two (Jordan's call), deciding which it is then applying the matching section at the bottom. Single items get a paragraph, groups get bullets. ⚠ PACKAGING ONLY FROM THE KEY POINTS - the OPPOSITE of the existing Model Railway presets, which both say "Include packaging" and whose Free one ends with a whole-lot packaging summary line; diecast lots will therefore read differently from railway lots on that point, flagged at the time and left as chosen. Livery and any operator/advertising name is named whenever legible - it is what buyers search. Scale only when the key points give it, never worked out from the model. Tinplate: say how it is driven (clockwork/friction/battery) and whether the key is present when recorded; MANY TINPLATE TOYS CARRY NO CATALOGUE NUMBER AND THAT IS NORMAL - leave it out rather than hunting. An existing "Vectis Strict: Modern Diecast (general)" is in the starter defaults; Jordan never said whether the new one replaces it.
+
+TV & FILM ("Vectis Free: TV & Film"): MANUFACTURER FIRST, same as the others - Jordan chose this over the franchise-first option that was recommended. The fallback matters here: many TV & Film lots have no manufacturer at all (autograph, poster, prop), and those LEAD WITH THE FRANCHISE OR PRODUCTION TITLE instead.
+⚠⚠ AUTHENTICITY BLOCK - THE RULE THAT MATTERS MOST IN THIS CATEGORY. Never describe anything as screen-used, screen-matched, production-made, original, genuine, authentic, hand-signed or accompanied by a certificate unless the key points say so IN THOSE TERMS. If the key points call it a replica/reproduction/fan-made, say so plainly and never soften it. On an autograph, don't name the signatory or call a signature genuine unless recorded. This is a MISDESCRIPTION RISK, not a style preference - added on Claude's own judgement and accepted. An existing "Vectis Strict: TV & Film Collectibles" is in the starter defaults (format-only, no domain rules); Jordan never said whether the new one replaces it.
+
+TO ITERATE ON ANY OF THESE: use the 🧪 Instructions Testing tab - 5-10 hand-picked lots, preview only, nothing written. Edit the wording on the Instructions tab first (it is the only editor), then run.`,
+  },
+  {
     filename: "instructions_testing.md",
     content: `---
 name: Instructions Testing tab - the pipeline on 5-10 lots
