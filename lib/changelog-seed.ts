@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"53cbaa56b85fb294aaacd1ad9a5dd7e4712629bf","author":"Jack Collings","date":"2026-08-19T11:44:26+01:00","subject":"Practice task 3 now asks for the SALE DATE, not the sale code"},
+  {"sha":"e10ce249c6f78429fd59b76fee1aac880ca846dc","author":"Jack Collings","date":"2026-08-19T11:24:53+01:00","subject":"Refresh changelog seed"},
   {"sha":"4772c21d599ec5a889c7021bbae0965108649fcc","author":"Jack Collings","date":"2026-08-19T11:24:41+01:00","subject":"Cut the Admin Centre course to 13 slides and 8 tasks, and fix it for the rebuilt panel"},
   {"sha":"e614dcb2e13785aa0ede0aae18b4314feb1846e1","author":"Jordan Orange","date":"2026-08-19T11:21:54+01:00","subject":"Add Conditions puts the condition on a new line"},
   {"sha":"d6bb57f302b927cdc063ea7a8ffc91df4ac50361","author":"Jack Collings","date":"2026-08-19T10:59:33+01:00","subject":"Refresh changelog seed"},
