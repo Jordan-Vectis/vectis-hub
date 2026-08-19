@@ -20,13 +20,26 @@ export type { BodyBlock, SlideLayout, SlideGraphic } from "@/lib/induction"
  * `pickFor` in lib/training-check.ts for how a real example is chosen each time.
  */
 export const EXERCISE_KINDS = [
-  { key: "WHO_CATALOGUED",  label: "Who catalogued this lot?", blurb: "Picks a real lot; the answer is its Hub cataloguer.", live: true,  panel: "who"  },
-  { key: "LOT_SALE",        label: "Which sale is this lot in?", blurb: "Picks a real lot; the answer is its sale code.",    live: true,  panel: "who"  },
-  { key: "LOT_COUNT",       label: "How many lots on this receipt / tote / customer?", blurb: "Picks a real receipt; the answer is the count.", live: true, panel: "find" },
-  { key: "LOT_VENDOR",      label: "Whose lots are these?", blurb: "Picks a real receipt; the answer is the customer number.", live: true, panel: "find" },
-  { key: "SALE_TOP",        label: "Who catalogued the most in this sale?", blurb: "Picks a real sale; the answer is the top cataloguer.", live: true, panel: "sale" },
-  { key: "CHOICE",          label: "Multiple choice", blurb: "For the bits that are judgement, not lookup — which tab, which number.", live: false, panel: null },
-  { key: "FREE_TEXT",       label: "Typed answer (fixed)", blurb: "⚠ Goes stale. Only for answers that cannot change.", live: false, panel: null },
+  // ── Tab 2 — one lot in, one fact out ──
+  { key: "WHO_CATALOGUED",   label: "Who catalogued this lot?",            blurb: "Picks a real lot; the answer is its Hub cataloguer.",           live: true,  panel: "who"  },
+  { key: "WHEN_CATALOGUED",  label: "When was this lot catalogued?",       blurb: "Picks a real lot; the answer is the date it was entered.",      live: true,  panel: "who"  },
+  { key: "LOT_SALE",         label: "Which sale is this lot in?",          blurb: "Picks a real lot; the answer is its sale code.",                live: true,  panel: "who"  },
+  { key: "LOT_UNIQUE_ID",    label: "What is this lot's unique ID?",       blurb: "Barcode in, unique ID out — teaches the two identifiers.",      live: true,  panel: "who"  },
+  { key: "LOT_RECEIPT",      label: "Which receipt did this lot come in on?", blurb: "Picks a real lot; the answer is its receipt number.",        live: true,  panel: "who"  },
+  { key: "LOT_TOTE",         label: "Which tote was this lot made from?",  blurb: "Picks a real lot; the answer is the tote on the lot card.",     live: true,  panel: "who"  },
+  { key: "LOT_LOCATION",     label: "Where is this lot physically?",       blurb: "Picks a lot BC has a location for; the answer is that location.", live: true, panel: "who" },
+  { key: "BC_NAME",          label: "Who is this BC code / username?",     blurb: "Picks a real BC record; the answer is the person behind the code.", live: true, panel: "who" },
+  // ── Tab 1 — a receipt, tote or customer in ──
+  { key: "LOT_COUNT",        label: "How many lots on this receipt / tote / customer?", blurb: "Picks a real one; the answer is the count.",       live: true,  panel: "find" },
+  { key: "LOT_VENDOR",       label: "Whose lots are these?",               blurb: "Picks a real receipt; the answer is the customer number.",      live: true,  panel: "find" },
+  { key: "VENDOR_SALE_COUNT",label: "How many sales is this customer in?", blurb: "Picks a customer with lots in several sales; answer is how many.", live: true, panel: "find" },
+  // ── Tab 3 — a whole sale ──
+  { key: "SALE_TOP",         label: "Who catalogued the most in this sale?", blurb: "Picks a real sale; the answer is the top cataloguer.",        live: true,  panel: "sale" },
+  { key: "SALE_COUNT",       label: "How many lots are in this sale?",     blurb: "Picks a real sale; the answer is the Hub's lot count.",         live: true,  panel: "sale" },
+  { key: "SALE_CATALOGUERS", label: "How many people catalogued this sale?", blurb: "Picks a real sale; the answer is how many names are listed.", live: true,  panel: "sale" },
+  // ── Judgement, not lookup ──
+  { key: "CHOICE",           label: "Multiple choice",                     blurb: "For the bits that are judgement — which tab, which number, what a warning means.", live: false, panel: null },
+  { key: "FREE_TEXT",        label: "Typed answer (fixed)",                blurb: "⚠ Goes stale. Only for answers that cannot change.",            live: false, panel: null },
 ] as const
 
 export type ExerciseKind = typeof EXERCISE_KINDS[number]["key"]
@@ -124,6 +137,36 @@ export function nameMatches(answer: string, correct: string): boolean {
 export function numberMatches(answer: string, correct: number): boolean {
   const m = answer.match(/-?\d+/)
   return m ? Number(m[0]) === correct : false
+}
+
+const MONTHS = ["january", "february", "march", "april", "may", "june",
+                "july", "august", "september", "october", "november", "december"]
+
+/**
+ * Dates, typed by a human reading "3 August 2026" off a screen. Accepts the day with the month
+ * named or numbered, in either order, and the ISO form — "3 Aug", "3 August 2026", "03/08/2026",
+ * "2026-08-03". ⚠ Deliberately does NOT require the year: the screen shows one date and the
+ * trainee is copying it, so demanding a year only marks careful people wrong.
+ */
+export function dateMatches(answer: string, iso: string | Date): boolean {
+  const d = iso instanceof Date ? iso : new Date(iso)
+  if (isNaN(d.getTime())) return false
+  // Europe/London, to agree with what the panel printed.
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric", month: "numeric", year: "numeric", timeZone: "Europe/London",
+  }).formatToParts(d)
+  const day   = Number(parts.find(p => p.type === "day")?.value ?? 0)
+  const month = Number(parts.find(p => p.type === "month")?.value ?? 0)
+  if (!day || !month) return false
+
+  const a = answer.toLowerCase()
+  const nums = (a.match(/\d+/g) ?? []).map(Number)
+  const hasDay = nums.includes(day)
+  if (!hasDay) return false
+  const monthName = MONTHS[month - 1]
+  // "aug" is enough; "au" is not — three letters is the shortest unambiguous month.
+  const namedMonth = a.includes(monthName) || a.includes(monthName.slice(0, 3))
+  return namedMonth || nums.includes(month)
 }
 
 /** Codes: F090, f090, "F090 — Diecast", "sale F090" all mean the same sale. */

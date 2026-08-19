@@ -9,7 +9,8 @@
 // Server-only (imports prisma). Never import from a "use client" file.
 
 import { prisma } from "@/lib/prisma"
-import { parseParams, nameMatches, numberMatches, codeMatches, normalise, type ExerciseParams } from "@/lib/training"
+import { bcPersonName } from "@/lib/cataloguer-directory"
+import { parseParams, nameMatches, numberMatches, codeMatches, dateMatches, normalise, type ExerciseParams } from "@/lib/training"
 
 export type Materialised = {
   /** What the task is about — a barcode, a receipt number, a sale code. */
@@ -55,11 +56,28 @@ async function recentNamedLots(take = PICK_POOL) {
     orderBy: { createdAt: "desc" },
     take,
     select: {
-      barcode: true, receiptUniqueId: true, receipt: true, vendor: true,
-      createdByName: true,
+      barcode: true, receiptUniqueId: true, receipt: true, vendor: true, tote: true,
+      createdByName: true, createdAt: true,
       auction: { select: { code: true, name: true, auctionDate: true } },
     },
   })
+}
+
+/**
+ * The lot kinds that ask about ONE lot, and what each needs to be present before that lot can
+ * be used as an example. Keeping it in one table means a new question type cannot forget to
+ * check that its own answer exists — which would set a task with no right answer.
+ */
+type Lot = Awaited<ReturnType<typeof recentNamedLots>>[number]
+
+const LOT_NEEDS: Record<string, (l: Lot) => boolean> = {
+  WHO_CATALOGUED:  l => !!l.createdByName,
+  WHEN_CATALOGUED: l => !!l.createdAt,
+  LOT_SALE:        l => !!l.auction?.code,
+  // Needs BOTH: the question is "here is the barcode, what is the unique ID?"
+  LOT_UNIQUE_ID:   l => !!l.barcode && !!l.receiptUniqueId,
+  LOT_RECEIPT:     l => !!l.receipt,
+  LOT_TOTE:        l => !!l.tote,
 }
 
 /**
@@ -74,14 +92,73 @@ export async function pickSubject(kind: string, rawParams: unknown): Promise<Mat
   try {
     switch (kind) {
       case "WHO_CATALOGUED":
-      case "LOT_SALE": {
-        const rows = await recentNamedLots()
-        // LOT_SALE needs the lot to actually be in a sale with a code, or there is no answer.
-        const usable = kind === "LOT_SALE" ? rows.filter(r => r.auction?.code) : rows
-        const hit = sample(usable.filter(r => r.barcode || r.receiptUniqueId))
+      case "WHEN_CATALOGUED":
+      case "LOT_SALE":
+      case "LOT_UNIQUE_ID":
+      case "LOT_RECEIPT":
+      case "LOT_TOTE": {
+        const rows  = await recentNamedLots()
+        const needs = LOT_NEEDS[kind] ?? (() => true)
+        const usable = rows.filter(needs)
+        // ⚠ "Barcode in, unique ID out" must hand out the BARCODE — handing out the unique ID
+        // would be asking a question whose answer is already on screen.
+        const hit = sample(kind === "LOT_UNIQUE_ID"
+          ? usable.filter(r => r.barcode)
+          : usable.filter(r => r.barcode || r.receiptUniqueId))
         if (!hit) return null
-        const subject = hit.barcode || hit.receiptUniqueId || ""
+        const subject = kind === "LOT_UNIQUE_ID"
+          ? (hit.barcode ?? "")
+          : (hit.barcode || hit.receiptUniqueId || "")
         return subject ? { subject, display: subject } : null
+      }
+
+      // Both of these ask about the BUSINESS CENTRAL side, so the example has to be picked from
+      // the synced BC cache rather than from Hub lots — a Hub lot with no BC row has neither a
+      // location nor a code behind its name.
+      case "LOT_LOCATION": {
+        const rows = await prisma.warehouseItem.findMany({
+          where:   { barcode: { not: null }, location: { not: null } },
+          orderBy: { updatedAt: "desc" },
+          take:    PICK_POOL,
+          select:  { barcode: true },
+        })
+        const hit = sample(rows.map(r => r.barcode).filter((b): b is string => !!b))
+        return hit ? { subject: hit, display: hit } : null
+      }
+
+      case "BC_NAME": {
+        // Needs SOMETHING recorded against it, or there is no person to name.
+        const rows = await prisma.warehouseItem.findMany({
+          where: {
+            barcode: { not: null },
+            OR: [{ cataloguedBy: { not: null } }, { cataloguedByUser: { not: null } }, { bcCreatedBy: { not: null } }],
+          },
+          orderBy: { updatedAt: "desc" },
+          take:    PICK_POOL,
+          select:  { barcode: true, cataloguedBy: true, cataloguedByUser: true, bcCreatedBy: true },
+        })
+        // ⚠ Only pick one the directory can actually resolve to a NAME. Setting a task whose
+        // answer is a tidied-up username teaches the trainee that the tidied username is the
+        // right answer, which is the opposite of the lesson.
+        const usable = rows.filter(r =>
+          r.barcode && bcPersonName(r.cataloguedBy, r.cataloguedByUser, r.bcCreatedBy).includes(" "))
+        const hit = sample(usable.map(r => r.barcode).filter((b): b is string => !!b))
+        return hit ? { subject: hit, display: hit } : null
+      }
+
+      case "VENDOR_SALE_COUNT": {
+        const rows = await recentNamedLots(PICK_POOL * 5)
+        // Only a customer whose lots genuinely span more than one sale — "1" is not a lesson.
+        const byVendor = new Map<string, Set<string>>()
+        for (const r of rows) {
+          if (!r.vendor || !r.auction?.code) continue
+          const set = byVendor.get(r.vendor) ?? new Set<string>()
+          set.add(r.auction.code)
+          byVendor.set(r.vendor, set)
+        }
+        const min = Math.max(2, params.min ?? 2)
+        const hit = sample([...byVendor.entries()].filter(([, s]) => s.size >= min).map(([v]) => v))
+        return hit ? { subject: hit, display: hit } : null
       }
 
       case "LOT_COUNT":
@@ -107,7 +184,9 @@ export async function pickSubject(kind: string, rawParams: unknown): Promise<Mat
         return hit ? { subject: hit, display: hit } : null
       }
 
-      case "SALE_TOP": {
+      case "SALE_TOP":
+      case "SALE_COUNT":
+      case "SALE_CATALOGUERS": {
         const min = Math.max(2, params.min ?? 2)
         const sales = await prisma.catalogueAuction.findMany({
           where:   { code: { not: "" } },
@@ -137,10 +216,38 @@ async function lotsFor(subject: string) {
     orderBy: { createdAt: "desc" },
     take:    5,
     select: {
-      createdByName: true, vendor: true, receipt: true,
+      createdByName: true, createdAt: true, vendor: true, receipt: true,
+      tote: true, barcode: true, receiptUniqueId: true,
       auction: { select: { code: true, name: true } },
     },
   })
+}
+
+/**
+ * The "one lot in, one field out" questions all mark the same way: pull the lot, collect the
+ * distinct values of one field, accept any of them.
+ *
+ * ⚠ ANY of them, not the first. A barcode is sale-scoped and can legitimately appear in more
+ * than one sale, so a lot genuinely has more than one right answer — marking the second one
+ * wrong would be marking the tool's own behaviour wrong.
+ */
+async function markLotField(
+  subject: string,
+  pick: (l: Awaited<ReturnType<typeof lotsFor>>[number]) => string | null | undefined,
+  match: (given: string, correct: string) => boolean,
+  given: string,
+  detailOf?: (l: Awaited<ReturnType<typeof lotsFor>>[number]) => string | undefined,
+): Promise<Marked> {
+  const lots = await lotsFor(subject)
+  const values = [...new Set(
+    lots.map(pick).filter((v): v is string => !!v && v !== "null"),
+  )]
+  if (!values.length) return { correct: false, answer: "—", unavailable: true }
+  return {
+    correct: values.some(v => match(given, v)),
+    answer:  values.join(" or "),
+    detail:  detailOf ? detailOf(lots[0]) : undefined,
+  }
 }
 
 /**
@@ -171,15 +278,50 @@ export async function markAnswer(
 
   try {
     switch (kind) {
-      case "WHO_CATALOGUED": {
-        const lots = await lotsFor(subject)
-        const names = [...new Set(lots.map(l => l.createdByName).filter((n): n is string => !!n && n !== "null"))]
-        if (!names.length) return { correct: false, answer: "—", unavailable: true }
-        // ⚠ A barcode is sale-scoped and can legitimately appear in more than one sale, so
-        // ANY of the cataloguers who entered it is a right answer. Marking the second one
-        // wrong would be marking the tool's own behaviour wrong.
-        const correct = names.some(n => nameMatches(said, n))
-        return { correct, answer: names.join(" or "), detail: lots[0]?.auction?.code ? `Sale ${lots[0].auction.code}` : undefined }
+      case "WHO_CATALOGUED":
+        return markLotField(subject, l => l.createdByName, nameMatches, said,
+          l => (l?.auction?.code ? `Sale ${l.auction.code}` : undefined))
+
+      case "WHEN_CATALOGUED":
+        return markLotField(subject, l => l.createdAt?.toISOString(), dateMatches, said,
+          l => (l?.createdByName ? `Catalogued by ${l.createdByName}` : undefined))
+
+      case "LOT_UNIQUE_ID":
+        return markLotField(subject, l => l.receiptUniqueId, codeMatches, said,
+          () => "The unique ID stays with the item for life; the barcode belongs to the sale.")
+
+      case "LOT_RECEIPT":
+        return markLotField(subject, l => l.receipt, codeMatches, said)
+
+      case "LOT_TOTE":
+        return markLotField(subject, l => l.tote, codeMatches, said)
+
+      case "LOT_LOCATION": {
+        const rows = await prisma.warehouseItem.findMany({
+          where:  { barcode: { equals: subject, mode: "insensitive" }, location: { not: null } },
+          select: { location: true },
+          take:   5,
+        })
+        const places = [...new Set(rows.map(r => r.location).filter((l): l is string => !!l))]
+        if (!places.length) return { correct: false, answer: "—", unavailable: true }
+        return { correct: places.some(p => codeMatches(said, p)), answer: places.join(" or ") }
+      }
+
+      case "BC_NAME": {
+        const row = await prisma.warehouseItem.findFirst({
+          where:  { barcode: { equals: subject, mode: "insensitive" } },
+          select: { cataloguedBy: true, cataloguedByUser: true, bcCreatedBy: true },
+        })
+        if (!row) return { correct: false, answer: "—", unavailable: true }
+        const name = bcPersonName(row.cataloguedBy, row.cataloguedByUser, row.bcCreatedBy)
+        if (!name) return { correct: false, answer: "—", unavailable: true }
+        // What BC literally stored, so the explanation can show the code they were reading.
+        const raw = [row.cataloguedBy, row.cataloguedByUser, row.bcCreatedBy].filter(Boolean).join(" · ")
+        return {
+          correct: nameMatches(said, name),
+          answer:  name,
+          detail:  raw ? `Business Central stored: ${raw}` : undefined,
+        }
       }
 
       case "LOT_SALE": {
@@ -213,6 +355,51 @@ export async function markAnswer(
         if (!vendors.length) return { correct: false, answer: "—", unavailable: true }
         const correct = vendors.some(v => codeMatches(said, v))
         return { correct, answer: vendors.join(" or ") }
+      }
+
+      case "VENDOR_SALE_COUNT": {
+        const rows = await prisma.catalogueLot.findMany({
+          where:  { vendor: subject },
+          select: { auction: { select: { code: true } } },
+          take:   PICK_POOL * 10,
+        })
+        const codes = [...new Set(rows.map(r => r.auction?.code).filter((c): c is string => !!c))]
+        if (!codes.length) return { correct: false, answer: "0", unavailable: true }
+        return {
+          correct: numberMatches(said, codes.length),
+          answer:  String(codes.length),
+          detail:  codes.slice(0, 8).join(", ") + (codes.length > 8 ? "…" : ""),
+        }
+      }
+
+      case "SALE_COUNT": {
+        const sale = await prisma.catalogueAuction.findFirst({
+          where:  { code: { equals: subject, mode: "insensitive" } },
+          select: { name: true, _count: { select: { lots: true } } },
+        })
+        if (!sale) return { correct: false, answer: "—", unavailable: true }
+        const n = sale._count.lots
+        return { correct: numberMatches(said, n), answer: String(n), detail: sale.name || undefined }
+      }
+
+      case "SALE_CATALOGUERS": {
+        const sale = await prisma.catalogueAuction.findFirst({
+          where:  { code: { equals: subject, mode: "insensitive" } },
+          select: { id: true },
+        })
+        if (!sale) return { correct: false, answer: "—", unavailable: true }
+        const grouped = await prisma.catalogueLot.groupBy({
+          by:     ["createdByName"],
+          where:  { auctionId: sale.id, createdByName: { not: null } },
+          _count: { _all: true },
+        })
+        const names = grouped.map(g => g.createdByName).filter((n): n is string => !!n && n !== "null")
+        if (!names.length) return { correct: false, answer: "0", unavailable: true }
+        return {
+          correct: numberMatches(said, names.length),
+          answer:  String(names.length),
+          detail:  names.slice(0, 8).join(", ") + (names.length > 8 ? "…" : ""),
+        }
       }
 
       case "SALE_TOP": {

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import TrainingSlideView from "@/components/training-slide"
 import {
   saveTrainingSlide, deleteTrainingSlide, moveTrainingSlide,
-  saveTrainingExercise, deleteTrainingExercise, saveTrainingModule,
+  saveTrainingExercise, deleteTrainingExercise, saveTrainingModule, restoreBuiltInCourse,
 } from "@/lib/actions/training"
 import { SLIDE_LAYOUTS, SLIDE_GRAPHICS, EXERCISE_KINDS, ADMIN_CENTRE_PANELS, parseParams } from "@/lib/training"
 import { CARD } from "@/lib/training-ui"
@@ -162,6 +162,33 @@ export default function EditTab({
           </ol>
         )}
       </div>
+
+      {/* ── Restore ── */}
+      {/* ⚠ The seed only ever writes into an EMPTY table, which is what stops a deploy quietly
+          undoing somebody's edits. The flip side is that an environment seeded months ago can
+          never pick up a lesson improved since — so refreshing is this button, deliberate and
+          confirmed, rather than something a deploy does behind your back. */}
+      {m.key === "LOT_LOOKUP" && (
+        <div className={`${CARD} p-6 border-2 border-amber-300 dark:border-amber-500/40`}>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Restore the built-in course</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300 max-w-3xl leading-relaxed mb-4">
+            Replaces every slide and task in this course with the version that ships in the app. Use it
+            after an update that improves the standard course. <strong>It deletes anything written here</strong> —
+            people&apos;s progress is left alone.
+          </p>
+          <button
+            onClick={() => {
+              if (!confirm("Replace all slides and tasks with the built-in course? Anything written here is lost.")) return
+              if (!confirm("Last check — this cannot be undone. Restore the built-in course?")) return
+              run(() => restoreBuiltInCourse(m.key), "Restored the built-in course")
+            }}
+            disabled={pending}
+            className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold"
+          >
+            Restore the built-in course
+          </button>
+        </div>
+      )}
 
       {slide && (
         <SlideEditor

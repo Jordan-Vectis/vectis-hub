@@ -117,6 +117,54 @@ export async function ensureTrainingSeed(): Promise<void> {
   }
 }
 
+/**
+ * Replace a course's content with the built-in version shipped in the code.
+ *
+ * ⚠ This exists because the seed only ever writes into an EMPTY table. That is the right
+ * default — it is what stops a deploy quietly undoing somebody's edits — but it also means an
+ * environment seeded last month can never pick up a lesson improved since. So refreshing is a
+ * deliberate, admin-only, confirmed action rather than something a deploy does.
+ *
+ * ⚠ It DELETES the course's current slides and tasks. Anything written in the app is lost, which
+ * is exactly why the button asks twice. Progress rows are left alone: a person who passed a task
+ * that no longer exists simply stops being counted against it, rather than losing their record.
+ */
+export async function restoreBuiltInCourse(moduleKey: string): Promise<Res> {
+  try {
+    await requireAdmin()
+    if (moduleKey !== "LOT_LOOKUP") {
+      return { ok: false, error: "There is no built-in course for this panel yet — only the Admin Centre ships written." }
+    }
+    const mod = await prisma.trainingModule.findUnique({ where: { key: moduleKey }, select: { id: true } })
+    if (!mod) return { ok: false, error: "That course no longer exists" }
+
+    await prisma.$transaction(async tx => {
+      await tx.trainingSlide.deleteMany({ where: { moduleId: mod.id } })
+      await tx.trainingExercise.deleteMany({ where: { moduleId: mod.id } })
+      await tx.trainingSlide.createMany({
+        data: ADMIN_CENTRE_SLIDES.map((sl, i) => ({
+          moduleId: mod.id,
+          title: sl.title, subtitle: sl.subtitle ?? null, body: sl.body ?? null,
+          layout: sl.layout ?? "CONTENT", graphic: sl.graphic ?? "NONE",
+          tryHref: sl.tryHref ?? null, tryLabel: sl.tryLabel ?? null,
+          notes: sl.notes ?? null, sortOrder: (i + 1) * 10,
+        })),
+      })
+      await tx.trainingExercise.createMany({
+        data: ADMIN_CENTRE_EXERCISES.map((ex, i) => ({
+          moduleId: mod.id,
+          title: ex.title, brief: ex.brief, panel: ex.panel ?? null, kind: ex.kind,
+          params: (ex.params ?? {}) as object,
+          expected: ex.expected ?? null, hint: ex.hint ?? null, explain: ex.explain ?? null,
+          sortOrder: (i + 1) * 10,
+        })),
+      })
+    })
+    refresh(moduleKey)
+    return { ok: true }
+  } catch (e) { return fail(e) }
+}
+
 // ─── Modules ────────────────────────────────────────────────────────────────
 
 export async function saveTrainingModule(form: FormData): Promise<Res> {
