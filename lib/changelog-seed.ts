@@ -14,6 +14,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b3702e387b53040fec83d8ef0d35fc3aa0e74faa","author":"Jordan Orange","date":"2026-08-19T10:05:21+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"cfb7bc949d85d99938ec48672bb5c21b6fd247a5","author":"Jordan Orange","date":"2026-08-19T10:04:30+01:00","subject":"Add Instructions Testing tab to Auction AI"},
+  {"sha":"9e742d7fbdacc68541c44fe84b403a1748d185a4","author":"Jack Collings","date":"2026-08-19T10:02:11+01:00","subject":"Refresh changelog seed"},
   {"sha":"567cd6adfa2f68a1fc86aea47846420c974581d3","author":"Jack Collings","date":"2026-08-19T10:02:02+01:00","subject":"Add IT & Admin -> Training: a course per Hub panel, starting with the Admin Centre"},
   {"sha":"8d1575a621a7c1a9e0bf0d31cc54ade2dd32f877","author":"Jordan Orange","date":"2026-08-19T09:21:23+01:00","subject":"Memory: the sandbox, the missing delete path, and understanding the job first"},
   {"sha":"28b94677cf53c1f211d985943a2348e23a1d87f2","author":"Jordan Orange","date":"2026-08-19T09:11:14+01:00","subject":"BC Match: show the mismatches the tile is counting"},
