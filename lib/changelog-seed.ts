@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"825f63b4e7efe9cd441e9e8856e5c50aa83e2e0d","author":"Jordan Orange","date":"2026-08-19T14:12:09+01:00","subject":"Ask about a walk-away at the save, and stop the popup appearing mid-lot"},
+  {"sha":"c7b4aad162c703adceec434488c157e82f9c44de","author":"Jordan Orange","date":"2026-08-19T14:00:57+01:00","subject":"Refresh changelog seed"},
   {"sha":"870ec94cdde1fd394ad31ef17d62a427e91c7a6e","author":"Jordan Orange","date":"2026-08-19T13:57:29+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"72b1ac6437b11c1ea2ef5868ad4f374d8d5c05ae","author":"Jordan Orange","date":"2026-08-19T13:57:27+01:00","subject":"Fix Unaccounted Time showing every clock time an hour early"},
   {"sha":"72118e348febf3cb4edda35d0bea87b0ba325428","author":"Jack Collings","date":"2026-08-19T13:18:46+01:00","subject":"Refresh changelog seed"},
