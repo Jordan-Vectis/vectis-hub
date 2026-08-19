@@ -6,6 +6,7 @@ import { KEY_POINTS_INSTRUCTION, KEY_POINTS_INSTRUCTION_RELAXED } from "@/lib/ke
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { auditCodes } from "@/lib/product-codes"
+import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
 
 export const maxDuration = 60
 
@@ -23,12 +24,16 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
   try {
-    const { label, keyPoints, description, model, mode } = await req.json() as {
+    const { label, keyPoints, description, model, mode, presetKey } = await req.json() as {
       label:       string
       keyPoints:   string
       description: string
       model?:      string
       mode?:       "strict" | "relaxed"
+      // Which instruction the run is using — only so the Dolls/Bears clean-up can be
+      // scoped. The INSTRUCTION TEXT is never posted; this stage has its own system
+      // prompt and does not resolve the preset.
+      presetKey?:  string
     }
     if (!label || !keyPoints || !description) {
       return NextResponse.json({ error: "Missing label, keyPoints or description" }, { status: 400 })
@@ -116,6 +121,17 @@ export async function POST(req: NextRequest) {
     // The check we enforced outranks what the model volunteered — it is the one backed by
     // evidence rather than by the model's confidence.
     if (!flag && modelFlag) flag = modelFlag
+
+    // ⚠ The Dolls/Bears mechanical clean-up runs HERE, as the last thing to touch the text.
+    // The Batch route cleans its own output, but this stage runs AFTER it in the pipeline and
+    // its whole job is to restore the cataloguer's exact wording — and the cataloguer writes
+    // the code spaced ("CB 165133"), so it put the space straight back and nothing cleaned up
+    // behind it (measured on a live Charlie Bears trio, 2026-08-19).
+    // ⚠ It must stay AFTER the code audit above: that repair puts the cataloguer's own
+    // spelling back with a literal string replace, so cleaning first would simply reintroduce
+    // the spaced code it had just closed. cleanBearsDescription is idempotent, so running it
+    // again after Batch already did is harmless.
+    if (isBearsPreset(presetKey)) revised = cleanBearsDescription(revised)
 
     const changed = revised !== description.trim()
     return NextResponse.json({ revised, changed, missing, added, found, flag,

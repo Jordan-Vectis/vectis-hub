@@ -490,7 +490,7 @@ async function runStages(
       const result = await withRetry(lot.label, deadline, addLog, async (attempt) => {
         const res  = await fetch(`${base()}/api/auction-ai/key-points-check`, {
           method: "POST", headers: cronHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelFor(attempt), mode: item.kpRelaxed ? "relaxed" : "strict" }),
+          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelFor(attempt), mode: item.kpRelaxed ? "relaxed" : "strict", presetKey: item.preset }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)
@@ -562,7 +562,7 @@ async function runStages(
         }
         const res  = await fetch(`${base()}/api/auction-ai/double-check`, {
           method: "POST", headers: cronHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: modelFor(attempt), keyPoints: lot.keyPoints }),
+          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: modelFor(attempt), keyPoints: lot.keyPoints, presetKey: item.preset }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)

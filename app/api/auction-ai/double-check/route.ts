@@ -6,6 +6,7 @@ import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { auditCodes } from "@/lib/product-codes"
+import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
 
 export const maxDuration = 60
 
@@ -21,12 +22,15 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
   try {
-    const { label, description, images, model, keyPoints } = await req.json() as {
+    const { label, description, images, model, keyPoints, presetKey } = await req.json() as {
       label:       string
       description: string
       images?:     { data: string; mimeType: string }[]
       model?:      string
       keyPoints?:  string
+      // Which instruction the run is using — only so the Dolls/Bears clean-up can be
+      // scoped. The INSTRUCTION TEXT is never posted; this stage has its own system prompt.
+      presetKey?:  string
     }
     if (!label || !description) return NextResponse.json({ error: "Missing label or description" }, { status: 400 })
 
@@ -113,6 +117,14 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // ⚠ The Dolls/Bears mechanical clean-up runs HERE, as the last thing to touch the text.
+    // Batch cleans its own output, but Double Check is the FINAL stage of the pipeline — a
+    // rewrite it produces was reaching the catalogue uncleaned (measured 2026-08-19).
+    // ⚠ It must stay AFTER the code audit above: the repair puts the cataloguer's own spelling
+    // back with a literal string replace, so cleaning first would reintroduce the spaced code
+    // it had just closed. cleanBearsDescription is idempotent — re-running it is harmless.
+    if (revised && isBearsPreset(presetKey)) revised = cleanBearsDescription(revised)
 
     return NextResponse.json({ verdict, contradictions, unsupported, revised, flag,
       debug: { prompt: textPart.text, response: rawResponse, imageCount: imageParts.length } })

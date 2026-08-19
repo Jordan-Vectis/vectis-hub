@@ -4449,7 +4449,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         const res  = await fetch("/api/auction-ai/double-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
           // keyPoints sent so DC keeps cataloguer facts and only removes duplication
-          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: modelToUse, keyPoints: lot.keyPoints }),
+          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: modelToUse, keyPoints: lot.keyPoints, presetKey: preset }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)
@@ -4537,7 +4537,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res  = await fetch("/api/auction-ai/key-points-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelToUse, mode: kpRelaxed ? "relaxed" : "strict" }),
+          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelToUse, mode: kpRelaxed ? "relaxed" : "strict", presetKey: preset }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)

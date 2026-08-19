@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c187cbae95bf5e3262e9ecd089a793ba014140b6","author":"Jordan Orange","date":"2026-08-19T10:09:09+01:00","subject":"Refresh changelog seed"},
   {"sha":"b3702e387b53040fec83d8ef0d35fc3aa0e74faa","author":"Jordan Orange","date":"2026-08-19T10:05:21+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"cfb7bc949d85d99938ec48672bb5c21b6fd247a5","author":"Jordan Orange","date":"2026-08-19T10:04:30+01:00","subject":"Add Instructions Testing tab to Auction AI"},
   {"sha":"9e742d7fbdacc68541c44fe84b403a1748d185a4","author":"Jack Collings","date":"2026-08-19T10:02:11+01:00","subject":"Refresh changelog seed"},

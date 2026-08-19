@@ -263,7 +263,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
           const kp = await attempt(lot.label, async (modelToUse) => {
             const res = await fetch("/api/auction-ai/key-points-check", {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: currentDesc, model: modelToUse, mode: kpRelaxed ? "relaxed" : "strict" }),
+              body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: currentDesc, model: modelToUse, mode: kpRelaxed ? "relaxed" : "strict", presetKey: preset }),
             })
             const json = await res.json()
             if (json.error) throw new Error(json.error)
@@ -297,7 +297,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
             })))
             const res = await fetch("/api/auction-ai/double-check", {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ label: lot.label, description: currentDesc, images, model: modelToUse, keyPoints: lot.keyPoints }),
+              body: JSON.stringify({ label: lot.label, description: currentDesc, images, model: modelToUse, keyPoints: lot.keyPoints, presetKey: preset }),
             })
             const json = await res.json()
             if (json.error) throw new Error(json.error)
