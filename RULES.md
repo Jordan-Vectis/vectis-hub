@@ -413,6 +413,14 @@ drift happened even though nobody edited it in the UI). Do **not** reintroduce a
   `PUT /api/auction-ai/presets`), which persists to the DB forever. Delete is permanent (the table is
   only ever auto-seeded when completely empty, so a deleted built-in does not reappear).
 - The Instructions page is the **only** editor. Do not add editing UIs to the run tabs.
+- **Instructions Testing tab (2026-08-19)** — Auction AI → Run → 🧪 Instructions Testing runs the full
+  pipeline (Batch → Key Points → Double Check) over 5–10 hand-picked lots so instruction wording can be
+  tried before a real sale. It is **PREVIEW ONLY and must stay that way**: no description, estimate,
+  `aiFlagNote`, pipeline row or saved run is ever written. Do not add an apply/save button to it — the
+  point is that a test run has no consequence. It honours the rule above (no instruction editor; it
+  posts a `presetKey` like every other run tab). Its retries are deliberately **bounded** (3 attempts)
+  rather than the pipeline's infinite loop, so a 5-lot test can never hang — failures are reported
+  loudly on the lot, never swallowed. Lives in `app/(app)/tools/auction-ai/instructions-test-tab.tsx`.
 - **Export / Import (sync between environments).** Staging and production are **separate databases**,
   so instruction edits do not cross over automatically. The Instructions page has **⬇ Export all**
   (downloads every instruction as `vectis-instructions-<date>.json`) and **⬆ Import** (upload that

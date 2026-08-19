@@ -8,6 +8,7 @@ import { applyAiDescriptionOne, applyAiEstimateOne, saveAiFlagNote } from "@/lib
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
 import BcImportCheckTab from "./bc-import-check-tab"
+import InstructionsTestTab from "./instructions-test-tab"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 import RunCostEstimate from "@/components/run-cost-estimate"
 import Link from "next/link"
@@ -155,7 +156,7 @@ function ToastContainer() {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline" | "upgrade" | "bcimport"
+type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline" | "upgrade" | "bcimport" | "instrtest"
 
 type ChatMessage = {
   role: "user" | "model"
@@ -6209,6 +6210,7 @@ const TAB_GROUPS: { label: string; tabs: TabDef[] }[] = [
       { id: "kpcheck",      label: "Key Points Check",   icon: "✓"  },
       { id: "doublecheck",  label: "Double Check",       icon: "🔎" },
       { id: "pipeline",     label: "Auto Pipeline",      icon: "🔄", accent: "#C8A96E" },
+      { id: "instrtest",    label: "Instructions Testing", icon: "🧪", accent: "#10b981" },
       { id: "upgrade",      label: "AI Upgrade",         icon: "✨", accent: "#6366f1" },
     ],
   },
@@ -6379,6 +6381,7 @@ export default function AuctionAIPage() {
         <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} fallbackModel={fallbackModel} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
         <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} fallbackModel={fallbackModel} />}</div>
         <div className={tab === "upgrade"      ? "" : "hidden"}>{tab === "upgrade"   && <UpgradeTab model={model} fallbackModel={fallbackModel} />}</div>
+        <div className={tab === "instrtest"    ? "" : "hidden"}>{tab === "instrtest" && <InstructionsTestTab model={model} fallbackModel={fallbackModel} />}</div>
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
         <div className={tab === "bcimport"     ? "" : "hidden"}>{tab === "bcimport" && <BcImportCheckTab />}</div>

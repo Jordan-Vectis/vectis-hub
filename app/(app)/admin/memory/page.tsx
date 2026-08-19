@@ -16,6 +16,31 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "instructions_testing.md",
+    content: `---
+name: Instructions Testing tab - the pipeline on 5-10 lots
+purpose: Auction AI's test harness for instruction changes. PREVIEW ONLY - it never writes. Read before touching it or adding any apply/save to it.
+metadata:
+  type: reference
+---
+
+Auction AI -> Run group -> 🧪 Instructions Testing (built 2026-08-19). Jordan: "I basically want the auto pipeline but it lets me pick like 5 or 10 lots to run through and test" - the loop for trying an instruction change before letting it near a 500-lot sale.
+
+Lives in its OWN file, app/(app)/tools/auction-ai/instructions-test-tab.tsx, not inside the 6,389-line page.tsx - matching the existing siblings bc-import-check-tab.tsx and macro-tab.tsx. Wired into page.tsx in four places: the import, the Tab union, TAB_GROUPS (Run group, after Auto Pipeline), and the main render.
+
+⚠⚠ IT NEVER WRITES - THAT IS THE ENTIRE POINT. Preview only, chosen by Jordan. Every write the real pipeline performs is deliberately absent: applyAiDescriptionOne, applyAiEstimateOne, saveAiFlagNote, /api/auction-ai/pipeline/lot, /api/auction-ai/runs. No description, no estimate, no aiFlagNote, no PipelineLot row, no saved run. The same awkward lots can be re-run as often as you like with the catalogue untouched. Do NOT add an apply button - that is a decision to take with Jordan first, and the value of the tab is that running it has no consequence. It never touches appliedDesc, so it cannot cause the Review-and-Apply faults.
+
+WHAT IT DOES. Pick a sale, Load lots (only-with-photos on by default), tick the ones you want (First 5 / First 10 / Clear; over 20 shows a cost warning), pick the saved instruction, tick which stages to run. Then per lot: Batch -> Key Points -> Double Check, the pipeline's own order, each stage feeding the next in memory. Each lot expands to show the cataloguer's key points, what is currently on the catalogue, the three stage outputs side by side, KP missing/added, DC contradictions/unsupported, any AI flag, and the final text with a Copy button.
+
+It calls the SAME three server routes (/api/auction-ai/batch, /key-points-check, /double-check), so the instruction text, cleanBearsDescription, auditCodes and the relaxed/strict KP wording all still resolve server-side from the one source. Nothing about the prompts is re-implemented client-side.
+
+⚠ TWO DELIBERATE DIFFERENCES FROM THE AUTO PIPELINE:
+1. No instruction editor. RULES.md - "The Instructions page is the only editor. Do not add editing UIs to the run tabs" - and run tabs post a presetKey, never instruction text. Raised with Jordan as a conflict before building; he chose to keep the rule. Edit on the Instructions tab, then come back and run.
+2. Retries are BOUNDED (3 attempts, alternating primary/fallback), not infinite. The real pipeline retries forever so a sale never silently loses a lot; a tab you are sat in front of waiting on 5 lots must not hang for half an hour on a rate limit. Nothing fails silently - the give-up reason goes in the log and onto the lot.
+
+Not added to the AUCTION_AI section list in lib/apps.ts, matching Auto Pipeline / AI Upgrade / Double Check which are also absent - so it gates exactly like the tab it tests.`,
+  },
+  {
     filename: "sandbox_environment.md",
     content: `---
 name: Sandbox - staging's code, production's data
