@@ -21,30 +21,55 @@ export const ADMIN_CENTRE_SLIDES: SeedSlide[] = [
   {
     layout: "TITLE",
     title: "The Admin Centre",
-    subtitle: "Answering “where are my items?” without asking a cataloguer",
-    notes: "Open by asking the room what they do today when a customer rings up about their consignment. Most will say they ask a cataloguer, or open two systems. That is the habit this replaces. Around 25 slides — budget 20 minutes, then move to the practice tasks.",
+    subtitle: "Because the lot information in Business Central is not what you think it is",
+    notes: "Open by asking the room where they look today when they need to know something about a lot. Almost everyone says Business Central. That is the habit this course is here to break. Around 38 slides — budget 25 minutes, then move to the practice tasks.",
   },
   {
     layout: "STATEMENT",
-    title: "One object. Two systems. Two different numbers.",
-    subtitle: "Everything else on this course follows from that sentence",
-    body: "A lot is catalogued in the Hub first and pushed to Business Central afterwards. The same physical item is F090447 here and R008414-7 there.",
-    notes: "Make sure this lands before going on. If it does, the rest is detail.",
+    title: "Business Central says Jack and Jordan catalogued everything",
+    subtitle: "They did not. They pushed it.",
+    body: "Lots are entered in the Hub all week by the whole team, then pushed across to Business Central in bulk at the end. BC stamps that push onto every lot in the batch — so it records whoever pressed the button, not whoever did the work.",
+    notes: "This is the slide the whole course hangs off. Ask who in the room has ever looked up a lot in BC and taken the cataloguer at face value. Nearly everyone will have.",
   },
   {
-    title: "What each system actually knows",
-    body: `The two halves of the answer live in different places, which is why nobody could ever answer the question from one screen.
+    title: "What else the push gets wrong",
+    body: `The cataloguer is the obvious one, but it is not the only field that arrives as a side effect of the push rather than as a fact about the lot.
 
-The Hub knows
-- What was catalogued, by whom, and exactly when
-- Which sale it was catalogued into
-- Every change anyone has made to the lot since
+- Catalogued by — whoever ran the push, on every lot in the batch
+- Catalogued date — when it was pushed, not when it was catalogued
+- Categories — routinely wrong for the same reason
 
-Business Central knows
-- The lot number the customer will see
+None of this is Business Central misbehaving. It is simply what a bulk push looks like from the inside. BC is recording exactly what happened to it.`,
+    notes: "Worth being fair to BC here — it is not broken, it is answering a different question. It knows what happened to the record, not what happened to the item.",
+  },
+  {
+    layout: "STATEMENT",
+    title: "The Hub knows who actually did it",
+    subtitle: "Because it was there at the time",
+    body: "The Hub records the person who was logged in when the lot was created, the moment they created it, and the category they chose. That is the truth of it — and it is why the Hub always wins.",
+  },
+  {
+    title: "But Business Central is not useless",
+    body: `Two things genuinely only exist there, and both matter to somebody on the phone.
+
+Business Central alone knows
+- The lot number the customer will quote at you
 - Where the item physically is
-- What was booked in, on which receipt, in which tote`,
-    notes: "Worth naming the consequence: the lot NUMBER a customer quotes on the phone only exists in BC, and the cataloguer only exists in the Hub.",
+
+The Hub alone knows
+- Who really catalogued it, when, and into which sale
+- The real category
+- Every change anyone has made since
+
+So the answer is never in one system. It never was.`,
+    notes: "The point to make: this is not Hub good, BC bad. Each is authoritative about different things, and the skill is knowing which.",
+  },
+  {
+    layout: "STATEMENT",
+    title: "The bridge is where the new information comes from",
+    subtitle: "Not a third system — a join",
+    body: "Which of our cataloguers entered lot 247 in F088? Business Central has the lot number and a cataloguer that just says Jordan. The Hub has the real cataloguer and no lot number. Joined on the barcode, it is one line on one screen — and that line existed in neither system before.",
+    notes: "This is the slide that explains why the tool exists at all. It is not a nicer window onto BC — the join itself creates information that was in neither system. Everything from here is how to use it.",
   },
   {
     layout: "CARDS",
@@ -199,10 +224,10 @@ Below it, the lot itself: the sale, the barcode, the unique ID, the receipt, the
   },
   {
     layout: "STATEMENT",
-    title: "Business Central's “catalogued by” is the import stamp",
-    subtitle: "Trust the Hub's name, every single time",
-    body: "Lots are pushed across in bulk, so every lot in a sale carries whoever ran that import. The Hub records the person who actually typed the lot.",
-    notes: "The most common wrong answer people give on this course. Spend a moment here.",
+    title: "Business Central's “catalogued by” is the push stamp",
+    subtitle: "If it says Jack or Jordan, that is the button, not the work",
+    body: "Every lot in a pushed batch carries whoever ran it. Look up ten lots from one sale in BC and you will get the same name ten times — which should tell you it is not answering the question you asked.",
+    notes: "Callback to the second slide. The tell is the repetition: a real cataloguer list for a sale has several names on it with different counts.",
   },
 
   // ── Names — the bit that confuses everybody ──
@@ -390,6 +415,21 @@ export const ADMIN_CENTRE_EXERCISES: SeedExercise[] = [
     explain: "The barcode belongs to the sale and changes if the item is re-entered later. The unique ID stays with the item for life — which is why it is the one to search with when a barcode finds nothing.",
   },
   {
+    title: "Everyone catalogued by Jordan?",
+    kind: "CHOICE",
+    brief: "You look up eight lots from the same sale in Business Central. All eight say they were catalogued by Jordan, on the same day, within a few minutes of each other. What are you actually looking at?",
+    params: {
+      options: [
+        "The bulk push — Jordan ran it, so his name and that timestamp are on every lot in the batch",
+        "Jordan did catalogue all eight; he is simply very quick",
+        "Seven of the records are duplicates and should be deleted",
+        "The sale was imported from a spreadsheet rather than catalogued at all",
+      ],
+      correct: 0,
+    },
+    explain: "This is the single reason the Admin Centre exists. Lots are entered in the Hub all week by the whole team and pushed to BC in bulk at the end, so BC records the push, not the work — the name, the timestamp, and often the category too. The repetition is the tell: a real cataloguer list has several names with different counts. Always take the cataloguer from the Hub.",
+  },
+  {
     title: "Reading a BC code",
     kind: "CHOICE",
     brief: "You are looking at a Business Central row and the catalogued-by field just says “JC”. What are you looking at?",
@@ -442,6 +482,21 @@ export const ADMIN_CENTRE_EXERCISES: SeedExercise[] = [
       correct: 0,
     },
     explain: "Lots go to Business Central in bulk, so every lot in that batch carries whoever ran it. The two names answering different questions is normal — the Hub answers who catalogued it, BC answers who pushed it across. Always quote the Hub's name.",
+  },
+  {
+    title: "The wrong category",
+    kind: "CHOICE",
+    brief: "A colleague says a lot is filed under the wrong category, and shows you Business Central to prove it. Where should you check before agreeing with them?",
+    params: {
+      options: [
+        "The Hub — the category the cataloguer actually chose is there; BC's arrives with the bulk push and is routinely wrong",
+        "Nowhere — Business Central is the system of record for categories",
+        "The tote's category on tab 1, which overrides the lot's",
+        "The sale's own settings, which set the category for every lot in it",
+      ],
+      correct: 0,
+    },
+    explain: "Same root cause as the cataloguer name. The push writes what it writes across the whole batch, so a category read off BC is not evidence of a cataloguing mistake. Check what the Hub holds first — that is what the person with the item in their hands actually chose.",
   },
   {
     title: "Which sale is it in?",
