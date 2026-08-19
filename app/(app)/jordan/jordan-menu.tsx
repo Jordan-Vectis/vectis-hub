@@ -76,8 +76,12 @@ export default function JordanMenu() {
               <span>05 &nbsp;CV WORKSHOP <span className="opacity-50">— upload a CV, edit it, tailor it to a job + covering letter</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
+            <Link href="/jordan/garage" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+              <span>06 &nbsp;GARAGE <span className="opacity-50">— MOT, tax &amp; service due dates, history and past cars</span></span>
+              <span className="shrink-0 font-bold">[ OPEN ]</span>
+            </Link>
             <div className={`${row} opacity-40 select-none`}>
-              <span>06 &nbsp;????????????</span>
+              <span>07 &nbsp;????????????</span>
               <span className="shrink-0">[ LOCKED ]</span>
             </div>
 

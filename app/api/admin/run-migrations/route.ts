@@ -14,6 +14,50 @@ import { prisma } from "@/lib/prisma"
 // array has changed since (or was never run) the hashes differ → pending.
 
 const MIGRATIONS = [
+  // JORDAN.SYS garage (personal, /jordan) — cars + their MOT/service history.
+  `CREATE TABLE IF NOT EXISTS "JordanCar" (
+    "id"           TEXT NOT NULL PRIMARY KEY,
+    "nickname"     TEXT NOT NULL DEFAULT '',
+    "reg"          TEXT NOT NULL DEFAULT '',
+    "make"         TEXT NOT NULL DEFAULT '',
+    "model"        TEXT NOT NULL DEFAULT '',
+    "colour"       TEXT NOT NULL DEFAULT '',
+    "year"         TEXT NOT NULL DEFAULT '',
+    "fuel"         TEXT NOT NULL DEFAULT '',
+    "notes"        TEXT NOT NULL DEFAULT '',
+    "photoKey"     TEXT NOT NULL DEFAULT '',
+    "mileage"      INTEGER,
+    "motDue"       TIMESTAMP(3),
+    "taxDue"       TIMESTAMP(3),
+    "serviceDue"   TIMESTAMP(3),
+    "insuranceDue" TIMESTAMP(3),
+    "isPast"       BOOLEAN NOT NULL DEFAULT FALSE,
+    "boughtOn"     TIMESTAMP(3),
+    "soldOn"       TIMESTAMP(3),
+    "boughtPrice"  INTEGER,
+    "soldPrice"    INTEGER,
+    "position"     INTEGER NOT NULL DEFAULT 0,
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanCar_isPast_idx" ON "JordanCar"("isPast")`,
+  `CREATE TABLE IF NOT EXISTS "JordanCarRecord" (
+    "id"        TEXT NOT NULL PRIMARY KEY,
+    "carId"     TEXT NOT NULL,
+    "kind"      TEXT NOT NULL DEFAULT 'SERVICE',
+    "date"      TIMESTAMP(3) NOT NULL,
+    "mileage"   INTEGER,
+    "costPence" INTEGER,
+    "garage"    TEXT NOT NULL DEFAULT '',
+    "result"    TEXT NOT NULL DEFAULT '',
+    "notes"     TEXT NOT NULL DEFAULT '',
+    "fileKeys"  TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "JordanCarRecord_carId_fkey" FOREIGN KEY ("carId")
+      REFERENCES "JordanCar"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanCarRecord_carId_idx" ON "JordanCarRecord"("carId")`,
+  `CREATE INDEX IF NOT EXISTS "JordanCarRecord_date_idx" ON "JordanCarRecord"("date")`,
   // JORDAN.SYS CV workshop (personal, /jordan) — profiles + their applications.
   `CREATE TABLE IF NOT EXISTS "JordanCvProfile" (
     "id"         TEXT NOT NULL PRIMARY KEY,

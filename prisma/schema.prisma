@@ -2453,3 +2453,74 @@ model JordanCvApplication {
   @@index([profileId])
   @@index([createdAt])
 }
+
+// ─── JORDAN.SYS — garage (personal, /jordan) ─────────────────────────────────
+// A handful of cars, current and past, with what is due when and a history of
+// everything done to them. Every route behind isJordan().
+model JordanCar {
+  id       String @id @default(cuid())
+  nickname String @default("") // "the Golf" — what he actually calls it
+  reg      String @default("")
+  make     String @default("")
+  model    String @default("")
+  colour   String @default("")
+  year     String @default("")
+  fuel     String @default("")
+  notes    String @default("") @db.Text
+
+  // R2 object key for the main photo. Under the jordan/ prefix, which the
+  // gated proxy insists on — see app/api/jordan/cars/photo/route.ts.
+  photoKey String @default("")
+
+  mileage Int? // last known, so "due" can be judged
+
+  // ⚠ Dates are nullable on purpose: "no MOT date recorded" and "MOT due today"
+  // must never look the same. A 0/epoch default would have made them identical.
+  motDue       DateTime?
+  taxDue       DateTime?
+  serviceDue   DateTime?
+  insuranceDue DateTime?
+
+  // Past cars stay in the same table — the history is the point of keeping them,
+  // and moving a row between tables when it is sold would orphan its records.
+  isPast      Boolean   @default(false)
+  boughtOn    DateTime?
+  soldOn      DateTime?
+  boughtPrice Int? // whole pounds; nobody needs pence here
+  soldPrice   Int?
+
+  position  Int      @default(0) // manual order on screen
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  records JordanCarRecord[]
+
+  @@index([isPast])
+}
+
+model JordanCarRecord {
+  id    String    @id @default(cuid())
+  carId String
+  car   JordanCar @relation(fields: [carId], references: [id], onDelete: Cascade)
+
+  // MOT | SERVICE | REPAIR | TAX | INSURANCE | OTHER
+  kind      String   @default("SERVICE")
+  date      DateTime
+  mileage   Int?
+  costPence Int? // pence, so a £123.45 invoice is exact
+  garage    String   @default("")
+  /**
+   * MOT outcome — "PASS" | "FAIL" | "" (not an MOT, or not recorded).
+   */
+  result    String   @default("")
+  notes     String   @default("") @db.Text
+  /**
+   * R2 keys — the certificate, the invoice, a photo of an advisory.
+   */
+  fileKeys  String[] @default([])
+
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+  @@index([date])
+}
