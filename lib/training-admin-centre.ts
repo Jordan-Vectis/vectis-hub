@@ -163,12 +163,12 @@ export const ADMIN_CENTRE_EXERCISES: SeedExercise[] = [
   },
   {
     title: "When's it going through?",
-    kind: "LOT_SALE",
+    kind: "LOT_SALE_DATE",
     panel: "code",
     params: { mode: "PICK" },
-    brief: "A customer's asking when their item is selling. Look up {{q}} and tell me the sale code it's in.",
-    hint: "It's on the lot card as a code and a name — F090 — Diecast Sale. The code on its own is fine.",
-    explain: "Careful not to read the big date under the cataloguer's name — that's when it was catalogued, not when it sells. The sale date sits with the sale.",
+    brief: "A customer's on the phone asking when their items are going through. Look up {{q}} and give them the date of the sale it's assigned to.",
+    hint: "Find the sale on the lot card — it's shown as a code, a name and a date, like F090 — Diecast Sale · 15 Aug 2026. The day and month are enough.",
+    explain: "⚠ Don't read the big date under the cataloguer's name — that's when it was catalogued, not when it sells. The date you want is the one against the sale. And if a sale has no date set yet, say that to the customer rather than guessing.",
   },
   {
     title: "The other number",

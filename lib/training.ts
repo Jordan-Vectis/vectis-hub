@@ -24,6 +24,7 @@ export const EXERCISE_KINDS = [
   { key: "WHO_CATALOGUED",   label: "Who catalogued this lot?",            blurb: "Picks a real lot; the answer is its Hub cataloguer.",           live: true,  panel: "who"  },
   { key: "WHEN_CATALOGUED",  label: "When was this lot catalogued?",       blurb: "Picks a real lot; the answer is the date it was entered.",      live: true,  panel: "who"  },
   { key: "LOT_SALE",         label: "Which sale is this lot in?",          blurb: "Picks a real lot; the answer is its sale code.",                live: true,  panel: "who"  },
+  { key: "LOT_SALE_DATE",    label: "When is this lot going through?",     blurb: "Picks a lot in a dated sale; the answer is that sale's DATE.",  live: true,  panel: "who"  },
   { key: "LOT_UNIQUE_ID",    label: "What is this lot's unique ID?",       blurb: "Barcode in, unique ID out — teaches the two identifiers.",      live: true,  panel: "who"  },
   { key: "LOT_RECEIPT",      label: "Which receipt did this lot come in on?", blurb: "Picks a real lot; the answer is its receipt number.",        live: true,  panel: "who"  },
   { key: "LOT_TOTE",         label: "Which tote was this lot made from?",  blurb: "Picks a real lot; the answer is the tote on the lot card.",     live: true,  panel: "who"  },

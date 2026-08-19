@@ -33,6 +33,13 @@ export type Marked = {
 // hundreds of thousands of lots by ordering randomly would be a sequential scan every time.
 const PICK_POOL = 200
 
+/** "15 Aug 2026" — the format the panel itself prints sale dates in. */
+function formatDate(d: Date): string {
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London",
+  })
+}
+
 /** Random member of an array, or null. Kept in one place so the pick is obviously uniform. */
 function sample<T>(rows: T[]): T | null {
   if (!rows.length) return null
@@ -74,6 +81,10 @@ const LOT_NEEDS: Record<string, (l: Lot) => boolean> = {
   WHO_CATALOGUED:  l => !!l.createdByName,
   WHEN_CATALOGUED: l => !!l.createdAt,
   LOT_SALE:        l => !!l.auction?.code,
+  // ⚠ Needs a sale WITH a date. A Hub lot always has an auction (auctionId is non-nullable),
+  // but auctionDate is optional — and the panel prints "No date set yet" for those, which is
+  // not something a trainee can be asked to type.
+  LOT_SALE_DATE:   l => !!l.auction?.code && !!l.auction?.auctionDate,
   // Needs BOTH: the question is "here is the barcode, what is the unique ID?"
   LOT_UNIQUE_ID:   l => !!l.barcode && !!l.receiptUniqueId,
   LOT_RECEIPT:     l => !!l.receipt,
@@ -94,6 +105,7 @@ export async function pickSubject(kind: string, rawParams: unknown): Promise<Mat
       case "WHO_CATALOGUED":
       case "WHEN_CATALOGUED":
       case "LOT_SALE":
+      case "LOT_SALE_DATE":
       case "LOT_UNIQUE_ID":
       case "LOT_RECEIPT":
       case "LOT_TOTE": {
@@ -218,7 +230,7 @@ async function lotsFor(subject: string) {
     select: {
       createdByName: true, createdAt: true, vendor: true, receipt: true,
       tote: true, barcode: true, receiptUniqueId: true,
-      auction: { select: { code: true, name: true } },
+      auction: { select: { code: true, name: true, auctionDate: true } },
     },
   })
 }
@@ -321,6 +333,21 @@ export async function markAnswer(
           correct: nameMatches(said, name),
           answer:  name,
           detail:  raw ? `Business Central stored: ${raw}` : undefined,
+        }
+      }
+
+      case "LOT_SALE_DATE": {
+        const lots = await lotsFor(subject)
+        const dated = lots.filter(l => l.auction?.auctionDate)
+        if (!dated.length) return { correct: false, answer: "—", unavailable: true }
+        // ⚠ The Hub's auction date, because that is exactly what the panel shows: resolveSale
+        // is Hub-first and never falls back to BC's date for a lot the Hub holds.
+        const correct = dated.some(l => dateMatches(said, l.auction!.auctionDate!))
+        const first = dated[0].auction!
+        return {
+          correct,
+          answer: formatDate(first.auctionDate!),
+          detail: [first.code, first.name].filter(Boolean).join(" — ") || undefined,
         }
       }
 
