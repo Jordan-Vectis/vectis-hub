@@ -18,14 +18,30 @@ import { auth } from "@/auth"
 
 type Res = { ok: true; saved: number; batchId: string } | { ok: false; error: string }
 
-async function requireAdmin() {
+/**
+ * ⚠ SAVING is open to any signed-in user, DELETING is admin-only, and that asymmetry is
+ * deliberate. The whole point is that flags do not get lost, so anybody looking at the Review
+ * tab should be able to protect them without hunting down an admin — a snapshot only copies
+ * data that person can already see on that page. Destroying an archive is the dangerous
+ * direction, so that stays with admins.
+ */
+async function requireSignedIn() {
   const session = await auth()
   if (!session) throw new Error("Not signed in")
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id }, select: { role: true, name: true, email: true },
   })
-  if (dbUser?.role !== "ADMIN") throw new Error("Only an admin can save or delete flag archives")
-  return { id: session.user.id, name: dbUser?.name || dbUser?.email || "Unknown" }
+  return {
+    id: session.user.id,
+    name: dbUser?.name || dbUser?.email || "Unknown",
+    isAdmin: dbUser?.role === "ADMIN",
+  }
+}
+
+async function requireAdmin() {
+  const me = await requireSignedIn()
+  if (!me.isAdmin) throw new Error("Only an admin can delete a saved archive")
+  return me
 }
 
 /** Everything the Review tab puts on a flagged lot's card, so the archive can render the same. */
@@ -51,7 +67,7 @@ const LOT_SELECT = {
  */
 export async function saveAiFlagSnapshot(auctionId: string, label: string): Promise<Res> {
   try {
-    const me = await requireAdmin()
+    const me = await requireSignedIn()
     const scope = auctionId.trim()
     if (!scope) return { ok: false, error: "Choose a sale, or All sales" }
 
@@ -105,7 +121,7 @@ export async function saveAiFlagSnapshot(auctionId: string, label: string): Prom
 /** How many lots a save would capture, so the button can say so before it is pressed. */
 export async function countFlaggedLots(auctionId: string): Promise<number> {
   try {
-    await requireAdmin()
+    await requireSignedIn()
     const scope = auctionId.trim()
     if (!scope) return 0
     return await prisma.catalogueLot.count({

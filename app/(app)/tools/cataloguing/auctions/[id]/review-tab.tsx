@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { setLotReviewFlag, saveLotDescription, saveAiFlagNote, resolveKeyPointsMistake, clearKeyPointsMistake, applyFlagFixes } from "@/lib/actions/catalogue"
+import { saveAiFlagSnapshot } from "@/lib/actions/saved-ai-flags"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 // ⚠ The one title rule, shared with the Generate Titles action — never re-derive it here.
 import { titleFromDescription } from "@/lib/lot-title"
@@ -91,6 +92,7 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [flaggedOnly, setFlaggedOnly]       = useState(false)
   const [aiFlaggedOnly, setAiFlaggedOnly]   = useState(false)
   const [cataloguer, setCataloguer]   = useState("")
+  const [savingFlags, setSavingFlags] = useState(false)
   type IssueFilter = "all" | "attention" | "wording" | "issues" | "good"
   const [issueFilter, setIssueFilter] = useState<IssueFilter>("all")
   const [photoLot, setPhotoLot] = useState<ReviewLot | null>(null)
@@ -132,6 +134,25 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
 
   const flaggedCount = lots.filter(l => l.reviewFlag).length
   const aiFlagCount  = lots.filter(l => l.aiFlagNote).length
+
+  // Freeze this sale's flags into Admin → Saved Flagged Lots before an AI run replaces them.
+  async function saveFlagsSnapshot() {
+    if (savingFlags) return
+    setSavingFlags(true)
+    setError(null)
+    try {
+      const res = await saveAiFlagSnapshot(auctionId, `Review tab — ${new Date().toLocaleDateString("en-GB")}`)
+      if (res.ok) {
+        alert(`Saved ${res.saved} flagged lot${res.saved === 1 ? "" : "s"}.
+
+Read them back any time at Admin → Saved Flagged Lots.`)
+      } else {
+        setError(res.error)
+      }
+    } catch (e: any) {
+      setError(e?.message ?? "Could not save the flags")
+    } finally { setSavingFlags(false) }
+  }
 
   const cataloguers = useMemo(() =>
     [...new Set(lots.map(l => l.createdByName).filter(Boolean))].sort() as string[],
@@ -522,6 +543,19 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
                 className="px-3 py-2 text-sm font-semibold rounded-lg border border-emerald-500 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/20 transition-colors whitespace-nowrap"
               >
                 ✨ Fix all AI-flagged ({aiFlagCount})
+              </button>
+            )}
+            {/* ⚠ Re-running the AI overwrites every aiFlagNote with a bare update that does not
+                reach the lot change log, so the previous run's flags are gone with no trace.
+                This freezes them first — read them back at Admin → Saved Flagged Lots. */}
+            {(aiFlagCount > 0 || lots.some(l => l.reviewFlag)) && (
+              <button
+                onClick={saveFlagsSnapshot}
+                disabled={savingFlags}
+                title="Freeze the flags on this sale before the AI overwrites them. Kept in Admin → Saved Flagged Lots."
+                className="px-3 py-2 text-sm font-semibold rounded-lg border border-orange-500 bg-orange-600/10 text-orange-600 dark:text-orange-400 hover:bg-orange-600/20 disabled:opacity-40 transition-colors whitespace-nowrap"
+              >
+                {savingFlags ? "Saving…" : "💾 Save these flags"}
               </button>
             )}
           </div>
