@@ -1935,7 +1935,9 @@ export async function bulkAddConditionsToDescriptions(
     const oldDesc = lot.description ?? ""
     if (oldDesc.includes(condText)) { skipped++; continue }   // already present
 
-    const newDesc = oldDesc.trimEnd() ? `${oldDesc.trimEnd()} ${condText}` : condText
+    // ⚠ Joined with a NEW LINE, not a space (Jordan, 2026-08-19) — the condition is its own
+    // statement, not the tail of the last sentence of the description.
+    const newDesc = oldDesc.trimEnd() ? `${oldDesc.trimEnd()}\n${condText}` : condText
     await updateLotLogged(lot.id, { description: newDesc, title: titleFromDescription(newDesc) }, ctx)
     undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: newDesc } } })
     updated++
@@ -1947,7 +1949,9 @@ export async function bulkAddConditionsToDescriptions(
 }
 
 // The inverse: strip the "Condition appears [condition]." sentence this tool adds
-// back out of the description (with the space before it), leaving the rest intact.
+// back out of the description, leaving the rest intact. ⚠ It must strip BOTH joins — the
+// new line used since 2026-08-19 AND the single space used before it, because every lot
+// conditioned before that change still carries the space form.
 export async function bulkRemoveConditionsFromDescriptions(
   auctionId: string,
   lotIds?: string[],
@@ -1970,8 +1974,14 @@ export async function bulkRemoveConditionsFromDescriptions(
     const oldDesc = lot.description ?? ""
     if (!condition || !oldDesc.includes(conditionText(condition))) { skipped++; continue }
 
-    // Remove the sentence and the single space that joined it, then tidy edges.
-    const newDesc = oldDesc.split(` ${conditionText(condition)}`).join("").split(conditionText(condition)).join("").trim()
+    // Remove the sentence together with whatever joined it — newline first, then space,
+    // then bare (a description that is nothing but the condition sentence).
+    const condText = conditionText(condition)
+    const newDesc = oldDesc
+      .split(`\n${condText}`).join("")
+      .split(` ${condText}`).join("")
+      .split(condText).join("")
+      .trim()
     if (newDesc === oldDesc) { skipped++; continue }
     await updateLotLogged(lot.id, { description: newDesc, title: titleFromDescription(newDesc) }, ctx)
     undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: newDesc } } })

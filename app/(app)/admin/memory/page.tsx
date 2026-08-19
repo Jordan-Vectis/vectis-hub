@@ -1794,6 +1794,8 @@ All in auction-tabs.tsx (ManageLotsTab) + lib/actions/catalogue.ts.
 
 3. **Remove Conditions** — strips the exact "Condition appears <condition>." sentence Add appends.
 
+⚠ 2026-08-19 — ADD CONDITIONS JOINS WITH A NEW LINE, NOT A SPACE (Jordan). The condition is its own statement, not the tail of the description's last sentence. Changed in THREE places that must stay in step: bulkAddConditionsToDescriptions (the ✚ Add Conditions bulk button), addConditionToDesc in auction-tabs.tsx (the per-lot "+ Add condition to description" button), and the remover. ⚠ bulkRemoveConditionsFromDescriptions now strips BOTH joins — newline first, then space, then bare — because every lot conditioned before this change still carries the space form; dropping the space branch would strand them. Nothing downstream needed changing: lib/condition.ts norm() collapses \s+ to a single space, so checkConditionInDescription, the Locking Check condDesc criterion and the Description Copier condition check all treat a newline exactly like a space.
+
 4. **Clear Descriptions** — ALWAYS skips aiExcluded lots (hand-typed descriptions), regardless of selection. Clears description; title becomes "Untitled".
 
 5. **Multi-step, conflict-safe Undo.** New CatalogueBulkUndo table (NEEDS Run Migrations). Every field-editing bulk action records a per-lot before/after snapshot; the amber "↶ Undo: <label>" button (top of toolbar) reverses the most recent, press again to step back. Conflict-safe: a lot changed since the action is skipped, never clobbered. Scoped to the actor (you undo only your own mass actions). Covers add/remove conditions, clear descriptions, bulk AI-exclude, bulk added-to-BC — NOT delete/transfer/photos.

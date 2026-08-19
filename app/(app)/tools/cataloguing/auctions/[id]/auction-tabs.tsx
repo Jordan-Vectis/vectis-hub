@@ -2628,7 +2628,8 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
     const condText = `Condition appears ${condValue}.`
     setDescVal(prev => {
       const trimmed = prev.trimEnd()
-      return trimmed ? `${trimmed} ${condText}` : condText
+      // New line, not a space — matches bulkAddConditionsToDescriptions. Keep the two in step.
+      return trimmed ? `${trimmed}\n${condText}` : condText
     })
   }
 
