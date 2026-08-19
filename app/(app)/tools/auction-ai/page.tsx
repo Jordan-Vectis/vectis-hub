@@ -3992,6 +3992,7 @@ const UPGRADE_MODES: { key: string; label: string; desc: string }[] = [
   { key: "no_hyperbole",     label: "Remove hyperbole",       desc: "Strip vague positives and sales-speak" },
   { key: "auction_language", label: "Auction language",       desc: "Reinforce lot/catalogue-appropriate terminology" },
   { key: "brand_first",      label: "Brand first",            desc: "Move the brand/maker name to the very start of the description" },
+  { key: "brand_caps",       label: "Fix brand capitalisation", desc: "Marvel not marvel, DC not Dc — brand, character and title names only. Wording, codes and sizes untouched" },
   { key: "dolls_bears_fix",  label: "🧸 Dolls & Bears check",  desc: "Fix the recurring Dolls/Bears errors: no \"x three\", spell out \"limited edition\", drop \"plumo means…\" notes, don't repeat the name or guess the animal type, tidy phrasing (facts unchanged)" },
 ]
 
