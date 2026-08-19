@@ -347,7 +347,20 @@ async function withRetry<T>(
       const isRL    = lastError.startsWith("RATE_LIMITED:")
       const isRecit = /RECITATION/i.test(lastError)
       const wait    = isRL ? rateLimitWait(attempt) : isRecit ? 1500 : otherWait(attempt)
-      if (!deadline.fits(wait)) throw new SliceOver(wait)
+      // ⚠⚠ NEVER sleep in-process for as long as the heartbeat takes to go stale.
+      // flush() is the only thing that writes heartbeatAt and it runs once per LOT, so a
+      // long sleep here leaves the queue row looking dead: the 30-second tick sees a
+      // RUNNING row more than HEARTBEAT_STALE_MS old, reclaims the sale, and TWO SLICES
+      // then run it at once — double the Gemini spend and interleaved writes. The rate-limit
+      // backoff reaches 240s on the third consecutive 429, which is past the 3-minute
+      // window, so this was reachable on any busy sale.
+      //
+      // Hand the wait to the QUEUE instead. SliceOver carries it into retryAfter and the
+      // handler parks the row as QUEUED, so the sale sleeps exactly this long, nothing can
+      // mistake it for a crash, and it resumes ON THIS LOT. Waits shorter than the window
+      // (12s/24s/30s, the 1.5s RECITATION nudge, and the first two rate-limit backoffs)
+      // still happen in-process, so the common case is unchanged.
+      if (wait >= HEARTBEAT_STALE_MS || !deadline.fits(wait)) throw new SliceOver(wait)
       addLog(`  ↺ ${label} — ${isRL ? "rate limited, waiting" : "retrying in"} ${Math.round(wait / 1000)}s (attempt ${attempt + 1})`)
       await sleep(wait)
     }
