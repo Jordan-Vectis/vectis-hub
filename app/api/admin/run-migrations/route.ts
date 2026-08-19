@@ -14,6 +14,29 @@ import { prisma } from "@/lib/prisma"
 // array has changed since (or was never run) the hashes differ → pending.
 
 const MIGRATIONS = [
+  // JORDAN.SYS documents (personal, /jordan) — nested folders + files.
+  `CREATE TABLE IF NOT EXISTS "JordanDocFolder" (
+    "id"        TEXT NOT NULL PRIMARY KEY,
+    "name"      TEXT NOT NULL,
+    "parentId"  TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "JordanDocFolder_parentId_fkey" FOREIGN KEY ("parentId")
+      REFERENCES "JordanDocFolder"("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanDocFolder_parentId_idx" ON "JordanDocFolder"("parentId")`,
+  `CREATE TABLE IF NOT EXISTS "JordanDocFile" (
+    "id"        TEXT NOT NULL PRIMARY KEY,
+    "name"      TEXT NOT NULL,
+    "key"       TEXT NOT NULL,
+    "size"      INTEGER NOT NULL DEFAULT 0,
+    "mimeType"  TEXT NOT NULL DEFAULT '',
+    "folderId"  TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "JordanDocFile_folderId_fkey" FOREIGN KEY ("folderId")
+      REFERENCES "JordanDocFolder"("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanDocFile_folderId_idx" ON "JordanDocFile"("folderId")`,
   // JORDAN.SYS garage (personal, /jordan) — cars + their MOT/service history.
   `CREATE TABLE IF NOT EXISTS "JordanCar" (
     "id"           TEXT NOT NULL PRIMARY KEY,

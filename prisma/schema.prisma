@@ -2524,3 +2524,36 @@ model JordanCarRecord {
   @@index([carId])
   @@index([date])
 }
+
+// ─── JORDAN.SYS — documents (personal, /jordan) ──────────────────────────────
+// ⚠ SEPARATE TABLES from DocumentFolder/DocumentFile on purpose. Adding an
+// "owner" flag to the shared ones would put these on the same page every admin
+// opens, one forgotten `where` away from being visible. A private store in a
+// menu that is meant to be invisible must not share a table with a public one.
+model JordanDocFolder {
+  id       String            @id @default(cuid())
+  name     String
+  parentId String?
+  parent   JordanDocFolder?  @relation("JordanFolderChildren", fields: [parentId], references: [id])
+  children JordanDocFolder[] @relation("JordanFolderChildren")
+  files    JordanDocFile[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+}
+
+model JordanDocFile {
+  id       String           @id @default(cuid())
+  name     String
+  key      String // R2 object key, always under jordan/docs/
+  size     Int              @default(0)
+  mimeType String           @default("")
+  folderId String?
+  folder   JordanDocFolder? @relation(fields: [folderId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([folderId])
+}
