@@ -41,6 +41,33 @@ It calls the SAME three server routes (/api/auction-ai/batch, /key-points-check,
 Not added to the AUCTION_AI section list in lib/apps.ts, matching Auto Pipeline / AI Upgrade / Double Check which are also absent - so it gates exactly like the tab it tests.`,
   },
   {
+    filename: "training_tool.md",
+    content: `---
+name: Training - a course per panel, tasks marked from live data
+purpose: How IT & Admin -> Training is put together, and the one decision that stops it going stale. Read before adding a course or a task type.
+metadata:
+  type: reference
+---
+
+IT & Admin -> Training (/tools/training), added 2026-08-19. A course per panel of the Hub. Jordan asked for it pointed at the Admin Centre first, with "some kind of interactive thing with examples on how to use the admin centre such as find this receipt", and a shell that can take every other panel afterwards.
+
+THE CARD IS allUsers AND HAS NO appKey, DELIBERATELY. Training somebody on a tool is how they end up being given it - gating the training behind the tool's own permission is backwards. WRITING a course is admin-only, checked server-side in lib/actions/training.ts, not just hidden in the UI.
+
+⚠⚠ A PRACTICE TASK STORES NO ANSWER. This is the whole design. lib/training-check.ts pickSubject() chooses a lot or sale that exists RIGHT NOW when the task is handed out, fills it into the brief where the author wrote {{q}}, and markAnswer() works the answer out from the same tables the Admin Centre reads. So a task cannot ask about a lot somebody has since deleted - the failure that rotted the induction PowerPoint, applied to exercises. FREE_TEXT exists and is labelled as the one that WILL go stale; prefer the live kinds (WHO_CATALOGUED, LOT_SALE, LOT_COUNT, LOT_VENDOR, SALE_TOP) plus CHOICE for judgement questions.
+
+Marking is deliberately forgiving in three places, because marking a right answer wrong teaches people the tool is broken: names match on SURNAME (nameMatches), a barcode that appears in more than one sale accepts ANY of its cataloguers, and a genuine tie on "who did the most" accepts either name.
+
+PICKING IS BOUNDED. LOT_COUNT / LOT_VENDOR group the most recent 1000 lots in JS rather than a GROUP BY over the whole table - this runs on every practice page load and there are hundreds of thousands of lots. A receipt seen twice inside that window certainly has two overall; the ANSWER is still counted against the full table at marking time.
+
+THE SLIDES REUSE THE INDUCTION RENDERER. components/training-slide.tsx is a thin adapter over components/induction-slide.tsx (liveBlock forced to NONE, empty LiveData) plus a "Try it" button rendered AROUND it. A training slide and an induction slide are the same object; a second copy of that 350-line renderer would drift the first time either was fixed. Layouts, the two-column bullet flow, the numbered-steps graphic and the body-text convention (blank line = paragraph, "- " = bullet, short line with no full stop = heading) all come free. The presenter is its own copy because its keys and exit route differ.
+
+THE PRACTICE PANE EMBEDS THE REAL PANEL, not a screenshot - app/(app)/tools/training/panel-embeds.tsx dynamic-imports the actual FindLotsTab / WhoCataloguedTab / BySaleTab. Consequence: it needs the panel's OWN permission, so the module page passes canOpenPanel and the pane says so plainly rather than rendering a dead box. To add practice for another panel, export its tab components and add one entry to PANEL_EMBEDS.
+
+MODULE_SEEDS is derived from APP_CARD_DEFS, not typed out - a tool added to the Hub gets a training slot automatically and nothing here can name a panel that no longer exists. Seeding follows the induction pattern exactly: per-key checks under a pg_advisory_xact_lock, only ever into empty tables, so editing lib/training-seed.ts changes nothing on an environment that has already been seeded.
+
+Tables TrainingModule / TrainingSlide / TrainingExercise / TrainingProgress (NEEDS Run Migrations). Every read in lib/training-data.ts is try/caught - the code reaches Railway before the button is pressed, and an empty course list beats a 500 on the Hub.`,
+  },
+  {
     filename: "sandbox_environment.md",
     content: `---
 name: Sandbox - staging's code, production's data

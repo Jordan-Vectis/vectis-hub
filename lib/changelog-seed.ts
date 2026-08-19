@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"567cd6adfa2f68a1fc86aea47846420c974581d3","author":"Jack Collings","date":"2026-08-19T10:02:02+01:00","subject":"Add IT & Admin -> Training: a course per Hub panel, starting with the Admin Centre"},
+  {"sha":"8d1575a621a7c1a9e0bf0d31cc54ade2dd32f877","author":"Jordan Orange","date":"2026-08-19T09:21:23+01:00","subject":"Memory: the sandbox, the missing delete path, and understanding the job first"},
   {"sha":"28b94677cf53c1f211d985943a2348e23a1d87f2","author":"Jordan Orange","date":"2026-08-19T09:11:14+01:00","subject":"BC Match: show the mismatches the tile is counting"},
   {"sha":"4f83bf8a9e39b732916ff93cb2912724711cc52a","author":"Jordan Orange","date":"2026-08-18T16:48:46+01:00","subject":"Data Sync: remove records that have been deleted in Business Central"},
   {"sha":"1ae564b44073f5d2a57d2940e74c87ec215569ca","author":"Jordan Orange","date":"2026-08-18T16:29:53+01:00","subject":"Admin Centre: drop BC rows for barcodes that are ours somewhere else"},

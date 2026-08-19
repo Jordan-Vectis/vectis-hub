@@ -1508,6 +1508,85 @@ const MIGRATIONS = [
     ALTER TABLE "CatalogueAuctionFavourite" ADD CONSTRAINT "CatalogueAuctionFavourite_auctionId_fkey"
       FOREIGN KEY ("auctionId") REFERENCES "CatalogueAuction"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // ── IT & Admin → Training ──
+  // A course per panel of the Hub, editable in the app. Reads are try/caught everywhere
+  // because the code reaches Railway before this button is pressed.
+  `CREATE TABLE IF NOT EXISTS "TrainingModule" (
+     "id"        TEXT NOT NULL,
+     "key"       TEXT NOT NULL,
+     "title"     TEXT NOT NULL,
+     "icon"      TEXT NOT NULL DEFAULT '📘',
+     "blurb"     TEXT,
+     "href"      TEXT,
+     "appKey"    TEXT,
+     "accent"    TEXT NOT NULL DEFAULT 'indigo',
+     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+     "active"    BOOLEAN NOT NULL DEFAULT true,
+     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     CONSTRAINT "TrainingModule_pkey" PRIMARY KEY ("id")
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "TrainingModule_key_key" ON "TrainingModule"("key")`,
+  `CREATE INDEX IF NOT EXISTS "TrainingModule_sortOrder_idx" ON "TrainingModule"("sortOrder")`,
+  `CREATE TABLE IF NOT EXISTS "TrainingSlide" (
+     "id"        TEXT NOT NULL,
+     "moduleId"  TEXT NOT NULL,
+     "title"     TEXT NOT NULL,
+     "subtitle"  TEXT,
+     "body"      TEXT,
+     "imageKey"  TEXT,
+     "videoUrl"  TEXT,
+     "layout"    TEXT NOT NULL DEFAULT 'CONTENT',
+     "graphic"   TEXT NOT NULL DEFAULT 'NONE',
+     "tryHref"   TEXT,
+     "tryLabel"  TEXT,
+     "notes"     TEXT,
+     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+     "active"    BOOLEAN NOT NULL DEFAULT true,
+     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     CONSTRAINT "TrainingSlide_pkey" PRIMARY KEY ("id")
+   )`,
+  `CREATE INDEX IF NOT EXISTS "TrainingSlide_moduleId_sortOrder_idx" ON "TrainingSlide"("moduleId", "sortOrder")`,
+  `DO $$ BEGIN
+    ALTER TABLE "TrainingSlide" ADD CONSTRAINT "TrainingSlide_moduleId_fkey"
+      FOREIGN KEY ("moduleId") REFERENCES "TrainingModule"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `CREATE TABLE IF NOT EXISTS "TrainingExercise" (
+     "id"        TEXT NOT NULL,
+     "moduleId"  TEXT NOT NULL,
+     "title"     TEXT NOT NULL,
+     "brief"     TEXT NOT NULL,
+     "panel"     TEXT,
+     "kind"      TEXT NOT NULL DEFAULT 'FREE_TEXT',
+     "params"    JSONB,
+     "expected"  TEXT,
+     "hint"      TEXT,
+     "explain"   TEXT,
+     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+     "active"    BOOLEAN NOT NULL DEFAULT true,
+     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     CONSTRAINT "TrainingExercise_pkey" PRIMARY KEY ("id")
+   )`,
+  `CREATE INDEX IF NOT EXISTS "TrainingExercise_moduleId_sortOrder_idx" ON "TrainingExercise"("moduleId", "sortOrder")`,
+  `DO $$ BEGIN
+    ALTER TABLE "TrainingExercise" ADD CONSTRAINT "TrainingExercise_moduleId_fkey"
+      FOREIGN KEY ("moduleId") REFERENCES "TrainingModule"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `CREATE TABLE IF NOT EXISTS "TrainingProgress" (
+     "userId"      TEXT NOT NULL,
+     "moduleId"    TEXT NOT NULL,
+     "userName"    TEXT NOT NULL DEFAULT '',
+     "slidesSeen"  INTEGER NOT NULL DEFAULT 0,
+     "deckDoneAt"  TIMESTAMP(3),
+     "passedIds"   TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+     "attempts"    INTEGER NOT NULL DEFAULT 0,
+     "lastAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "completedAt" TIMESTAMP(3),
+     CONSTRAINT "TrainingProgress_pkey" PRIMARY KEY ("userId", "moduleId")
+   )`,
+  `CREATE INDEX IF NOT EXISTS "TrainingProgress_moduleId_idx" ON "TrainingProgress"("moduleId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
