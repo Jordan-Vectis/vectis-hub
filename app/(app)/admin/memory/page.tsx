@@ -16,6 +16,36 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "idle_within_lot.md",
+    content: `---
+name: Within-lot idle - server-confirmed, and asked at the SAVE not mid-lot
+purpose: Why the popup no longer appears part way through a lot, and how a walk-away is still caught. Read before touching any wizard idle check.
+metadata:
+  type: reference
+---
+
+⚠⚠ 2026-08-19 - THE MID-LOT POPUP IS GONE. A WALK-AWAY IS REMEMBERED AND ASKED AT THE SAVE.
+
+Jordan: "I dont want it popping up mid lot either at lot start or lot finish so you get a save at each point and so if a lot takes over half an hour when you finish and save it asks you?" - then, offered the choice, he picked ONLY ASK IF THEY WERE ACTUALLY IDLE: a lot worked on solidly for 45 minutes must never ask; a lot left sitting untouched must.
+
+⚠ A CORRECTION TO THE FIRST DIAGNOSIS, worth keeping. maybePromptIdleBeforeSave ALREADY asked at the save, measuring inactivity. And the mid-lot check skipped taps ON PURPOSE: "a tap can be the Save button, and raising the popup from under a save would swallow it." The obvious-looking fix - run the check on pointer-down too - would have broken saves. DO NOT REINSTATE IT.
+
+THE REAL DEFECT WAS NARROWER: noteInteraction() reset lastInteractionRef without ever recording that a long stretch had happened, so the first tap on returning destroyed the evidence and the save-time check then measured seconds. Measured on a real lot whose own duration was 1h 24m: nobody was prompted, and it surfaced only on the Unaccounted Time report, where the cataloguer had no way to answer it.
+
+WHAT CHANGED (lot-wizard-tab.tsx):
+- lotMaxIdleRef - the LONGEST inactive stretch during the lot in progress, and when it began. Cleared in startLotTiming.
+- rememberIdleStretch() - folds the stretch that has just ended into that maximum BEFORE the clock is reset. ⚠ Every path that resets lastInteractionRef must call it first, or the stretch is lost for good. It only records stretches already over threshold (and ignores a full working day, the same exclusion the other checks make).
+- noteInteraction() calls it first, so ALL THREE capture handlers (pointer-down, change, key-down) now behave identically: end the stretch, remember it, reset. NONE of them can raise the popup.
+- maybePromptIdleBeforeSave triggers on max(current stretch, longest recorded stretch).
+- checkWithinLotIdle DELETED, with idleConfirmRef. visibilitychange now calls noteInteraction() - returning to the foreground ends the stretch, it does not raise anything.
+
+⚠ THE SERVER CONFIRM IS NOT LOST. maybePromptIdleBeforeSave still calls confirmIdleWithServer, so the 2026-08-07 fix survives: the local measure is only a cheap pre-filter for WHEN to ask, and the SERVER decides whether the person was genuinely away (working-hours gap since their last save on ANY device). A cataloguer active in another tab, on another device or in the native camera is still never accused of being away - that fix exists because a false "2h+ away" popup appeared on a second screen while the cataloguer was saving lots every few minutes on her main one.
+
+⚠ WHY NO "WORKING ON THIS LOT" REASON WAS ADDED: it was offered and Jordan chose the idle-only trigger instead. This matters - EVERY reason in the list writes an IdleLog row the reports count as non-cataloguing time, so prompting on a lot's CLOCK TIME would have forced a cataloguer who genuinely spent 45 minutes on a hard lot to mislabel real work as idle, and it would have landed on them in the activity report. Triggering on INACTIVITY means that lot is never asked about at all. DO NOT "simplify" this to prompt on lot duration.
+
+Prompts now happen at exactly two moments: LOT START (checkIdleOnLotStart, the gap since the last save) and SAVE (maybePromptIdleBeforeSave, inactivity during the lot).`,
+  },
+  {
     filename: "ai_instruction_house_style.md",
     content: `---
 name: AI instruction house style - the one shape all three follow

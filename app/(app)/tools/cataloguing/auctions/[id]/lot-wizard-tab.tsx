@@ -498,6 +498,13 @@ export default function LotWizardTab({
   // counts the full wall-clock time (two hours of research means the lot took two
   // hours) — this is the "of which, idle" figure that sits inside it.
   const lotIdleAccumRef    = useRef<number>(0)
+  // ⚠⚠ The LONGEST inactive stretch seen so far during the lot in progress, and when it
+  // began. Without this the evidence of a walk-away was destroyed by the first touch on
+  // returning: noteInteraction() reset lastInteractionRef, so the save-time check measured
+  // seconds and never asked. Measured on a real lot (2026-08-19) whose own duration was
+  // 1h 24m — nobody was ever prompted, and the gap surfaced only on the Unaccounted Time
+  // report, where the cataloguer had no way to answer it.
+  const lotMaxIdleRef      = useRef<{ startMs: number; ms: number } | null>(null)
 
   // Live timer display
   const [timerActive, setTimerActive] = useState(false)
@@ -640,7 +647,6 @@ export default function LotWizardTab({
   // server clock, London hours) and the popup uses the server's figures.
   // Offline, the old device-local behaviour stands (better to over-ask than
   // let a gap slip; the create-lot gate still backstops the save).
-  const idleConfirmRef = useRef(false)
   const serverGapRef   = useRef<{ sinceMs: number; idleMs: number } | null>(null)
 
   async function confirmIdleWithServer(): Promise<"prompt" | "fine" | "offline"> {
@@ -679,8 +685,17 @@ export default function LotWizardTab({
   function maybePromptIdleBeforeSave(): boolean {
     if (!showScanTimer || idlePopup) return false
     if (!barcodeStartedAt.current) return false
-    const since = lastInteractionRef.current || barcodeStartedAt.current
-    const idleMs = workingMsBetween(since, Date.now())
+    // The stretch running right now…
+    const liveSince = lastInteractionRef.current || barcodeStartedAt.current
+    const liveMs    = workingMsBetween(liveSince, Date.now())
+    // …versus the longest one that happened EARLIER in this lot and has since been
+    // touched away. Jordan, 2026-08-19: a lot worked on solidly for 45 minutes must
+    // never ask, but one left sitting untouched must — so the trigger is inactivity,
+    // not the lot's clock time.
+    const best   = lotMaxIdleRef.current
+    const useMax = !!best && best.ms > liveMs
+    const since  = useMax ? best!.startMs : liveSince
+    const idleMs = useMax ? best!.ms      : liveMs
     if (idleMs < timerRedSecs * 1000) return false
     if (idleMs >= EIGHT_WORK_HOURS_MS) return false
     pendingSaveRef.current  = true
@@ -708,57 +723,45 @@ export default function LotWizardTab({
   // a category. Resets the idle clock; the gap is only ever measured from here.
   function noteInteraction() {
     if (!barcodeStartedAt.current) return
+    rememberIdleStretch()
     lastInteractionRef.current = Date.now()
   }
 
-  // "Have they come back to a lot they left?" Runs on typing and when the app is
-  // brought back to the foreground (the iPhone swipe-back case), so the popup is
-  // waiting for them rather than turning up later at Save.
-  //
-  // Deliberately NOT run on taps: a tap can be the Save button, and raising the
-  // popup from under a save would swallow it. The save path does its own check
-  // (maybePromptIdleBeforeSave), which pauses and resumes the save properly.
-  //
-  // Since 2026-08-07 the local measure only decides when to ASK — the popup
-  // opens solely on the server's say-so (see the note above
-  // confirmIdleWithServer), so photos in the camera, a spell in another tab or
-  // saves on another device no longer read as being away.
-  function checkWithinLotIdle() {
-    if (!showScanTimer || idlePopup) return
-    if (!barcodeStartedAt.current || !lastInteractionRef.current) return
-    const since  = lastInteractionRef.current
-    const idleMs = workingMsBetween(since, Date.now())
-    if (idleMs < timerRedSecs * 1000) return
-    if (idleMs >= EIGHT_WORK_HOURS_MS) { lastInteractionRef.current = Date.now(); return }
-    if (idleConfirmRef.current) return
-    idleConfirmRef.current = true
-    void (async () => {
-      try {
-        const verdict = await confirmIdleWithServer()
-        // A save may have started or the popup opened while we awaited — bail
-        // rather than raise over the top of either.
-        if (idlePopup || pendingSaveRef.current) return
-        if (verdict === "fine") {
-          // Active somewhere (another tab / device / the camera) — not away.
-          lastInteractionRef.current = Date.now()
-          return
-        }
-        idleWithinLotRef.current = true
-        if (verdict === "prompt" && serverGapRef.current) {
-          raiseIdlePopup(serverGapRef.current.sinceMs, serverGapRef.current.idleMs)
-        } else {
-          raiseIdlePopup(since, idleMs)   // offline — device-local figures
-        }
-      } finally {
-        idleConfirmRef.current = false
-      }
-    })()
+  // Fold the stretch that has just ended into the lot's longest, BEFORE the clock is
+  // reset. Every path that resets lastInteractionRef must call this first, or the
+  // stretch it is about to erase is lost for good.
+  function rememberIdleStretch() {
+    const since = lastInteractionRef.current
+    if (!since) return
+    const ms = workingMsBetween(since, Date.now())
+    // A full working day or more is a day off, not a walk-away — the same exclusion
+    // the other checks make.
+    if (ms < timerRedSecs * 1000 || ms >= EIGHT_WORK_HOURS_MS) return
+    if (!lotMaxIdleRef.current || ms > lotMaxIdleRef.current.ms) {
+      lotMaxIdleRef.current = { startMs: since, ms }
+    }
   }
+
+  // ⚠⚠ THE MID-LOT POPUP WAS REMOVED (Jordan, 2026-08-19): "I dont want it popping up mid
+  // lot either at lot start or lot finish". checkWithinLotIdle used to raise the popup part
+  // way through a lot, on typing or on coming back to the foreground. It now asks at the
+  // two moments a lot has a natural boundary instead — checkIdleOnLotStart at the start,
+  // maybePromptIdleBeforeSave at the save — and a walk-away in the middle is remembered by
+  // rememberIdleStretch() and raised at the save.
+  //
+  // ⚠ Do NOT reinstate a check on TAPS to catch this: a tap can be the Save button, and
+  // raising the popup from under a save swallows it. That was a deliberate exclusion, and
+  // recording the stretch rather than raising it is what makes the tap harmless.
+  //
+  // ⚠ The server confirm is NOT lost with it: maybePromptIdleBeforeSave still calls
+  // confirmIdleWithServer, so a cataloguer active in another tab, on another device or in
+  // the native camera is still never accused of being away (the 2026-08-07 fix).
 
   // Coming back to the app after it was backgrounded / the screen was locked.
   useEffect(() => {
     if (!showScanTimer) return
-    const onVisible = () => { if (document.visibilityState === "visible") checkWithinLotIdle() }
+    // Returning to the foreground ends the stretch — record it, don't raise anything.
+    const onVisible = () => { if (document.visibilityState === "visible") noteInteraction() }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
   })
@@ -772,6 +775,7 @@ export default function LotWizardTab({
     barcodeStartedAt.current   = Date.now()
     lastInteractionRef.current = Date.now()
     lotIdleAccumRef.current    = 0
+    lotMaxIdleRef.current      = null
     void checkIdleOnLotStart()
   }
 
@@ -1348,14 +1352,14 @@ export default function LotWizardTab({
   }
 
   return (
-    // Capture-phase so every control inside counts as activity without having to
-    // wire each one. Taps only reset the clock (see checkWithinLotIdle for why);
-    // typing both resets it and checks whether they've just come back to a lot
-    // they left.
+    // Capture-phase so every control inside counts as activity without having to wire
+    // each one. All three do the same thing now: end the current inactive stretch,
+    // remember it if it is this lot's longest, and reset the clock. None of them can
+    // raise the popup — that happens only at lot start and at save.
     <div className="flex flex-col h-full"
       onPointerDownCapture={noteInteraction}
       onChangeCapture={noteInteraction}
-      onKeyDownCapture={() => { checkWithinLotIdle(); noteInteraction() }}>
+      onKeyDownCapture={noteInteraction}>
 
       {/* ── Idle popup ──────────────────────────────────────────────────────── */}
       {idlePopup && (() => {
