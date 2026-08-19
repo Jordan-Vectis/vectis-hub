@@ -1168,6 +1168,20 @@ A **"Catalogued by"** column shows the Hub's \`createdByName\`, falling back to 
 ## Sale date
 
 Every sale is shown with its **date** — a 📅 chip on each sale group in Find lots, and part of the Sale line in the Who-catalogued cards. ⚠ Two different sources: the Hub sends \`CatalogueAuction.auctionDate\` (a real DateTime → ISO), BC sends \`WarehouseItem.auctionDate\` as a **plain string** and uses **\`0001-01-01\` for "no date"**. \`formatSaleDate\` in \`ui.ts\` handles both and blanks anything before 1990 — don't format these dates inline anywhere else. BC also leaves the date off some rows of a sale, so the grouping takes the first non-empty one.
+
+## 2026-08-19 — 📍 "Where it is" on the Barcode search
+
+Jordan: "when you search by barcode there is no location section. Would it be possible to also location history as well? We have a tab for that in the BC warehouse section". This is the page's core job — customers ring up asking where their things are — so location now gets its own card instead of being one small Fact among five inside "What Business Central says", where it already was and was easily missed.
+
+Barcode search renders WhoCataloguedTab (lookup-client.tsx, run.mode === "code"). The new WhereItIs card sits directly under the big "Catalogued by" answer and above the cross-check grid, and again on a BC-only row.
+
+TWO SOURCES, DELIBERATELY SPLIT. The CURRENT LOCATION comes free with the search — it is already in the synced warehouse data (bc.location), so it paints instantly. The MOVE HISTORY is a LIVE BC call, so the card fetches it itself, per card, AFTER the answer is on screen: an admin with a customer on the phone gets the location immediately and watches the history fill in. ⚠ Never make the main search await this.
+
+⚠ It REUSES /api/bc/location-history — the route behind BC Warehouse → Location History. RULES.md forbids changing that TAB (it was accidentally replaced once and had to be restored by hand). Calling its route is fine; never "tidy" the shared endpoint to suit the Admin Centre.
+
+⚠ QUERIED BY BARCODE, NEVER THE UNIQUE ID — the route's barcode mode matches on the Internal Barcode change-log value, so a unique ID finds nothing. Consistent with the house rule that BC membership is decided on barcode alone. The card takes bc?.barcode || lot.barcode, so a search typed as a unique ID still resolves to the right barcode.
+
+Failure states are worded as ordinary outcomes, never errors: not connected → "Connect to Business Central to see the move history"; 404 → "Business Central has no move record for this barcode"; empty list → "No moves recorded — it hasn't been moved since it was put away". A lot with no moves is normal and must not look like a fault. Most recent row highlighted and labelled, matching the BC Warehouse tab. Sizing follows the oversized ui.ts — don't compact it.
 `,
   },
   {

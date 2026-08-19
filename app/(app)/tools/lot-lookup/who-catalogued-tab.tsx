@@ -189,6 +189,9 @@ export default function WhoCataloguedTab({ controlled }: { controlled?: WhoContr
               </div>
             </div>
 
+            {/* Where it is — the question this page exists to answer. */}
+            <WhereItIs barcode={bc?.barcode || lot.barcode} location={bc?.location ?? ""} inBc={!!bc} />
+
             {/* Cross-check + everyone who touched it */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div className={`${CARD} p-6`}>
@@ -329,9 +332,123 @@ export default function WhoCataloguedTab({ controlled }: { controlled?: WhoContr
               <Fact label="Location" value={b.location || "—"} mono />
               <Fact label="Made from tote" value={b.toteNo || "Not recorded"} mono={!!b.toteNo} />
             </div>
+            <div className="mt-6">
+              <WhereItIs barcode={b.barcode} location={b.location ?? ""} inBc />
+            </div>
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Where it is ──────────────────────────────────────────────────────────────
+//
+// The current location comes free with the search (it is already in the synced
+// warehouse data). The MOVE HISTORY is a live BC call, so it is fetched here,
+// per card, AFTER the answer is on screen — an admin with a customer on the
+// phone gets the location immediately and watches the history fill in, rather
+// than waiting on Business Central for the whole result.
+//
+// ⚠ Reuses /api/bc/location-history — the same route behind BC Warehouse →
+// Location History. RULES.md forbids changing that TAB; this only calls its
+// route, and must not be "tidied" by altering the shared endpoint.
+//
+// ⚠ Queried by BARCODE. The route's barcode mode matches on the Internal
+// Barcode change-log value, so a unique ID will not find anything — which is
+// also the house rule for deciding what is in BC.
+type Move = { from: string; to: string; changedBy: string; changedAt: string }
+
+function WhereItIs({ barcode, location, inBc }: { barcode: string; location: string; inBc: boolean }) {
+  const [moves,   setMoves]   = useState<Move[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [note,    setNote]    = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!barcode || !inBc) { setMoves(null); setNote(null); return }
+    let cancelled = false
+    setLoading(true); setNote(null); setMoves(null)
+    fetch(`/api/bc/location-history?mode=barcode&q=${encodeURIComponent(barcode)}`)
+      .then(async res => {
+        const json = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (res.ok) { setMoves(json.entries ?? []); return }
+        // A lot with no move recorded is ordinary, not an error — say so plainly.
+        setNote(
+          json.error === "BC_NOT_CONNECTED"
+            ? "Connect to Business Central to see the move history."
+            : res.status === 404
+              ? "Business Central has no move record for this barcode."
+              : "Could not read the move history from Business Central."
+        )
+      })
+      .catch(() => { if (!cancelled) setNote("Could not reach Business Central.") })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [barcode, inBc])
+
+  return (
+    <div className={`${CARD} overflow-hidden`}>
+      <div className="bg-teal-50 dark:bg-teal-500/10 border-b border-teal-100 dark:border-teal-500/20 px-8 py-7">
+        <p className="text-sm font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-400 mb-2">
+          Where it is
+        </p>
+        {location ? (
+          <p className="text-4xl sm:text-5xl font-bold font-mono text-gray-900 dark:text-white leading-tight">{location}</p>
+        ) : (
+          <>
+            <p className="text-3xl font-bold text-gray-500 dark:text-gray-400">No location recorded</p>
+            <p className="text-base text-gray-600 dark:text-gray-400 mt-3 max-w-2xl">
+              {inBc
+                ? "Business Central has this item but no location against it. The last sync may predate it being put away."
+                : "This lot hasn't reached Business Central yet, so it has no warehouse location."}
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="px-8 py-6">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">📍 Every move</h3>
+        <p className={`${HINT} mb-4`}>
+          Newest first, from the Business Central change log — the same record as BC Warehouse → Location History.
+        </p>
+
+        {loading && <p className="text-base text-gray-500 dark:text-gray-400 py-2">Checking Business Central…</p>}
+        {!loading && note && <p className="text-base text-gray-500 dark:text-gray-400 py-2">{note}</p>}
+        {!loading && !note && moves?.length === 0 && (
+          <p className="text-base text-gray-500 dark:text-gray-400 py-2">
+            No moves recorded — it hasn&apos;t been moved since it was put away.
+          </p>
+        )}
+
+        {!loading && !!moves?.length && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-base">
+              <thead>
+                <tr className="text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
+                  <th className="text-left px-3 py-3 font-semibold">From</th>
+                  <th className="text-left px-3 py-3 font-semibold">To</th>
+                  <th className="text-left px-3 py-3 font-semibold">Moved by</th>
+                  <th className="text-left px-3 py-3 font-semibold">When</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {moves.map((m, i) => (
+                  <tr key={i} className={i === 0 ? "bg-teal-50/70 dark:bg-teal-500/10" : ""}>
+                    <td className="px-3 py-3 font-mono text-gray-700 dark:text-gray-300">{m.from || "—"}</td>
+                    <td className="px-3 py-3 font-mono font-semibold text-gray-900 dark:text-white">
+                      {m.to || "—"}
+                      {i === 0 && <span className="ml-2 text-xs font-sans font-medium text-teal-700 dark:text-teal-400">most recent</span>}
+                    </td>
+                    <td className="px-3 py-3 text-gray-700 dark:text-gray-300">{m.changedBy || "—"}</td>
+                    <td className="px-3 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatWhen(m.changedAt) || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
