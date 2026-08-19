@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError, AiNotConfiguredError } from "@/lib/ai-provider"
-import { parseModelJson } from "@/lib/model-json"
+import { parseModelJson, extractJsonField } from "@/lib/model-json"
 
 export const maxDuration = 60
 
@@ -70,19 +70,38 @@ export async function POST(req: NextRequest) {
       system: PROMPT,
       prompt: `Key points:\n${kpIn || "(none)"}\n\nDescription:\n${descIn}\n\nFlag:\n${String(flagNote).trim()}`,
       json: true,
-      maxOutputTokens: 2000,
+      // ⚠ The reply carries TWO whole documents — the corrected description AND the
+      // corrected key points — so it needs real room. This was 2000, which was fine for the
+      // short descriptions of the time but is exceeded by a long multi-bullet lot, and a
+      // truncated reply surfaces to the user as "the AI's answer could not be read".
+      // A cap is not a spend: only tokens actually generated are billed.
+      maxOutputTokens: 8192,
     })
 
-    const parsed = parseModelJson(raw)
-    if (!parsed || typeof parsed !== "object" || !String(parsed.description ?? "").trim()) {
-      return NextResponse.json({ error: "The AI's answer could not be read — try again." }, { status: 502 })
-    }
+    // ⚠ Salvage before giving up — the Key Points and Double Check routes already do this and
+    // this one was the odd one out. lib/ai-provider.ts treats a MAX_TOKENS finish as acceptable
+    // (per RULES.md) and returns the text anyway, so a reply cut off mid-object arrives here
+    // looking perfectly normal and only fails at JSON.parse. "description" is the FIRST field
+    // in the shape we ask for, so it usually survives a truncated tail intact.
+    const parsed  = parseModelJson(raw)
+    const obj     = parsed && typeof parsed === "object" ? parsed : null
+    const fixedDesc = (obj ? String(obj.description ?? "") : extractJsonField(raw, "description") ?? "").trim()
 
-    const fixedDesc = String(parsed.description).trim()
+    if (!fixedDesc) {
+      // Don't say "try again" when trying again cannot help — an over-long lot truncates every
+      // time. extractJsonField needs a closing quote, so a reply cut off inside the description
+      // itself lands here.
+      const looksTruncated = !!raw?.trim() && !raw.trim().endsWith("}")
+      return NextResponse.json({
+        error: looksTruncated
+          ? "The AI's answer was cut off before it finished — this lot is too long to correct in one pass. Use the per-lot Auto-fix on it, or shorten the description first."
+          : "The AI's answer could not be read — try again.",
+      }, { status: 502 })
+    }
     // ⚠ Only ever report key points as changed when they REALLY differ. A model that echoes them
     // back with a stray space would otherwise rewrite the cataloguer's notes for no reason, and
     // the caller would show a "correction" that corrects nothing.
-    const fixedKp   = String(parsed.keyPoints ?? "").trim()
+    const fixedKp   = (obj ? String(obj.keyPoints ?? "") : extractJsonField(raw, "keyPoints") ?? "").trim()
     const kpChanged = !!fixedKp && fixedKp !== kpIn
 
     return NextResponse.json({
@@ -91,7 +110,7 @@ export async function POST(req: NextRequest) {
       keyPoints:   kpChanged ? fixedKp : null,
       descChanged: fixedDesc !== descIn,
       where:       kpChanged ? (fixedDesc !== descIn ? "both" : "key-points") : "description",
-      note:        String(parsed.note ?? "").trim().slice(0, 300),
+      note:        (obj ? String(obj.note ?? "") : extractJsonField(raw, "note") ?? "").trim().slice(0, 300),
     })
   } catch (e: any) {
     if (e instanceof AiNotConfiguredError) return NextResponse.json({ error: e.message }, { status: 500 })
