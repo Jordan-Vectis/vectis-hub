@@ -188,15 +188,12 @@ export const ADMIN_CENTRE_EXERCISES: SeedExercise[] = [
     hint: "It's on the “What Business Central says” panel further down.",
     explain: "The clearest example of why this reads both systems: only BC knows which shelf it's on.",
   },
-  {
-    title: "How much is done?",
-    kind: "LOT_COUNT",
-    panel: "receipt",
-    params: { mode: "PICK", type: "receipt", min: 2 },
-    brief: "A customer wants to know how much of their consignment is done. Search receipt {{q}} and tell me how many lots the Hub has against it.",
-    hint: "Press 🧾 Receipt number. Results are grouped by sale — open them all, or add up the counts in the headers.",
-    explain: "The grouping does the harder half for you: it also tells you which sales the work went into.",
-  },
+  // ⚠ There is deliberately NO "how many lots on this receipt?" task. The receipt search shows
+  // one row per physical item across BOTH systems — Hub lots plus items Business Central has
+  // that nobody has catalogued here yet — so "how many" has two defensible answers depending on
+  // which rows you count, and the screen does not label which is which. A task with two right
+  // answers teaches people the tool is unreliable. Same reason as F111: never ask a question the
+  // screen cannot answer unambiguously.
   {
     title: "Who did the sale?",
     kind: "SALE_TOP",

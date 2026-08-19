@@ -20,26 +20,26 @@ export type { BodyBlock, SlideLayout, SlideGraphic } from "@/lib/induction"
  * `pickFor` in lib/training-check.ts for how a real example is chosen each time.
  */
 export const EXERCISE_KINDS = [
-  // ── Tab 2 — one lot in, one fact out ──
-  { key: "WHO_CATALOGUED",   label: "Who catalogued this lot?",            blurb: "Picks a real lot; the answer is its Hub cataloguer.",           live: true,  panel: "who"  },
-  { key: "WHEN_CATALOGUED",  label: "When was this lot catalogued?",       blurb: "Picks a real lot; the answer is the date it was entered.",      live: true,  panel: "who"  },
-  { key: "LOT_SALE",         label: "Which sale is this lot in?",          blurb: "Picks a real lot; the answer is its sale code.",                live: true,  panel: "who"  },
-  { key: "LOT_SALE_DATE",    label: "When is this lot going through?",     blurb: "Picks a lot in a dated sale; the answer is that sale's DATE.",  live: true,  panel: "who"  },
-  { key: "LOT_UNIQUE_ID",    label: "What is this lot's unique ID?",       blurb: "Barcode in, unique ID out — teaches the two identifiers.",      live: true,  panel: "who"  },
-  { key: "LOT_RECEIPT",      label: "Which receipt did this lot come in on?", blurb: "Picks a real lot; the answer is its receipt number.",        live: true,  panel: "who"  },
-  { key: "LOT_TOTE",         label: "Which tote was this lot made from?",  blurb: "Picks a real lot; the answer is the tote on the lot card.",     live: true,  panel: "who"  },
-  { key: "LOT_LOCATION",     label: "Where is this lot physically?",       blurb: "Picks a lot BC has a location for; the answer is that location.", live: true, panel: "who" },
-  { key: "BC_NAME",          label: "Who is this BC code / username?",     blurb: "Picks a real BC record; the answer is the person behind the code.", live: true, panel: "who" },
-  // ── Tab 1 — a receipt, tote or customer in ──
-  { key: "LOT_COUNT",        label: "How many lots on this receipt / tote / customer?", blurb: "Picks a real one; the answer is the count.",       live: true,  panel: "find" },
-  { key: "LOT_VENDOR",       label: "Whose lots are these?",               blurb: "Picks a real receipt; the answer is the customer number.",      live: true,  panel: "find" },
-  { key: "VENDOR_SALE_COUNT",label: "How many sales is this customer in?", blurb: "Picks a customer with lots in several sales; answer is how many.", live: true, panel: "find" },
-  // ── Tab 3 — a whole sale ──
+  // ── One lot in, one fact out — the 🏷️ Barcode button ──
+  { key: "WHO_CATALOGUED",   label: "Who catalogued this lot?",            blurb: "Picks a real lot; the answer is its Hub cataloguer.",           live: true,  panel: "code" },
+  { key: "WHEN_CATALOGUED",  label: "When was this lot catalogued?",       blurb: "Picks a real lot; the answer is the date it was entered.",      live: true,  panel: "code" },
+  { key: "LOT_SALE",         label: "Which sale is this lot in?",          blurb: "Picks a real lot; the answer is its sale code.",                live: true,  panel: "code" },
+  { key: "LOT_SALE_DATE",    label: "When is this lot going through?",     blurb: "Picks a lot in a dated sale; the answer is that sale's DATE.",  live: true,  panel: "code" },
+  { key: "LOT_UNIQUE_ID",    label: "What is this lot's unique ID?",       blurb: "Barcode in, unique ID out — teaches the two identifiers.",      live: true,  panel: "code" },
+  { key: "LOT_RECEIPT",      label: "Which receipt did this lot come in on?", blurb: "Picks a real lot; the answer is its receipt number.",        live: true,  panel: "code" },
+  { key: "LOT_TOTE",         label: "Which tote was this lot made from?",  blurb: "Picks a real lot; the answer is the tote on the lot card.",     live: true,  panel: "code" },
+  { key: "LOT_LOCATION",     label: "Where is this lot physically?",       blurb: "Picks a lot BC has a location for; the answer is that location.", live: true, panel: "code" },
+  { key: "BC_NAME",          label: "Who is this BC code / username?",     blurb: "Picks a real BC record; the answer is the person behind the code.", live: true, panel: "code" },
+  // ── A receipt, tote or customer in ──
+  { key: "LOT_COUNT",        label: "How many lots on this receipt / tote / customer?", blurb: "⚠ Counts HUB lots only; the screen also lists BC-only rows, so it has two answers.", live: true, panel: "receipt" },
+  { key: "LOT_VENDOR",       label: "Whose lots are these?",               blurb: "Picks a real receipt; the answer is the customer number.",      live: true,  panel: "receipt" },
+  { key: "VENDOR_SALE_COUNT",label: "How many sales is this customer in?", blurb: "Picks a customer with lots in several sales; answer is how many.", live: true, panel: "receipt" },
+  // ── A whole sale — the 🔨 Sale and lot number button ──
   { key: "SALE_TOP",         label: "Who catalogued the most in this sale?", blurb: "Picks a real sale; the answer is the top cataloguer.",        live: true,  panel: "sale" },
-  { key: "SALE_COUNT",       label: "How many lots are in this sale?",     blurb: "Picks a real sale; the answer is the Hub's lot count.",         live: true,  panel: "sale" },
-  { key: "SALE_CATALOGUERS", label: "How many people catalogued this sale?", blurb: "Picks a real sale; the answer is how many names are listed.", live: true,  panel: "sale" },
+  { key: "SALE_COUNT",       label: "How many lots are in this sale?",     blurb: "⚠ Counts the HUB's lots; the sale screen counts BC's. Use with care.", live: true, panel: "sale" },
+  { key: "SALE_CATALOGUERS", label: "How many people catalogued this sale?", blurb: "⚠ Counts the HUB's cataloguers; the sale screen lists only those BC also has.", live: true, panel: "sale" },
   // ── Judgement, not lookup ──
-  { key: "CHOICE",           label: "Multiple choice",                     blurb: "For the bits that are judgement — which tab, which number, what a warning means.", live: false, panel: null },
+  { key: "CHOICE",           label: "Multiple choice",                     blurb: "For the bits that are judgement — which button, which number, what a warning means.", live: false, panel: null },
   { key: "FREE_TEXT",        label: "Typed answer (fixed)",                blurb: "⚠ Goes stale. Only for answers that cannot change.",            live: false, panel: null },
 ] as const
 
