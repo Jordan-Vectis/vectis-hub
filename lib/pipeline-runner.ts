@@ -104,6 +104,14 @@ async function updateLotLogged(lotId: string, data: Record<string, any>, ctx: Ct
   }
 }
 
+// ⚠ Raising a flag is a lot mutation and MUST be logged (RULES.md — every create/edit/delete
+// goes through lib/lot-log.ts). These three writes used to be bare prisma.catalogueLot.update
+// calls, so a flag raised overnight left NO entry in the Lot Change Log while the identical
+// flag raised from the Auto Pipeline tab did (which goes through saveAiFlagNote →
+// updateLotLogged). Stamped "ai_flag" like the browser path, so the only difference between
+// the two in the log is changedBy.
+const flagCtx = (ctx: Ctx): Ctx => ({ ...ctx, source: "ai_flag" })
+
 async function applyDescription(lotId: string, description: string, ctx: Ctx): Promise<void> {
   await updateLotLogged(lotId, {
     description,
@@ -456,7 +464,7 @@ async function runStages(
         // ⚠ A size that merely disagrees with the manufacturer is NOT a mistake — we measure
         // the item. shouldKeepFlag drops those and keeps everything else. See lib/measurement-check.ts.
         if (result.flag && shouldKeepFlag(result.flag, lot.keyPoints)) {
-          try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: result.flag } }) } catch { /* advisory */ }
+          try { await updateLotLogged(lot.id, { aiFlagNote: result.flag }, flagCtx(ctx)) } catch { /* advisory — never fail the run for it */ }
         }
         lot.batchStatus = "ok"
         lot.currentDesc = desc
@@ -502,7 +510,7 @@ async function runStages(
         // The stage tried to change a product code it cannot have seen (it gets no photos).
         // The cataloguer's value was kept by the route; surface the doubt in the Review tab.
         if (flag && shouldKeepFlag(flag, lot.keyPoints)) {
-          try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: flag } }) } catch { /* advisory */ }
+          try { await updateLotLogged(lot.id, { aiFlagNote: flag }, flagCtx(ctx)) } catch { /* advisory — never fail the run for it */ }
           addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
         }
         let newDesc = lot.currentDesc
@@ -574,7 +582,7 @@ async function runStages(
         // It tried to rewrite a product code the cataloguer recorded. The route kept the
         // cataloguer's; surface the doubt instead of acting on it.
         if (flag && shouldKeepFlag(flag, lot.keyPoints)) {
-          try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: flag } }) } catch { /* advisory */ }
+          try { await updateLotLogged(lot.id, { aiFlagNote: flag }, flagCtx(ctx)) } catch { /* advisory — never fail the run for it */ }
           addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
         }
         if (verdict === "issues" && revised) {

@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"ae8d152c66303158ac950d3bfd089da6c5deefb1","author":"Jordan Orange","date":"2026-08-19T14:39:09+01:00","subject":"Let a finished pipeline run be reset and started again"},
   {"sha":"608970526afde2c05a1eddbb641ae93d49ce7625","author":"Jordan Orange","date":"2026-08-19T14:24:48+01:00","subject":"Stop Fix all AI-flagged failing with \"answer could not be read\""},
   {"sha":"2d6e879d1ea5d10dcc465407f75989e1fdf46e76","author":"Jordan Orange","date":"2026-08-19T14:16:37+01:00","subject":"Drop the code-ownership note from the memory record"},
   {"sha":"205d7813ab677d183cc50df019c714f85a05edc2","author":"Jordan Orange","date":"2026-08-19T14:12:18+01:00","subject":"Refresh changelog seed"},

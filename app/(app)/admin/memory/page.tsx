@@ -361,6 +361,21 @@ A 601-lot sale reads about 1693, because outstanding() counts every stage pass s
 - flush() splits progress from status. Progress and the log are always saved; the STATUS is only moved on a row that is not PAUSED or CANCELLED. Without that split, pressing Hold mid-slice was silently undone when the slice ended, and pressing Remove mid-slice made the error handler throw. stopRequested() is also checked between lots so Hold takes effect within seconds rather than at the end of a nine-minute slice.
 - Claiming a sale is conditional (updateMany on the expected status), and a RUNNING row whose heartbeat is older than three minutes is reclaimed - that is how a deploy restarting mid-sale resumes rather than stalling.
 - The runner writes lots itself (it has no session, so it cannot use the applyAiDescriptionOne server action) but logs through lib/lot-log.ts exactly the same way, as changedBy "Auto Pipeline (overnight...)" with source "ai_apply". RULES: every path that mutates a lot must log.
+
+## 2026-08-19 — AUDITED AGAINST THE BROWSER TAB: IT DOES FOLLOW THE SAME RULES
+
+Jordan asked whether the overnight runs obey everything the tab does, "for example does it not run anything excluded by ai?". Checked in code rather than assumed.
+
+- aiExcluded — NEVER TOUCHED, AND STRUCTURALLY SO. Both the tab and lib/pipeline-runner.ts load through the SAME /api/auction-ai/catalogue-lots route, whose Prisma query carries where: { aiExcluded: false }. An excluded lot never enters either run, so there is no second copy of the rule that could drift. ⚠ Keep it that way - do NOT give the runner its own lot query.
+- Same three server routes, so the instruction text, cleanBearsDescription, auditCodes and the strict/relaxed KP wording are identical by construction.
+- shouldKeepFlag gates all three stages, so a size that merely differs from the manufacturer raises nothing overnight either.
+- appliedDesc is only recorded when the catalogue write actually succeeded.
+- Every per-sale toggle mirrors the tab (PipelineQueueItem): preset, model, fallbackModel, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed.
+- The AI estimate is saved regardless of auto-apply, same as the tab, because it lives in its own fields.
+
+⚠ THE ONE GAP FOUND, NOW FIXED - OVERNIGHT FLAGS LEFT NO AUDIT TRAIL. All three stages wrote aiFlagNote with a bare prisma.catalogueLot.update, so a flag raised overnight left NO entry in the Lot Change Log while the identical flag raised from the tab did (that path goes saveAiFlagNote → updateLotLogged). Against the rule directly above it. Fixed with a flagCtx(ctx) helper stamping source "ai_flag" - the same source the browser path uses, so the only difference between the two in the log is changedBy. The writes stay try/catch and advisory: a logging failure must never fail a run.
+
+DO THE FLAGS STILL REACH THE REVIEW TAB AFTER AN OVERNIGHT RUN? YES. The flag is written to CatalogueLot.aiFlagNote, which is exactly what the Review tab's amber banner and its "AI-flagged only" filter read - the missing piece was only the audit entry, never the flag itself. Nothing in the runner clears it: applyDescription writes description / title / aiUpgraded and does not touch aiFlagNote (that field is cleared by saveLotDescription, the Review tab's own save, which the runner never calls). ⚠ Measurement-only flags are still dropped by shouldKeepFlag, by design.
 `,
   },
   {
