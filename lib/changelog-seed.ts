@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7b10ac999327160cec698967b2451486a8838b8a","author":"Jordan Orange","date":"2026-08-19T12:30:23+01:00","subject":"Record the AI instruction house style in the shared memory record"},
+  {"sha":"c90e5b7133eea1f350b56ad83a7da60c4a9bdd69","author":"Jordan Orange","date":"2026-08-19T12:12:45+01:00","subject":"Refresh changelog seed"},
   {"sha":"3273b4f01c848d0c4e5286944978c1224157f566","author":"Jordan Orange","date":"2026-08-19T12:10:16+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"adb99e50b774e9094f159e3a3e0cdda819e3c259","author":"Jordan Orange","date":"2026-08-19T12:10:14+01:00","subject":"Add a Where it is card to the Admin Centre barcode search"},
   {"sha":"86926e18dd21f889d8bdc345831b66bafbcb43c4","author":"Jack Collings","date":"2026-08-19T11:50:34+01:00","subject":"Refresh changelog seed"},
