@@ -14,7 +14,12 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a8a1589a2cb20379120ccd5b145ef1599a9eb672","author":"Jordan Orange","date":"2026-08-19T11:45:53+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"587ca0a758b3e06e4381b462e2af4d7df175f48b","author":"Jordan Orange","date":"2026-08-19T11:45:40+01:00","subject":"Refresh changelog seed"},
+  {"sha":"4d8fda1f6bc4338d63aed47a4d4414197562e784","author":"Jack Collings","date":"2026-08-19T11:44:30+01:00","subject":"Refresh changelog seed"},
   {"sha":"53cbaa56b85fb294aaacd1ad9a5dd7e4712629bf","author":"Jack Collings","date":"2026-08-19T11:44:26+01:00","subject":"Practice task 3 now asks for the SALE DATE, not the sale code"},
+  {"sha":"43a965c0234080458a0f12b509d3b0aa5068d296","author":"Jordan Orange","date":"2026-08-19T11:43:09+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"cef8e46220936cd8358d52c6bfd6f6ca9c9a769b","author":"Jordan Orange","date":"2026-08-19T11:43:02+01:00","subject":"Add Exclude from AI to the tablet lot view"},
   {"sha":"e10ce249c6f78429fd59b76fee1aac880ca846dc","author":"Jack Collings","date":"2026-08-19T11:24:53+01:00","subject":"Refresh changelog seed"},
   {"sha":"4772c21d599ec5a889c7021bbae0965108649fcc","author":"Jack Collings","date":"2026-08-19T11:24:41+01:00","subject":"Cut the Admin Centre course to 13 slides and 8 tasks, and fix it for the rebuilt panel"},
   {"sha":"e614dcb2e13785aa0ede0aae18b4314feb1846e1","author":"Jordan Orange","date":"2026-08-19T11:21:54+01:00","subject":"Add Conditions puts the condition on a new line"},
