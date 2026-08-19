@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"3752862de571110f05bdb6bdbb7850541a4a1536","author":"Jack Collings","date":"2026-08-19T13:18:45+01:00","subject":"Photo viewer on the live Review tab, plus the fixes an adversarial review turned up"},
+  {"sha":"f82d964cd1d7fe2c93bb04a3e764652807d5ff12","author":"Jack Collings","date":"2026-08-19T13:04:02+01:00","subject":"Refresh changelog seed"},
   {"sha":"1d967b7075c67cc0974ff2ed123bd2273018064b","author":"Jack Collings","date":"2026-08-19T13:04:01+01:00","subject":"Saved Flagged Lots: the real key-point analysis, and a photo viewer you can zoom"},
   {"sha":"25a8ccadd696bd3be31f8d71a422a157ae1febce","author":"Jack Collings","date":"2026-08-19T12:55:19+01:00","subject":"Refresh changelog seed"},
   {"sha":"4f6fbb28534b9db64bba2ab443f6d5d9e15bbc7e","author":"Jack Collings","date":"2026-08-19T12:55:17+01:00","subject":"Make Saved Flagged Lots correct at production scale"},
