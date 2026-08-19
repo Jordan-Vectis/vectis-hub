@@ -13,364 +13,277 @@
 import type { SeedSlide, SeedExercise } from "@/lib/training-seed"
 
 // ─── The deck ────────────────────────────────────────────────────────────────
-// Structured in six parts. A deck that is 25 slides of the same layout reads as a document,
-// so the section markers are TITLE slides and the points that must land are STATEMENTs.
+// ⚠ Written to be SAID OUT LOUD to a room, not read off a page. Short slides, plain words, one
+// idea each. The detail — the measured percentages, BC's field names, the exact holding-pen
+// codes — lives in the presenter notes, where a trainer can reach for it if somebody asks. Put
+// it on the slide and the slide stops being a slide.
+//
+// Everything asserted here was read off app/(app)/tools/lot-lookup/* and app/api/lot-lookup/*.
+// People believe training material, which is what makes a wrong slide expensive.
 
 export const ADMIN_CENTRE_SLIDES: SeedSlide[] = [
-  // ── Part 1 · Why this exists ──
+  // ── Part 1 · Why you would use it ──
   {
     layout: "TITLE",
     title: "The Admin Centre",
-    subtitle: "Because the lot information in Business Central is not what you think it is",
-    notes: "Open by asking the room where they look today when they need to know something about a lot. Almost everyone says Business Central. That is the habit this course is here to break. Around 38 slides — budget 25 minutes, then move to the practice tasks.",
+    subtitle: "Everything about a lot, on one screen",
+    notes: "Ask the room where they look today when they need to know something about a lot. Almost everyone will say Business Central. That is the habit this course is here to break. About 30 slides, 20 minutes, then the practice tasks.",
   },
   {
     layout: "STATEMENT",
     title: "Business Central says Jack and Jordan catalogued everything",
-    subtitle: "They did not. They pushed it.",
-    body: "Lots are entered in the Hub all week by the whole team, then pushed across to Business Central in bulk at the end. BC stamps that push onto every lot in the batch — so it records whoever pressed the button, not whoever did the work.",
-    notes: "This is the slide the whole course hangs off. Ask who in the room has ever looked up a lot in BC and taken the cataloguer at face value. Nearly everyone will have.",
+    subtitle: "They didn't. They pushed it.",
+    notes: "This is the slide the whole course hangs off. Ask for a show of hands: who has looked up a lot in BC and taken the cataloguer at face value?",
   },
   {
-    title: "What else the push gets wrong",
-    body: `The cataloguer is the obvious one, but it is not the only field that arrives as a side effect of the push rather than as a fact about the lot.
+    title: "Why that happens",
+    body: `The team catalogues in the Hub all week.
 
-- Catalogued by — whoever ran the push, on every lot in the batch
-- Catalogued date — when it was pushed, not when it was catalogued
-- Categories — routinely wrong for the same reason
+At the end, it all gets pushed over to Business Central in one go.
 
-None of this is Business Central misbehaving. It is simply what a bulk push looks like from the inside. BC is recording exactly what happened to it.`,
-    notes: "Worth being fair to BC here — it is not broken, it is answering a different question. It knows what happened to the record, not what happened to the item.",
+BC stamps that push onto every lot in the batch.
+
+So it records who pressed the button, not who did the work.`,
+    notes: "Be fair to BC — it is not broken. It is telling you what happened to the record. It was never told what happened to the item.",
+  },
+  {
+    title: "Which means you can't trust",
+    layout: "CARDS",
+    body: `- Catalogued by — you get whoever ran the push
+- Catalogued date — you get the day it was pushed
+- Category — comes over the same way, and is often wrong`,
+    notes: "These three are the ones people get caught by. If somebody quotes any of them off BC, ask where they got it.",
   },
   {
     layout: "STATEMENT",
-    title: "The Hub knows who actually did it",
-    subtitle: "Because it was there at the time",
-    body: "The Hub records the person who was logged in when the lot was created, the moment they created it, and the category they chose. That is the truth of it — and it is why the Hub always wins.",
+    title: "The Hub knows who really did it",
+    subtitle: "It was there at the time",
+    body: "It records who was logged in, the moment they created the lot, and the category they picked.",
   },
   {
-    title: "But Business Central is not useless",
-    body: `Two things genuinely only exist there, and both matter to somebody on the phone.
+    title: "But BC still knows things the Hub doesn't",
+    body: `Only Business Central knows
+- The lot number your customer will quote at you
+- Where the item is right now
 
-Business Central alone knows
-- The lot number the customer will quote at you
-- Where the item physically is
-
-The Hub alone knows
-- Who really catalogued it, when, and into which sale
+Only the Hub knows
+- Who really catalogued it, and when
 - The real category
-- Every change anyone has made since
+- Every change made since
 
-So the answer is never in one system. It never was.`,
-    notes: "The point to make: this is not Hub good, BC bad. Each is authoritative about different things, and the skill is knowing which.",
+The answer is never in one system.`,
+    notes: "Not Hub good, BC bad. Each is right about different things. The skill is knowing which to ask.",
   },
   {
     layout: "STATEMENT",
-    title: "The bridge is where the new information comes from",
-    subtitle: "Not a third system — a join",
-    body: "Which of our cataloguers entered lot 247 in F088? Business Central has the lot number and a cataloguer that just says Jordan. The Hub has the real cataloguer and no lot number. Joined on the barcode, it is one line on one screen — and that line existed in neither system before.",
-    notes: "This is the slide that explains why the tool exists at all. It is not a nicer window onto BC — the join itself creates information that was in neither system. Everything from here is how to use it.",
+    title: "So this tool joins them together",
+    subtitle: "And the join is the bit you can't get anywhere else",
+    body: "Who catalogued lot 247 in F088? BC has the lot number. The Hub has the name. Put them on one line and you have an answer that was in neither system.",
+  },
+
+  // ── Part 2 · What you would use it for ──
+  {
+    layout: "TITLE",
+    title: "What you'd use it for",
+    subtitle: "The questions that come up every week",
   },
   {
     layout: "CARDS",
-    title: "Three tabs, three questions",
-    body: `Find a customer's lots — everything for one receipt, tote or customer
-Who catalogued this lot? — one barcode in, one name out
-Who catalogued this sale? — a whole sale, in lot-number order`,
+    title: "Questions it answers",
+    body: `- Who catalogued this lot?
+- Which sale is it in?
+- When is it going through?
+- Where is the item right now?
+- How much of this customer's stuff is done?
+- Who catalogued the lots in this sale?`,
     tryHref: "/tools/lot-lookup",
     tryLabel: "Open the Admin Centre",
-    notes: "Pick the tab by the QUESTION you were asked, not by the number you happen to be holding. That is the single most common mistake.",
-  },
-
-  // ── Part 2 · The numbers ──
-  {
-    layout: "TITLE",
-    title: "First, the numbers",
-    subtitle: "Almost every failed search is the right number in the wrong box",
+    notes: "Ask the room which of these they were asked in the last fortnight. Usually several hands go up for the first three.",
   },
   {
-    title: "Know your five numbers",
-    body: `Receipt — R000009 — everything booked in at once
-Tote — T001868 — one physical box
-Customer — C224652 — the vendor; everything they have ever sent
-Barcode — F066001 — one lot, in one sale
-Unique ID — R000016-413 — one lot, for its whole life
-
-The first three go in tab 1. The last two go in tab 2.`,
+    layout: "CARDS",
+    title: "Three tabs, three starting points",
+    body: `- Find a customer's lots — start with a receipt, tote or customer
+- Who catalogued this lot? — start with one barcode
+- Who catalogued this sale? — start with a sale`,
+    notes: "Pick the tab by what you are HOLDING. That is the simplest rule and it is nearly always right.",
+  },
+  {
+    title: "The numbers you'll type",
     graphic: "STEPS",
-    notes: "Write the five formats on the whiteboard and leave them up for the practice session.",
-  },
-  {
-    layout: "STATEMENT",
-    title: "A barcode belongs to a SALE. A unique ID belongs to the ITEM.",
-    subtitle: "Re-enter an item into a later sale and it gets a brand new barcode",
-    body: "So if a search by barcode comes back empty, try the unique ID before deciding the lot does not exist. The unique ID is the number that never changes.",
-    notes: "This is the one that catches people out weeks later. Say it twice.",
+    body: `- Receipt — R000009 — one delivery
+- Tote — T001868 — one box
+- Customer — C224652 — one person, everything they've sent
+- Barcode — F066001 — one lot, in one sale
+- Unique ID — R000016-413 — one lot, forever`,
+    notes: "Write these five on the whiteboard and leave them up for the practice session. Almost every failed search is the right number in the wrong box.",
   },
 
-  // ── Part 3 · Tab 1 ──
+  // ── Part 3 · How to use it ──
   {
     layout: "TITLE",
     title: "Tab 1 — Find a customer's lots",
-    subtitle: "The one you will use most",
+    subtitle: "The one you'll use most",
   },
   {
-    title: "Running the search",
+    title: "How to use it",
     graphic: "STEPS",
-    body: `Choose what you are searching by — receipt, tote or customer
-Type or scan the number and press Search
-Read the totes panel — what they physically sent in
-Then read the sale blocks underneath — what it has become`,
+    body: `- Pick receipt, tote or customer
+- Type the number and press Search
+- Read the totes — what they sent in
+- Read the sales underneath — what it's become`,
     tryHref: "/tools/lot-lookup",
     tryLabel: "Try it now",
-    notes: "On customer search, you can also type part of a customer's NAME and it will look them up in Business Central. Useful when someone rings up and has no idea what their number is.",
+    notes: "On customer, you can also type part of their NAME. Handy when someone rings up and has no idea what their number is.",
   },
   {
-    title: "The totes panel",
-    subtitle: "What the customer actually sent in, before any of it became lots",
-    body: `Straight from Business Central's own tote screen, and shown first for that reason.
+    title: "What you get back",
+    body: `Their totes first — how many, and how many are done.
 
-- Tote, when it was created, its category and sub-category
-- Catalogued, or Not yet — per tote
-- The header counts them: how many totes, how many done, how many still to do
+Then their lots, grouped by sale. Each sale shows the date it's going through and how many lots are in it.
 
-A busy customer can have hundreds of totes — 341 on one measured account — so the table scrolls inside itself rather than pushing the sales off the screen.`,
-    notes: "For a customer asking how far along their consignment is, this panel alone often answers it.",
-  },
-  {
-    title: "The sale blocks",
-    body: `Underneath the totes, the lots are grouped by the sale they are in.
-
-- Blocks start COLLAPSED. The question is usually which sales their things are in, before it is ever show me every lot
-- A search that finds exactly one sale opens itself
-- Open them all is there when you do want everything
-- The line above says how many sales, how many items, and that it is as of the last warehouse sync`,
-    notes: "A customer's lots can span a dozen sales and hundreds of rows. Collapsed by default was a deliberate decision, not an oversight.",
-  },
-  {
-    title: "Reading a lot row",
-    body: `Five columns, and each answers a question somebody actually asks.
-
-- Lot — the number the customer will quote at you, or Not numbered yet
-- Item — the barcode or unique ID, and what the thing is
-- Tote — which box it came out of
-- Catalogued by — the person
-- Where it is up to — Catalogued, Waiting to be catalogued, or Needs looking at, plus where it physically is`,
-    notes: "Nothing on the row says which SYSTEM it came from. That is deliberate — an admin with a customer on the phone needs the answer, not our plumbing.",
+Open a sale and you get the lot number, what it is, the tote, who catalogued it, and where it's up to.`,
+    notes: "The groups start closed on purpose — a regular customer's things can span a dozen sales. The question is usually WHICH sales before it is ever show me everything. Open them all is there when you want it.",
   },
   {
     layout: "STATEMENT",
-    title: "⚠ “Needs looking at” means the lot is in BC's problem pile",
-    subtitle: "A999 — Lost / Missing / Re-Receipted, and lots with BC issues",
-    body: "It is not a warning about the search. It is the tool telling you this item genuinely needs somebody to sort it out.",
-    notes: "If a customer's row shows this, it is worth flagging rather than reading out the location and moving on.",
+    title: "This is the screen for “when is my stuff selling?”",
+    subtitle: "Every sale block has its date on it",
+    notes: "Probably the single most common customer question, and it is answered without opening anything.",
   },
-  {
-    title: "Why a sale code can look wrong",
-    body: `Business Central's auction code is not always an auction. The A9-hundreds are holding pens.
-
-- A995 — Temp F109 Bears
-- A992 — Temp F110 Dolls and bears day 2
-- A996 — Temp F119 Trains
-- A998 — Unsold Mover
-- A999 — the problem pile
-
-Left alone, those put a sale on screen called A995 dated 1 January 2099, which means nothing to anybody.`,
-    notes: "This is why the tool does not simply print what BC says.",
-  },
-  {
-    title: "So the barcode decides",
-    subtitle: "F109034 is an F109 lot, whatever BC has filed it under",
-    body: `The first four characters of a barcode name the sale, and that beats BC's own field whenever the field is a holding pen.
-
-Measured across the 211,229 BC rows that carry a real auction code, the barcode agrees 199,901 times — 94.6%. And every one of the 692 items parked in A995 carries an F109 barcode, which is the sale they were really for.
-
-The order the tool uses
-- Our sale, if the Hub has the lot
-- Otherwise the sale the barcode names, if we hold that sale
-- Otherwise BC's code, but only when it is a real sale rather than a waiting room`,
-    notes: "Nobody needs to memorise this. They need to know that a sale shown here is trustworthy even when BC's own screen disagrees.",
-  },
-  {
-    title: "Two messages worth understanding",
-    body: `Records left out
-Business Central files some barcodes under more than one receipt, so a BC row whose barcode belongs to a lot on a DIFFERENT receipt is dropped. On one measured tote, 93 of 142 rows belonged to another customer entirely. The count is always reported, never silently swallowed.
-
-Showing the first 500
-The search caps at 500 rows each side. Narrow it — a receipt rather than the whole customer.`,
-    notes: "Design rule 7 in the house rules: never let nothing happened look like success. Both of these exist so a partial answer never reads as a complete one.",
-  },
-  {
-    layout: "STATEMENT",
-    title: "⚠ Searching by tote gives you the whole RECEIPT",
-    subtitle: "Lots are not individually tagged with a tote in either system",
-    body: "So a tote search bridges tote → receipt → lots, and may include other totes booked in at the same time. The panel says so on screen every time.",
-  },
-
-  // ── Part 4 · Tab 2 ──
   {
     layout: "TITLE",
     title: "Tab 2 — Who catalogued this lot?",
-    subtitle: "One question, one straight answer",
+    subtitle: "One barcode in, one name out",
   },
   {
-    title: "The big answer",
-    body: `Scan or type a barcode — F066001 — and the name fills the top of the screen, with the day and the time underneath.
-
-Below it, the lot itself: the sale, the barcode, the unique ID, the receipt, the tote it was made from, and the customer. Then the photo count, whether it reached Business Central, and its category.`,
+    title: "How to use it",
+    graphic: "STEPS",
+    body: `- Scan or type the barcode
+- Read the big name at the top — that's your answer
+- Underneath: the sale, the receipt, the tote, the customer
+- Further down: what BC says, and everyone who's touched it`,
     tryHref: "/tools/lot-lookup",
     tryLabel: "Try it now",
-    notes: "Deliberately enormous type. This tab answers one question and the answer should be readable across a desk.",
+    notes: "Deliberately huge type at the top. This tab answers one question and you should be able to read it across a desk.",
   },
   {
-    layout: "STATEMENT",
-    title: "Business Central's “catalogued by” is the push stamp",
-    subtitle: "If it says Jack or Jordan, that is the button, not the work",
-    body: "Every lot in a pushed batch carries whoever ran it. Look up ten lots from one sale in BC and you will get the same name ten times — which should tell you it is not answering the question you asked.",
-    notes: "Callback to the second slide. The tell is the repetition: a real cataloguer list for a sale has several names on it with different counts.",
+    title: "If it says “No name recorded”",
+    body: `That's not a fault. Older lots and imported lots don't have one.
+
+Look at everyone who's worked on the lot — the first name is usually your answer.`,
+    notes: "Teach the fallback or people will read it as the tool being broken.",
   },
-
-  // ── Names — the bit that confuses everybody ──
-  {
-    layout: "TITLE",
-    title: "A word about names",
-    subtitle: "The same person looks completely different in each system",
-    notes: "This section exists because people open BC, see JC or JACK.COLLINGS, and think they are looking at something other than a person.",
-  },
-  {
-    title: "How the Hub stores a name",
-    subtitle: "It just stores the person",
-    body: `When somebody catalogues a lot in the Hub, it records whoever was logged in — as their actual name.
-
-- Jack Collings
-- Jordan Orange
-- Keiran Southgate
-
-That is what you see on the lot card, in the sale list, and in the change history. No translation, no codes.`,
-    notes: "Worth saying plainly: if a lot was made in the Hub, the name on screen is simply the person who made it.",
-  },
-  {
-    title: "How Business Central stores a name",
-    subtitle: "Three different fields, and rarely the obvious one",
-    body: `Business Central does not store a name at all. It stores one of three things.
-
-- Catalogued by — a short code. JC, JO, KS. And it is BLANK on tens of thousands of lines
-- Catalogued by user — a Windows username, in capitals. JACK.COLLINGS
-- Created by — also a Windows username, and the one that is almost always filled in
-
-Measured on 200 catalogued lines whose code was blank: the username was filled on 98 of them, and created-by on all 200.`,
-    notes: "So on a BC screen the honest answer to who did this is frequently a two-letter code, or a shouty username, or nothing at all.",
-  },
-  {
-    title: "So the Hub translates them for you",
-    graphic: "STEPS",
-    body: `Try the short code against BC's own User Setup list — JC is Jack Collings, JO is Jordan Orange, KS is Keiran Southgate
-If there is no code, match the username to the same person by their email — JACK.COLLINGS is jack.collings@vectis.co.uk, so it is Jack Collings
-If they are not on the list at all, tidy the username up — JAKE.KENYON becomes Jake Kenyon
-And if the lot exists in the Hub, none of that happens — the Hub's own name wins outright`,
-    notes: "The point to land: you should almost never have to read a code. If you are looking at one, it is because that person is not on the list.",
-  },
-  {
-    layout: "STATEMENT",
-    title: "A code you can still see means somebody is missing from the list",
-    subtitle: "Tell IT — it is a two-minute fix",
-    body: "The list of codes comes from Business Central's User Setup. A new starter who has not been added shows up as a tidied username, or as bare initials. That is worth reporting, not working around.",
-  },
-  {
-    title: "Putting it together",
-    body: `The same lot, seen two ways.
-
-Made in the Hub
-Catalogued by reads Jack Collings, because Jack typed it. Business Central may well show JO against the very same lot — that is Jordan, who ran the import.
-
-Only in Business Central
-There is no Hub name to use, so the tool resolves whatever BC recorded: the code first, then the username, then a tidy-up. You get a person's name either way.
-
-Which is why the two can disagree and neither is broken. The Hub answers who catalogued it. BC answers who pushed it across.`,
-    notes: "If people take one thing from this section, it is that a disagreement between the two names is normal and expected.",
-  },
-  {
-    title: "When it says “No name recorded”",
-    body: `That is not a fault. It happens with older lots, and with lots created by an import rather than by a person.
-
-What to do
-- Look at Everyone who has worked on this lot — the first person listed usually is the answer
-- Open the full change history for who touched what, and when
-- Check what Business Central says, as a cross-reference`,
-    notes: "Teach the fallback, or people will read No name recorded as the tool being broken.",
-  },
-  {
-    title: "The cross-check, and the audit trail",
-    body: `What Business Central says
-From the last warehouse sync. It can disagree with the Hub, and that on its own is not a problem — it usually just means the sync has not caught up.
-
-Everyone who has worked on this lot
-Every person who has touched it, with how many changes each has made.
-
-Full change history
-Field by field: who changed what, from what, to what, and when.
-
-And because a barcode can legitimately appear in more than one sale, this tab returns a LIST rather than pretending there is one answer.`,
-  },
-
-  // ── Part 5 · Tab 3 ──
   {
     layout: "TITLE",
     title: "Tab 3 — Who catalogued this sale?",
-    subtitle: "The only place the lot number and the cataloguer appear together",
+    subtitle: "A whole sale at once",
   },
   {
-    title: "Why this tab has to exist",
-    body: `The lot NUMBER only lives in Business Central. The CATALOGUER only lives in the Hub. This tab reads each from the system that actually knows it and joins them on the barcode and unique ID.
-
-- Pick the sale from the dropdown — straight from BC, newest first, with its lot count
-- Or type a code, for a sale so new the list has not caught up
-- Then search a lot number: typing 247 lands on lot 247, not on 1247 and 2470 as well
-- One exact match gives you the big answer instead of a one-row table`,
+    title: "How to use it",
+    graphic: "STEPS",
+    body: `- Pick the sale from the list
+- Or type a lot number to jump straight to it
+- Click a cataloguer's name to see just their lots
+- Click it again to clear`,
     tryHref: "/tools/lot-lookup",
     tryLabel: "Try it now",
+    notes: "This is the only place the lot number and the real cataloguer appear together — BC has one, the Hub has the other.",
   },
   {
-    title: "Reading the sale",
-    body: `Who catalogued this sale lists everyone with a count against each name. Click a name and the table filters to just their lots.
+    title: "Good for a quick check",
+    body: `You get everyone who worked on the sale, with a count each.
 
-The table itself is lot number, item, catalogued by, when, and location.
+One name on a big sale, or a dozen names on a small one, are both worth a second look.
 
-It also tells you what is missing — lots Business Central has that the Hub does not, and lots with no number yet.`,
-    notes: "Useful for a spot check before a sale goes live: the names with counts show at a glance whether one person did all of it.",
+It also flags lots BC has that we don't, and lots with no number yet.`,
+    notes: "Useful before a sale goes live.",
   },
 
-  // ── Part 6 · Traps and habits ──
+  // ── Part 4 · Names ──
   {
     layout: "TITLE",
-    title: "Before you start",
-    subtitle: "The four things worth remembering",
+    title: "About names",
+    subtitle: "Why the same person looks different in each system",
   },
   {
-    title: "When it finds nothing",
+    title: "In Business Central you'll see",
+    layout: "CARDS",
+    body: `- JC or JO or KS — a short code
+- JACK.COLLINGS — a computer login
+- Nothing at all — it's blank more often than not`,
+    notes: "The short code is BC's own staff code. It is empty on tens of thousands of lines, which is why the login name is what usually identifies somebody.",
+  },
+  {
+    title: "The Hub just shows the person",
+    body: `Jack Collings. Jordan Orange. Keiran Southgate.
+
+And it translates BC's codes for you, so you should almost never have to read one.
+
+If you can still see a code, that person is missing from the list. Tell IT — it's a two-minute fix.`,
+    notes: "The list comes from BC's User Setup. A new starter who has not been added shows as a tidied-up login instead of their name.",
+  },
+  {
+    layout: "STATEMENT",
+    title: "The two names disagreeing is normal",
+    subtitle: "They're answering different questions",
+    body: "The Hub tells you who catalogued it. BC tells you who pushed it. Quote the Hub.",
+  },
+
+  // ── Part 5 · Things that look wrong but aren't ──
+  {
+    layout: "TITLE",
+    title: "Looks wrong, isn't",
+    subtitle: "Four things that catch people out",
+  },
+  {
+    layout: "STATEMENT",
+    title: "A barcode belongs to a sale, not to an item",
+    subtitle: "Put an item in a later sale and it gets a new one",
+    body: "So if a barcode finds nothing, try the unique ID — that one never changes.",
+  },
+  {
+    layout: "STATEMENT",
+    title: "Searching a tote gives you the whole delivery",
+    subtitle: "Not just that box",
+    body: "Nothing tags a lot to a tote, so it shows everything on that tote's receipt. The screen says so every time.",
+  },
+  {
+    title: "Odd sale codes like A995",
+    body: `Those aren't sales. They're waiting rooms in Business Central.
+
+The tool works out the real sale from the barcode instead, so you don't have to think about it.
+
+The one to notice is “Needs looking at” — that means BC has the item in its problem pile, and it genuinely needs sorting.`,
+    notes: "A995 is Temp F109 Bears, A999 is lost/missing/re-receipted. The barcode's first four characters name the real sale and agree with BC 94.6% of the time across 211,229 rows — every one of the 692 items sat in A995 carried an F109 barcode.",
+  },
+  {
+    title: "When you find nothing",
     graphic: "STEPS",
-    body: `Check the number is in the right box — a tote number in the receipt field finds nothing
-Try the unique ID instead of the barcode, because the barcode changes between sales
-Check it was catalogued in the Hub at all — a BC-only item appears on its own row
-Ask when it was catalogued — a very recent lot may not have synced yet`,
-    notes: "Never let an empty result read as it does not exist. It nearly always means the wrong number was typed.",
+    body: `- Check the number is in the right box
+- Try the unique ID instead of the barcode
+- Check it was catalogued in the Hub at all
+- Ask when it was done — very new lots may not have synced yet`,
+    notes: "Never let an empty result read as it doesn't exist. It nearly always means the wrong number.",
   },
+
+  // ── Part 6 · Wrap ──
   {
-    title: "One thing it will not tell you",
-    body: `There is no lot STATUS column anywhere in the Admin Centre, on purpose.
-
-It reads ENTERED on virtually every lot, so it tells an admin nothing while occupying space something useful could use. It was dropped from Manage Lots for exactly the same reason.
-
-Where it is up to on tab 1 is the useful version of that question — and it comes from real signals, not the status field.`,
-    notes: "Asked about often enough to be worth heading off.",
+    layout: "CARDS",
+    title: "In short",
+    body: `- Don't take lot information off Business Central
+- The Hub knows who catalogued it, and when
+- BC knows the lot number and where it is
+- This tool puts both on one screen`,
   },
   {
     layout: "TITLE",
     title: "Now you try",
-    subtitle: "The practice tasks are set on real lots from this system, and mark themselves",
-    notes: "Send them to the Practice tab. Tasks are randomised, so people can come back to it as many times as they like and never get the same set twice.",
+    subtitle: "Real lots from our own system — and it marks itself",
+    notes: "Send them to the Practice tab. Every task picks a real lot each time it's opened, so people can come back as often as they like and never get the same question twice.",
   },
 ]
+
 
 // ─── The practice scenarios ──────────────────────────────────────────────────
 // ⚠ Every lookup task is mode PICK. The server chooses a lot, receipt, customer or sale that
