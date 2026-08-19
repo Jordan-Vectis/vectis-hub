@@ -12,10 +12,29 @@ export const metadata = { title: "Unaccounted Time" }
 // reads the save history the client can't rewrite, so it catches the outcome
 // however the in-app popup was avoided.
 
-function localDayStart(dateStr: string): Date { const d = new Date(dateStr + "T00:00:00"); return isNaN(d.getTime()) ? new Date() : d }
-function localDayEnd(dateStr: string): Date { const d = new Date(dateStr + "T23:59:59.999"); return isNaN(d.getTime()) ? new Date() : d }
-function ymd(d: Date): string { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` }
-function hm(d: Date): string { return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) }
+// ⚠ EVERY date here must name Europe/London. This is a SERVER component, so the bare
+// Date methods run on Railway, whose clock is UTC — "2026-08-19T00:00:00" parsed there is
+// 01:00 London through BST, so the day ran 01:00–00:59 instead of midnight to midnight.
+
+// A London wall-clock time as a real instant. Read the wall clock as if it were UTC, ask
+// what London calls that instant, and take the difference back off — which is the offset
+// in force on that date, so it is right either side of the March/October changeover.
+function londonInstant(dateStr: string, time: string): Date {
+  const naive = new Date(`${dateStr}T${time}Z`)
+  if (isNaN(naive.getTime())) return new Date()
+  const asLondon = new Date(naive.toLocaleString("en-US", { timeZone: "Europe/London" }))
+  const asUtc    = new Date(naive.toLocaleString("en-US", { timeZone: "UTC" }))
+  return new Date(naive.getTime() - (asLondon.getTime() - asUtc.getTime()))
+}
+function localDayStart(dateStr: string): Date { return londonInstant(dateStr, "00:00:00.000") }
+function localDayEnd(dateStr: string): Date { return londonInstant(dateStr, "23:59:59.999") }
+// en-CA renders YYYY-MM-DD, which is what the date inputs expect.
+function ymd(d: Date): string { return d.toLocaleDateString("en-CA", { timeZone: "Europe/London" }) }
+// ⚠ timeZone is REQUIRED here. This is a SERVER component, so these format on Railway
+// — whose clock is UTC — not in the reader's browser. Without it every time on this
+// report reads an hour early through British Summer Time: a gap the lot list showed as
+// 11:48 → 13:13 printed here as 10:48 → 12:13 (measured 2026-08-19).
+function hm(d: Date): string { return d.toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" }) }
 
 // A save whose device claimed a non-UK timezone, or a clock more than an hour off
 // the server, is the fingerprint of the 9–5 dodge (phone set to US / odd time).
@@ -32,7 +51,7 @@ function phoneClock(clientNow: Date | null, clientTz: string | null): string {
   if (!clientNow) return "—"
   try {
     return clientNow.toLocaleString("en-GB", { timeZone: clientTz || "Europe/London", weekday: "short", hour: "2-digit", minute: "2-digit" })
-  } catch { return clientNow.toLocaleString("en-GB") }
+  } catch { return clientNow.toLocaleString("en-GB", { timeZone: "Europe/London" }) }
 }
 const REASON_LABEL: Record<string, string> = {
   BLOCKED: "🚫 Blocked (asked for reason)", CLEARED_BY_REASON: "✓ Cleared by a logged reason",
@@ -181,7 +200,7 @@ export default async function IdleGapsPage({ searchParams }: { searchParams: Pro
                   <tbody>
                     {gaps.map((g, i) => (
                       <tr key={i} className="border-t border-gray-100 dark:border-gray-800/70">
-                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{g.start.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{g.start.toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "short", day: "2-digit", month: "short" })}</td>
                         <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap tabular-nums">
                           {hm(g.start)} → {g.start.toDateString() !== g.end.toDateString() && <span className="text-amber-500">(next day) </span>}{hm(g.end)}
                         </td>
