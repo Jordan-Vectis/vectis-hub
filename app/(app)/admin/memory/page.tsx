@@ -228,7 +228,7 @@ Deliberate details, all of which matter:
 - The CLEARED_BY_REASON window still runs to nowMs, not the measured end - a reason logged DURING the lot (the within-lot check) must still account for the break.
 - IdleGateEval gained measuredToMs; nowMs stays the true server clock because clockLooksTampered compares the device's claim against it.
 
-⚠ THE WITHIN-LOT CHECK WAS LEFT ALONE. checkWithinLotIdle / maybePromptIdleBeforeSave measure to NOW on purpose - they ask "have you wandered off during this lot?", and measuring those to lot start would give ~0 and reopen the hole the 2026-07-20 second check closed. (Jack owns the wizard's idle code - coordinate on conflicts.)
+⚠ THE WITHIN-LOT MEASURE STAYS AT "NOW". It asks "have you wandered off during this lot?", and measuring it to lot start would give ~0 and reopen the hole the 2026-07-20 second check closed. ⚠ UPDATED 2026-08-19: checkWithinLotIdle no longer exists - the mid-lot popup was removed and the walk-away is now remembered and raised at the SAVE by maybePromptIdleBeforeSave, which still measures to now.
 
 ⚠ THE REPORTS WERE ALREADY CORRECT - lib/cataloguing-reports.ts treats a lot as occupying [savedAt - durationMs, savedAt]. Only the live gate was wrong. And CatalogueTimingLog.savedAt is the FINISH time (@default(now()), never passed in by the client); a lot's start is savedAt minus durationMs.`,
   },
@@ -1531,7 +1531,7 @@ Verified with a temp tsx suite (10 cases incl. token-reasons+huge-unallocated = 
 **Admin preview:** Admin → Cataloguer Activity Timer (**/admin/activity-timer**) has a "👁 Preview the popup" button — read-only replica driven by the configured reasons (✕ + amber "Preview" badge; nothing saved). Component: components/idle-prompt-preview.tsx.
 
 ⚠ **The popup markup lives in TWO places:**
-1. The REAL popup — inline in app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-tab.tsx (search "How was this time spent?"). Wired to idle detection + the save flow. ⚠ Jack owns/actively works in this file's idle logic — coordinate before touching it.
+1. The REAL popup — inline in app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-tab.tsx (search "How was this time spent?"). Wired to idle detection + the save flow.
 2. The preview REPLICA — components/idle-prompt-preview.tsx.
 
 The **chrome** (heading, split sliders, notes) is still duplicated — the real popup is tightly coupled to the wizard's idle refs and save flow, so it was safer to replicate than to refactor the critical cataloguing path. **The reason BUTTONS are no longer duplicated** (2026-08-10): they and the message banner come from **components/idle-reason-picker.tsx**, which both render — don't inline them back.
@@ -1819,7 +1819,7 @@ The decision log is the point: once on production it will show exactly what his 
 
 Kathy Taylor got a "2h+ away" popup at 16:52 on 2026-08-06 while saving lots every few minutes. Production data proved no server involvement (no IdleGateDecision block, no IdleLog at that time) — the popup came from a **stale page instance** (second device/tab with the sale open mid-lot): the two WITHIN-LOT checks in lot-wizard-tab.tsx (\`checkWithinLotIdle\`, \`maybePromptIdleBeforeSave\`) measured "how long since THIS PAGE was touched" from in-memory refs, blind to work in another tab (the wizard stays **mounted-hidden** on tab switch in both auction-tabs and tablet-tabs), another device, or the native camera. Refresh clears it because the refs die with the page — **a popup with no matching IdleGateDecision/IdleLog row is a device-local false positive.**
 
-Fix: same pattern checkIdleOnLotStart always had — the local measure only decides WHEN to ask; \`confirmIdleWithServer()\` hits /api/catalogue/last-activity (→ evaluateIdleGate) and the popup opens only on "prompt", using the SERVER's figures. "fine" → re-baseline (the save path clears pendingSaveRef and resumes performSave itself). Offline → old device-local behaviour (create-lot gate still backstops). **Never raise the within-lot popup from local refs alone again.** The Resume (draft) button is safe by design — timing starts fresh + it runs the server-based lot-start check. ⚠ Jack owns this file's idle code — fix made on Jordan's instruction; coordinate on conflicts.`,
+Fix: same pattern checkIdleOnLotStart always had — the local measure only decides WHEN to ask; \`confirmIdleWithServer()\` hits /api/catalogue/last-activity (→ evaluateIdleGate) and the popup opens only on "prompt", using the SERVER's figures. "fine" → re-baseline (the save path clears pendingSaveRef and resumes performSave itself). Offline → old device-local behaviour (create-lot gate still backstops). **Never raise the within-lot popup from local refs alone again.** The Resume (draft) button is safe by design — timing starts fresh + it runs the server-based lot-start check.`,
   },
   {
     filename: "report_day_exclusion.md",
