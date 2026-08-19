@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4f83bf8a9e39b732916ff93cb2912724711cc52a","author":"Jordan Orange","date":"2026-08-18T16:48:46+01:00","subject":"Data Sync: remove records that have been deleted in Business Central"},
   {"sha":"1ae564b44073f5d2a57d2940e74c87ec215569ca","author":"Jordan Orange","date":"2026-08-18T16:29:53+01:00","subject":"Admin Centre: drop BC rows for barcodes that are ours somewhere else"},
   {"sha":"94cc5513b75768cd2976c0d0ab78d702da4e02f9","author":"Jordan Orange","date":"2026-08-18T16:13:02+01:00","subject":"Admin Centre: the Hub always wins, BC only fills the gaps"},
   {"sha":"c401090e4a582b719215c71847db15d560418ab4","author":"Jordan Orange","date":"2026-08-18T16:05:33+01:00","subject":"Admin Centre: name whoever catalogued it, and never cross customers"},

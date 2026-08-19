@@ -1339,6 +1339,14 @@ function BcMatchAllPanel({ onImported }: { onImported: (msg: string) => void }) 
                 {filter !== "pending" && shownRows.length === 0 && (
                   <p className="text-xs text-gray-500">Nothing in this group.</p>
                 )}
+                {/* A huge export can still overflow the display cap for MATCHES (mismatches
+                    always survive it) — say so rather than letting a short list read as all. */}
+                {filter !== "pending" && shownRows.length > 0 &&
+                  (filterMeta.find(f => f.key === filter)?.count ?? 0) > shownRows.length && (
+                  <p className="text-xs text-gray-500">
+                    Showing the first {shownRows.length.toLocaleString()} of {(filterMeta.find(f => f.key === filter)?.count ?? 0).toLocaleString()} — the counts above are the full picture.
+                  </p>
+                )}
                 {filter === "pending" && res.pendingNotInExport.map((p, i) => (
                   <div key={`${p.barcode}-${i}`} className="text-xs flex flex-wrap items-center gap-x-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/25 px-3 py-1.5">
                     <span className="font-mono font-bold text-gray-900 dark:text-white">{p.barcode}</span>

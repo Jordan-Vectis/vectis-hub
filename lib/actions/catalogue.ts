@@ -890,9 +890,18 @@ export async function matchBcLinesAcrossAuctions(
       }
     }
 
+    // ⚠ The display cap must keep the rows a person actually needs to READ. A flat
+    // slice(0, 1000) in export order cut everything past row 1,000 — so on a big export the
+    // tiles said "3 receipt disagrees" while clicking the tile showed nothing, because all
+    // three sat beyond the cap (Jordan, 2026-08-19). Mismatches are why anyone opens the list,
+    // so they survive first, then not-found, and matches fill whatever room is left.
+    const mismatchRows = resultRows.filter(r => r.status === "mismatch").slice(0, 500)
+    const notFoundRows = resultRows.filter(r => r.status === "not_found").slice(0, 300)
+    const matchRows    = resultRows.filter(r => r.status === "match")
+      .slice(0, Math.max(0, 1000 - mismatchRows.length - notFoundRows.length))
     return {
       ok: true, counts,
-      rows: resultRows.slice(0, 1000),
+      rows: [...mismatchRows, ...notFoundRows, ...matchRows],
       pendingNotInExport: pendingNotInExport.slice(0, 500),
       updated, skipped, lockedSales,
     }
