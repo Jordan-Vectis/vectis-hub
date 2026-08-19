@@ -2349,6 +2349,20 @@ last_updated: 2026-05-08
 
 # Business Central OData — Reference & Gotchas
 
+## ⚠⚠ THE CACHE HAD NO DELETE PATH UNTIL 2026-08-19 — ROWS DELETED IN BC LIVED HERE FOREVER
+
+Every sync/* stage is UPSERT-ONLY, deliberately, so a partial walk can never wipe good data. The cost: a row DELETED in BC stayed in WarehouseItem indefinitely. Found when Jordan put BC's own Receipt Lines screen beside ours - receipt R008537 returns 50 rows from live BC, our cache held 143. The 93 ghosts were temp A995 lines BC deleted when the items were re-receipted, and their barcodes had since been reused on OTHER CUSTOMERS' lots - which is how a search for one customer's tote showed another customer's items in the Admin Centre. ~1,800 A9xx rows cache-wide had the same shape.
+
+POST /api/warehouse/sync/reconcile-deleted - Data Sync STAGE 8, and the tail of the nightly cron/bc-warehouse. For each SUSPECT receipt (any holding at least one A9xx row) it asks LIVE BC what that receipt actually contains and deletes the cached rows BC no longer has.
+
+⚠ IT IS THE ONLY STAGE ALLOWED TO DELETE, so the rules are strict and must stay: SUSPECTS ONLY (never a whole-table sweep deciding what to kill); LIVE BC IS THE SOLE AUTHORITY (never a heuristic, never our own cache); AN EMPTY ANSWER DELETES NOTHING (a receipt returning no rows is skipped and counted - "delete everything" must never ride on a response that may simply have failed); A FETCH ERROR STOPS THE RUN rather than skipping on. Same contract as the other stages so the Data Sync stage loop drives it unchanged.
+
+## ⚠ "WHO CATALOGUED IT" LIVES IN THREE BC FIELDS - THE OBVIOUS ONE IS USUALLY EMPTY
+
+EVA_CataloguedBy is a short CODE ("KS") and is blank on tens of thousands of lines. EVA_CataloguedByUser and EVA_CreatedBy carry a WINDOWS USERNAME ("ANNABELL.FENBY"). Measured on 200 catalogued receipt lines whose EVA_CataloguedBy was blank: 98 had CataloguedByUser, ALL 200 had CreatedBy. Synced onto WarehouseItem.cataloguedByUser / bcCreatedBy; resolved by bcPersonName() in lib/cataloguer-directory.ts (code through the directory, then username matched on the directory's EMAIL local-part, then title-cased).
+
+⚠ receiptTotes (eva/tot custom API) field names, READ OFF A LIVE ROW: receiptNo, toteNo, vendorNo, articleCategory, articleSubcategory, articleSubcategory2, contentsDescription, catalogued, cataloguedAt, cataloguedBy, toteLocation, systemCreatedAt, reserveStatus, reservePrice. camelCase, unlike the EVA_-prefixed Excel feeds.
+
 ## Diagnostic tool — always use this first
 \`/api/bc/api-viewer?endpoint=<EndpointName>&limit=1[&filter=...]\` returns sample row + every field name. Use BEFORE guessing field names.
 
@@ -2765,6 +2779,8 @@ Hi Claude. Before we start, here are the rules for working with me:
 **Never guess.** If you don't know something — a file path, a credential, how an external service works, where something should go in the app — stop and either look it up properly or ask me. Guessing wastes time and causes mistakes.
 
 **Ask before building.** If a task involves creating a new page, moving files, adding a new section, or connecting to an external service — ask me where I want it first. Don't assume.
+
+**Understand the JOB before redesigning a screen.** On 2026-08-18 several rounds went into rearranging the Admin Centre from screenshots - collapsible groups, a totes table, button layouts - before anyone asked what the page was FOR. It exists because customers ring up asking where their things are, and the moment that was said the real faults were obvious in one pass: it was answering "which of our two systems is this lot in", which is the one thing the admin must never have to care about. If a screen keeps needing another tweak, stop and ask who uses it and what question they are answering.
 
 **Common sense on confirmation.** You don't need to check with me on every small thing — fixing a bug, a TypeScript error, a styling tweak within an existing file is fine to just do. But if the decision involves WHERE something lives, WHAT it connects to, or anything that affects the structure of the app — ask first.
 
