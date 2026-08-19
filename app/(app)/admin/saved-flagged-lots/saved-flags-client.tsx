@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { saveAiFlagSnapshot, deleteAiFlagBatch } from "@/lib/actions/saved-ai-flags"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
+import LotPhotoViewer from "@/components/lot-photo-viewer"
 
 // Admin → Saved Flagged Lots.
 //
@@ -175,7 +176,7 @@ export default function SavedFlagsClient({
             {pending ? "Saving…" : "💾 Save flagged lots"}
           </button>
         </div>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
           Saves every lot that currently has an AI flag or a human review flag, with its photos, key
           points and description exactly as they are now.
         </p>
@@ -184,7 +185,7 @@ export default function SavedFlagsClient({
       {/* ── The archives ── */}
       <div className="mt-6 grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)] items-start">
         <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-3 lg:sticky lg:top-4">
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 px-2 py-2">
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-gray-500 dark:text-gray-400 px-2 py-2">
             Saves ({batches.length})
           </p>
           {batches.length === 0 ? (
@@ -207,7 +208,7 @@ export default function SavedFlagsClient({
                     <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       {b.lots} lot{b.lots === 1 ? "" : "s"} · {b.aiFlags} AI · {when(b.savedAt)}
                     </span>
-                    <span className="block text-xs text-gray-400 dark:text-gray-500 truncate">
+                    <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
                       {b.sales.length === 1 ? b.sales[0] : `${b.sales.length} sales`} · {b.savedByName}
                     </span>
                   </Link>
@@ -269,11 +270,20 @@ export default function SavedFlagsClient({
                   {rows.length === 0 ? "This archive is empty." : "No lots match that filter."}
                 </p>
               ) : (
+                <>
+                <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+                  Key points: <span className="text-green-500">✓</span> found ·
+                  <span className="text-amber-500"> ≈</span> partly worded ·
+                  <span className="text-amber-500"> ✍</span> reworded ·
+                  <span className="text-red-500"> ⚠</span> not found.
+                  A coloured dot marks where that key point appears in the description.
+                </p>
                 <div className="space-y-4">
                   {shown.map(lot => (
                     <SavedLotCard key={lot.id} lot={lot} onPhoto={i => setViewer({ lot, index: i })} />
                   ))}
                 </div>
+                </>
               )}
             </>
           )}
@@ -281,8 +291,9 @@ export default function SavedFlagsClient({
       </div>
 
       {viewer && (
-        <PhotoViewer
-          lot={viewer.lot}
+        <LotPhotoViewer
+          images={viewer.lot.imageUrls}
+          label={viewer.lot.barcode || viewer.lot.receiptUniqueId || ""}
           index={viewer.index}
           onIndex={i => setViewer({ lot: viewer.lot, index: i })}
           onClose={() => setViewer(null)}
@@ -309,7 +320,7 @@ function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: (index: nu
           {lot.barcode || lot.receiptUniqueId || "—"}
         </span>
         {lot.receiptUniqueId && lot.barcode && (
-          <span className="font-mono text-xs text-gray-400 dark:text-gray-500">{lot.receiptUniqueId}</span>
+          <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{lot.receiptUniqueId}</span>
         )}
         {lot.auctionCode && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold">
@@ -370,14 +381,14 @@ function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: (index: nu
           )}
 
           <div className="mt-3 space-y-1.5 text-sm">
-            {est && <p><span className="text-gray-500 dark:text-gray-500">Estimate:</span> <span className="font-semibold text-[#2AB4A6]">{est}</span></p>}
-            {!est && aiEst && <p><span className="text-gray-500 dark:text-gray-500">AI Est:</span> <span className="font-semibold text-purple-400">{aiEst}</span></p>}
-            {lot.condition && <p><span className="text-gray-500 dark:text-gray-500">Condition:</span> <span className="text-gray-700 dark:text-gray-300">{lot.condition}</span></p>}
+            {est && <p><span className="text-gray-500 dark:text-gray-400">Estimate:</span> <span className="font-semibold text-[#2AB4A6]">{est}</span></p>}
+            {!est && aiEst && <p><span className="text-gray-500 dark:text-gray-400">AI Est:</span> <span className="font-semibold text-purple-400">{aiEst}</span></p>}
+            {lot.condition && <p><span className="text-gray-500 dark:text-gray-400">Condition:</span> <span className="text-gray-700 dark:text-gray-300">{lot.condition}</span></p>}
             {(lot.category || lot.subCategory) && (
-              <p><span className="text-gray-500 dark:text-gray-500">Category:</span> <span className="text-gray-700 dark:text-gray-300">{[lot.category, lot.subCategory].filter(Boolean).join(" / ")}</span></p>
+              <p><span className="text-gray-500 dark:text-gray-400">Category:</span> <span className="text-gray-700 dark:text-gray-300">{[lot.category, lot.subCategory].filter(Boolean).join(" / ")}</span></p>
             )}
-            {lot.brand && <p><span className="text-gray-500 dark:text-gray-500">Brand:</span> <span className="text-gray-700 dark:text-gray-300">{lot.brand}</span></p>}
-            {lot.cataloguedBy && <p><span className="text-gray-500 dark:text-gray-500">Cataloguer:</span> <span className="text-gray-700 dark:text-gray-300">{lot.cataloguedBy}</span></p>}
+            {lot.brand && <p><span className="text-gray-500 dark:text-gray-400">Brand:</span> <span className="text-gray-700 dark:text-gray-300">{lot.brand}</span></p>}
+            {lot.cataloguedBy && <p><span className="text-gray-500 dark:text-gray-400">Cataloguer:</span> <span className="text-gray-700 dark:text-gray-300">{lot.cataloguedBy}</span></p>}
           </div>
         </div>
 
@@ -423,7 +434,7 @@ function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: (index: nu
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                   <p className="text-xs text-emerald-600 dark:text-emerald-400">
                     ✓ {lot.kpFixNote}
-                    <span className="text-gray-500 dark:text-gray-500">
+                    <span className="text-gray-500 dark:text-gray-400">
                       {lot.kpFixedBy ? ` — ${lot.kpFixedBy}` : ""}
                       {lot.kpFixedAt ? ` · ${new Date(lot.kpFixedAt).toLocaleDateString("en-GB")}` : ""}
                     </span>
@@ -441,145 +452,6 @@ function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: (index: nu
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Photo viewer ────────────────────────────────────────────────────────────
-// Enlarge, then zoom in far enough to read a swing label or a product code off the picture —
-// which is the actual job when you are checking whether the AI's flag was right.
-
-const ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6, 8]
-
-function PhotoViewer({
-  lot, index, onIndex, onClose,
-}: {
-  lot: SavedFlagRow
-  index: number
-  onIndex: (i: number) => void
-  onClose: () => void
-}) {
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan]   = useState({ x: 0, y: 0 })
-  const drag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
-  const total = lot.imageUrls.length
-
-  // A new photo starts fresh — carrying the previous one's pan leaves you looking at empty space.
-  const reset = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [])
-  useEffect(() => { reset() }, [index, reset])
-
-  const step = useCallback((dir: 1 | -1) => {
-    setZoom(z => {
-      const i = ZOOM_STEPS.findIndex(s => s >= z - 0.001)
-      const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir))]
-      if (next === 1) setPan({ x: 0, y: 0 })
-      return next
-    })
-  }, [])
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
-      else if (e.key === "ArrowRight" && total > 1) onIndex((index + 1) % total)
-      else if (e.key === "ArrowLeft"  && total > 1) onIndex((index - 1 + total) % total)
-      else if (e.key === "+" || e.key === "=") step(1)
-      else if (e.key === "-") step(-1)
-      else if (e.key === "0") reset()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [index, total, onIndex, onClose, step, reset])
-
-  // Wheel zooms rather than scrolls the page behind — the pointer stays where it was aimed.
-  function onWheel(e: React.WheelEvent) {
-    e.preventDefault()
-    step(e.deltaY < 0 ? 1 : -1)
-  }
-
-  function onPointerDown(e: React.PointerEvent) {
-    if (zoom === 1) return
-    drag.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
-    ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
-  }
-  function onPointerMove(e: React.PointerEvent) {
-    const d = drag.current
-    if (!d) return
-    setPan({ x: d.panX + (e.clientX - d.x), y: d.panY + (e.clientY - d.y) })
-  }
-  function onPointerUp() { drag.current = null }
-
-  const btn = "px-3 py-2 min-h-[44px] rounded-lg text-sm font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-
-  return (
-    <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col" onClick={onClose}>
-      {/* Controls — same wording and weight as the rest of the app, on a dark ground */}
-      <div
-        className="flex items-center gap-2 px-4 py-2 shrink-0 text-white/80"
-        onClick={e => e.stopPropagation()}
-      >
-        <button onClick={onClose} className={btn}>✕ Close</button>
-        <span className="font-mono text-sm text-white/60">{lot.barcode || lot.receiptUniqueId}</span>
-        {total > 1 && (
-          <span className="text-sm text-white/50 tabular-nums">{index + 1} / {total}</span>
-        )}
-        <div className="ml-auto flex items-center gap-1">
-          <button onClick={() => step(-1)} disabled={zoom <= 1} className={`${btn} disabled:opacity-30`}>−</button>
-          <span className="text-sm tabular-nums w-14 text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => step(1)} disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} className={`${btn} disabled:opacity-30`}>+</button>
-          <button onClick={reset} className={btn}>Reset</button>
-        </div>
-      </div>
-
-      {/* The picture */}
-      <div
-        className="flex-1 min-h-0 overflow-hidden flex items-center justify-center select-none"
-        onClick={e => e.stopPropagation()}
-        onWheel={onWheel}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-        onDoubleClick={() => (zoom === 1 ? step(1) : reset())}
-        style={{ cursor: zoom > 1 ? (drag.current ? "grabbing" : "grab") : "zoom-in" }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={proxyUrl(lot.imageUrls[index])}
-          alt={`${lot.barcode ?? "Lot"} photo ${index + 1}`}
-          draggable={false}
-          className="max-h-full max-w-full object-contain"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: "center center",
-            transition: drag.current ? "none" : "transform 120ms ease-out",
-            // ⚠ Zooming a photo to read a product code is pointless if the browser smooths the
-            // pixels into mush at 400%. Keep it crisp.
-            imageRendering: zoom >= 3 ? "pixelated" : "auto",
-          }}
-        />
-      </div>
-
-      {/* Thumbnails */}
-      {total > 1 && (
-        <div className="shrink-0 flex gap-2 overflow-x-auto px-4 py-3" onClick={e => e.stopPropagation()}>
-          {lot.imageUrls.map((key, i) => (
-            <button
-              key={i}
-              onClick={() => onIndex(i)}
-              className={`shrink-0 rounded-lg overflow-hidden border-2 transition ${
-                i === index ? "border-orange-500" : "border-transparent opacity-60 hover:opacity-100"
-              }`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={proxyUrl(key)} alt={`Photo ${i + 1}`} className="h-16 w-16 object-cover" />
-            </button>
-          ))}
-        </div>
-      )}
-
-      <p className="shrink-0 text-center text-xs text-white/40 pb-3" onClick={e => e.stopPropagation()}>
-        Scroll or double-click to zoom · drag to move · arrow keys change photo · Esc closes
-      </p>
     </div>
   )
 }

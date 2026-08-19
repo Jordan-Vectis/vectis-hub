@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { setLotReviewFlag, saveLotDescription, saveAiFlagNote, resolveKeyPointsMistake, clearKeyPointsMistake, applyFlagFixes } from "@/lib/actions/catalogue"
 import { saveAiFlagSnapshot } from "@/lib/actions/saved-ai-flags"
+import LotPhotoViewer from "@/components/lot-photo-viewer"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 // ⚠ The one title rule, shared with the Generate Titles action — never re-derive it here.
 import { titleFromDescription } from "@/lib/lot-title"
@@ -100,7 +101,7 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [flagText, setFlagText]     = useState("")
   const [editDescId, setEditDescId] = useState<string | null>(null)
   const [editDescText, setEditDescText] = useState("")
-  const [fullscreenImg, setFullscreenImg] = useState<string | null>(null)
+  const [photoIndex, setPhotoIndex] = useState(0)
   const [fixingId, setFixingId] = useState<string | null>(null)
   const [kpFixId, setKpFixId]     = useState<string | null>(null)
   const [kpFixText, setKpFixText] = useState("")
@@ -704,7 +705,7 @@ Read them back any time at Admin → Saved Flagged Lots.`)
               {/* Photo */}
               <div>
                 {lot.imageUrls.length > 0 ? (
-                  <button onClick={() => setPhotoLot(lot)} className="relative block w-full">
+                  <button onClick={() => { setPhotoIndex(0); setPhotoLot(lot) }} className="relative block w-full">
                     <img
                       src={proxyUrl(lot.imageUrls[0])}
                       alt={lot.barcode ?? "Lot photo"}
@@ -1080,34 +1081,19 @@ Read them back any time at Admin → Saved Flagged Lots.`)
         </div>
       )}
 
-      {/* Fullscreen image overlay */}
-      {fullscreenImg && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/95" onClick={() => setFullscreenImg(null)}>
-          <button onClick={() => setFullscreenImg(null)} className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl leading-none px-3">✕</button>
-          <img src={fullscreenImg} alt="Fullscreen photo" className="max-w-full max-h-full object-contain" onClick={e => e.stopPropagation()} />
-        </div>
+      {/* Photos — enlarge and zoom, shared with Admin → Saved Flagged Lots so the two cannot
+          drift. Replaced a grid-then-fullscreen pair that could not zoom, which is what you
+          actually need to check a product code against the description. */}
+      {photoLot && (
+        <LotPhotoViewer
+          images={photoLot.imageUrls}
+          label={photoLot.barcode ?? photoLot.receiptUniqueId ?? ""}
+          index={photoIndex}
+          onIndex={setPhotoIndex}
+          onClose={() => setPhotoLot(null)}
+        />
       )}
 
-      {/* Photo viewer */}
-      {photoLot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setPhotoLot(null)}>
-          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl p-4 max-w-2xl w-full max-h-[90vh] overflow-y-auto space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <span className="font-mono font-semibold text-gray-900 dark:text-white">{photoLot.barcode ?? photoLot.receiptUniqueId}</span>
-              <button onClick={() => setPhotoLot(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl leading-none px-2">✕</button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {photoLot.imageUrls.map((key, i) => (
-                <button key={key} onClick={() => setFullscreenImg(proxyUrl(key))} className="relative group block w-full text-left">
-                  <img src={proxyUrl(key)} alt={`Photo ${i + 1}`} loading="lazy"
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 object-contain" />
-                  <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs px-2 py-1 rounded-lg">⛶ Fullscreen</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
