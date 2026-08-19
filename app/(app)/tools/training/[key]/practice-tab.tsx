@@ -48,6 +48,22 @@ export default function PracticeTab({
   const [at, setAt] = useState(0)
   const [passed, setPassed] = useState<Set<string>>(new Set(passedIds))
 
+  /**
+   * Jump to a random task — the "come back to it next week" button.
+   *
+   * ⚠ Prefers one you have NOT passed. Somebody returning to practise is trying to find the
+   * gaps, and a shuffle that keeps landing on the three they already know is a shuffle they
+   * stop pressing. Falls back to any task once they have passed the lot, and never hands back
+   * the one already on screen.
+   */
+  function shuffle() {
+    const pool = exercises.map((e, n) => ({ e, n })).filter(x => x.n !== at)
+    if (!pool.length) return
+    const unseen = pool.filter(x => !passed.has(x.e.id))
+    const from   = unseen.length ? unseen : pool
+    setAt(from[Math.floor(Math.random() * from.length)].n)
+  }
+
   if (exercises.length === 0) {
     return (
       <div className={`${CARD} p-10 text-center`}>
@@ -64,6 +80,23 @@ export default function PracticeTab({
 
   return (
     <div className="space-y-5">
+      {/* Every task sets itself from live data, so this is worth saying once at the top —
+          otherwise somebody who did this last month assumes they are about to repeat it. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-gray-200 dark:border-gray-800 px-5 py-4">
+        <p className="text-sm text-gray-600 dark:text-gray-300 max-w-3xl leading-relaxed">
+          🎲 Every task picks a <strong>real lot from this system</strong> when you open it, so you get a
+          different question each time. Come back as often as you like — and press <strong>Give me another</strong>
+          {" "}on any task to be set the same question about a different lot.
+        </p>
+        <button
+          onClick={shuffle}
+          disabled={exercises.length < 2}
+          className={`px-6 py-3 min-h-[44px] rounded-xl ${a.btn} text-white text-sm font-bold shrink-0 disabled:opacity-40`}
+        >
+          🎲 Surprise me
+        </button>
+      </div>
+
       {/* Task rail — how many, which one, which are done */}
       <div className="flex flex-wrap items-center gap-2">
         {exercises.map((e, n) => {

@@ -14,6 +14,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"fe2eaefe86794bddb38a493389877ce69ef21ec1","author":"Jack Collings","date":"2026-08-19T10:51:19+01:00","subject":"Reframe the Admin Centre course around why BC's lot information is wrong"},
+  {"sha":"b9aeb5bbe7c9375178f06ad8370f2899a800b9e3","author":"Jack Collings","date":"2026-08-19T10:28:36+01:00","subject":"Refresh changelog seed"},
+  {"sha":"51c3ac79549be37be1e74f8b155a32aa024b648b","author":"Jack Collings","date":"2026-08-19T10:26:57+01:00","subject":"Flesh out the Admin Centre course: 35 slides, 23 scenarios, and how names differ between systems"},
   {"sha":"d705e6e9ebaaa7277bc01df5fa4eb4f6233bd4ba","author":"Jordan Orange","date":"2026-08-19T10:23:01+01:00","subject":"Run the Dolls & Bears clean-up after Key Points and Double Check too"},
   {"sha":"c187cbae95bf5e3262e9ecd089a793ba014140b6","author":"Jordan Orange","date":"2026-08-19T10:09:09+01:00","subject":"Refresh changelog seed"},
   {"sha":"b3702e387b53040fec83d8ef0d35fc3aa0e74faa","author":"Jordan Orange","date":"2026-08-19T10:05:21+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
