@@ -99,6 +99,9 @@ async function loadBatch(batchId: string): Promise<SavedFlagRow[]> {
       aiFlagNote: r.aiFlagNote, reviewFlag: r.reviewFlag,
       reviewFlaggedBy: r.reviewFlaggedBy,
       reviewFlaggedAt: r.reviewFlaggedAt?.toISOString() ?? null,
+      kpFixNote: r.kpFixNote, kpFixedBy: r.kpFixedBy,
+      kpFixedAt: r.kpFixedAt?.toISOString() ?? null,
+      kpMode: r.kpMode === "relaxed" ? "relaxed" : "strict",
       savedAt: r.savedAt.toISOString(), savedByName: r.savedByName,
     }))
   } catch { return [] }

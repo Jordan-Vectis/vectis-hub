@@ -2390,6 +2390,13 @@ model SavedAiFlag {
   reviewFlaggedBy String?
   reviewFlaggedAt DateTime?
   kpFixNote       String?   @db.Text
+  kpFixedBy       String?
+  kpFixedAt       DateTime?
+  // ⚠ The auction's key-point matching mode at save time. analyseKeyPoints is pure — given the
+  // same description, key points and mode it returns the same verdict — so storing this is what
+  // lets the archive redraw the Review tab's ticks and crosses exactly as they were, rather
+  // than recomputing them under whatever mode the sale uses today.
+  kpMode          String    @default("strict")
 
   savedAt     DateTime @default(now())
   savedById   String?

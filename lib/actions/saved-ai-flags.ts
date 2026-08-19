@@ -51,8 +51,11 @@ const LOT_SELECT = {
   brand: true, estimateLow: true, estimateHigh: true, aiEstimateLow: true, aiEstimateHigh: true,
   imageUrls: true, createdByName: true,
   aiFlagNote: true, reviewFlag: true, reviewFlaggedBy: true, reviewFlaggedAt: true,
+  kpFixNote: true, kpFixedBy: true, kpFixedAt: true,
   auctionId: true,
-  auction: { select: { code: true, name: true } },
+  // reviewKpMode decides how key points are matched, so the archive has to keep it or it would
+  // redraw an old verdict under today's rules.
+  auction: { select: { code: true, name: true, reviewKpMode: true } },
 } as const
 
 /**
@@ -107,6 +110,8 @@ export async function saveAiFlagSnapshot(auctionId: string, label: string): Prom
         cataloguedBy: l.createdByName,
         aiFlagNote: l.aiFlagNote, reviewFlag: l.reviewFlag,
         reviewFlaggedBy: l.reviewFlaggedBy, reviewFlaggedAt: l.reviewFlaggedAt,
+        kpFixNote: l.kpFixNote, kpFixedBy: l.kpFixedBy, kpFixedAt: l.kpFixedAt,
+        kpMode: l.auction?.reviewKpMode === "relaxed" ? "relaxed" : "strict",
         savedById: me.id, savedByName: me.name,
       })),
     })

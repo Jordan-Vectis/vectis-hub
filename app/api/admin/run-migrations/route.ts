@@ -1618,6 +1618,9 @@ const MIGRATIONS = [
      "reviewFlaggedBy" TEXT,
      "reviewFlaggedAt" TIMESTAMP(3),
      "kpFixNote"       TEXT,
+     "kpFixedBy"       TEXT,
+     "kpFixedAt"       TIMESTAMP(3),
+     "kpMode"          TEXT NOT NULL DEFAULT 'strict',
      "savedAt"         TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
      "savedById"       TEXT,
      "savedByName"     TEXT NOT NULL DEFAULT '',
@@ -1626,6 +1629,10 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "SavedAiFlag_batchId_idx" ON "SavedAiFlag"("batchId")`,
   `CREATE INDEX IF NOT EXISTS "SavedAiFlag_auctionId_idx" ON "SavedAiFlag"("auctionId")`,
   `CREATE INDEX IF NOT EXISTS "SavedAiFlag_savedAt_idx" ON "SavedAiFlag"("savedAt")`,
+  // Added after the table — safe on an environment that already created it.
+  `ALTER TABLE "SavedAiFlag" ADD COLUMN IF NOT EXISTS "kpFixedBy" TEXT`,
+  `ALTER TABLE "SavedAiFlag" ADD COLUMN IF NOT EXISTS "kpFixedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "SavedAiFlag" ADD COLUMN IF NOT EXISTS "kpMode" TEXT NOT NULL DEFAULT 'strict'`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

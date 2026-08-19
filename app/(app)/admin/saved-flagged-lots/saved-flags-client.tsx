@@ -1,21 +1,26 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useCallback, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { saveAiFlagSnapshot, deleteAiFlagBatch } from "@/lib/actions/saved-ai-flags"
+import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 
 // Admin → Saved Flagged Lots.
 //
-// ⚠ The lot cards below deliberately MIRROR the Review tab's layout — same photo-left/details
-// -under, same orange AI-flag banner, same key points and description blocks — because that is
-// the screen people already read these on. Jack: "it has to save with the same UI as the review
-// tool."
+// ⚠ The lot cards below deliberately MIRROR the Review tab: same photo-left/details-under, same
+// orange AI-flag banner, same key points and description blocks. Jack: "it has to save with the
+// same UI as the review tool."
 //
-// ⚠ What they do NOT have is the Review tab's buttons: no auto-fix, no edit description, no
-// ignore. This is a frozen record of what the AI said before it was overwritten. Letting
-// somebody "fix" a lot from inside an archive would either do nothing or edit a live lot from a
-// screen showing month-old text — both worse than having no button.
+// ⚠ The ticks, the colour dots and the highlighted description ARE the Review tab's own —
+// analyseKeyPoints, HighlightedDescription and kpColour, imported rather than reimplemented.
+// That is safe because analyseKeyPoints is PURE: the description, the key points and the sale's
+// matching mode are all snapshotted onto the row, so it reproduces exactly the verdict that was
+// on screen the day the save was taken, not today's.
+//
+// ⚠ What the cards do NOT have is the Review tab's buttons — no auto-fix, no edit description,
+// no ignore. This is a frozen record. A button here would either do nothing or edit a live lot
+// from a screen showing month-old text, and both are worse than no button.
 
 export type SavedBatch = {
   batchId: string
@@ -51,6 +56,10 @@ export type SavedFlagRow = {
   reviewFlag: string | null
   reviewFlaggedBy: string | null
   reviewFlaggedAt: string | null
+  kpFixNote: string | null
+  kpFixedBy: string | null
+  kpFixedAt: string | null
+  kpMode: "strict" | "relaxed"
   savedAt: string
   savedByName: string
 }
@@ -83,7 +92,7 @@ export default function SavedFlagsClient({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [scope, setScope] = useState("ALL")
   const [label, setLabel] = useState("")
-  const [photo, setPhoto] = useState<SavedFlagRow | null>(null)
+  const [viewer, setViewer] = useState<{ lot: SavedFlagRow; index: number } | null>(null)
   const [aiOnly, setAiOnly] = useState(false)
 
   function save() {
@@ -245,9 +254,9 @@ export default function SavedFlagsClient({
                 </div>
               </div>
 
-              {/* ⚠ The archive page is capped. Say so — a partial archive that looks complete is
-                  worse than no archive, because nobody goes looking for the rest (design rule 7).
-                  Nothing is missing from the SAVE; this is only what is being shown. */}
+              {/* ⚠ The page is paged. Say so — a partial archive that looks complete is worse
+                  than no archive, because nobody goes looking for the rest. Nothing is missing
+                  from the SAVE; this is only what is being rendered. */}
               {batch && batch.lots > rows.length && (
                 <div className="mb-4 rounded-xl border-2 border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
                   Showing the first {rows.length.toLocaleString()} of {batch.lots.toLocaleString()} saved lots.
@@ -261,7 +270,9 @@ export default function SavedFlagsClient({
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {shown.map(lot => <SavedLotCard key={lot.id} lot={lot} onPhoto={() => setPhoto(lot)} />)}
+                  {shown.map(lot => (
+                    <SavedLotCard key={lot.id} lot={lot} onPhoto={i => setViewer({ lot, index: i })} />
+                  ))}
                 </div>
               )}
             </>
@@ -269,16 +280,13 @@ export default function SavedFlagsClient({
         </div>
       </div>
 
-      {/* Photo lightbox — same behaviour as the Review tab's */}
-      {photo && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setPhoto(null)}>
-          <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2" onClick={e => e.stopPropagation()}>
-            {photo.imageUrls.map((key, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={i} src={proxyUrl(key)} alt={`Photo ${i + 1}`} className="w-full rounded-lg" />
-            ))}
-          </div>
-        </div>
+      {viewer && (
+        <PhotoViewer
+          lot={viewer.lot}
+          index={viewer.index}
+          onIndex={i => setViewer({ lot: viewer.lot, index: i })}
+          onClose={() => setViewer(null)}
+        />
       )}
     </div>
   )
@@ -286,10 +294,12 @@ export default function SavedFlagsClient({
 
 // ─── One saved lot, laid out the way the Review tab lays it out ──────────────
 
-function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: () => void }) {
+function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: (index: number) => void }) {
   const est   = fmtEstimate(lot.estimateLow, lot.estimateHigh)
   const aiEst = fmtEstimate(lot.aiEstimateLow, lot.aiEstimateHigh)
-  const keyPointLines = (lot.keyPoints ?? "").split("\n").map(l => l.trim()).filter(Boolean)
+
+  const a = analyseKeyPoints(lot.description ?? "", lot.keyPoints ?? "", lot.kpMode)
+  const notFound = a.matches.filter(m => m.status === "missing").length
 
   return (
     <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 space-y-4">
@@ -298,12 +308,20 @@ function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: () => void
         <span className="font-mono font-semibold text-gray-900 dark:text-white">
           {lot.barcode || lot.receiptUniqueId || "—"}
         </span>
+        {lot.receiptUniqueId && lot.barcode && (
+          <span className="font-mono text-xs text-gray-400 dark:text-gray-500">{lot.receiptUniqueId}</span>
+        )}
         {lot.auctionCode && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-semibold">
             {lot.auctionCode}
           </span>
         )}
         <span className="text-sm text-gray-600 dark:text-gray-400 truncate">{lot.title}</span>
+        {notFound > 0 && (
+          <span className="ml-auto shrink-0 text-xs px-2 py-1 rounded-lg bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 font-semibold">
+            ⚠ {notFound} key point{notFound === 1 ? "" : "s"} not found
+          </span>
+        )}
       </div>
 
       {/* Human flag */}
@@ -331,7 +349,7 @@ function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: () => void
       <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4">
         <div>
           {lot.imageUrls.length > 0 ? (
-            <button onClick={onPhoto} className="relative block w-full">
+            <button onClick={() => onPhoto(0)} className="relative block w-full" title="Click to enlarge and zoom in">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={proxyUrl(lot.imageUrls[0])}
@@ -364,28 +382,204 @@ function SavedLotCard({ lot, onPhoto }: { lot: SavedFlagRow; onPhoto: () => void
         </div>
 
         <div className="space-y-3 min-w-0">
-          {keyPointLines.length > 0 && (
+          {a.matches.length > 0 && (
             <div className="rounded-xl bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-gray-700 px-4 py-3">
               <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Key Points</p>
-              {/* ⚠ Shown as written, NOT re-checked against the description. The Review tab's
-                  ticks and crosses are computed live; recomputing them here would be measuring
-                  frozen text and presenting the result as though it were that day's verdict. */}
               <ul className="space-y-1">
-                {keyPointLines.map((line, i) => (
-                  <li key={i} className="text-sm text-gray-700 dark:text-gray-300">{line}</li>
+                {a.matches.map((m, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span className={`shrink-0 ${m.status === "found" ? "text-green-500" : m.status === "missing" ? "text-red-500" : "text-amber-500"}`}>
+                      {m.status === "found" ? "✓" : m.status === "partial" ? "≈" : m.status === "reworded" ? "✍" : "⚠"}
+                    </span>
+                    {m.status !== "missing" && (
+                      <span className={`shrink-0 w-2.5 h-2.5 rounded-full mt-1.5 ${kpColour(i).dot}`} title="Highlight colour in the description" />
+                    )}
+                    <span className={
+                      m.status === "found"     ? "text-gray-700 dark:text-gray-300"
+                      : m.status === "missing" ? "text-red-700 dark:text-red-300 font-medium"
+                      : "text-amber-700 dark:text-amber-300 font-medium"
+                    }>{m.line}</span>
+                    {m.status === "partial" && (
+                      <span className="text-xs text-amber-500/80 shrink-0 mt-0.5">
+                        partly worded{m.missing.length > 0 ? ` — missing: ${m.missing.slice(0, 4).join(", ")}` : " — check"}
+                      </span>
+                    )}
+                    {m.status === "reworded" && (
+                      <span className="text-xs text-amber-500/80 shrink-0 mt-0.5">
+                        reworded{m.missing.length > 0 ? ` — wording differs on: ${m.missing.slice(0, 4).join(", ")}` : " — check wording"}
+                      </span>
+                    )}
+                    {m.status === "missing" && (
+                      <span className="text-xs text-red-500/80 shrink-0 mt-0.5">
+                        not found{m.missing.length > 0 ? `: ${m.missing.slice(0, 5).join(", ")}` : ""}
+                      </span>
+                    )}
+                  </li>
                 ))}
               </ul>
+
+              {/* "The key points were wrong, not the description" — as recorded at save time. */}
+              {lot.kpFixNote && (
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    ✓ {lot.kpFixNote}
+                    <span className="text-gray-500 dark:text-gray-500">
+                      {lot.kpFixedBy ? ` — ${lot.kpFixedBy}` : ""}
+                      {lot.kpFixedAt ? ` · ${new Date(lot.kpFixedAt).toLocaleDateString("en-GB")}` : ""}
+                    </span>
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
           <div className="rounded-xl bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-gray-700 px-4 py-3">
             <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Description</p>
-            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-              {lot.description || <span className="text-red-400">No description</span>}
-            </p>
+            {lot.description
+              ? <HighlightedDescription description={lot.description} ranges={a.ranges} />
+              : <p className="text-sm text-red-400">No description</p>}
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Photo viewer ────────────────────────────────────────────────────────────
+// Enlarge, then zoom in far enough to read a swing label or a product code off the picture —
+// which is the actual job when you are checking whether the AI's flag was right.
+
+const ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6, 8]
+
+function PhotoViewer({
+  lot, index, onIndex, onClose,
+}: {
+  lot: SavedFlagRow
+  index: number
+  onIndex: (i: number) => void
+  onClose: () => void
+}) {
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan]   = useState({ x: 0, y: 0 })
+  const drag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  const total = lot.imageUrls.length
+
+  // A new photo starts fresh — carrying the previous one's pan leaves you looking at empty space.
+  const reset = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [])
+  useEffect(() => { reset() }, [index, reset])
+
+  const step = useCallback((dir: 1 | -1) => {
+    setZoom(z => {
+      const i = ZOOM_STEPS.findIndex(s => s >= z - 0.001)
+      const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir))]
+      if (next === 1) setPan({ x: 0, y: 0 })
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+      else if (e.key === "ArrowRight" && total > 1) onIndex((index + 1) % total)
+      else if (e.key === "ArrowLeft"  && total > 1) onIndex((index - 1 + total) % total)
+      else if (e.key === "+" || e.key === "=") step(1)
+      else if (e.key === "-") step(-1)
+      else if (e.key === "0") reset()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [index, total, onIndex, onClose, step, reset])
+
+  // Wheel zooms rather than scrolls the page behind — the pointer stays where it was aimed.
+  function onWheel(e: React.WheelEvent) {
+    e.preventDefault()
+    step(e.deltaY < 0 ? 1 : -1)
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (zoom === 1) return
+    drag.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+    ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    const d = drag.current
+    if (!d) return
+    setPan({ x: d.panX + (e.clientX - d.x), y: d.panY + (e.clientY - d.y) })
+  }
+  function onPointerUp() { drag.current = null }
+
+  const btn = "px-3 py-2 min-h-[44px] rounded-lg text-sm font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col" onClick={onClose}>
+      {/* Controls — same wording and weight as the rest of the app, on a dark ground */}
+      <div
+        className="flex items-center gap-2 px-4 py-2 shrink-0 text-white/80"
+        onClick={e => e.stopPropagation()}
+      >
+        <button onClick={onClose} className={btn}>✕ Close</button>
+        <span className="font-mono text-sm text-white/60">{lot.barcode || lot.receiptUniqueId}</span>
+        {total > 1 && (
+          <span className="text-sm text-white/50 tabular-nums">{index + 1} / {total}</span>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={() => step(-1)} disabled={zoom <= 1} className={`${btn} disabled:opacity-30`}>−</button>
+          <span className="text-sm tabular-nums w-14 text-center">{Math.round(zoom * 100)}%</span>
+          <button onClick={() => step(1)} disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} className={`${btn} disabled:opacity-30`}>+</button>
+          <button onClick={reset} className={btn}>Reset</button>
+        </div>
+      </div>
+
+      {/* The picture */}
+      <div
+        className="flex-1 min-h-0 overflow-hidden flex items-center justify-center select-none"
+        onClick={e => e.stopPropagation()}
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        onDoubleClick={() => (zoom === 1 ? step(1) : reset())}
+        style={{ cursor: zoom > 1 ? (drag.current ? "grabbing" : "grab") : "zoom-in" }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={proxyUrl(lot.imageUrls[index])}
+          alt={`${lot.barcode ?? "Lot"} photo ${index + 1}`}
+          draggable={false}
+          className="max-h-full max-w-full object-contain"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: "center center",
+            transition: drag.current ? "none" : "transform 120ms ease-out",
+            // ⚠ Zooming a photo to read a product code is pointless if the browser smooths the
+            // pixels into mush at 400%. Keep it crisp.
+            imageRendering: zoom >= 3 ? "pixelated" : "auto",
+          }}
+        />
+      </div>
+
+      {/* Thumbnails */}
+      {total > 1 && (
+        <div className="shrink-0 flex gap-2 overflow-x-auto px-4 py-3" onClick={e => e.stopPropagation()}>
+          {lot.imageUrls.map((key, i) => (
+            <button
+              key={i}
+              onClick={() => onIndex(i)}
+              className={`shrink-0 rounded-lg overflow-hidden border-2 transition ${
+                i === index ? "border-orange-500" : "border-transparent opacity-60 hover:opacity-100"
+              }`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={proxyUrl(key)} alt={`Photo ${i + 1}`} className="h-16 w-16 object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <p className="shrink-0 text-center text-xs text-white/40 pb-3" onClick={e => e.stopPropagation()}>
+        Scroll or double-click to zoom · drag to move · arrow keys change photo · Esc closes
+      </p>
     </div>
   )
 }
