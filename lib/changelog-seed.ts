@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b55b9ead7c64ad9267bb0a610f5fce66799a203e","author":"Jack Collings","date":"2026-08-19T12:46:06+01:00","subject":"Saved Flagged Lots — freeze the Review tab's flags before an AI run overwrites them"},
+  {"sha":"3806cd33d3458cc3f9ecf9e51ccda51ea356d153","author":"Jack Collings","date":"2026-08-19T12:35:57+01:00","subject":"Refresh changelog seed"},
   {"sha":"432fb41fb7271eb87cddd3e696bee0a6ed247890","author":"Jack Collings","date":"2026-08-19T12:34:44+01:00","subject":"Add the BC Warehouse training course"},
   {"sha":"5df888fe91ac7f180c477d74f847e6aa79cdb532","author":"Jordan Orange","date":"2026-08-19T12:30:32+01:00","subject":"Refresh changelog seed"},
   {"sha":"7b10ac999327160cec698967b2451486a8838b8a","author":"Jordan Orange","date":"2026-08-19T12:30:23+01:00","subject":"Record the AI instruction house style in the shared memory record"},
