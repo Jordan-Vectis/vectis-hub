@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"56f89a9c8493752e3d5362ddf0f66ada765a9ede","author":"Jack Collings","date":"2026-08-20T13:17:32+01:00","subject":"Test Mode: run a real sale's lots instead of the built-in ten"},
+  {"sha":"bfea9d5d7f87d1c2a304d88f40666a2b71754e14","author":"Jack Collings","date":"2026-08-20T13:03:18+01:00","subject":"Refresh changelog seed"},
   {"sha":"582b3668897427dfdbd932654d87621dfe6978d8","author":"Jack Collings","date":"2026-08-20T13:02:56+01:00","subject":"Test Mode: open every lot at £0"},
   {"sha":"4aecd90e6ab592808ab837eaacf1082b25182d26","author":"Jordan Orange","date":"2026-08-20T12:58:06+01:00","subject":"Record the day's findings in the shared memory page"},
   {"sha":"2389542eaac75292ed1d582fbd575ef6e5723773","author":"Jack Collings","date":"2026-08-20T12:49:46+01:00","subject":"Refresh changelog seed"},
