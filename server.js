@@ -5,6 +5,7 @@ const next             = require('next')
 const { Server }       = require('socket.io')
 const { Pool }         = require('pg')
 const { setupAuctionSocket } = require('./lib/auction-socket')
+const { setupTrainerSocket } = require('./lib/trainer-socket')
 require('dotenv').config()
 
 const dev  = process.env.NODE_ENV !== 'production'
@@ -84,6 +85,8 @@ app.prepare().then(async () => {
   })
 
   setupAuctionSocket(io)
+  // Saleroom Trainer test mode — in-memory practice rooms only, never a real sale.
+  setupTrainerSocket(io)
 
   // Make io accessible to API routes via globalThis
   globalThis._io = io

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#18242e">
+<title>Practice Bidding — Saleroom Trainer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  background: #18242e;
+  color: #e8eef4;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+}
+
+/* ── TRAINING BANNER ── */
+#banner {
+  background: #f39c12; color: #1a1200;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  text-align: center; padding: 5px 10px; flex-shrink: 0;
+}
+
+/* ── TOP BAR ── */
+#top {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: #14202a;
+  border-bottom: 1px solid #2a3f52; flex-shrink: 0;
+}
+#top .who { font-size: 13px; color: #8fa6b8; flex: 1; min-width: 0; }
+#top .who b { color: #e8eef4; }
+#conn { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+#conn.on  { background: #14532d; color: #4ade80; }
+#conn.off { background: #4a1d1d; color: #f87171; }
+
+/* ── JOIN CARD ── */
+#join {
+  margin: auto; padding: 24px; width: 100%; max-width: 400px;
+}
+#join h1 { font-size: 22px; font-style: italic; margin-bottom: 4px; }
+#join .sub { color: #8fa6b8; font-size: 14px; margin-bottom: 22px; }
+#join label { display: block; font-size: 13px; color: #8fa6b8; margin: 14px 0 6px; }
+#join input {
+  width: 100%; padding: 14px; font-size: 18px; font-family: inherit;
+  background: #22323f; border: 2px solid #3a4f60; border-radius: 8px; color: #e8eef4;
+}
+#join input:focus { outline: none; border-color: #5dadec; }
+#join input#code { text-transform: uppercase; letter-spacing: 0.3em; font-weight: 700; text-align: center; }
+#joinBtn {
+  width: 100%; margin-top: 22px; padding: 16px; font-size: 17px; font-weight: 700;
+  font-family: inherit; background: #27ae60; color: white;
+  border: none; border-radius: 8px; cursor: pointer;
+}
+#joinBtn:disabled { background: #3a4f60; color: #7d8f9e; }
+#joinErr { color: #f87171; font-size: 14px; margin-top: 14px; min-height: 20px; }
+
+/* ── SALE VIEW ── */
+#sale { display: none; flex: 1; flex-direction: column; min-height: 0; }
+#sale.on { display: flex; }
+
+#lotbox { padding: 14px; border-bottom: 1px solid #2a3f52; }
+#lotnum { font-size: 15px; font-weight: 700; color: #4ade80; }
+#lotest { font-size: 13px; color: #8fa6b8; margin-top: 2px; }
+#lotdesc {
+  font-size: 13px; color: #c3d1dc; line-height: 1.45; margin-top: 8px;
+  max-height: 4.4em; overflow-y: auto;
+}
+
+#pricebox { padding: 20px 14px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+#priceLbl { font-size: 12px; color: #8fa6b8; letter-spacing: 0.1em; text-transform: uppercase; }
+#price { font-size: 54px; font-weight: 800; line-height: 1.1; margin: 4px 0; }
+#price.lit { animation: pop 0.4s ease; }
+@keyframes pop { 0% { transform: scale(1); color: #4ade80; } 40% { transform: scale(1.1); } 100% { transform: scale(1); } }
+#leader { font-size: 14px; color: #8fa6b8; min-height: 20px; }
+#leader.mine { color: #4ade80; font-weight: 700; }
+
+#status {
+  margin: 12px auto 0; padding: 8px 16px; border-radius: 999px;
+  font-size: 14px; font-weight: 700; max-width: 92%;
+  background: #22323f; color: #8fa6b8;
+}
+#status.warn { background: #f39c12; color: #1a1200; }
+#status.hot  { background: #c0392b; color: white; }
+#status.good { background: #14532d; color: #4ade80; }
+#status.hold { background: #2c4a6e; color: #9cc9ee; }
+
+/* ── BID BUTTON ── */
+#bidbox { padding: 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); flex-shrink: 0; }
+#bidBtn {
+  width: 100%; padding: 26px 14px; font-size: 26px; font-weight: 800;
+  font-family: inherit; background: #27ae60; color: white;
+  border: none; border-radius: 12px; cursor: pointer;
+  box-shadow: 0 4px 0 #1e8449;
+  transition: transform 0.06s, box-shadow 0.06s;
+}
+#bidBtn:active:not(:disabled) { transform: translateY(4px); box-shadow: none; }
+#bidBtn:disabled { background: #2f3f4d; color: #6b7f8f; box-shadow: none; }
+#bidBtn small { display: block; font-size: 12px; font-weight: 600; opacity: 0.8; margin-top: 3px; }
+
+#hint { text-align: center; font-size: 12px; color: #6b7f8f; margin-top: 10px; min-height: 16px; }
+#hint.bad { color: #f87171; }
+
+/* ── LOG ── */
+#log {
+  border-top: 1px solid #2a3f52; max-height: 22vh; overflow-y: auto;
+  font-size: 13px; flex-shrink: 0; background: #14202a;
+}
+.logrow { display: flex; justify-content: space-between; gap: 10px; padding: 7px 14px; border-bottom: 1px solid #1f303d; }
+.logrow span:first-child { color: #8fa6b8; }
+.logrow.mine span:first-child { color: #4ade80; font-weight: 700; }
+.logrow b { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div id="banner">⚠ TRAINING SIMULATOR — PRACTICE BIDS ONLY, NOT A REAL SALE</div>
+
+<!-- ═══ JOIN ═══ -->
+<div id="join">
+  <h1>the saleroom</h1>
+  <div class="sub">Practice bidding — join a colleague's training sale.</div>
+
+  <label for="code">Room code</label>
+  <input id="code" type="text" inputmode="text" autocapitalize="characters" autocomplete="off"
+         maxlength="8" placeholder="––––">
+
+  <label for="name">Your name</label>
+  <input id="name" type="text" autocomplete="off" maxlength="24" placeholder="e.g. Jack">
+
+  <button id="joinBtn" onclick="doJoin()">Join the sale</button>
+  <div id="joinErr"></div>
+</div>
+
+<!-- ═══ SALE ═══ -->
+<div id="sale">
+  <div id="top">
+    <div class="who">Paddle <b id="myPaddle">—</b> · <span id="myName">—</span></div>
+    <div id="conn" class="off">connecting…</div>
+  </div>
+
+  <div id="lotbox">
+    <div id="lotnum">Waiting for the clerk…</div>
+    <div id="lotest"></div>
+    <div id="lotdesc"></div>
+  </div>
+
+  <div id="pricebox">
+    <div id="priceLbl">Current bid</div>
+    <div id="price">£0</div>
+    <div id="leader">No bids yet</div>
+    <div id="status">Waiting for the sale to start</div>
+  </div>
+
+  <div id="bidbox">
+    <button id="bidBtn" onclick="placeBid()" disabled>
+      Waiting…
+      <small>&nbsp;</small>
+    </button>
+    <div id="hint"></div>
+  </div>
+
+  <div id="log"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* ─────────────────────────────────────────
+   STATE
+───────────────────────────────────────── */
+let socket   = null;
+let myCode   = '';
+let myPaddle = '';
+let myName   = '';
+let last     = null;   // last state pushed by the clerk
+let lastHi   = -1;     // to animate only on a real change
+let pressedAt = 0;     // debounce double-taps
+
+const $ = id => document.getElementById(id);
+
+/* Prefill the code from the QR / shared link, and the name from a previous join. */
+(function init(){
+  const room = new URLSearchParams(location.search).get('room');
+  if(room) $('code').value = room.trim().toUpperCase();
+  const saved = localStorage.getItem('trainerBidderName');
+  if(saved) $('name').value = saved;
+  ($('code').value ? $('name') : $('code')).focus();
+  $('code').addEventListener('keydown', e => { if(e.key === 'Enter') $('name').focus(); });
+  $('name').addEventListener('keydown', e => { if(e.key === 'Enter') doJoin(); });
+})();
+
+/* ─────────────────────────────────────────
+   JOIN
+───────────────────────────────────────── */
+function doJoin(){
+  const code = $('code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const name = $('name').value.trim();
+  if(!code){ $('joinErr').textContent = 'Enter the room code shown on the clerking screen.'; return; }
+  if(!name){ $('joinErr').textContent = 'Enter your name so the clerk knows who is bidding.'; return; }
+
+  localStorage.setItem('trainerBidderName', name);
+  $('joinBtn').disabled = true;
+  $('joinBtn').textContent = 'Joining…';
+  $('joinErr').textContent = '';
+
+  socket = io(location.origin, { transports: ['websocket', 'polling'] });
+
+  socket.on('connect', () => {
+    setConn(true);
+    // Also runs on reconnect — the server hands back the same paddle for this
+    // socket where it can, and always the current state, so a phone that slept
+    // through half a lot comes back correct.
+    socket.emit('trainer:join', { code, name }, res => {
+      if(!res || !res.ok){
+        setConn(false);
+        $('joinBtn').disabled = false;
+        $('joinBtn').textContent = 'Join the sale';
+        $('joinErr').textContent = (res && res.error) || 'Could not join.';
+        socket.disconnect();
+        socket = null;
+        return;
+      }
+      myCode = res.code; myPaddle = res.paddle; myName = res.name;
+      $('myPaddle').textContent = myPaddle;
+      $('myName').textContent = myName;
+      $('join').style.display = 'none';
+      $('sale').classList.add('on');
+      render(res.state);
+    });
+  });
+
+  socket.on('disconnect', () => { setConn(false); render(last); });
+  socket.on('connect_error', () => { setConn(false); });
+  socket.on('trainer:state', render);
+  socket.on('trainer:bidResult', onBidResult);
+  socket.on('trainer:closed', ({ reason } = {}) => {
+    setStatus(reason === 'host-left' ? 'The clerk closed the trainer' : 'Practice sale ended', 'hold');
+    $('bidBtn').disabled = true;
+    $('bidBtn').firstChild.nodeValue = 'Sale ended';
+    $('bidBtn').querySelector('small').textContent = ' ';
+  });
+}
+
+function setConn(on){
+  const el = $('conn');
+  el.className = on ? 'on' : 'off';
+  el.textContent = on ? 'connected' : 'reconnecting…';
+  if(!on){ $('bidBtn').disabled = true; }
+}
+
+/* ─────────────────────────────────────────
+   BIDDING
+───────────────────────────────────────── */
+function placeBid(){
+  if(!socket || !last || last.next == null) return;
+  const now = Date.now();
+  if(now - pressedAt < 300) return;   // fat-finger double tap
+  pressedAt = now;
+
+  const amount = last.next;
+  socket.emit('trainer:bid', { code: myCode, amount });
+
+  // Optimistic lock-out: unlock again on the next state push or on a rejection,
+  // so the button can't fire twice for the same increment.
+  $('bidBtn').disabled = true;
+  hint(`Bid of £${fmt(amount)} sent to the clerk…`, false);
+}
+
+function onBidResult({ accepted, message } = {}){
+  hint(message || (accepted ? 'Bid taken' : 'Bid not taken'), !accepted);
+  if(!accepted) paintButton(last);
+}
+
+function hint(text, bad){
+  const el = $('hint');
+  el.textContent = text || '';
+  el.className = bad ? 'bad' : '';
+}
+
+/* ─────────────────────────────────────────
+   RENDER
+───────────────────────────────────────── */
+function render(state){
+  if(state) last = state;
+  const s = last;
+  if(!s){ return; }
+
+  // Lot
+  if(s.lot){
+    $('lotnum').textContent  = `Lot ${s.lot.id}`;
+    $('lotest').textContent  = s.lot.est ? `Estimate £${s.lot.est}` : '';
+    $('lotdesc').textContent = s.lot.desc || '';
+  }
+
+  // Price
+  const hi = s.hi || 0;
+  $('price').textContent = '£' + fmt(hi);
+  if(hi !== lastHi){
+    lastHi = hi;
+    const p = $('price');
+    p.classList.remove('lit'); void p.offsetWidth; p.classList.add('lit');
+  }
+
+  // Who holds it
+  const leader = $('leader');
+  const mine = !!(s.leaderPaddle && s.leaderPaddle === myPaddle);
+  leader.className = mine ? 'mine' : '';
+  if(hi <= 0)          leader.textContent = 'No bids yet';
+  else if(mine)        leader.textContent = '✔ You are the highest bidder';
+  else if(s.leaderType === 'ROOM') leader.textContent = 'With the room';
+  else if(s.leaderName) leader.textContent = `With ${s.leaderName}`;
+  else                 leader.textContent = 'With another bidder';
+
+  // Status line — most urgent thing first
+  if(s.status === 'sold'){
+    setStatus(mine ? `🔨 SOLD to you at £${fmt(hi)}` : `🔨 Sold at £${fmt(hi)}`, mine ? 'good' : 'hold');
+  } else if(s.status === 'passed'){
+    setStatus('Lot passed — no sale', 'hold');
+  } else if(s.status === 'finished'){
+    setStatus('🏆 Auction complete', 'good');
+  } else if(s.hold){
+    setStatus('⏸ Clerk has paused bidding', 'hold');
+  } else if(s.once === 3){
+    setStatus('🔴 FINAL!', 'hot');
+  } else if(s.once === 2){
+    setStatus('⏱ Twice…', 'warn');
+  } else if(s.once === 1){
+    setStatus('⏱ Once…', 'warn');
+  } else if(s.fairWarning){
+    setStatus('⚠ Fair Warning — about to close', 'warn');
+  } else {
+    setStatus(`Bidding open · ${s.bidders || 1} on this sale`, '');
+  }
+
+  paintButton(s);
+  renderLog(s.log || []);
+}
+
+function paintButton(s){
+  const btn  = $('bidBtn');
+  const sub  = btn.querySelector('small');
+  const open = s && s.status === 'open' && !s.hold && socket && socket.connected;
+  const mine = !!(s && s.leaderPaddle && s.leaderPaddle === myPaddle);
+
+  btn.disabled = !open;
+  if(!s || !s.lot){
+    btn.firstChild.nodeValue = 'Waiting… ';
+    sub.textContent = 'The clerk has not opened a lot yet';
+  } else if(s.status === 'sold' || s.status === 'passed' || s.status === 'finished'){
+    btn.firstChild.nodeValue = 'Lot closed ';
+    sub.textContent = 'Wait for the clerk to move on';
+  } else if(s.hold){
+    btn.firstChild.nodeValue = 'On hold ';
+    sub.textContent = 'The clerk has paused bidding';
+  } else {
+    btn.firstChild.nodeValue = `BID £${fmt(s.next)} `;
+    sub.textContent = mine ? 'You already hold this lot' : `Current bid £${fmt(s.hi || 0)}`;
+  }
+}
+
+function setStatus(text, cls){
+  const el = $('status');
+  el.textContent = text;
+  el.className = cls || '';
+}
+
+function renderLog(rows){
+  $('log').innerHTML = [...rows].reverse().slice(0, 12).map(r => {
+    const mine = r.paddle && r.paddle === myPaddle;
+    const who  = mine ? 'You' : (r.name || r.paddle || '—');
+    const amt  = typeof r.a === 'number' ? '£' + fmt(r.a) : (r.a || '—');
+    return `<div class="logrow${mine ? ' mine' : ''}"><span>${esc(who)}</span><b>${amt}</b></div>`;
+  }).join('');
+}
+
+function fmt(n){ return Number(n || 0).toLocaleString('en-GB'); }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>

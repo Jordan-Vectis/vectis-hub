@@ -371,7 +371,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     key:                "SALEROOM_TRAINER",
     href:               "/tools/saleroom-trainer",
     defaultLabel:       "Saleroom Trainer",
-    defaultDescription: "Interactive training simulator for saleroom clerking.",
+    defaultDescription: "Interactive training simulator for saleroom clerking, with a test mode colleagues can bid into from their own phones.",
     icon:               "🎓",
     border:             "border-purple-500",
     iconBg:             "text-purple-400",

@@ -444,6 +444,68 @@ body {
 .img-close { align-self: flex-end; background: #c0392b; color: white; border: none;
   border-radius: 4px; padding: 0.4vh 1.2vw; font-size: 1.8vmin; cursor: pointer; margin-bottom: 0.5vh; }
 .img-close:hover { background: #e74c3c; }
+
+/* ── TEST MODE — BIDDER LINK MODAL ── */
+#tmModal {
+  display: none; position: fixed; inset: 0; z-index: 10001;
+  background: rgba(0,0,0,0.85);
+  align-items: center; justify-content: center;
+}
+#tmModal.open { display: flex; }
+.tm-box {
+  background: #1a2a38; border: 2px solid #f39c12; border-radius: 8px;
+  padding: 2.5vh 2.5vw; max-width: 80vw; color: white;
+  display: flex; flex-direction: column; gap: 1.5vh;
+}
+.tm-box h2 { color: #f39c12; font-size: 2.2vmin; margin: 0; }
+.tm-box > p { color: #aaa; font-size: 1.6vmin; margin: 0; line-height: 1.5; }
+.tm-cols { display: flex; gap: 2.5vw; align-items: flex-start; }
+.tm-qr {
+  background: white; border-radius: 6px; padding: 1vh;
+  width: 22vh; height: 22vh; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.tm-qr img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.tm-qr .tm-qr-wait { color: #666; font-size: 1.5vmin; }
+.tm-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.6vh; }
+.tm-lbl { color: #8fa6b8; font-size: 1.4vmin; text-transform: uppercase; letter-spacing: 0.08em; }
+.tm-code {
+  font-size: 5vmin; font-weight: 800; letter-spacing: 0.25em; color: #4ade80;
+  font-family: "Consolas", "Menlo", monospace; line-height: 1.1;
+}
+.tm-url {
+  background: #0f1a24; border: 1px solid #3a4f60; border-radius: 4px;
+  padding: 0.7vh 1vh; font-size: 1.5vmin; color: #9cc9ee;
+  font-family: "Consolas", "Menlo", monospace;
+  overflow-wrap: anywhere; user-select: all;
+}
+.tm-actions { display: flex; gap: 0.8vw; margin-top: 0.4vh; }
+.tm-status { font-size: 1.5vmin; color: #8fa6b8; margin-top: 0.6vh; }
+.tm-status.err { color: #f87171; }
+.tm-status.ok  { color: #4ade80; }
+.tm-bidders { font-size: 1.5vmin; color: #ccc; line-height: 1.6; }
+.tm-bidders b { color: #4ade80; }
+.tm-start {
+  align-self: flex-end; background: #27ae60; color: white; border: none;
+  border-radius: 6px; padding: 0.9vh 2.5vw; font-size: 1.9vmin;
+  font-family: inherit; font-weight: bold; cursor: pointer;
+}
+.tm-start:hover { background: #2ecc71; }
+
+/* ── TEST MODE — CORNER CHIP ── */
+#tmChip {
+  display: none; position: fixed; right: 1.2vw; bottom: 1.5vh; z-index: 9000;
+  background: #1a2a38; border: 2px solid #f39c12; border-radius: 999px;
+  color: white; font-size: 1.6vmin; font-weight: bold;
+  padding: 0.7vh 1.4vh; cursor: pointer; align-items: center; gap: 0.7vh;
+  box-shadow: 0 0.4vh 1.2vh rgba(0,0,0,0.45);
+}
+#tmChip.on { display: flex; }
+#tmChip:hover { background: #24384a; }
+#tmChip b { color: #f39c12; letter-spacing: 0.08em; }
+#tmChip .tm-chip-code { color: #4ade80; font-family: "Consolas","Menlo",monospace; letter-spacing: 0.15em; }
+.tm-dot { width: 1vh; height: 1vh; border-radius: 50%; background: #f87171; flex-shrink: 0; }
+.tm-dot.live { background: #4ade80; box-shadow: 0 0 0.8vh #4ade80; }
 </style>
 </head>
 <body>
@@ -488,6 +550,11 @@ body {
       <p>Run a full auction with no prompts. Online bids arrive automatically. Use all buttons freely — Sell, Pass, Room, Fair Warning, Once, Undo.</p>
       <span class="diff" style="background:#5dadec;color:#111">Free Practice</span>
     </div>
+    <div class="sc-card" onclick="goTest()" style="grid-column:1/-1;border-color:#f39c12">
+      <h3 style="color:#f39c12;font-size:2.2vmin">📱 Test Mode — Live Bidders on Other Devices</h3>
+      <p>Run a full auction where the online bids come from real people. You get a room code and a link to open on phones or a second machine — every bid pressed there lands on this screen as an incoming online bid. Nothing leaves the trainer.</p>
+      <span class="diff" style="background:#f39c12;color:#111">Two or More People</span>
+    </div>
   </div>
   <div class="overlay-footer">
     <button class="eg-btn" onclick="document.getElementById('imgModal').classList.add('open')">🖼 Example Images — Real Software</button>
@@ -513,6 +580,41 @@ body {
       </div>
     </div>
   </div>
+</div>
+
+<!-- ═══ TEST MODE — BIDDER LINK ═══ -->
+<div id="tmModal" onclick="if(event.target===this)closeLinkModal()">
+  <div class="tm-box">
+    <h2>📱 Test Mode — bidders join from another device</h2>
+    <p>Scan the code, or open the link on a phone or second machine. Every bid pressed there arrives
+       here as an incoming online bid, and you clerk it exactly as you would in a real sale.<br>
+       <span style="color:#f39c12">That device signs in to the Hub first</span> — the trainer is staff-only,
+       so the code is for colleagues, not customers.</p>
+    <div class="tm-cols">
+      <div class="tm-qr"><span class="tm-qr-wait" id="tmQrWait">QR…</span><img id="tmQr" alt="" style="display:none"></div>
+      <div class="tm-info">
+        <div class="tm-lbl">Room code</div>
+        <div class="tm-code" id="tmCode">····</div>
+        <div class="tm-lbl">Link</div>
+        <div class="tm-url" id="tmUrl">—</div>
+        <div class="tm-actions">
+          <button class="eg-btn" id="tmCopy" onclick="copyBidderLink()">📋 Copy link</button>
+          <button class="eg-btn" onclick="openBidderLink()">↗ Open in a tab</button>
+        </div>
+        <div class="tm-status" id="tmStatus">Connecting…</div>
+        <div class="tm-bidders" id="tmBidders">No bidders have joined yet.</div>
+      </div>
+    </div>
+    <button class="tm-start" onclick="closeLinkModal()">Start the sale ▶</button>
+  </div>
+</div>
+
+<!-- ═══ TEST MODE — CORNER CHIP ═══ -->
+<div id="tmChip" onclick="showLinkModal()" title="Show the bidder link">
+  <span class="tm-dot" id="tmDot"></span>
+  <b>TEST</b>
+  <span class="tm-chip-code" id="tmChipCode">····</span>
+  <span id="tmChipCount">0 bidders</span>
 </div>
 
 <div id="wrapper">
@@ -715,6 +817,9 @@ body {
 </div><!-- end #main -->
 </div><!-- end #wrapper -->
 
+<!-- Served by the Socket.IO server in server.js. Only Test Mode needs it; if it
+     fails to load the rest of the trainer carries on unaffected. -->
+<script src="/socket.io/socket.io.js"></script>
 <script>
 /* ─────────────────────────────────────────
    INCREMENT TABLE BUILDER
@@ -742,11 +847,12 @@ function buildIncTable(){
     if(!S.sc && !S.free) return;
     if(S.free && S.freeLotSold){ fb('Lot is closed — click NEXT to continue', 'info'); return; }
     S.pending = null;
-    S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM'; S.lpaddle = null;
     addLog('ROOM', v, 'ROOM', 'room');
     setNotif(''); setAmt(v); hiInc(v);
     fb(`Room bid: £${v}`, 'good');
     if(S.free) freeScheduleBid();
+    if(S.test) pushState();
     setTimeout(focusOverride, 50);
   });
 }
@@ -772,12 +878,13 @@ function overrideEnter(){
   if(S.free && S.freeLotSold){ fb('Lot is closed — click NEXT to continue', 'info'); focusOverride(); return; }
   el.value = '';
   S.pending = null;
-  S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+  S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM'; S.lpaddle = null;
   addLog('ROOM', v, 'ROOM', 'room');
   setNotif('');
   setAmt(v); hiInc(v);
   fb(`Room bid: £${v}`, 'good');
   if(S.free) freeScheduleBid();
+  if(S.test) pushState();
   setTimeout(focusOverride, 50);
 }
 
@@ -891,6 +998,7 @@ const FREE_BIDDERS = [
 const FREE_LIMITS = [95, 65, 55, 130, 60, 55, 40, 145, 260, 175];
 
 function goFree(){
+  endTestSale();
   document.getElementById('overlay').style.display = 'none';
   S = {
     sc:null, free:true,
@@ -914,8 +1022,263 @@ function goFree(){
   setTimeout(focusOverride, 200);
 }
 
+/* ─────────────────────────────────────────
+   TEST MODE — LIVE BIDDERS ON OTHER DEVICES
+
+   Free Mode with the robot bidder replaced by real people. The clerking screen
+   hosts a throwaway room, colleagues open /saleroom-trainer-bid.html on their
+   own devices with the room code, and every press of their BID button arrives
+   here as an incoming online bid. Everything stays inside the trainer — no live
+   auction, no database, no money.
+───────────────────────────────────────── */
+let TS = { socket:null, code:'', bidders:[], ready:false, seen:false };
+
+function goTest(){
+  if(typeof io === 'undefined'){
+    alert('Test Mode needs the live-bidding server, which is not running here.\n\n' +
+          'Free Mode and the scenarios still work as normal.');
+    return;
+  }
+  goFree();                 // reuse the whole free-run setup: lots, list, buttons
+  S.test = true;
+  S.freePaused = true;      // the robot bidder stays out of a human test
+  clearTO();                // cancel the auto-bid goFree just scheduled
+
+  S.testHold = false;
+  S.testFinished = false;
+  S.lotOutcome = null;
+  S.fairWarned = false;
+  S.lpaddle = null;
+
+  document.getElementById('gbar-label').textContent = 'TEST MODE:';
+  document.getElementById('gbar-label').style.color = '#f39c12';
+  setG('Waiting for bidders — share the link, then run the sale as normal.');
+
+  const pauseBtn = document.getElementById('bPause');
+  pauseBtn.textContent = '⏸ Hold bids';
+  pauseBtn.style.background = '';
+
+  hostTestSale();
+}
+
+function hostTestSale(){
+  if(TS.socket){ try { TS.socket.disconnect(); } catch(e) {} }
+  TS = { socket:null, code:'', bidders:[], ready:false, seen:false };
+  renderBidders();
+  document.getElementById('tmChip').classList.add('on');
+  document.getElementById('tmChipCode').textContent = '····';
+  document.getElementById('tmCode').textContent = '····';
+  document.getElementById('tmUrl').textContent = '—';
+  document.getElementById('tmQr').style.display = 'none';
+  document.getElementById('tmQrWait').style.display = '';
+  tmStatus('Connecting…', '');
+  showLinkModal();
+
+  const sock = io(location.origin, { transports:['websocket','polling'] });
+  TS.socket = sock;
+
+  sock.on('connect', () => {
+    // The server drops a room the moment its host disconnects, so a reconnect
+    // genuinely needs a fresh code — say so rather than leaving people pressing
+    // a dead one.
+    const rejoining = TS.seen;
+    sock.emit('trainer:host', { state:testState() }, res => {
+      if(!res || !res.ok){ tmStatus((res && res.error) || 'Could not open a room.', 'err'); return; }
+      TS.code = res.code; TS.ready = true; TS.seen = true; TS.bidders = [];
+      applyCode(res.code);
+      renderBidders();
+      pushState();
+      if(rejoining){
+        fb('Reconnected — NEW room code, bidders must rejoin', 'warn');
+        showLinkModal();
+      }
+    });
+  });
+
+  sock.on('trainer:bid', onRemoteBid);
+  sock.on('trainer:bidders', ({ bidders } = {}) => {
+    TS.bidders = bidders || [];
+    renderBidders();
+    pushState();
+  });
+  sock.on('disconnect', () => {
+    TS.ready = false;
+    setDot(false);
+    tmStatus('Disconnected — reconnecting…', 'err');
+  });
+  sock.on('connect_error', () => { TS.ready = false; setDot(false); tmStatus('Cannot reach the server.', 'err'); });
+}
+
+function bidderLink(){
+  return TS.code ? `${location.origin}/saleroom-trainer-bid.html?room=${TS.code}` : '';
+}
+
+function applyCode(code){
+  document.getElementById('tmCode').textContent = code;
+  document.getElementById('tmChipCode').textContent = code;
+  document.getElementById('tmUrl').textContent = bidderLink();
+  const img = document.getElementById('tmQr');
+  img.onload  = () => { img.style.display = ''; document.getElementById('tmQrWait').style.display = 'none'; };
+  img.onerror = () => { document.getElementById('tmQrWait').textContent = 'Use the link below'; };
+  img.src = `/api/trainer/qr?code=${encodeURIComponent(code)}`;
+  setDot(true);
+  tmStatus('Room open — waiting for bidders to join.', 'ok');
+}
+
+function setDot(live){
+  document.getElementById('tmDot').className = 'tm-dot' + (live ? ' live' : '');
+}
+
+function tmStatus(text, cls){
+  const el = document.getElementById('tmStatus');
+  el.textContent = text;
+  el.className = 'tm-status' + (cls ? ' ' + cls : '');
+}
+
+function renderBidders(){
+  const n = TS.bidders.length;
+  document.getElementById('tmChipCount').textContent = n === 1 ? '1 bidder' : `${n} bidders`;
+  document.getElementById('tmBidders').innerHTML = n === 0
+    ? 'No bidders have joined yet.'
+    : `<b>${n} joined:</b> ` + TS.bidders.map(b => `${esc(b.name)} (${esc(b.paddle)})`).join(', ');
+  if(TS.ready && n > 0) tmStatus('Room open — bidders connected.', 'ok');
+}
+
+function showLinkModal(){
+  if(!S || !S.test) return;
+  document.getElementById('tmModal').classList.add('open');
+}
+
+function closeLinkModal(){
+  document.getElementById('tmModal').classList.remove('open');
+  setTimeout(focusOverride, 100);
+}
+
+function copyBidderLink(){
+  const url = bidderLink();
+  if(!url) return;
+  const done = ok => {
+    const btn = document.getElementById('tmCopy');
+    btn.textContent = ok ? '✔ Copied' : '⚠ Select the link above';
+    setTimeout(() => { btn.textContent = '📋 Copy link'; }, 2000);
+  };
+  // The trainer runs inside an iframe, where the async clipboard API is only
+  // available when the frame is allowed it — fall back to the old selection copy.
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(() => done(true), () => done(legacyCopy(url)));
+  } else {
+    done(legacyCopy(url));
+  }
+}
+
+function legacyCopy(text){
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch(e){ return false; }
+}
+
+function openBidderLink(){
+  const url = bidderLink();
+  if(url) window.open(url, '_blank', 'noopener');
+}
+
+/* Where a lot opens when nobody has bid yet.
+   The robot bidder in Free Mode starts at £5 and climbs on a timer, which is
+   harmless. A person pressing a button is not going to tap thirty times to get
+   an £80–110 lot up to its estimate, so open around half the low estimate — the
+   sort of level the rostrum actually starts at — snapped onto the increment
+   ladder so the next press lands on a real step. */
+function openingBid(lot){
+  const low = lot ? parseInt(String(lot.est).split('-')[0], 10) : NaN;
+  if(!low || isNaN(low)) return nextBid(0);
+  const target = Math.max(nextBid(0), Math.floor(low / 2));
+  let v = 0;
+  while(v < target) v = nextBid(v);
+  return v;
+}
+
+/* What the bidder devices see. Pushed after every change rather than diffed, so
+   a phone that joins late or wakes from sleep is immediately correct. */
+function testState(){
+  const lot = (S && S.lots) ? S.lots[S.li] : null;
+  const hi = (S && S.hi) || 0;
+  return {
+    lot: lot ? { id:lot.id, est:lot.est, desc:lot.desc } : null,
+    hi,
+    next: hi > 0 ? nextBid(hi) : openingBid(lot),
+    // A room bid takes the lot away from every device, so no paddle holds it.
+    leaderPaddle: (S && S.lbdr === 'ROOM') ? null : ((S && S.lpaddle) || null),
+    leaderName: (S && S.lname) || '',
+    leaderType: (S && S.lbdr === 'ROOM') ? 'ROOM' : 'ONLINE',
+    status: (S && S.testFinished) ? 'finished' : ((S && S.lotOutcome) || 'open'),
+    hold: !!(S && S.testHold),
+    fairWarning: !!(S && S.fairWarned),
+    once: (S && S.once) || 0,
+    bidders: TS.bidders.length,
+    log: ((S && S.log) || []).slice(-12).map(r => ({ paddle:r.b, name:r.n, a:r.a })),
+  };
+}
+
+function pushState(){
+  if(!TS.socket || !TS.ready || !TS.code) return;
+  TS.socket.emit('trainer:state', { code:TS.code, state:testState() });
+}
+
+function onRemoteBid({ bidderId, paddle, name, amount } = {}){
+  if(!S || !S.test) return;
+
+  const reply = (accepted, message) => {
+    if(TS.socket && TS.code){
+      TS.socket.emit('trainer:bidResult', { code:TS.code, bidderId, accepted, message });
+    }
+  };
+
+  if(S.testHold){ reply(false, 'The clerk has paused bidding'); return; }
+  if(S.testFinished || S.lotOutcome){ reply(false, 'That lot is already closed'); pushState(); return; }
+  if(amount <= (S.hi || 0)){
+    reply(false, `Too late — the bid is already £${(S.hi || 0).toLocaleString()}`);
+    pushState();
+    return;
+  }
+
+  S.pending = null;
+  S.bid = amount; S.hi = amount;
+  S.lbdr = paddle; S.lname = name; S.lpaddle = paddle;
+  addLog(paddle, amount, name, '');
+  setNotif('ng'); setAmt(amount); hiInc(amount);
+  fb(`Online bid: £${amount} — ${name} (${paddle})`, 'info');
+  reply(true, 'Bid taken');
+  pushState();
+}
+
+/* Tear the room down when the clerk leaves Test Mode, so the code is released
+   and any phone still on it is told the sale is over rather than going quiet. */
+function endTestSale(){
+  if(TS.socket){
+    try {
+      if(TS.code) TS.socket.emit('trainer:end', { code:TS.code });
+      TS.socket.disconnect();
+    } catch(e) {}
+  }
+  TS = { socket:null, code:'', bidders:[], ready:false, seen:false };
+  document.getElementById('tmChip').classList.remove('on');
+  document.getElementById('tmModal').classList.remove('open');
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ─────────────────────────────────────────
+   FREE MODE — AUTO BIDS
+───────────────────────────────────────── */
 function freeScheduleBid(){
-  if(!S.free || S.freePaused) return;
+  if(!S.free || S.freePaused || S.test) return;
   const limit = FREE_LIMITS[S.li] || 80;
   if(S.hi >= limit) return;
   const delay = 2000 + Math.random() * 2000;
@@ -956,6 +1319,7 @@ function nextBid(b){ return b + getInc(b); }
    SCENARIO RUNNER
 ───────────────────────────────────────── */
 function go(idx){
+  endTestSale();
   document.getElementById('overlay').style.display = 'none';
   resetState(SCENARIOS[idx]);
   clearLogs(); setNotif(''); setAmt(0);
@@ -1027,16 +1391,24 @@ function act(a){
       fb(`🔨 SOLD — Lot ${lot.id} £${S.hi} to ${S.lname}`, 'good');
       setNotif(''); renderLL();
       S.freeLotSold = true;
+      S.lotOutcome = 'sold';
       setG(`Lot ${lot.id} sold at £${S.hi}. Click NEXT to move on.`);
     } else if(a === 'pass'){
       const lot = S.lots[S.li];
       addLog('—', '—', 'NO SALE', '');
       fb('Lot passed — no sale', 'info');
       S.freeLotSold = true;
+      S.lotOutcome = 'passed';
       setG(`Lot ${lot.id} passed. Click NEXT to move on.`);
     } else if(a === 'next'){
-      if(S.li >= S.lots.length-1){ setG('🏆 All lots complete!'); fb('Auction finished','good'); return; }
+      if(S.li >= S.lots.length-1){
+        setG('🏆 All lots complete!'); fb('Auction finished','good');
+        S.testFinished = true;
+        if(S.test) pushState();
+        return;
+      }
       S.li++; S.bid=0; S.hi=0; S.log=[]; S.freeLotSold=false;
+      S.lotOutcome=null; S.fairWarned=false; S.lpaddle=null; S.lbdr=''; S.lname='';
       clearLogs(); setAmt(0);
       document.getElementById('fH').value = '0';
       resetOnce(); updateLot(); renderLL();
@@ -1046,6 +1418,7 @@ function act(a){
     } else if(a === 'fairwarn'){
       addChat('⚠️ Fair Warning — lot about to close!');
       fb('Fair Warning sent','warn');
+      S.fairWarned = true;
     } else if(a === 'once'){
       S.once = (S.once%3)+1;
       const btn = document.getElementById('bOnce');
@@ -1058,11 +1431,33 @@ function act(a){
     } else if(a === 'undo'){
       if(S.log.length>0){
         S.log.pop(); renderLogFull();
-        const prev = S.log.length>0 && typeof S.log[S.log.length-1].a==='number' ? S.log[S.log.length-1].a : 0;
+        const top  = S.log.length>0 ? S.log[S.log.length-1] : null;
+        const prev = top && typeof top.a==='number' ? top.a : 0;
         S.bid=prev; setAmt(prev); hiInc(prev);
         fb('Bid undone','warn');
+        if(S.test){
+          // Devices bid against S.hi and are locked out once the lot closes, so
+          // an undo has to actually reopen the lot and hand it back to whoever
+          // now sits on top of the log — otherwise the phones stay stuck.
+          S.hi = prev;
+          S.lotOutcome = null; S.freeLotSold = false; S.testFinished = false;
+          if(top && top.b === 'ROOM'){ S.lbdr='ROOM'; S.lname='ROOM'; S.lpaddle=null; }
+          else if(top){ S.lbdr=top.b; S.lname=top.n; S.lpaddle=top.b; }
+          else { S.lbdr=''; S.lname=''; S.lpaddle=null; }
+          const lot = S.lots[S.li];
+          if(lot){ delete S.sold[lot.id]; delete lot.hammer; delete lot.buyer; renderLL(); }
+        }
       }
     } else if(a==='offer'){ fb('Offer: re-opens a passed lot','info');
+    } else if(a==='pause' && S.test){
+      // In Test Mode there is no robot to pause — this holds the human bidders,
+      // which is the control a clerk actually reaches for.
+      S.testHold = !S.testHold;
+      const btn = document.getElementById('bPause');
+      btn.textContent = S.testHold ? '▶ Resume bids' : '⏸ Hold bids';
+      btn.style.background = S.testHold ? '#e65100' : '';
+      fb(S.testHold ? '⏸ Bidding held — devices cannot bid' : '▶ Bidding open again',
+         S.testHold ? 'warn' : 'good');
     } else if(a==='pause'){
       S.freePaused = !S.freePaused;
       const btn = document.getElementById('bPause');
@@ -1079,6 +1474,7 @@ function act(a){
       }
     } else if(a==='minus'){ S.bid=Math.max(0,S.bid-getInc(S.bid)); setAmt(S.bid); hiInc(S.bid);
     } else if(a==='plus'){  S.bid=nextBid(S.bid); setAmt(S.bid); hiInc(S.bid); }
+    if(S.test) pushState();
     setTimeout(focusOverride, 50);
     return;
   }
