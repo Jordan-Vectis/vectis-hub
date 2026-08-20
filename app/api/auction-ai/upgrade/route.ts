@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isCronRequest } from "@/lib/cron-auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { cleanBearsDescription } from "@/lib/description-cleanup"
@@ -25,8 +26,10 @@ const MODE_INSTRUCTIONS: Record<string, string> = {
 // Returns: { revised: string }
 export async function POST(req: NextRequest) {
   try {
+    // The overnight queue runner calls this same route over localhost, so the
+    // prompt and mode instructions stay single-source (see lib/pipeline-runner.ts).
     const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    if (!session && !isCronRequest(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })

@@ -34,12 +34,19 @@ export const STAGE_LABEL: Record<string, string> = {
   batch:       "Batch run",
   kpcheck:     "Key points",
   doublecheck: "Double check",
+  upgrade:     "AI Upgrade",
   complete:    "Finished",
 }
+
+/** What an overnight run actually does: the three-stage Auto Pipeline, or an
+ *  AI Upgrade mass rewrite whose results are held for morning review. */
+export type QueueKind = "pipeline" | "upgrade"
 
 /** The Auto Pipeline settings a queued sale carries, so a Bears sale and a
  *  Trains sale can run back to back on completely different instructions. */
 export type QueueSettings = {
+  kind:           QueueKind
+  upgradeModes:   string // comma-separated AI Upgrade mode keys (kind "upgrade" only)
   preset:         string
   model:          string
   fallbackModel:  string
@@ -66,6 +73,9 @@ export type QueueItem = QueueSettings & {
   finishedAt:  string | null
   heartbeatAt: string | null
   addedBy:     string | null
+  // kind "upgrade" only: how many rewrites exist, and how many a person has accepted.
+  upgradeDone:     number
+  upgradeAccepted: number
 }
 
 /** A queue item is only workable when it's waiting (or already mid-run) and any

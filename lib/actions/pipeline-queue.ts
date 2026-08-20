@@ -9,6 +9,8 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import type { QueueSettings } from "@/lib/pipeline-queue"
+import { UPGRADE_MODE_LABEL } from "@/lib/upgrade-modes"
+import { applyAiDescriptionOne } from "@/lib/actions/catalogue"
 
 export type QueueResult = { ok: boolean; error?: string; id?: string }
 
@@ -27,14 +29,24 @@ export async function addToPipelineQueue(code: string, settings: QueueSettings):
     const upper = str(code, 40).toUpperCase()
     if (!upper) return { ok: false, error: "Pick a sale first." }
 
-    // Queueing the same sale twice would have two slices fighting over the same
-    // lots — the second would find everything already done, but the run would
-    // still look wrong. Block it plainly instead.
+    const kind = settings.kind === "upgrade" ? "upgrade" : "pipeline"
+    // Only known mode keys survive, so a stale client can't queue an instruction
+    // the upgrade route would reject lot after lot, all night.
+    const modes = kind === "upgrade"
+      ? str(settings.upgradeModes, 400).split(",").map(m => m.trim()).filter(m => UPGRADE_MODE_LABEL[m])
+      : []
+    if (kind === "upgrade" && modes.length === 0) return { ok: false, error: "Pick at least one upgrade option first." }
+
+    // Queueing the same sale twice FOR THE SAME KIND of run would have two
+    // slices fighting over the same lots — the second would find everything
+    // already done, but the run would still look wrong. Block it plainly.
+    // (A pipeline run and an upgrade run on the same sale are fine: the queue
+    // is strictly one-at-a-time, so they can never interleave.)
     const existing = await prisma.pipelineQueueItem.findFirst({
-      where: { code: upper, status: { in: ["QUEUED", "RUNNING", "PAUSED"] } },
+      where: { code: upper, kind, status: { in: ["QUEUED", "RUNNING", "PAUSED"] } },
       select: { status: true },
     })
-    if (existing) return { ok: false, error: `${upper} is already in the queue (${existing.status.toLowerCase()}).` }
+    if (existing) return { ok: false, error: `${upper} already has a ${kind === "upgrade" ? "AI Upgrade" : "pipeline"} run in the queue (${existing.status.toLowerCase()}).` }
 
     const last = await prisma.pipelineQueueItem.findFirst({ orderBy: { position: "desc" }, select: { position: true } })
     const row = await prisma.pipelineQueueItem.create({
@@ -47,6 +59,9 @@ export async function addToPipelineQueue(code: string, settings: QueueSettings):
         // "Never started" is told apart from "paused mid-run" by startedAt being null, which is
         // what the UI labels off. Do NOT create these as QUEUED again.
         status: "PAUSED",
+        kind,
+        upgradeModes:   modes.join(","),
+        stage:          kind === "upgrade" ? "upgrade" : "batch",
         preset:         str(settings.preset, 80),
         model:          str(settings.model, 80),
         fallbackModel:  str(settings.fallbackModel, 80),
@@ -149,6 +164,33 @@ export async function removeFromPipelineQueue(id: string): Promise<QueueResult> 
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Could not remove the sale" }
+  }
+}
+
+/** Accept one overnight AI Upgrade rewrite — writes it to the catalogue through
+ *  the same logged path the AI Upgrade tab uses, then marks the row accepted.
+ *  ⚠ Refuses when the lot's description has changed since the rewrite was made:
+ *  overnight ran against a snapshot, and accepting over a newer human edit is
+ *  exactly the Apply-all-overwrites-newer-edits trap (see the appliedDesc rule). */
+export async function acceptUpgradeLot(upgradeLotId: string): Promise<QueueResult> {
+  try {
+    await requireUser()
+    const row = await prisma.upgradeLot.findUnique({ where: { id: upgradeLotId } })
+    if (!row) return { ok: false, error: "That rewrite isn't there any more." }
+    if (row.accepted) return { ok: true }
+    if (row.status !== "done" || !row.revised.trim()) return { ok: false, error: "There is no rewritten text to accept on that lot." }
+
+    const lot = await prisma.catalogueLot.findUnique({ where: { id: row.lotId }, select: { auctionId: true, description: true } })
+    if (!lot) return { ok: false, error: "That lot has been deleted since the run." }
+    if ((lot.description ?? "").trim() !== row.original.trim()) {
+      return { ok: false, error: "The description has been edited since the overnight rewrite — accept skipped so the newer edit isn't overwritten." }
+    }
+
+    await applyAiDescriptionOne(lot.auctionId, { id: row.lotId, description: row.revised })
+    await prisma.upgradeLot.update({ where: { id: row.id }, data: { accepted: true } })
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Could not accept the rewrite" }
   }
 }
 

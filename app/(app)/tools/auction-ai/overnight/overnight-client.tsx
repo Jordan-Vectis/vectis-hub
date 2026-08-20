@@ -13,7 +13,8 @@ import {
   removeFromPipelineQueue, clearFinishedQueueItems,
   startPipelineQueueItem, startAllPipelineQueueItems,
 } from "@/lib/actions/pipeline-queue"
-import { STAGE_LABEL, queueStatusLabel, isNotStarted, type QueueItem } from "@/lib/pipeline-queue"
+import { STAGE_LABEL, queueStatusLabel, isNotStarted, type QueueItem, type QueueKind, type QueueSettings } from "@/lib/pipeline-queue"
+import { UPGRADE_MODES, UPGRADE_MODE_LABEL } from "@/lib/upgrade-modes"
 
 type Auction = { code: string; name: string | null; auctionDate: string | null }
 
@@ -138,7 +139,10 @@ export default function OvernightClient() {
       {adding && (
         <QueueForm
           auctions={auctions}
-          queuedCodes={items.filter(i => ["QUEUED", "RUNNING", "PAUSED"].includes(i.status)).map(i => i.code)}
+          queuedByKind={{
+            pipeline: items.filter(i => i.kind !== "upgrade" && ["QUEUED", "RUNNING", "PAUSED"].includes(i.status)).map(i => i.code),
+            upgrade:  items.filter(i => i.kind === "upgrade" && ["QUEUED", "RUNNING", "PAUSED"].includes(i.status)).map(i => i.code),
+          }}
           busy={busy}
           onCancel={() => setAdding(false)}
           onSubmit={async (code, settings) => {
@@ -279,6 +283,11 @@ function RunCard({
   const pct     = item.total > 0 ? Math.min(100, Math.round((item.done / item.total) * 100)) : 0
   const waiting = item.retryAfter && new Date(item.retryAfter).getTime() > Date.now()
   const ghost   = "px-2.5 py-2 min-h-[36px] rounded-lg text-xs font-semibold bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white disabled:opacity-40"
+  const isUpgrade = item.kind === "upgrade"
+  const openHref  = isUpgrade
+    ? `/tools/auction-ai/overnight/upgrade/${encodeURIComponent(item.id)}`
+    : `/tools/auction-ai/overnight/${encodeURIComponent(item.code)}`
+  const toReview  = isUpgrade ? Math.max(0, item.upgradeDone - item.upgradeAccepted) : 0
 
   return (
     <div className={`rounded-2xl border p-4 ${tone.card}`}>
@@ -286,26 +295,44 @@ function RunCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             {place && <span className="text-xs font-bold text-gray-400 tabular-nums">#{place}</span>}
-            <Link href={`/tools/auction-ai/overnight/${encodeURIComponent(item.code)}`}
+            <Link href={openHref}
               className="font-bold text-gray-900 dark:text-white hover:underline">
               {item.code}
             </Link>
             {name && <span className="text-sm text-gray-500 dark:text-gray-400 truncate">{name}</span>}
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+              {isUpgrade ? "✨ AI Upgrade" : "⚙ Auto Pipeline"}
+            </span>
             <span className={`text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${tone.chip}`}>
               {queueStatusLabel(item)}
             </span>
-            {!fresh && <StagePips stage={item.stage} running={item.status === "RUNNING"} />}
+            {!fresh && !isUpgrade && <StagePips stage={item.stage} running={item.status === "RUNNING"} />}
           </div>
 
           <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5">
-            {item.preset || "no instruction"}
-            {" · "}{item.autoApply ? "auto-apply" : "review before applying"}
-            {item.onlyWithPhotos ? " · photos only" : ""}
-            {item.skipHasDesc ? " · skip described" : ""}
-            {item.kpRelaxed ? " · relaxed key points" : ""}
-            {item.grounded ? " · web search" : ""}
-            {item.addedBy ? ` · queued by ${item.addedBy}` : ""}
+            {isUpgrade ? (
+              <>
+                {item.upgradeModes.split(",").filter(Boolean).map(m => UPGRADE_MODE_LABEL[m] ?? m).join(", ") || "no options picked"}
+                {" · rewrites held for review"}
+                {item.addedBy ? ` · queued by ${item.addedBy}` : ""}
+              </>
+            ) : (
+              <>
+                {item.preset || "no instruction"}
+                {" · "}{item.autoApply ? "auto-apply" : "review before applying"}
+                {item.onlyWithPhotos ? " · photos only" : ""}
+                {item.skipHasDesc ? " · skip described" : ""}
+                {item.kpRelaxed ? " · relaxed key points" : ""}
+                {item.grounded ? " · web search" : ""}
+                {item.addedBy ? ` · queued by ${item.addedBy}` : ""}
+              </>
+            )}
           </p>
+          {isUpgrade && toReview > 0 && (
+            <p className="text-[11px] font-semibold text-[#C8A96E] mt-1">
+              ✨ {toReview} rewrite{toReview === 1 ? "" : "s"} waiting for review
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -329,9 +356,9 @@ function RunCard({
               )}
             </>
           )}
-          <Link href={`/tools/auction-ai/overnight/${encodeURIComponent(item.code)}`}
+          <Link href={openHref}
             className="px-3 py-2 min-h-[36px] rounded-lg text-xs font-bold bg-[#C8A96E] hover:bg-[#b9995c] text-black inline-flex items-center">
-            Open
+            {isUpgrade && toReview > 0 ? "Review" : "Open"}
           </Link>
           <button className={`${ghost} text-red-500 hover:text-red-700`} disabled={busy}
             onClick={() => {
@@ -347,8 +374,8 @@ function RunCard({
               goes through batch, key points and double check — so a 601-lot sale reads ~1693.
               It was labelled "lots" here and read as nonsense. */}
           <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1">
-            <span title="Each lot goes through up to three stages, so this counts stage passes rather than lots">
-              {item.done} of {item.total} steps{item.skipped > 0 ? ` · ${item.skipped} refused` : ""}
+            <span title={isUpgrade ? "One rewrite per lot" : "Each lot goes through up to three stages, so this counts stage passes rather than lots"}>
+              {item.done} of {item.total} {isUpgrade ? "lots" : "steps"}{item.skipped > 0 ? ` · ${item.skipped} refused` : ""}
             </span>
             <span className="tabular-nums">{pct}%</span>
           </div>
@@ -376,17 +403,15 @@ function RunCard({
 // ─── Queue a sale ─────────────────────────────────────────────────────────
 
 function QueueForm({
-  auctions, queuedCodes, busy, onCancel, onSubmit,
+  auctions, queuedByKind, busy, onCancel, onSubmit,
 }: {
   auctions: Auction[]
-  queuedCodes: string[]
+  queuedByKind: Record<QueueKind, string[]>
   busy: boolean
   onCancel: () => void
-  onSubmit: (code: string, settings: {
-    preset: string; model: string; fallbackModel: string
-    grounded: boolean; autoApply: boolean; onlyWithPhotos: boolean; skipHasDesc: boolean; kpRelaxed: boolean
-  }) => void
+  onSubmit: (code: string, settings: QueueSettings) => void
 }) {
+  const [kind, setKind] = useState<QueueKind>("pipeline")
   const [code, setCode] = useState("")
   const [preset, setPreset] = useState("")
   const [model, setModel] = useState("")
@@ -396,6 +421,8 @@ function QueueForm({
   const [skipHasDesc, setSkipHasDesc] = useState(false)
   const [kpRelaxed, setKpRelaxed] = useState(false)
   const [grounded, setGrounded] = useState(false)
+  // Same starting point as the AI Upgrade tab.
+  const [modes, setModes] = useState<Set<string>>(new Set(["humanise", "grammar"]))
   const [presets, setPresets] = useState<{ key: string; favourite?: boolean }[]>([])
   const [models, setModels] = useState<string[]>([])
 
@@ -406,7 +433,8 @@ function QueueForm({
       .then(j => { if (j.models?.length) { setModels(j.models); setModel(m => m || j.models[0]) } }).catch(() => {})
   }, [])
 
-  const already = useMemo(() => new Set(queuedCodes.map(c => c.toUpperCase())), [queuedCodes])
+  const already = useMemo(() => new Set(queuedByKind[kind].map(c => c.toUpperCase())), [queuedByKind, kind])
+  const conflictModes = modes.has("shorten") && modes.has("expand")
   const input = "w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#2C2C2E] px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#C8A96E] dark:[color-scheme:dark]"
   const label = "block text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1"
 
@@ -420,6 +448,20 @@ function QueueForm({
         instruction and model.
       </p>
 
+      {/* What kind of run this is. */}
+      <div className="flex gap-2">
+        {([["pipeline", "⚙ Auto Pipeline", "Batch → Key Points → Double Check"], ["upgrade", "✨ AI Upgrade", "Mass rewrite, held for morning review"]] as const).map(([k, lbl, hint]) => (
+          <button key={k} onClick={() => setKind(k)}
+            className={`px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold border text-left ${
+              kind === k
+                ? "bg-[#C8A96E]/15 border-[#C8A96E]/60 text-[#C8A96E]"
+                : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+            {lbl}
+            <span className="block text-[10px] font-normal opacity-70">{hint}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className={label}>Sale</label>
@@ -432,13 +474,15 @@ function QueueForm({
             ))}
           </select>
         </div>
-        <div>
-          <label className={label}>Instruction</label>
-          <select value={preset} onChange={e => setPreset(e.target.value)} className={input}>
-            <option value="">— none —</option>
-            {presets.map(p => <option key={p.key} value={p.key}>{p.favourite ? "★ " : ""}{p.key}</option>)}
-          </select>
-        </div>
+        {kind === "pipeline" && (
+          <div>
+            <label className={label}>Instruction</label>
+            <select value={preset} onChange={e => setPreset(e.target.value)} className={input}>
+              <option value="">— none —</option>
+              {presets.map(p => <option key={p.key} value={p.key}>{p.favourite ? "★ " : ""}{p.key}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className={label}>Model</label>
           <select value={model} onChange={e => setModel(e.target.value)} className={input}>
@@ -454,23 +498,64 @@ function QueueForm({
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 text-sm text-gray-700 dark:text-gray-300">
-        <Toggle checked={autoApply} onChange={setAutoApply}
-          label="Apply the descriptions" hint="All three stages write to the catalogue. Off means everything is held for review." />
-        <Toggle checked={onlyWithPhotos} onChange={setOnlyWithPhotos}
-          label="Only lots with photos" hint="Leaves anything not photographed yet for a later run." />
-        <Toggle checked={skipHasDesc} onChange={setSkipHasDesc}
-          label="Skip lots already described" hint="Leaves anything that already has a description alone." />
-        <Toggle checked={kpRelaxed} onChange={setKpRelaxed}
-          label="Relaxed key points" hint="Accepts the meaning rather than the exact wording." />
-        <Toggle checked={grounded} onChange={setGrounded}
-          label="Web search" hint="Lets the AI look things up while describing." />
-      </div>
+      {kind === "pipeline" ? (
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 text-sm text-gray-700 dark:text-gray-300">
+          <Toggle checked={autoApply} onChange={setAutoApply}
+            label="Apply the descriptions" hint="All three stages write to the catalogue. Off means everything is held for review." />
+          <Toggle checked={onlyWithPhotos} onChange={setOnlyWithPhotos}
+            label="Only lots with photos" hint="Leaves anything not photographed yet for a later run." />
+          <Toggle checked={skipHasDesc} onChange={setSkipHasDesc}
+            label="Skip lots already described" hint="Leaves anything that already has a description alone." />
+          <Toggle checked={kpRelaxed} onChange={setKpRelaxed}
+            label="Relaxed key points" hint="Accepts the meaning rather than the exact wording." />
+          <Toggle checked={grounded} onChange={setGrounded}
+            label="Web search" hint="Lets the AI look things up while describing." />
+        </div>
+      ) : (
+        <div>
+          <p className={label}>Upgrade options — same choices as the AI Upgrade tab</p>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {UPGRADE_MODES.map(m => {
+              const on = modes.has(m.key)
+              return (
+                <label key={m.key} title={m.desc}
+                  className={`flex items-start gap-2 cursor-pointer px-3 py-2 min-h-[44px] rounded-lg border text-xs ${
+                    on
+                      ? "bg-[#C8A96E]/15 border-[#C8A96E]/60 text-[#C8A96E]"
+                      : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+                  <input type="checkbox" checked={on}
+                    onChange={() => setModes(prev => { const n = new Set(prev); if (n.has(m.key)) n.delete(m.key); else n.add(m.key); return n })}
+                    className="mt-0.5 w-4 h-4 accent-[#C8A96E] shrink-0" />
+                  <span>
+                    <span className="block font-semibold leading-tight">{m.label}</span>
+                    <span className="block text-[10px] opacity-60 mt-0.5 leading-tight">{m.desc}</span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+          {conflictModes && (
+            <p className="text-xs text-amber-500 mt-2">⚠ Shorten and Add more detail are opposites — the AI will attempt both but results may vary.</p>
+          )}
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            Every lot with a description is rewritten overnight and <strong>held here for review</strong> — nothing
+            touches the catalogue until you accept it in the morning.
+          </p>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <button
-          disabled={busy || !code}
-          onClick={() => onSubmit(code, { preset, model, fallbackModel, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed })}
+          disabled={busy || !code || (kind === "upgrade" && modes.size === 0)}
+          onClick={() => onSubmit(code, {
+            kind, upgradeModes: kind === "upgrade" ? Array.from(modes).join(",") : "",
+            preset: kind === "pipeline" ? preset : "", model, fallbackModel,
+            grounded: kind === "pipeline" && grounded,
+            autoApply: kind === "pipeline" && autoApply,
+            onlyWithPhotos: kind === "pipeline" && onlyWithPhotos,
+            skipHasDesc: kind === "pipeline" && skipHasDesc,
+            kpRelaxed: kind === "pipeline" && kpRelaxed,
+          })}
           className="px-5 py-2.5 rounded-xl bg-[#C8A96E] hover:bg-[#b9995c] text-black font-bold text-sm disabled:opacity-40">
           Add to the queue
         </button>

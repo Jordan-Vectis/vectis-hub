@@ -76,7 +76,9 @@ export default function RunClient({ code }: { code: string }) {
         fetch("/api/auction-ai/queue").then(r => r.json()).catch(() => null),
         fetch(`/api/auction-ai/pipeline?code=${encodeURIComponent(code)}`).then(r => r.json()).catch(() => null),
       ])
-      if (queueRes?.items) setItem(queueRes.items.find((i: QueueItem) => i.code === code) ?? null)
+      // ⚠ The same sale can also have an AI Upgrade run queued (its own page at
+      // /overnight/upgrade/[id]) — this page is the PIPELINE run only.
+      if (queueRes?.items) setItem(queueRes.items.find((i: QueueItem) => i.code === code && i.kind !== "upgrade") ?? null)
       if (runRes?.run) { setLots(runRes.run.lots ?? []); setStage(runRes.run.stage ?? "") }
       else if (runRes && runRes.run === null) { setLots([]); setStage("") }
     } catch { /* a dropped poll retries on the next tick */ }

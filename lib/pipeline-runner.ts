@@ -151,7 +151,7 @@ export type SliceResult =
  *  ticks every 30 seconds, so without this the gap between the two would fill
  *  the production logs with the same Prisma error twice a minute. */
 function isMissingTable(e: any): boolean {
-  return e?.code === "P2021" || /does not exist in the current database/i.test(e?.message ?? "")
+  return e?.code === "P2021" || e?.code === "P2022" || /does not exist in the current database/i.test(e?.message ?? "")
 }
 
 export async function runQueueSlice(): Promise<SliceResult> {
@@ -250,6 +250,15 @@ export async function runQueueSlice(): Promise<SliceResult> {
       return { ran: true, code: item.code, status: "CANCELLED", done: 0, total: 0, stage: item.stage, message: "sale not found" }
     }
     const { lots } = state
+
+    if (item.kind === "upgrade") {
+      addLog(`   AI Upgrade · ${item.upgradeModes.split(",").filter(Boolean).join(", ")} · everything held for morning review`)
+      await runUpgradeKind(item, lots, deadline, addLog, flush, stopRequested)
+      await flush({ status: "DONE", stage: "complete", finishedAt: new Date(), lastMessage: `Finished ${item.code} — the rewrites are waiting for review.` })
+      addLog(`🎉 ${item.code} complete — open the run to review and accept the rewrites`)
+      return { ran: true, code: item.code, status: "DONE", done: item.done, total: item.total, stage: "complete", message: "complete" }
+    }
+
     addLog(`   ${lots.length} lots in scope · ${item.preset || "no instruction"} · ${item.autoApply ? "auto-apply" : "review before applying"}`)
 
     await runStages(item, lots, deadline, addLog, flush, stopRequested, ctx)
@@ -290,6 +299,20 @@ async function loadLots(item: NonNullable<Item>): Promise<{ auctionId: string; l
   if (!catRes.ok) return null
   const cat = await catRes.json()
   if (!cat?.auctionId) return null
+
+  // An AI Upgrade run keeps its progress in its own UpgradeLot rows, not in the
+  // pipeline's saved state — nothing more to read here.
+  if (item.kind === "upgrade") {
+    const lots: Lot[] = (cat.lots ?? []).map((l: any) => ({
+      id:          l.id,
+      label:       l.barcode || l.receiptUniqueId || l.id,
+      keyPoints:   l.keyPoints ?? "",
+      imageUrls:   l.imageUrls ?? [],
+      currentDesc: l.description || "",
+      appliedDesc: l.description || "",
+    }))
+    return { auctionId: cat.auctionId, lots }
+  }
 
   // ⚠ This read is NOT best-effort. The saved per-lot state is the only record
   // of what has already been described; treating a failure as "nothing done yet"
@@ -626,6 +649,88 @@ async function runStages(
     }
     item.stage = "complete"
     await advanceStage(code, "complete", item)
+  }
+}
+
+// ── The AI Upgrade run (kind "upgrade") ─────────────────────────────────────
+// One stage: every lot with a description goes through /api/auction-ai/upgrade
+// with the modes chosen on the queue form. ⚠ NOTHING is written to the
+// catalogue here — every rewrite lands in an UpgradeLot row and waits for a
+// person to accept it in the morning (Jordan's choice, 2026-08-20). The rows
+// double as the resume record: a lot with a row is never re-run, and reading
+// them goes through prisma, which throws on failure rather than pretending
+// nothing was done (the not-best-effort rule).
+async function runUpgradeKind(
+  item: NonNullable<Item>,
+  allLots: Lot[],
+  deadline: Deadline,
+  addLog: (m: string) => void,
+  flush: (f: Record<string, any>) => Promise<void>,
+  stopRequested: () => Promise<boolean>,
+): Promise<void> {
+  const modes = item.upgradeModes.split(",").map(m => m.trim()).filter(Boolean)
+  const modelFor = (attempt: number) => (attempt % 2 === 0 && item.fallbackModel) ? item.fallbackModel : item.model
+
+  const lots = allLots.filter(l => (l.currentDesc ?? "").trim())
+  const existing = await prisma.upgradeLot.findMany({
+    where: { queueId: item.id },
+    select: { lotId: true },
+  })
+  const doneIds = new Set(existing.map(r => r.lotId))
+  const toRun = lots.filter(l => !doneIds.has(l.id))
+
+  let done = doneIds.size
+  let skipped = item.skipped
+  const total = lots.length
+  addLog(`── AI Upgrade — ${toRun.length} of ${total} still to rewrite`)
+  await flush({ stage: "upgrade", done, total, skipped })
+
+  const saveRow = async (lot: Lot, fields: { revised: string; status: string }) => {
+    await prisma.upgradeLot.upsert({
+      where:  { queueId_lotId: { queueId: item.id, lotId: lot.id } },
+      create: { queueId: item.id, lotId: lot.id, label: lot.label, original: lot.currentDesc, ...fields },
+      update: fields,
+    })
+  }
+
+  for (const lot of toRun) {
+    if (deadline.expired) throw new SliceOver(0)
+
+    const result = await withRetry(lot.label, deadline, addLog, async (attempt) => {
+      const res = await fetch(`${base()}/api/auction-ai/upgrade`, {
+        method: "POST", headers: cronHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ description: lot.currentDesc, modes, model: modelFor(attempt), keyPoints: lot.keyPoints }),
+      })
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      return json
+    })
+
+    if (result) {
+      const revised = String(result.revised ?? "").trim()
+      if (revised) {
+        await saveRow(lot, { revised, status: "done" })
+        addLog(`  ✓ ${lot.label} — rewritten, waiting for review`)
+      } else {
+        // Same as the tab: an empty result can't be accepted, so it is recorded
+        // plainly rather than sitting behind a button with nothing in it.
+        await saveRow(lot, { revised: "", status: "empty" })
+        addLog(`  ✗ ${lot.label} — model returned an empty result, skipping`)
+      }
+    } else {
+      // withRetry returned null → content block, the one permitted skip.
+      await saveRow(lot, { revised: "", status: "blocked" })
+      skipped++
+    }
+
+    done++
+    item.done = done
+    item.total = total
+    item.skipped = skipped
+    await flush({ stage: "upgrade", done, total, skipped })
+    if (await stopRequested()) throw new SliceOver(0)
+    if (!deadline.fits(LOT_GAP_MS)) throw new SliceOver(0)
+    await sleep(LOT_GAP_MS)
   }
 }
 

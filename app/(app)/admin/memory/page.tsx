@@ -321,6 +321,17 @@ WARNING: the Auto Pipeline tab's own Run button STILL RUNS IN THE BROWSER - its 
 - lib/pipeline-runner.ts is the worker. server.js ticks /api/cron/pipeline-queue every 30 seconds; each tick does a roughly nine-minute SLICE and hands back, and the next tick carries on from the same lot.
 - UI (MOVED 2026-08-14): its own page at **/tools/auction-ai/overnight** (overnight-client.tsx), with a per-run page at **/tools/auction-ai/overnight/[code]** (run-client.tsx). Server actions in lib/actions/pipeline-queue.ts, list at GET /api/auction-ai/queue, per-lot detail from GET /api/auction-ai/pipeline?code=.
 
+## The queue also runs AI UPGRADE jobs (2026-08-20)
+
+Jordan asked for the AI Upgrades overnight as well, and chose the SAME overnight page (a run KIND on the queue form: Auto Pipeline / AI Upgrade) and save-for-morning-review over auto-apply.
+
+- PipelineQueueItem.kind ("pipeline" | "upgrade") + upgradeModes (comma-separated keys) + a new UpgradeLot table (queueId+lotId unique; original/revised/status/accepted). NEEDS Run Migrations. UpgradeLot rows ARE the resume record (a lot with a row is never re-run) and the review data.
+- WARNING: an overnight upgrade run writes NOTHING to the catalogue. Every rewrite is held in UpgradeLot; the morning page /tools/auction-ai/overnight/upgrade/[id] (keyed by queue-item ID, because the same sale can also have a pipeline run queued — run-client.tsx filters kind !== "upgrade" when finding its item by code) shows before/after with Accept / Accept All. Accept = acceptUpgradeLot action → applyAiDescriptionOne (the same logged path the tab uses) → row marked accepted. Accept REFUSES when the lot's description has changed since the rewrite (compared against UpgradeLot.original) — the appliedDesc overwrite-newer-edits trap, blocked by design. Accept All loops client-side so one refusal doesn't stop the rest.
+- The runner branch runUpgradeKind uses the same withRetry / slices / heartbeat / 12s-gap machinery and calls THE SAME /api/auction-ai/upgrade route the tab uses (isCronRequest added alongside the session check) — never re-implement the mode instructions in the runner. A content block becomes row status "blocked", an empty result "empty"; both appear on the review page's "Refused / empty" filter.
+- lib/upgrade-modes.ts is now the single source of the UPGRADE_MODES list (page.tsx imports it; the instruction TEXT stays in the upgrade route's MODE_INSTRUCTIONS). addToPipelineQueue validates modes against it server-side.
+- The duplicate-in-queue check is now per code+kind, so a pipeline run and an upgrade run may coexist for one sale — the queue is strictly serial, they can never interleave.
+- The queue API returns upgradeDone/upgradeAccepted per item so the list card can say "N rewrites waiting for review"; progress on upgrade cards is labelled lots (one stage), not steps.
+
 ## The queue is GONE from the Auto Pipeline tab (2026-08-14)
 
 Jordan: "I really dont like how this overnight que works... revert the Auto Pipeline to not have the overnight que stuff then make a new page called Overnight AI runs or something similar... I think you should be able to list out all the runs then click inside of them to see what is actually happening."

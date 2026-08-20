@@ -331,6 +331,11 @@ model PipelineQueueItem {
   position  Int     @default(0)
   status    String  @default("QUEUED") // QUEUED | RUNNING | PAUSED | DONE | CANCELLED
 
+  // What kind of overnight run this is: "pipeline" (Batch → KP → DC) or
+  // "upgrade" (AI Upgrade mass rewrite, held for morning review).
+  kind         String @default("pipeline")
+  upgradeModes String @default("") // comma-separated AI Upgrade mode keys (kind "upgrade" only)
+
   // Settings, per sale — these mirror the Auto Pipeline tab's own controls.
   preset         String  @default("")
   model          String  @default("")
@@ -357,7 +362,29 @@ model PipelineQueueItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  upgradeLots UpgradeLot[]
+
   @@index([status, position])
+}
+
+// One rewritten description from an overnight AI Upgrade run, held for morning
+// review. Nothing reaches the catalogue until a person accepts it — the row
+// itself is also the resume record (a lot with a row is not re-run).
+model UpgradeLot {
+  id       String            @id @default(cuid())
+  queueId  String
+  queue    PipelineQueueItem @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  lotId    String
+  label    String            @default("")
+  original String            @default("") @db.Text // the description as it was when rewritten
+  revised  String            @default("") @db.Text
+  status   String            @default("done") // done | blocked | empty
+  accepted Boolean           @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([queueId, lotId])
+  @@index([queueId])
 }
 
 model PipelineLot {

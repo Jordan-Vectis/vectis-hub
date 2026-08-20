@@ -24,6 +24,27 @@ export async function GET(_req: NextRequest) {
       throw e
     }
 
+    // For AI Upgrade runs: how many rewrites exist, and how many are accepted —
+    // that is what the morning check wants to know at a glance. Advisory only,
+    // and the table arrives with the same migration batch as the kind column.
+    const upgradeCounts: Record<string, { done: number; accepted: number }> = {}
+    try {
+      const ids = items.filter(i => (i as any).kind === "upgrade").map(i => i.id)
+      if (ids.length > 0) {
+        const rows = await prisma.upgradeLot.groupBy({
+          by: ["queueId", "accepted"],
+          where: { queueId: { in: ids }, status: "done" },
+          _count: { _all: true },
+        })
+        for (const r of rows) {
+          const c = upgradeCounts[r.queueId] ?? { done: 0, accepted: 0 }
+          c.done += r._count._all
+          if (r.accepted) c.accepted += r._count._all
+          upgradeCounts[r.queueId] = c
+        }
+      }
+    } catch { /* counts are a nicety — the list must not fail over them */ }
+
     return NextResponse.json({
       // Whether the background loop can actually run. Without CRON_SECRET the
       // queue would sit there filling up and never move, which must not look
@@ -32,6 +53,7 @@ export async function GET(_req: NextRequest) {
       items: items.map((i) => ({
         id: i.id, code: i.code, position: i.position, status: i.status, stage: i.stage,
         done: i.done, total: i.total, skipped: i.skipped,
+        kind: (i as any).kind ?? "pipeline", upgradeModes: (i as any).upgradeModes ?? "",
         preset: i.preset, model: i.model, fallbackModel: i.fallbackModel,
         grounded: i.grounded, autoApply: i.autoApply, onlyWithPhotos: i.onlyWithPhotos,
         skipHasDesc: i.skipHasDesc, kpRelaxed: i.kpRelaxed,
@@ -40,6 +62,8 @@ export async function GET(_req: NextRequest) {
         finishedAt:  i.finishedAt?.toISOString()  ?? null,
         heartbeatAt: i.heartbeatAt?.toISOString() ?? null,
         lastMessage: i.lastMessage, logText: i.logText, addedBy: i.addedBy,
+        upgradeDone:     upgradeCounts[i.id]?.done     ?? 0,
+        upgradeAccepted: upgradeCounts[i.id]?.accepted ?? 0,
       })),
     })
   } catch (e: any) {

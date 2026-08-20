@@ -1747,6 +1747,27 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "TrainingSignature_moduleKey_idx" ON "TrainingSignature"("moduleKey")`,
   `CREATE INDEX IF NOT EXISTS "TrainingSignature_userId_idx" ON "TrainingSignature"("userId")`,
   `CREATE INDEX IF NOT EXISTS "TrainingSignature_signedAt_idx" ON "TrainingSignature"("signedAt")`,
+
+  // Overnight AI Upgrade runs (2026-08-20) — the queue gains a run kind, and the
+  // rewrites are held per lot for morning review (nothing applies until accepted).
+  `ALTER TABLE "PipelineQueueItem" ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'pipeline'`,
+  `ALTER TABLE "PipelineQueueItem" ADD COLUMN IF NOT EXISTS "upgradeModes" TEXT NOT NULL DEFAULT ''`,
+  `CREATE TABLE IF NOT EXISTS "UpgradeLot" (
+    "id"        TEXT NOT NULL,
+    "queueId"   TEXT NOT NULL,
+    "lotId"     TEXT NOT NULL,
+    "label"     TEXT NOT NULL DEFAULT '',
+    "original"  TEXT NOT NULL DEFAULT '',
+    "revised"   TEXT NOT NULL DEFAULT '',
+    "status"    TEXT NOT NULL DEFAULT 'done',
+    "accepted"  BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "UpgradeLot_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "UpgradeLot_queueId_fkey" FOREIGN KEY ("queueId")
+      REFERENCES "PipelineQueueItem"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "UpgradeLot_queueId_lotId_key" ON "UpgradeLot"("queueId", "lotId")`,
+  `CREATE INDEX IF NOT EXISTS "UpgradeLot_queueId_idx" ON "UpgradeLot"("queueId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
