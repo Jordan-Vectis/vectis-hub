@@ -2556,6 +2556,7 @@ model JordanDocFile {
   createdAt DateTime @default(now())
 
   @@index([folderId])
+}
 
 // ─── Training → sign-off ─────────────────────────────────────────────────────
 // Signed at the end of a course, once every practice task has been passed.
