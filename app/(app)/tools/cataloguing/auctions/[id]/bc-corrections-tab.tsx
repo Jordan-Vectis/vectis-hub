@@ -239,9 +239,9 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                 </>}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 max-w-3xl">
-            Each of these lots is on the wrong receipt or vendor. BC is right, so the wrong value is most likely what
-            went into BC — fix these there, ticking them off as you go. The list stays put after Tote Check → Match BC
-            tidies the Hub, so you can come back to it.
+            The same lots Tote Check finds — here as a job list for putting them right in BC. Copy the IDs and the
+            receipt straight into BC, ticking each group off as you go. A lot leaves this list when BC is corrected
+            and Data Sync has run, so the count always matches Tote Check.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -334,15 +334,31 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                 {/* Group header — the move to make in BC */}
                 <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] flex items-center gap-3 flex-wrap">
                   <div className="text-sm">
-                    <span className="text-gray-500 dark:text-gray-500">On </span>
-                    <span className="font-mono font-bold text-red-500">{g.oldReceipt ?? "—"}</span>
-                    <span className="text-gray-500 dark:text-gray-500"> / </span>
-                    <span className="font-mono font-bold text-red-500">{g.oldVendor ?? "—"}</span>
-                    <span className="mx-2 text-gray-400">→</span>
-                    <span className="text-gray-500 dark:text-gray-500">should be </span>
-                    <span className="font-mono font-bold text-green-500">{g.newReceipt ?? "—"}</span>
-                    <span className="text-gray-500 dark:text-gray-500"> / </span>
-                    <span className="font-mono font-bold text-green-500">{g.newVendor ?? "—"}</span>
+                    {/* ⚠ Only colour what actually CHANGES. Painting an unchanged vendor red on the
+                        left and green on the right says "move this too" when nothing needs moving —
+                        on a long list that is a lot of imaginary work (Jordan, 2026-08-20: the vendor
+                        was C023312 on both sides). */}
+                    {(() => {
+                      const receiptChanged = (g.oldReceipt ?? "") !== (g.newReceipt ?? "")
+                      const vendorChanged  = (g.oldVendor ?? "")  !== (g.newVendor ?? "")
+                      const was  = "font-mono font-bold text-red-500"
+                      const will = "font-mono font-bold text-green-500"
+                      const same = "font-mono text-gray-500 dark:text-gray-400"
+                      return (
+                        <>
+                          <span className="text-gray-500 dark:text-gray-500">On </span>
+                          <span className={receiptChanged ? was : same}>{g.oldReceipt ?? "—"}</span>
+                          <span className="text-gray-500 dark:text-gray-500"> / </span>
+                          <span className={vendorChanged ? was : same}>{g.oldVendor ?? "—"}</span>
+                          <span className="mx-2 text-gray-400">→</span>
+                          <span className="text-gray-500 dark:text-gray-500">should be </span>
+                          <span className={receiptChanged ? will : same}>{g.newReceipt ?? "—"}</span>
+                          <span className="text-gray-500 dark:text-gray-500"> / </span>
+                          <span className={vendorChanged ? will : same}>{g.newVendor ?? "—"}</span>
+                          {!vendorChanged && <span className="ml-2 text-xs text-gray-500">vendor unchanged</span>}
+                        </>
+                      )
+                    })()}
                     {g.newVendorName && <span className="text-gray-500"> · {g.newVendorName}</span>}
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
@@ -429,11 +445,7 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                         })()}
                         <td className="px-4 py-2.5 text-xs text-gray-600 dark:text-gray-400">
                           <span className="line-clamp-1">{r.title || "—"}</span>
-                          {!r.stillWrong && (
-                            <span className="text-gray-500" title="Tote Check → Match BC has already put the Hub right for this lot.">
-                              {" "}· Hub corrected
-                            </span>
-                          )}
+
                           {r.done && r.doneBy && <span className="text-gray-500"> · ticked by {r.doneBy}</span>}
                         </td>
                       </tr>

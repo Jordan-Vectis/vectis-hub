@@ -106,18 +106,33 @@ export async function GET(req: NextRequest) {
       notReady = true
     }
 
+    // ⚠⚠ REVERSED 2026-08-20 (Jordan). This list is now LIVE MISMATCHES ONLY. A saved row
+    // contributes its TICK and nothing else — it can no longer put a lot on the list by itself.
+    //
+    // It used to merge saved rows in so the list survived Tote Check → Match BC tidying the Hub.
+    // The effect on F109 was 97 listed against 4 real ones: Locking Check said 591/595 and Tote
+    // Check said "4 to look at", while this tab showed 97, so the one screen meant to drive BC
+    // work disagreed with both live checks and could not be trusted. Jordan: "the 4 wrong is the
+    // correct answer and thats what BC corrections should also show".
+    //
+    // ⚠ THE TRADE, so nobody reinstates it by accident: a lot whose Hub value has already been
+    // corrected no longer appears here, even if BC still holds the old value. The list follows
+    // the same source of truth as Tote Check — the BC tote data — so a row clears when BC is put
+    // right and Data Sync runs, NOT when the Hub is tidied.
     const merged = new Map<string, BcCorrectionRow>(live)
     for (const s of saved) {
       const liveRow = live.get(s.lotId)
+      if (!liveRow) continue   // no live mismatch — nothing to correct in BC
       merged.set(s.lotId, {
         lotId: s.lotId, saved: true,
         barcode: s.barcode, receiptUniqueId: s.receiptUniqueId, title: s.title, tote: s.tote,
-        oldVendor: s.oldVendor, oldReceipt: s.oldReceipt,
-        newVendor: s.newVendor, newReceipt: s.newReceipt,
+        // ⚠ LIVE values win. The saved row holds them as they were when it was written, which
+        // may be stale — showing those would tell someone to make a move BC no longer needs.
+        oldVendor: liveRow.oldVendor, oldReceipt: liveRow.oldReceipt,
+        newVendor: liveRow.newVendor, newReceipt: liveRow.newReceipt,
         newVendorName: liveRow?.newVendorName ?? null,
         done: s.done, doneBy: s.doneBy, doneAt: s.doneAt?.toISOString() ?? null,
-        // No live mismatch left → the Hub has already been corrected.
-        stillWrong: !!liveRow,
+        stillWrong: true,   // only live rows reach here now
       })
     }
 

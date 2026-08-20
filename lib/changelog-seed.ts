@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4a972a36b2fd4602c1a42f1c981635190c28d822","author":"Jordan Orange","date":"2026-08-20T10:15:20+01:00","subject":"Stop the code guard accusing the AI of inventing a code that is present"},
   {"sha":"17988f1e6c55ded7d4d565c179dadcb617d43b78","author":"Jack Collings","date":"2026-08-20T10:09:16+01:00","subject":"Refresh changelog seed"},
   {"sha":"3dfde276925b3f09bd76ef521e2623b3f88b570e","author":"Jack Collings","date":"2026-08-20T10:09:15+01:00","subject":"Fix a closing brace lost resolving the schema conflict"},
   {"sha":"31f8572d7d11428639510e79a532d0d383db634b","author":"Jack Collings","date":"2026-08-20T10:04:49+01:00","subject":"Training sign-off: sign to acknowledge you have been trained, stored in Admin"},
