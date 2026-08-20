@@ -378,9 +378,17 @@ Read them back any time at Admin → Saved Flagged Lots.`)
     // and it STAYS widened. The old code dropped straight back to 400ms after a
     // successful retry and tripped again immediately. It eases back only after a
     // run of clean lots, so a sale that is simply busy speeds up again on its own.
-    let gap = 1_500
+    //
+    // ⚠⚠ MEASURED 2026-08-19, Google Cloud → Quotas on project "auction-ai":
+    // "Request limit per model per minute for a project in the PAID TIER 1" is
+    // **4** for gemini-omni-flash (20 for gemini-3-pro-image). Four a minute is
+    // FIFTEEN SECONDS between calls — which is why the batch route's 12s exists
+    // and why anything faster refuses immediately. So this starts at 8s and the
+    // first refusal takes it to 16s, i.e. under a 4/min limit in ONE step rather
+    // than crawling up from a value that was never going to work.
+    let gap = 8_000
     let clean = 0
-    const GAP_MAX = 20_000
+    const GAP_MAX = 60_000
 
     for (const lot of flagged) {
       if (stopRef.current) { patchFix(lot.id, { status: "failed", error: "Stopped", keep: false }); continue }
@@ -402,7 +410,8 @@ Read them back any time at Admin → Saved Flagged Lots.`)
             keyPoints:   data.keyPoints ?? null,
             note:        data.note ?? "",
           })
-          if (++clean >= 5) { gap = Math.max(1_500, Math.round(gap * 0.7)); clean = 0 }
+          // ⚠ Never eases below 8s — the measured quota makes anything faster futile.
+          if (++clean >= 5) { gap = Math.max(8_000, Math.round(gap * 0.8)); clean = 0 }
           break
         } catch (e: any) {
           const msg: string = e?.message ?? "Auto-fix failed"
@@ -410,7 +419,7 @@ Read them back any time at Admin → Saved Flagged Lots.`)
           // The countdown is on screen and Stop is always available, so this can't hang silently.
           if (/RATE_LIMITED|429/i.test(msg) && attempt < 8) {
             // Widen the gap for every lot after this one, and keep it widened.
-            gap = Math.min(GAP_MAX, Math.max(gap * 2, 4_000))
+            gap = Math.min(GAP_MAX, Math.max(gap * 2, 16_000))
             clean = 0
             setRateNote(prev => prev ?? msg.replace(/^RATE_LIMITED:\s*/i, "").slice(0, 400))
             const wait = Math.min(20 * attempt, 60)
@@ -984,7 +993,7 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">✨ Fix all AI-flagged lots</h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
                   {bulkRunning
-                    ? `Working out the corrections — ${bulkDoneCnt} of ${bulkFixes.length} done. Nothing is saved yet.`
+                    ? `Working out the corrections — ${bulkDoneCnt} of ${bulkFixes.length} done. Nothing is saved yet. This is deliberately slow: the AI quota allows only a few requests a minute.`
                     : `${bulkReady} correction${bulkReady === 1 ? "" : "s"} ready to read${bulkFailed ? `, ${bulkFailed} failed` : ""}. Nothing is saved until you press Save.`}
                 </p>
                 {/* ⚠ "rate limited" on a chip cannot tell a per-MINUTE limit (waiting clears
