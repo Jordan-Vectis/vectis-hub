@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"26373f333bae552662dae01e3ce1b52237224955","author":"Jordan Orange","date":"2026-08-20T09:28:00+01:00","subject":"Pace the bulk Auto-fix to the quota that actually exists"},
   {"sha":"c7c999442317f110dd4e529f653d81bb2d894f65","author":"Jordan Orange","date":"2026-08-20T09:22:08+01:00","subject":"Make Review-tab Auto-fix failures visible, and pace the bulk run"},
   {"sha":"46779873db82fe7f1fc46a2f5ddbb73db06cdbeb","author":"Jordan Orange","date":"2026-08-19T16:50:39+01:00","subject":"Add a private document store to the personal menu"},
   {"sha":"81a83aa9575195f39d594dab2d326dd5bf6c6ea1","author":"Jordan Orange","date":"2026-08-19T16:35:08+01:00","subject":"Add the garage to the personal menu"},

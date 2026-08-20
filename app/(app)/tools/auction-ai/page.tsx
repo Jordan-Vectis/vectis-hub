@@ -13,6 +13,7 @@ import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-ana
 import RunCostEstimate from "@/components/run-cost-estimate"
 import Link from "next/link"
 import { describeActionError } from "@/lib/action-error"
+import { readJsonResponse } from "@/lib/read-response"
 import { checkConditionInDescription } from "@/lib/condition"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
@@ -385,9 +386,12 @@ function ChatTab({ model }: { model: string }) {
       images.forEach(img => fd.append("images", img, img.name))
 
       const endpoint = grounded ? "/api/auction-ai/chat-grounded" : "/api/auction-ai/chat"
-      const res  = await fetch(endpoint, { method: "POST", body: fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? res.statusText)
+      const res = await fetch(endpoint, { method: "POST", body: fd })
+      // ⚠ Not res.json() directly: during a deploy the PROXY answers with the plain
+      // text "upstream error", and parsing that threw a JSON syntax error at the user.
+      const read = await readJsonResponse<any>(res)
+      if (!read.ok) throw new Error(read.error)
+      const json = read.data
 
       setLastSearchQueries(json.searchQueries ?? [])
       setHistory(h => [...h, { role: "model", text: json.reply }])
