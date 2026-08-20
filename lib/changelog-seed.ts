@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"e3af24f4d4b0a046d8d24ad96722f559a2540465","author":"Jack Collings","date":"2026-08-20T21:25:11+01:00","subject":"Vectis Clerk Trainer — practice clerking on a faithful copy of the live software"},
+  {"sha":"0f71c9559a7ad5c7df03f3ba779d991176850b01","author":"Jordan Orange","date":"2026-08-20T17:01:43+01:00","subject":"Overnight AI Upgrade runs — queue kind on the Overnight page, rewrites held for morning review"},
   {"sha":"04b8af27291805b13e74ccbaf7fcc9863a638750","author":"Jordan Orange","date":"2026-08-20T15:54:51+01:00","subject":"Memory: Macro Calibrator confirmed working on PC + laptop (middle-click)"},
   {"sha":"53aa426b642a45fe130d85131dfc005a765199ec","author":"Jordan Orange","date":"2026-08-20T15:40:27+01:00","subject":"Memory: Macro Calibrator — middle-click capture (laptop F-row keys), OnError log, E2E verified"},
   {"sha":"b6676f06de326ace47a05e9f21e303b36f2fc510","author":"Jordan Orange","date":"2026-08-20T15:14:53+01:00","subject":"Memory: Macro Calibrator v2 (real hotkeys + banner; per-occurrence points for Description Copier placeholders) + changelog seed refresh"},
