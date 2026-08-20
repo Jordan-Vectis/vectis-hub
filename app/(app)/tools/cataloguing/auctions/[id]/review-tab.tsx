@@ -89,6 +89,15 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [saveErr, setSaveErr] = useState<string | null>(null)   // shown inline at the Save button (not the far-off top banner)
+  // ⚠ Auto-fix needs the same treatment for the same reason. It used to report through
+  // the top-of-page `error` banner, which on a long Review list is far off screen — so a
+  // failed fix looked exactly like nothing happening: the button said "Auto-fixing…" and
+  // then went back to normal (Jordan, 2026-08-19: "it just resets and nothing is happening").
+  const [fixErr, setFixErr] = useState<{ id: string; msg: string } | null>(null)
+  // What the AI provider actually said the first time it refused. The per-lot chip only
+  // ever showed "rate limited", which cannot tell a per-MINUTE limit (wait and it clears)
+  // from a per-DAY one (waiting will never clear it) — so the detail is surfaced once.
+  const [rateNote, setRateNote] = useState<string | null>(null)
   const [search, setSearch]   = useState("")
   const [flaggedOnly, setFlaggedOnly]       = useState(false)
   const [aiFlaggedOnly, setAiFlaggedOnly]   = useState(false)
@@ -317,6 +326,7 @@ Read them back any time at Admin → Saved Flagged Lots.`)
   async function autoFix(lot: ReviewLot) {
     setFixingId(lot.id)
     setError(null)
+    setFixErr(null)
     try {
       const res = await fetch("/api/auction-ai/autofix-flag", {
         method: "POST",
@@ -325,10 +335,23 @@ Read them back any time at Admin → Saved Flagged Lots.`)
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Auto-fix failed")
+
+      const fixed = String(data.description ?? "")
+      // ⚠ The AI can legitimately decide the description is already right — which is
+      // COMMON on these flags, since the code guard has usually put the cataloguer's
+      // value back before the flag is ever raised. Opening an editor containing the
+      // identical text reads as "nothing happened", so say so plainly instead.
+      if (!fixed.trim() || fixed.trim() === (lot.description ?? "").trim()) {
+        setFixErr({
+          id: lot.id,
+          msg: "The AI didn't change anything — it thinks the description is already right. If the key points are the thing that's wrong, use the key-points box above.",
+        })
+        return
+      }
       setEditDescId(lot.id)
-      setEditDescText(data.description ?? lot.description ?? "")
+      setEditDescText(fixed)
     } catch (e: any) {
-      setError(e?.message ?? "Auto-fix failed")
+      setFixErr({ id: lot.id, msg: e?.message ?? "Auto-fix failed" })
     } finally {
       setFixingId(null)
     }
@@ -343,6 +366,22 @@ Read them back any time at Admin → Saved Flagged Lots.`)
   async function runBulkFix(flagged: ReviewLot[]) {
     stopRef.current = false
     setBulkRunning(true)
+    setRateNote(null)
+
+    // ⚠ PACING. This was a flat 400ms between lots — about 150 requests a minute if
+    // nothing blocks, far past any per-minute quota — so a sale with 59 flags was
+    // rate limited on the FIRST lot and then crawled through the retry backoff
+    // (Jordan, 2026-08-19: "instantly rate limited on the mass autofix"). For
+    // comparison the batch route waits 12 SECONDS between lots (RULES.md).
+    //
+    // Rather than guess the right number, the gap ADAPTS: every refusal widens it
+    // and it STAYS widened. The old code dropped straight back to 400ms after a
+    // successful retry and tripped again immediately. It eases back only after a
+    // run of clean lots, so a sale that is simply busy speeds up again on its own.
+    let gap = 1_500
+    let clean = 0
+    const GAP_MAX = 20_000
+
     for (const lot of flagged) {
       if (stopRef.current) { patchFix(lot.id, { status: "failed", error: "Stopped", keep: false }); continue }
       patchFix(lot.id, { status: "working", waiting: undefined })
@@ -363,12 +402,17 @@ Read them back any time at Admin → Saved Flagged Lots.`)
             keyPoints:   data.keyPoints ?? null,
             note:        data.note ?? "",
           })
+          if (++clean >= 5) { gap = Math.max(1_500, Math.round(gap * 0.7)); clean = 0 }
           break
         } catch (e: any) {
           const msg: string = e?.message ?? "Auto-fix failed"
           // Rate limits are transient — wait it out rather than dropping the lot (RULES.md).
           // The countdown is on screen and Stop is always available, so this can't hang silently.
           if (/RATE_LIMITED|429/i.test(msg) && attempt < 8) {
+            // Widen the gap for every lot after this one, and keep it widened.
+            gap = Math.min(GAP_MAX, Math.max(gap * 2, 4_000))
+            clean = 0
+            setRateNote(prev => prev ?? msg.replace(/^RATE_LIMITED:\s*/i, "").slice(0, 400))
             const wait = Math.min(20 * attempt, 60)
             for (let s = wait; s > 0 && !stopRef.current; s--) {
               patchFix(lot.id, { status: "working", waiting: s, attempt })
@@ -380,7 +424,7 @@ Read them back any time at Admin → Saved Flagged Lots.`)
           break
         }
       }
-      await sleep(400)   // gentle spacing between lots
+      await sleep(gap)   // adaptive spacing — see the note at the top of this function
     }
     setBulkRunning(false)
   }
@@ -695,6 +739,12 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                       className="text-sm text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-40 transition-colors">
                       Ignore (AI is wrong)
                     </button>
+                    {fixErr?.id === lot.id && (
+                      <p className="basis-full text-sm text-red-600 dark:text-red-400 font-medium">
+                        {fixErr.msg}
+                        <button onClick={() => setFixErr(null)} className="ml-3 opacity-60 hover:opacity-100">✕</button>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -937,6 +987,18 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                     ? `Working out the corrections — ${bulkDoneCnt} of ${bulkFixes.length} done. Nothing is saved yet.`
                     : `${bulkReady} correction${bulkReady === 1 ? "" : "s"} ready to read${bulkFailed ? `, ${bulkFailed} failed` : ""}. Nothing is saved until you press Save.`}
                 </p>
+                {/* ⚠ "rate limited" on a chip cannot tell a per-MINUTE limit (waiting clears
+                    it) from a per-DAY one (waiting never will). Show what the provider
+                    actually said, once, so the difference is visible. */}
+                {rateNote && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-2 max-w-2xl">
+                    <strong>The AI is refusing requests:</strong> {rateNote}
+                    <br />
+                    Each refusal widens the gap between lots automatically. If it mentions a
+                    <em> daily</em> quota, waiting won&apos;t help — it needs a different model in
+                    Admin → AI Models, or tomorrow.
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {bulkRunning && (
