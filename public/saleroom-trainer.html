@@ -371,6 +371,13 @@ body {
 .sel-img {
   grid-area: img; display: flex; align-items: center; justify-content: center;
   font-size: 6vmin; background: #f5f5f5; border: 1px solid rgb(179,179,179);
+  overflow: hidden;
+}
+/* Placeholder holder — sized so a real lot photo dropped inside it fills the
+   panel instead of collapsing to nothing on an inline span. */
+#rphoto-e {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%; min-height: 0; overflow: hidden;
 }
 .sel-controls { grid-area: controls; display: flex; gap: 0.5vh; align-items: flex-start; }
 .sel-controls .btn { flex: 1; width: auto; padding: 2px 4px; font-size: 1.7vmin; }
@@ -492,6 +499,55 @@ body {
 }
 .tm-start:hover { background: #2ecc71; }
 
+/* ── TEST MODE — SALE PICKER ── */
+#tmSetup {
+  display: none; position: fixed; inset: 0; z-index: 10001;
+  background: rgba(0,0,0,0.85);
+  align-items: center; justify-content: center;
+}
+#tmSetup.open { display: flex; }
+.ts-box {
+  background: #1a2a38; border: 2px solid #f39c12; border-radius: 8px;
+  padding: 2.5vh 2.5vw; width: 62vw; max-width: 62vw; color: white;
+  display: flex; flex-direction: column; gap: 1.4vh;
+}
+.ts-box h2 { color: #f39c12; font-size: 2.2vmin; margin: 0; }
+.ts-box > p { color: #aaa; font-size: 1.6vmin; margin: 0; line-height: 1.5; }
+.ts-opt {
+  display: flex; gap: 1vh; align-items: flex-start;
+  background: #22323f; border: 2px solid #3a4f60; border-radius: 6px;
+  padding: 1.2vh 1.4vh; cursor: pointer;
+}
+.ts-opt:hover { border-color: #5dadec; }
+.ts-opt.sel { border-color: #4ade80; background: #24384a; }
+.ts-opt input { margin-top: 0.4vh; flex-shrink: 0; }
+.ts-opt .ts-t { font-size: 1.8vmin; font-weight: bold; }
+.ts-opt .ts-d { font-size: 1.5vmin; color: #aaa; margin-top: 0.3vh; line-height: 1.5; }
+.ts-pick { display: flex; gap: 0.8vw; margin-top: 1vh; }
+.ts-pick input, .ts-pick select {
+  background: #0f1a24; color: #e8eef4; border: 1px solid #3a4f60;
+  border-radius: 4px; padding: 0.6vh 1vh; font-family: inherit; font-size: 1.6vmin;
+}
+.ts-pick input { flex: 0 0 14vw; }
+.ts-pick select { flex: 1; min-width: 0; }
+.ts-note { font-size: 1.5vmin; color: #8fa6b8; min-height: 2.2vh; }
+.ts-note.err { color: #f87171; }
+.ts-note.ok  { color: #4ade80; }
+.ts-actions { display: flex; justify-content: flex-end; gap: 0.8vw; margin-top: 0.5vh; }
+.ts-go {
+  background: #27ae60; color: white; border: none; border-radius: 6px;
+  padding: 0.9vh 2.5vw; font-size: 1.9vmin; font-family: inherit;
+  font-weight: bold; cursor: pointer;
+}
+.ts-go:hover { background: #2ecc71; }
+.ts-go:disabled { background: #3a4f60; color: #7d8f9e; cursor: default; }
+.ts-cancel {
+  background: transparent; color: #8fa6b8; border: 1px solid #3a4f60;
+  border-radius: 6px; padding: 0.9vh 1.6vw; font-size: 1.8vmin;
+  font-family: inherit; cursor: pointer;
+}
+.ts-cancel:hover { color: white; border-color: #5dadec; }
+
 /* ── TEST MODE — CORNER CHIP ── */
 #tmChip {
   display: none; position: fixed; right: 1.2vw; bottom: 1.5vh; z-index: 9000;
@@ -552,7 +608,7 @@ body {
     </div>
     <div class="sc-card" onclick="goTest()" style="grid-column:1/-1;border-color:#f39c12">
       <h3 style="color:#f39c12;font-size:2.2vmin">📱 Test Mode — Live Bidders on Other Devices</h3>
-      <p>Run a full auction where the online bids come from real people. You get a room code and a link to open on phones or a second machine — every bid pressed there lands on this screen as an incoming online bid. Nothing leaves the trainer.</p>
+      <p>Run a full auction where the online bids come from real people. You get a room code and a link to open on phones or a second machine — every bid pressed there lands on this screen as an incoming online bid. Run the built-in lots, or load a real sale from the Hub so the practice matches what you're testing. Nothing leaves the trainer.</p>
       <span class="diff" style="background:#f39c12;color:#111">Two or More People</span>
     </div>
   </div>
@@ -578,6 +634,46 @@ body {
         <span>GAP Saleroom — full clerking screen</span>
         <span style="display:none;color:#e74c3c;font-size:1.5vmin">⚠ Image not found — save screenshot as <strong>gap-saleroom.png</strong> in the SaleroomTrainer folder</span>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TEST MODE — SALE PICKER ═══ -->
+<div id="tmSetup" onclick="if(event.target===this)closeSetup()">
+  <div class="ts-box">
+    <h2>📱 Test Mode — which lots do you want to run?</h2>
+    <p>Pick a real sale so the practice run matches whatever you're testing against, or stay on the
+       built-in lots. Either way the trainer keeps its bidding entirely to itself —
+       <span style="color:#4ade80">the sale is only ever read</span>, never written to.</p>
+
+    <label class="ts-opt sel" id="tsOptDemo" onclick="pickSource('demo')">
+      <input type="radio" name="tsSrc" value="demo" checked>
+      <span>
+        <span class="ts-t">Built-in practice lots</span>
+        <span class="ts-d">The ten Dinky pre-war lots the trainer ships with. Nothing to load.</span>
+      </span>
+    </label>
+
+    <label class="ts-opt" id="tsOptSale" onclick="pickSource('sale')">
+      <input type="radio" name="tsSrc" value="sale">
+      <span style="flex:1;min-width:0">
+        <span class="ts-t">A real sale from the Hub</span>
+        <span class="ts-d">Runs that sale's lots, in the order the live sale would take them.</span>
+        <span class="ts-pick">
+          <input type="text" id="tsFilter" placeholder="Filter…" oninput="renderSaleOptions()"
+                 onclick="event.stopPropagation()">
+          <select id="tsSale" onchange="onSaleChosen()" onclick="event.stopPropagation()">
+            <option value="">Loading sales…</option>
+          </select>
+        </span>
+      </span>
+    </label>
+
+    <div class="ts-note" id="tsNote"></div>
+
+    <div class="ts-actions">
+      <button class="ts-cancel" onclick="closeSetup()">Cancel</button>
+      <button class="ts-go" id="tsGo" onclick="startTest()">Start Test Mode ▶</button>
     </div>
   </div>
 </div>
@@ -1033,12 +1129,134 @@ function goFree(){
 ───────────────────────────────────────── */
 let TS = { socket:null, code:'', bidders:[], ready:false, seen:false };
 
+/* Lots for the next Test Mode run. null = the built-in practice lots. Scenarios
+   and Free Mode always use LOTS and are untouched by any of this. */
+let TEST_LOTS  = null;
+let TEST_LABEL = '';
+let SALES      = null;   // cached sale list from /api/trainer/sales
+
+/* ── Sale picker ───────────────────────────────────────────────────────────── */
 function goTest(){
   if(typeof io === 'undefined'){
     alert('Test Mode needs the live-bidding server, which is not running here.\n\n' +
           'Free Mode and the scenarios still work as normal.');
     return;
   }
+  pickSource('demo');
+  tsNote('');
+  document.getElementById('tmSetup').classList.add('open');
+  loadSales();
+}
+
+function closeSetup(){
+  document.getElementById('tmSetup').classList.remove('open');
+}
+
+function pickSource(which){
+  const demo = which === 'demo';
+  document.getElementById('tsOptDemo').classList.toggle('sel', demo);
+  document.getElementById('tsOptSale').classList.toggle('sel', !demo);
+  const radio = document.querySelector(`input[name="tsSrc"][value="${which}"]`);
+  if(radio) radio.checked = true;
+  if(demo) tsNote('');
+  else onSaleChosen();
+}
+
+function currentSource(){
+  const r = document.querySelector('input[name="tsSrc"]:checked');
+  return r ? r.value : 'demo';
+}
+
+function tsNote(text, cls){
+  const el = document.getElementById('tsNote');
+  el.textContent = text || '';
+  el.className = 'ts-note' + (cls ? ' ' + cls : '');
+}
+
+async function loadSales(){
+  if(SALES) { renderSaleOptions(); return; }
+  try {
+    const res = await fetch('/api/trainer/sales');
+    if(!res.ok) throw new Error(res.status === 401 ? 'Not signed in' : `HTTP ${res.status}`);
+    SALES = await res.json();
+  } catch(e){
+    SALES = [];
+    document.getElementById('tsSale').innerHTML = '<option value="">Could not load sales</option>';
+    tsNote(`Could not load the sale list (${e.message}). The built-in lots still work.`, 'err');
+    return;
+  }
+  renderSaleOptions();
+}
+
+function renderSaleOptions(){
+  if(!SALES) return;
+  const sel = document.getElementById('tsSale');
+  const keep = sel.value;
+  const f = (document.getElementById('tsFilter').value || '').toLowerCase();
+  const rows = SALES.filter(s =>
+    !f || s.code.toLowerCase().includes(f) || (s.name || '').toLowerCase().includes(f));
+
+  if(rows.length === 0){
+    sel.innerHTML = `<option value="">${SALES.length ? 'No sale matches that filter' : 'No sales available'}</option>`;
+    return;
+  }
+  sel.innerHTML = rows.map(s => {
+    const when = s.auctionDate ? new Date(s.auctionDate).toLocaleDateString('en-GB') : 'no date';
+    return `<option value="${esc(s.code)}">${esc(s.code)} — ${esc(s.name || 'Untitled')} · ${s.lotCount} lots · ${when}</option>`;
+  }).join('');
+  if(rows.some(s => s.code === keep)) sel.value = keep;
+  onSaleChosen();
+}
+
+function onSaleChosen(){
+  if(currentSource() !== 'sale') return;
+  const code = document.getElementById('tsSale').value;
+  const sale = (SALES || []).find(s => s.code === code);
+  tsNote(sale ? `${sale.code} — ${sale.lotCount} lot${sale.lotCount === 1 ? '' : 's'}. Read-only.` : '');
+}
+
+async function startTest(){
+  const btn = document.getElementById('tsGo');
+
+  if(currentSource() === 'demo'){
+    TEST_LOTS = null; TEST_LABEL = '';
+    closeSetup();
+    beginTest();
+    return;
+  }
+
+  const code = document.getElementById('tsSale').value;
+  if(!code){ tsNote('Choose a sale first, or switch to the built-in lots.', 'err'); return; }
+
+  btn.disabled = true;
+  tsNote(`Loading ${code}…`);
+  try {
+    const res = await fetch(`/api/trainer/sales/lots?code=${encodeURIComponent(code)}`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if(!data.lots || data.lots.length === 0) throw new Error('That sale has no lots to run.');
+
+    TEST_LOTS  = data.lots;
+    TEST_LABEL = `${data.code} — ${data.name || ''}`.trim();
+    closeSetup();
+    beginTest();
+
+    // Say plainly when the sale was longer than we loaded, rather than letting a
+    // 3,000-lot sale quietly look like a 500-lot one.
+    if(data.total > data.returned){
+      fb(`Loaded the first ${data.returned} of ${data.total} lots in ${data.code}`, 'warn');
+    } else {
+      fb(`Loaded ${data.returned} lot${data.returned === 1 ? '' : 's'} from ${data.code}`, 'good');
+    }
+  } catch(e){
+    tsNote(`Could not load that sale: ${e.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── Start the run ─────────────────────────────────────────────────────────── */
+function beginTest(){
   goFree();                 // reuse the whole free-run setup: lots, list, buttons
   S.test = true;
   S.freePaused = true;      // the robot bidder stays out of a human test
@@ -1050,9 +1268,21 @@ function goTest(){
   S.fairWarned = false;
   S.lpaddle = null;
 
+  // Swap in the chosen sale. goFree() has already loaded the built-in lots, so
+  // this only runs when a real sale was picked — LOTS itself is never touched,
+  // which keeps the scenarios and Free Mode exactly as they were.
+  if(TEST_LOTS){
+    S.lots = JSON.parse(JSON.stringify(TEST_LOTS));
+    S.li = 0;
+    S.sold = {};
+    updateLot(); renderLL();
+  }
+
   document.getElementById('gbar-label').textContent = 'TEST MODE:';
   document.getElementById('gbar-label').style.color = '#f39c12';
-  setG('Waiting for bidders — share the link, then run the sale as normal.');
+  setG(TEST_LABEL
+    ? `${TEST_LABEL} — share the link, then run the sale as normal.`
+    : 'Waiting for bidders — share the link, then run the sale as normal.');
 
   const pauseBtn = document.getElementById('bPause');
   pauseBtn.textContent = '⏸ Hold bids';
@@ -1195,7 +1425,7 @@ function testState(){
   const lot = (S && S.lots) ? S.lots[S.li] : null;
   const hi = (S && S.hi) || 0;
   return {
-    lot: lot ? { id:lot.id, est:lot.est, desc:lot.desc } : null,
+    lot: lot ? { id:lot.id, est:lot.est, desc:lot.desc, img:lot.img || null } : null,
     hi,
     // Every lot opens at £0 and climbs from the bottom of the increment ladder,
     // the same as Free Mode — bidders take it up themselves.
@@ -1615,10 +1845,29 @@ function updateLot(){
   if(!lot) return;
   document.getElementById('lnum').textContent=`Lot: ${lot.id}`;
   document.getElementById('lest').textContent='Est:';
-  document.getElementById('lest2').textContent=lot.est;
+  document.getElementById('lest2').textContent=lot.est||'—';
   document.getElementById('ldesc').textContent=lot.desc;
-  document.getElementById('limg').textContent=lot.e||'📦';
-  document.getElementById('rphoto-e').textContent=lot.e||'📦';
+  // Lots loaded from a real sale carry a photo; the built-in ones only ever
+  // had an emoji. Fall back to the emoji if the image fails to load, so a
+  // missing photo can't leave an empty grey box.
+  setLotImage(document.getElementById('limg'),      lot);
+  setLotImage(document.getElementById('rphoto-e'),  lot);
+}
+
+function setLotImage(el, lot){
+  if(!el) return;
+  const fallback = lot.e || '📦';
+  if(lot.img){
+    el.innerHTML = '';
+    const img = document.createElement('img');
+    img.alt = '';
+    img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block';
+    img.onerror = () => { el.textContent = fallback; };
+    img.src = lot.img;
+    el.appendChild(img);
+  } else {
+    el.textContent = fallback;
+  }
 }
 
 function renderLL(){

@@ -63,7 +63,15 @@ body {
 #sale { display: none; flex: 1; flex-direction: column; min-height: 0; }
 #sale.on { display: flex; }
 
-#lotbox { padding: 14px; border-bottom: 1px solid #2a3f52; }
+#lotbox { padding: 14px; border-bottom: 1px solid #2a3f52; display: flex; gap: 12px; }
+#lotphoto {
+  width: 84px; height: 84px; flex-shrink: 0; border-radius: 6px;
+  background: #22323f; border: 1px solid #3a4f60; overflow: hidden;
+  display: none; align-items: center; justify-content: center;
+}
+#lotphoto.on { display: flex; }
+#lotphoto img { width: 100%; height: 100%; object-fit: contain; display: block; }
+#lottext { flex: 1; min-width: 0; }
 #lotnum { font-size: 15px; font-weight: 700; color: #4ade80; }
 #lotest { font-size: 13px; color: #8fa6b8; margin-top: 2px; }
 #lotdesc {
@@ -144,9 +152,12 @@ body {
   </div>
 
   <div id="lotbox">
-    <div id="lotnum">Waiting for the clerk…</div>
-    <div id="lotest"></div>
-    <div id="lotdesc"></div>
+    <div id="lotphoto"><img id="lotimg" alt=""></div>
+    <div id="lottext">
+      <div id="lotnum">Waiting for the clerk…</div>
+      <div id="lotest"></div>
+      <div id="lotdesc"></div>
+    </div>
   </div>
 
   <div id="pricebox">
@@ -294,6 +305,7 @@ function render(state){
     $('lotnum').textContent  = `Lot ${s.lot.id}`;
     $('lotest').textContent  = s.lot.est ? `Estimate £${s.lot.est}` : '';
     $('lotdesc').textContent = s.lot.desc || '';
+    setLotPhoto(s.lot.img);
   }
 
   // Price
@@ -360,6 +372,17 @@ function paintButton(s){
     btn.firstChild.nodeValue = `BID £${fmt(s.next)} `;
     sub.textContent = mine ? 'You already hold this lot' : `Current bid £${fmt(s.hi || 0)}`;
   }
+}
+
+/* Only lots loaded from a real sale carry a photo. Hide the panel entirely when
+   there isn't one — an empty grey square reads as a broken image. */
+function setLotPhoto(url){
+  const box = $('lotphoto'), img = $('lotimg');
+  if(!url){ box.classList.remove('on'); img.removeAttribute('src'); return; }
+  if(img.getAttribute('src') === url){ return; }
+  img.onerror = () => box.classList.remove('on');
+  img.onload  = () => box.classList.add('on');
+  img.src = url;
 }
 
 function setStatus(text, cls){
