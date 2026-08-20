@@ -54,16 +54,47 @@ export type CodeAudit = {
   lost: FoundCode[]
 }
 
+
+/**
+ * The DIGITS of every code-like number in a piece of text — used only to decide whether a
+ * code is ALREADY KNOWN, never to decide that something IS a code.
+ *
+ * ⚠⚠ WHY THE ASYMMETRY. CODE_RE only sees a code when 2–4 letters butt against the
+ * digits, so it reads "Set 65705" but is blind to "Skidoo 65705", "Outfit 65705",
+ * "Set No. 65705", "Set #65705" and "Daisy, 65705". A cataloguer writes it any of those
+ * ways. The stage then rewrites it tidily as "Set 65705" — which IS recognised — and the
+ * guard concluded the AI had INVENTED a code that is plainly sitting in the key points,
+ * threw away a good rewrite, and told the cataloguer to go and check it against the item
+ * (measured 2026-08-19 on F109409, "wearing Skidoo Set 65705").
+ *
+ * So: STRICT about accusing (a bare number is still never treated as a code, because a
+ * size, year or edition looks like one), GENEROUS about exonerating (if those digits
+ * appear anywhere in what the stage was given, it did not invent them). Getting this wrong
+ * in the accusing direction discards real work; getting it wrong in the exonerating
+ * direction merely lets an edit through, which the human is reviewing anyway.
+ */
+function digitRuns(text: string): Set<string> {
+  const out = new Set<string>()
+  for (const m of (text ?? "").matchAll(/\d{4,9}/g)) out.add(m[0])
+  return out
+}
 /**
  * Compare what the stage was given against what it produced.
  * `sources` is everything it was allowed to draw on (key points + the original description).
  */
 export function auditCodes(keyPoints: string, original: string, revised: string): CodeAudit {
   const allowed   = new Set([...codeSet(keyPoints), ...codeSet(original)])
+  // Every code-like number the stage was allowed to see, however it was written.
+  const seenDigits = new Set([...digitRuns(keyPoints), ...digitRuns(original)])
   const inRevised = codeSet(revised)
   const stated    = codeSet(keyPoints)
   return {
-    invented: findProductCodes(revised).filter(c => !allowed.has(c.normalised)),
+    // ⚠ Not invented if those digits were already in front of it — see digitRuns above.
+    invented: findProductCodes(revised).filter(c => {
+      if (allowed.has(c.normalised)) return false
+      for (const d of digitRuns(c.asWritten)) if (seenDigits.has(d)) return false
+      return true
+    }),
     // Was in the description AND stated by the cataloguer, and the stage took it out.
     lost:     findProductCodes(original).filter(c => stated.has(c.normalised) && !inRevised.has(c.normalised)),
   }
