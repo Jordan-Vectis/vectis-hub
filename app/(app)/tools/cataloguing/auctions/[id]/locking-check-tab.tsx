@@ -232,6 +232,16 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot, onRefresh 
     if (suggesting) return
     setSuggesting(true); setCondMsg(null)
     setSugProgress({ done: 0, total: needsCondition.length })
+
+    // ⚠⚠ PACING. The Gemini quota measured on this project is FOUR REQUESTS A MINUTE per
+    // model (Google Cloud > Quotas, paid tier 1), which is fifteen seconds apart. This used to
+    // fire every lot back to back with no gap, so past the first couple they were all refused.
+    // Same adaptive scheme as the Review tab bulk fix: widen on refusal and stay widened.
+    let gap = 8_000
+    let clean = 0
+    let failed = 0
+    let lastError = ""
+
     try {
       for (const [i, lot] of needsCondition.entries()) {
         // Photos are the evidence — the route refuses to grade without them.
@@ -241,26 +251,63 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot, onRefresh 
               const r = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(key)}`)
               if (!r.ok) return null
               const buf = await r.arrayBuffer()
-              return { data: btoa(String.fromCharCode(...new Uint8Array(buf))), mimeType: r.headers.get("content-type") || "image/jpeg" }
+              // ⚠ Chunked: String.fromCharCode(...bigArray) overflows the stack on a large
+              // photo, and that threw INSIDE the old empty catch — one more silent failure.
+              const bytes = new Uint8Array(buf)
+              let binary = ""
+              for (let n = 0; n < bytes.length; n += 8192) binary += String.fromCharCode(...bytes.subarray(n, n + 8192))
+              return { data: btoa(binary), mimeType: r.headers.get("content-type") || "image/jpeg" }
             } catch { return null }
           }),
         )).filter(Boolean) as { data: string; mimeType: string }[]
 
-        try {
-          const res = await fetch("/api/auction-ai/suggest-condition", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ label: lot.barcode ?? lot.receiptUniqueId ?? "", description: lot.description, images }),
-          })
-          const j = await res.json()
-          if (j?.grade) setSuggestions(prev => ({ ...prev, [lot.id]: { grade: j.grade, reason: j.reason ?? "", confidence: j.confidence ?? "low" } }))
-        } catch { /* one lot failing must not stop the run */ }
+        if (images.length === 0) { failed++; lastError = "no photos could be loaded"; setSugProgress({ done: i + 1, total: needsCondition.length }); continue }
+
+        // ⚠⚠ NEVER swallow the failure. This catch used to be EMPTY and there was no res.ok
+        // check, so a rate limit, a block or a parse failure all looked identical to success:
+        // the counter ran to the end and nothing appeared (Jordan, 2026-08-20: "this suggest
+        // conditions doesnt do anything"). RULES.md — never let "nothing happened" look like it worked.
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          try {
+            const res = await fetch("/api/auction-ai/suggest-condition", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ label: lot.barcode ?? lot.receiptUniqueId ?? "", description: lot.description, images }),
+            })
+            const j = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(j?.error ?? `Request failed (${res.status})`)
+            if (!j?.grade) throw new Error(j?.error ?? "no grade came back")
+
+            setSuggestions(prev => ({ ...prev, [lot.id]: { grade: j.grade, reason: j.reason ?? "", confidence: j.confidence ?? "low" } }))
+            if (++clean >= 3) { gap = Math.max(8_000, Math.round(gap * 0.8)); clean = 0 }
+            break
+          } catch (e: any) {
+            const msg: string = e?.message ?? "failed"
+            lastError = msg
+            if (/RATE_LIMITED|429|quota/i.test(msg) && attempt < 4) {
+              gap = Math.min(60_000, Math.max(gap * 2, 16_000))
+              clean = 0
+              setCondMsg(`Waiting — the AI is rate limited (lot ${i + 1} of ${needsCondition.length}, attempt ${attempt + 1})…`)
+              await new Promise(r => setTimeout(r, Math.min(20_000 * attempt, 60_000)))
+              continue
+            }
+            failed++
+            break
+          }
+        }
+
         setSugProgress({ done: i + 1, total: needsCondition.length })
+        if (i < needsCondition.length - 1) await new Promise(r => setTimeout(r, gap))
       }
     } finally {
       setSuggesting(false)
+      const got = needsCondition.length - failed
+      setCondMsg(
+        failed === 0
+          ? (got > 0 ? `Suggested ${got} condition${got === 1 ? "" : "s"} — read them, then Accept.` : null)
+          : `Graded ${got} of ${needsCondition.length}. ${failed} could not be done — ${lastError}.`,
+      )
     }
   }
-
   async function applySuggestions() {
     const updates = Object.entries(suggestions)
       .filter(([, v]) => v.grade.trim())
@@ -384,7 +431,16 @@ Each one is the AI's suggestion — only accept what you have read.`)) return
             </button>
           </div>
 
-          {condMsg && <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{condMsg}</p>}
+          {/* ⚠ Green for every message would show a failure as if it had worked, which is the
+              whole fault being fixed here. Colour by what it says. */}
+          {condMsg && (() => {
+            const bad = /could not|couldn|failed|Waiting/i.test(condMsg)
+            return (
+              <p className={`text-sm font-semibold ${bad
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-emerald-600 dark:text-emerald-400"}`}>{condMsg}</p>
+            )
+          })()}
 
           {Object.keys(suggestions).length > 0 && (
             <>
