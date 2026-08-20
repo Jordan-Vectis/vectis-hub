@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"3d42f7964a134805eb83a58f317fa54ee64dc481","author":"Jack Collings","date":"2026-08-20T12:49:25+01:00","subject":"Saleroom Trainer: run a practice sale colleagues bid into from their own devices"},
+  {"sha":"a9b10507e08081c73c3f05bac3e38bc3085cf5b9","author":"Jordan Orange","date":"2026-08-20T12:11:31+01:00","subject":"Make Suggest conditions report its failures instead of doing nothing"},
   {"sha":"9c00528a97c8df154804a386d2fe1e014f597a1e","author":"Jordan Orange","date":"2026-08-20T12:00:45+01:00","subject":"Revert the tote-check changes; keep only the Match BC write guard"},
   {"sha":"b09c2c889c99d88bdc016efef9ca4883c9a4b25c","author":"Jordan Orange","date":"2026-08-20T11:48:35+01:00","subject":"A tote number is not unique - stop one receipt overwriting the other"},
   {"sha":"0f5c298132f3474234ede09637ed194e7b759c78","author":"Jordan Orange","date":"2026-08-20T11:39:56+01:00","subject":"Tote Check: let BC's unique ID say which side is wrong"},
