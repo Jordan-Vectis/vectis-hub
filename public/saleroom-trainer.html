@@ -1189,21 +1189,6 @@ function openBidderLink(){
   if(url) window.open(url, '_blank', 'noopener');
 }
 
-/* Where a lot opens when nobody has bid yet.
-   The robot bidder in Free Mode starts at £5 and climbs on a timer, which is
-   harmless. A person pressing a button is not going to tap thirty times to get
-   an £80–110 lot up to its estimate, so open around half the low estimate — the
-   sort of level the rostrum actually starts at — snapped onto the increment
-   ladder so the next press lands on a real step. */
-function openingBid(lot){
-  const low = lot ? parseInt(String(lot.est).split('-')[0], 10) : NaN;
-  if(!low || isNaN(low)) return nextBid(0);
-  const target = Math.max(nextBid(0), Math.floor(low / 2));
-  let v = 0;
-  while(v < target) v = nextBid(v);
-  return v;
-}
-
 /* What the bidder devices see. Pushed after every change rather than diffed, so
    a phone that joins late or wakes from sleep is immediately correct. */
 function testState(){
@@ -1212,7 +1197,9 @@ function testState(){
   return {
     lot: lot ? { id:lot.id, est:lot.est, desc:lot.desc } : null,
     hi,
-    next: hi > 0 ? nextBid(hi) : openingBid(lot),
+    // Every lot opens at £0 and climbs from the bottom of the increment ladder,
+    // the same as Free Mode — bidders take it up themselves.
+    next: nextBid(hi),
     // A room bid takes the lot away from every device, so no paddle holds it.
     leaderPaddle: (S && S.lbdr === 'ROOM') ? null : ((S && S.lpaddle) || null),
     leaderName: (S && S.lname) || '',
