@@ -190,6 +190,8 @@ let myName   = '';
 let last     = null;   // last state pushed by the clerk
 let lastHi   = -1;     // to animate only on a real change
 let pressedAt = 0;     // debounce double-taps
+let lastNudge = null;  // "Bid quicker!" counter from the clerk (null until first state)
+let hovering = false;  // finger on the bid button — relayed to the clerk's Hovering count
 
 const $ = id => document.getElementById(id);
 
@@ -202,6 +204,20 @@ const $ = id => document.getElementById(id);
   ($('code').value ? $('name') : $('code')).focus();
   $('code').addEventListener('keydown', e => { if(e.key === 'Enter') $('name').focus(); });
   $('name').addEventListener('keydown', e => { if(e.key === 'Enter') doJoin(); });
+
+  // Hover signal — the clerk's screen shows how many bidders have a finger on
+  // the button, the same "Hovering" count the real operator software gives the
+  // rostrum. Sent only on change, and only while joined.
+  const btn = $('bidBtn');
+  const setHover = h => {
+    if(h === hovering) return;
+    hovering = h;
+    if(socket && socket.connected && myCode) socket.emit('trainer:hover', { code: myCode, hovering: h });
+  };
+  btn.addEventListener('pointerdown',  () => { if(!btn.disabled) setHover(true); });
+  btn.addEventListener('pointerenter', () => { if(!btn.disabled) setHover(true); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
+    btn.addEventListener(ev, () => setHover(false)));
 })();
 
 /* ─────────────────────────────────────────
@@ -227,6 +243,19 @@ function doJoin(){
     // through half a lot comes back correct.
     socket.emit('trainer:join', { code, name }, res => {
       if(!res || !res.ok){
+        // A rejoin after reconnect can fail because the room died while we were
+        // away — the sale view is already up, so say the sale ended rather than
+        // dumping the error on the hidden join screen.
+        if($('sale').classList.contains('on')){
+          setStatus('Practice sale ended while you were away', 'hold');
+          $('bidBtn').disabled = true;
+          $('bidBtn').firstChild.nodeValue = 'Sale ended';
+          $('bidBtn').querySelector('small').textContent = 'Ask the clerk for a new room code';
+          setConn(false);
+          socket.disconnect();
+          socket = null;
+          return;
+        }
         setConn(false);
         $('joinBtn').disabled = false;
         $('joinBtn').textContent = 'Join the sale';
@@ -327,11 +356,21 @@ function render(state){
   else if(s.leaderName) leader.textContent = `With ${s.leaderName}`;
   else                 leader.textContent = 'With another bidder';
 
+  // "Bid quicker!" nudge from the clerk — the counter bumps each time it's sent.
+  if(typeof s.nudge === 'number'){
+    if(lastNudge !== null && s.nudge > lastNudge && s.status === 'open' && !s.hold){
+      hint('⚡ The auctioneer asks: bid quicker!', false);
+    }
+    lastNudge = s.nudge;
+  }
+
   // Status line — most urgent thing first
   if(s.status === 'sold'){
     setStatus(mine ? `🔨 SOLD to you at £${fmt(hi)}` : `🔨 Sold at £${fmt(hi)}`, mine ? 'good' : 'hold');
   } else if(s.status === 'passed'){
     setStatus('Lot passed — no sale', 'hold');
+  } else if(s.status === 'withdrawn'){
+    setStatus('Lot withdrawn', 'hold');
   } else if(s.status === 'finished'){
     setStatus('🏆 Auction complete', 'good');
   } else if(s.hold){
@@ -362,7 +401,7 @@ function paintButton(s){
   if(!s || !s.lot){
     btn.firstChild.nodeValue = 'Waiting… ';
     sub.textContent = 'The clerk has not opened a lot yet';
-  } else if(s.status === 'sold' || s.status === 'passed' || s.status === 'finished'){
+  } else if(s.status === 'sold' || s.status === 'passed' || s.status === 'withdrawn' || s.status === 'finished'){
     btn.firstChild.nodeValue = 'Lot closed ';
     sub.textContent = 'Wait for the clerk to move on';
   } else if(s.hold){

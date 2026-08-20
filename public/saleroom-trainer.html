@@ -611,6 +611,11 @@ body {
       <p>Run a full auction where the online bids come from real people. You get a room code and a link to open on phones or a second machine — every bid pressed there lands on this screen as an incoming online bid. Run the built-in lots, or load a real sale from the Hub so the practice matches what you're testing. Nothing leaves the trainer.</p>
       <span class="diff" style="background:#f39c12;color:#111">Two or More People</span>
     </div>
+    <div class="sc-card" onclick="location.href='vectis-clerk-trainer.html'" style="grid-column:1/-1;border-color:#8b8ef5">
+      <h3 style="color:#8b8ef5;font-size:2.2vmin">🔨 Vectis Clerk Trainer — Real Software Skin</h3>
+      <p>Clerk a practice sale on a faithful copy of the live operator screen — asking bids, increments, Room / Telephone / Invaluable / Saleroom, auto bids, Fair Warning, then Hammer and Next Lot. Generates the same phone link, so colleagues' bids arrive as Vectis Live bids. Built-in lots or a real sale from the Hub.</p>
+      <span class="diff" style="background:#8b8ef5;color:#111">Real Software</span>
+    </div>
   </div>
   <div class="overlay-footer">
     <button class="eg-btn" onclick="document.getElementById('imgModal').classList.add('open')">🖼 Example Images — Real Software</button>
@@ -1459,8 +1464,13 @@ function onRemoteBid({ bidderId, paddle, name, amount } = {}){
 
   if(S.testHold){ reply(false, 'The clerk has paused bidding'); return; }
   if(S.testFinished || S.lotOutcome){ reply(false, 'That lot is already closed'); pushState(); return; }
-  if(amount <= (S.hi || 0)){
-    reply(false, `Too late — the bid is already £${(S.hi || 0).toLocaleString()}`);
+  // The phone bids exactly the "next" amount it was last shown, so anything
+  // else is a stale press — most importantly one racing NEXT, which would
+  // otherwise open the new lot at the previous lot's price.
+  if(amount !== nextBid(S.hi || 0)){
+    reply(false, amount <= (S.hi || 0)
+      ? `Too late — the bid is already £${(S.hi || 0).toLocaleString()}`
+      : `The price has moved — it is now £${nextBid(S.hi || 0).toLocaleString()}`);
     pushState();
     return;
   }
