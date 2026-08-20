@@ -20,6 +20,8 @@ type CheckResult = {
 
 // Order matters — this is the order the summary chips appear in, worst first.
 const ISSUES: { key: ToteCheckIssue; label: string; hint: string; tone: "bad" | "warn" | "info" }[] = [
+  { key: "tote_receipt_mismatch", label: "Tote belongs to another receipt", tone: "warn",
+    hint: "The lot's receipt is confirmed by BC's own unique ID, so the RECEIPT is right and the TOTE is the odd one out. Either this lot was catalogued from the wrong tote, or the item moved after it was toted. Do NOT correct the receipt from the tote - that would put the lot out of step with BC." },
   { key: "receipt_mismatch",   label: "Receipt doesn't match the tote", tone: "bad",
     hint: "The tote belongs to a different receipt in BC. Either the wrong receipt was typed, or the item is in the wrong tote." },
   { key: "vendor_mismatch",    label: "Vendor doesn't match the tote",  tone: "bad",
@@ -103,7 +105,7 @@ export default function ToteCheckTab({
   // Only mismatches and blanks with a known tote can be corrected — an unknown
   // tote has nothing to correct against.
   const fixable = (result?.rows ?? []).filter(r =>
-    r.issues.some(i => i === "receipt_mismatch" || i === "vendor_mismatch" || i === "receipt_missing" || i === "vendor_missing"),
+    r.issues.some(i => i === "receipt_mismatch" || i === "tote_receipt_mismatch" || i === "vendor_mismatch" || i === "receipt_missing" || i === "vendor_missing"),
   ).length
 
   if (loading && !result) return <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">Checking lots against the BC tote data…</p>
@@ -220,7 +222,10 @@ export default function ToteCheckTab({
           <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] text-left">
-                {["Barcode", "Unique ID", "Tote", "What's wrong", "BC says", "On the lot", "Added by"].map(h => (
+                {/* "BC says" was untrue: this column is what the TOTE is filed under in BC, not BC's
+                    record for the lot. On F109 it read "BC says R006447" while BC's Receipt Lines had
+                    those lots on R006956 - and someone acting on it would have corrupted them. */}
+                {["Barcode", "Unique ID", "Tote", "What's wrong", "The tote is on", "On the lot", "Added by"].map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>

@@ -13,6 +13,9 @@ export type ToteCheckIssue =
   | "no_tote"             // nothing to check against
   | "tote_unknown"        // tote isn't in the BC data (typo, or not synced yet)
   | "receipt_mismatch"
+  // Receipt disagrees with the TOTE's receipt, but BC's own unique ID backs the lot.
+  // The tote is the odd one out, not the receipt - see the note in checkLot.
+  | "tote_receipt_mismatch"
   | "receipt_missing"
   | "vendor_mismatch"
   | "vendor_missing"
@@ -60,6 +63,13 @@ export function buildToteMap(totes: BcTote[]): Map<string, BcTote> {
   return new Map(totes.map(t => [norm(t.toteNo), t]))
 }
 
+/** The receipt a unique ID carries as its prefix - R006956-77 gives R006956. */
+function uidReceipt(uid: string | null | undefined): string {
+  const u = (uid ?? "").trim()
+  if (!u) return ""
+  return u.includes("-") ? u.slice(0, u.lastIndexOf("-")) : u
+}
+
 export function checkLot(lot: CheckableLot, toteMap: Map<string, BcTote>): LotToteVerdict {
   const issues: ToteCheckIssue[] = []
   const tote = norm(lot.tote) ? toteMap.get(norm(lot.tote)) : undefined
@@ -70,8 +80,32 @@ export function checkLot(lot: CheckableLot, toteMap: Map<string, BcTote>): LotTo
     issues.push("tote_unknown")
   } else {
     if (norm(tote.receiptNo)) {
-      if (!norm(lot.receipt))                             issues.push("receipt_missing")
-      else if (norm(lot.receipt) !== norm(tote.receiptNo)) issues.push("receipt_mismatch")
+      if (!norm(lot.receipt)) issues.push("receipt_missing")
+      else if (norm(lot.receipt) !== norm(tote.receiptNo)) {
+        // ⚠⚠ WHICH SIDE IS WRONG? tote.receiptNo is BC's view of the TOTE, not of this
+        // LOT, and the two are not the same thing. Measured on F109 (2026-08-20): four lots were
+        // reported as "BC says R006447" while BC's own Receipt Lines had them on R006956-77..80,
+        // agreeing with the Hub. The tote they were catalogued from is filed under a different
+        // receipt, and BC records no tote against those lines at all.
+        //
+        // The unique ID settles it: BC issues it (BC Match imports BC's own value) and it carries
+        // the receipt as a prefix. When that prefix matches the lot's receipt, BC is backing the
+        // lot, so the TOTE is the odd one out.
+        //
+        // ⚠ NOT COSMETIC. receipt_mismatch is what Match BC acts on, and it WRITES the tote's
+        // receipt onto the lot - it would have rewritten those four correct lots to R006447, out
+        // of step with BC and with their own unique IDs. It is also what puts a lot on BC
+        // Corrections, a list telling someone to change a receipt in BC that is already right.
+        //
+        // ⚠ A legacy Hub-minted uid was DERIVED from lot.receipt, so its prefix always matches
+        // and corroborates nothing. Such a lot stops being auto-corrected - chosen deliberately
+        // (Jordan, 2026-08-20): nothing is hidden, it still shows as a tote issue, and not
+        // auto-writing is the safe side of a check that was about to corrupt correct data.
+        const uidBase = uidReceipt(lot.receiptUniqueId)
+        issues.push(uidBase && norm(uidBase) === norm(lot.receipt)
+          ? "tote_receipt_mismatch"
+          : "receipt_mismatch")
+      }
     }
     if (norm(tote.vendorNo)) {
       if (!norm(lot.vendor))                            issues.push("vendor_missing")
@@ -84,8 +118,7 @@ export function checkLot(lot: CheckableLot, toteMap: Map<string, BcTote>): LotTo
   // the tote itself checks out.
   const uid = (lot.receiptUniqueId ?? "").trim()
   if (uid && norm(lot.receipt)) {
-    const base = uid.includes("-") ? uid.slice(0, uid.lastIndexOf("-")) : uid
-    if (norm(base) !== norm(lot.receipt)) issues.push("unique_id_mismatch")
+    if (norm(uidReceipt(uid)) !== norm(lot.receipt)) issues.push("unique_id_mismatch")
   }
 
   return { issues, tote }
