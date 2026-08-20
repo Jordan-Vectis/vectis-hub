@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"53aa426b642a45fe130d85131dfc005a765199ec","author":"Jordan Orange","date":"2026-08-20T15:40:27+01:00","subject":"Memory: Macro Calibrator — middle-click capture (laptop F-row keys), OnError log, E2E verified"},
   {"sha":"b6676f06de326ace47a05e9f21e303b36f2fc510","author":"Jordan Orange","date":"2026-08-20T15:14:53+01:00","subject":"Memory: Macro Calibrator v2 (real hotkeys + banner; per-occurrence points for Description Copier placeholders) + changelog seed refresh"},
   {"sha":"7028661625cc97b49288972f381a5359123537b6","author":"Jordan Orange","date":"2026-08-20T14:35:10+01:00","subject":"Memory: Macro Calibrator (point-and-press coordinate updater for the AHK macros) + changelog seed refresh"},
   {"sha":"5a664124b1a53974119954af4542b4ed918f62c1","author":"Jack Collings","date":"2026-08-20T13:17:39+01:00","subject":"Refresh changelog seed"},
