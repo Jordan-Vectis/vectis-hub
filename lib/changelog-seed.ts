@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"582b3668897427dfdbd932654d87621dfe6978d8","author":"Jack Collings","date":"2026-08-20T13:02:56+01:00","subject":"Test Mode: open every lot at £0"},
+  {"sha":"4aecd90e6ab592808ab837eaacf1082b25182d26","author":"Jordan Orange","date":"2026-08-20T12:58:06+01:00","subject":"Record the day's findings in the shared memory page"},
   {"sha":"2389542eaac75292ed1d582fbd575ef6e5723773","author":"Jack Collings","date":"2026-08-20T12:49:46+01:00","subject":"Refresh changelog seed"},
   {"sha":"3d42f7964a134805eb83a58f317fa54ee64dc481","author":"Jack Collings","date":"2026-08-20T12:49:25+01:00","subject":"Saleroom Trainer: run a practice sale colleagues bid into from their own devices"},
   {"sha":"a9b10507e08081c73c3f05bac3e38bc3085cf5b9","author":"Jordan Orange","date":"2026-08-20T12:11:31+01:00","subject":"Make Suggest conditions report its failures instead of doing nothing"},
