@@ -1018,6 +1018,10 @@ Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` ke
 
 ⚠ Jordan declined the watchdog/PC-companion idea ("doesn't really do what I need") — don't re-pitch monitoring unprompted.
 
+## 🎯 Macro Calibrator — new-machine coordinate setup (2026-08-20)
+
+"Macro Calibrator.ahk" (Jordan's Downloads, not in git) removes the pain of hand-editing coordinates on a new machine. Run it → pick ANY of the coordinate macros (BC import, tote, Description Copier…) → it parses every fixed screen position in the file — both styles: named pairs (\`RECEIPT_X := 603\`) and inline \`MouseMove/Click x, y\`, with labels read from the macro's own comments — then walks through them one at a time: hover the mouse over the real button and press **F8** to capture (F10 keeps the old position, F7 goes back, Esc stops without changing anything). After a review of old → new, it rewrites the macro in place, keeping a dated backup next to it, and syntax-checks the result with AutoHotkey itself — a failed check restores the backup automatically. Warns if a macro never sets CoordMode Screen. Verified against v5 (5 named pairs) and the tote macro (6 inline pairs, negative second-monitor coordinates included). ⚠ Coordinate changes go through the calibrator — never hand-edited numbers in chat.
+
 ## ⚠ Layout — two scrollbars + white space (root-caused in the browser 2026-08-10)
 
 Jordan: "a bug in the formatting here with the multiple sliders and white space" — a second window scrollbar plus a near-white band under the app, once **both morning-after panels are expanded**.
