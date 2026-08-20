@@ -1093,6 +1093,8 @@ purpose: Claude prompt caching in lib/ai-provider.ts (cachePrefix) and the "esti
 last_updated: 2026-08-04
 ---
 
+⚠⚠ 2026-08-20 - THE REAL LIMIT IS 4 REQUESTS PER MINUTE, PER MODEL. Every model in the Model Tester returned 429 at once, including Lyria which cataloguing never calls - when EVERY model refuses on one GEMINI_API_KEY the limit is at PROJECT level, not per model and not caused by how fast a tool is calling. Google Cloud > Quotas, project auction-ai: "Request limit per model per minute for a project in the paid tier 1" = 4 for gemini-omni-flash (20 for gemini-3-pro-image). FOUR A MINUTE IS FIFTEEN SECONDS BETWEEN CALLS - which is why the batch route's documented 12-second wait exists; it was never arbitrary caution, and anything faster refuses whatever model is chosen. ⚠ CONCURRENT TOOLS COMPETE: an overnight pipeline slice eats the same 4/min a Review-tab bulk fix is trying to use. ⚠ THESE QUOTAS ARE ADJUSTABLE - the real fix is a quota increase (Quotas > Increase Requests, or the quota adjuster under Configurations). Pacing only makes the tools survive the limit; it cannot make them fast. ⚠ DO NOT DIAGNOSE FROM THE APP: "Current usage > 90%: 0" can read reassuringly while requests are still refused - the per-minute counters are bursty and the console lags. Read the quota VALUE for the model in use, not the usage percentage, and filter the ~44,000 rows by model name.
+
 # AI cost — prompt caching + the run price estimator (built 2026-08-04)
 
 Prompted by an Anthropic Console showing **$4.73 spent for ~10 test messages**. Two things came out of it.
@@ -1677,6 +1679,8 @@ name: Dolls & Bears descriptions — tuning
 purpose: The recurring model errors, the deterministic clean-up, the "Dolls & Bears check" upgrade mode, and why bold was dropped. Read before touching the Dolls/Bears instruction or batch/upgrade cleanup.
 last_updated: 2026-07-22
 ---
+
+⚠⚠ 2026-08-20 - THE CODE GUARD ACCUSED THE AI OF INVENTING A CODE THAT WAS IN THE KEY POINTS. On F109409 the banner read "Double Check introduced product code Set 65705, which does not appear in the key points" while key point 2 read "wearing Skidoo Set 65705" - and Double Check's whole rewrite was discarded on the strength of it. CAUSE: CODE_RE only recognises a code when 2-4 LETTERS BUTT AGAINST THE DIGITS. Measured across real spellings: "Set 65705", "Set65705", "set 65705" are seen; "Skidoo 65705", "Outfit 65705", "Set #65705", "Set No. 65705", "Set: 65705" and "Daisy, 65705" are NOT - and that last is how the code appeared in that lot's own description. So the guard was blind to the code where the human wrote it, saw it in the stage's tidier version, and called it invented. FIX - AN ASYMMETRY, and the reasoning matters more than the code: STRICT ABOUT ACCUSING (a bare number is still never a code, since a size, year or edition looks like one - CODE_RE unchanged) but GENEROUS ABOUT EXONERATING (digitRuns() collects every 4-9 digit run from the key points and original description; if a new code's digits were already in front of the stage, it did not invent them). Getting it wrong in the ACCUSING direction discards real work and sends a cataloguer to re-check an item for nothing; the other way merely lets an edit through that a human is reviewing anyway. ⚠ NEVER tidy this into one symmetric rule. Regression-tested across six spellings, and the F109109 substitution CB252575 to CB104670 is still caught.
 
 # Dolls & Bears descriptions — tuning (2026-07-21)
 
