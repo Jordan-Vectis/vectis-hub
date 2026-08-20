@@ -42,6 +42,12 @@ export type BcTote = {
 export type LotToteVerdict = {
   issues:  ToteCheckIssue[]
   tote:    BcTote | undefined
+  /**
+   * EVERY copy of that tote number in BC. ⚠ More than one means the tote number is on
+   * several receipts, so "correct the lot from the tote" has no single answer - anything
+   * that WRITES must refuse rather than pick one. See buildToteMap.
+   */
+  copies:  BcTote[]
 }
 
 /** Tote / receipt / vendor numbers compare trimmed and case-insensitively —
@@ -59,8 +65,26 @@ export function toteLookupVariants(lots: { tote: string | null }[]): string[] {
   return [...out]
 }
 
-export function buildToteMap(totes: BcTote[]): Map<string, BcTote> {
-  return new Map(totes.map(t => [norm(t.toteNo), t]))
+/**
+ * ⚠⚠ A TOTE NUMBER IS NOT UNIQUE. Measured on F109 (2026-08-20): C L Parsons had the same
+ * tote number on TWO receipts - Jordan, "the customer has duplicated receipts with the same
+ * tote number on both, so there may be different receipt numbers even though its the same
+ * customer". This used to be `new Map(totes.map(...))`, where a duplicate key silently
+ * OVERWRITES: one receipt vanished, and every lot belonging to the losing one was reported
+ * as mismatched. Which receipt won depended on row order, so the same data could read
+ * differently between syncs.
+ *
+ * Keep them ALL. A lot is fine if its receipt matches ANY of them.
+ */
+export function buildToteMap(totes: BcTote[]): Map<string, BcTote[]> {
+  const map = new Map<string, BcTote[]>()
+  for (const t of totes) {
+    const k = norm(t.toteNo)
+    const list = map.get(k)
+    if (list) list.push(t)
+    else map.set(k, [t])
+  }
+  return map
 }
 
 /** The receipt a unique ID carries as its prefix - R006956-77 gives R006956. */
@@ -70,18 +94,25 @@ function uidReceipt(uid: string | null | undefined): string {
   return u.includes("-") ? u.slice(0, u.lastIndexOf("-")) : u
 }
 
-export function checkLot(lot: CheckableLot, toteMap: Map<string, BcTote>): LotToteVerdict {
+export function checkLot(lot: CheckableLot, toteMap: Map<string, BcTote[]>): LotToteVerdict {
   const issues: ToteCheckIssue[] = []
-  const tote = norm(lot.tote) ? toteMap.get(norm(lot.tote)) : undefined
+  const candidates = norm(lot.tote) ? toteMap.get(norm(lot.tote)) ?? [] : []
+  // Prefer the copy of the tote whose receipt the lot is actually on - with duplicated
+  // receipts sharing a tote number, that is the one this lot came from.
+  const tote = candidates.find(t => norm(t.receiptNo) && norm(t.receiptNo) === norm(lot.receipt))
+    ?? candidates[0]
 
   if (!norm(lot.tote)) {
     issues.push("no_tote")
   } else if (!tote) {
     issues.push("tote_unknown")
   } else {
-    if (norm(tote.receiptNo)) {
+    const receipts = candidates.map(t => norm(t.receiptNo)).filter(Boolean)
+    const vendors  = candidates.map(t => norm(t.vendorNo)).filter(Boolean)
+    if (receipts.length) {
       if (!norm(lot.receipt)) issues.push("receipt_missing")
-      else if (norm(lot.receipt) !== norm(tote.receiptNo)) {
+      // ⚠ ANY of them. Same tote number on two receipts is real, not corruption.
+      else if (!receipts.includes(norm(lot.receipt))) {
         // ⚠⚠ WHICH SIDE IS WRONG? tote.receiptNo is BC's view of the TOTE, not of this
         // LOT, and the two are not the same thing. Measured on F109 (2026-08-20): four lots were
         // reported as "BC says R006447" while BC's own Receipt Lines had them on R006956-77..80,
@@ -107,9 +138,9 @@ export function checkLot(lot: CheckableLot, toteMap: Map<string, BcTote>): LotTo
           : "receipt_mismatch")
       }
     }
-    if (norm(tote.vendorNo)) {
-      if (!norm(lot.vendor))                            issues.push("vendor_missing")
-      else if (norm(lot.vendor) !== norm(tote.vendorNo)) issues.push("vendor_mismatch")
+    if (vendors.length) {
+      if (!norm(lot.vendor)) issues.push("vendor_missing")
+      else if (!vendors.includes(norm(lot.vendor))) issues.push("vendor_mismatch")
     }
   }
 
@@ -121,5 +152,5 @@ export function checkLot(lot: CheckableLot, toteMap: Map<string, BcTote>): LotTo
     if (norm(uidReceipt(uid)) !== norm(lot.receipt)) issues.push("unique_id_mismatch")
   }
 
-  return { issues, tote }
+  return { issues, tote, copies: candidates }
 }

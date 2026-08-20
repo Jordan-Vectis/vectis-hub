@@ -556,16 +556,21 @@ export async function autocorrectLotsFromTotes(auctionId: string, apply: boolean
     const changes: AutocorrectChange[] = []
 
     for (const lot of lots) {
-      const { issues, tote } = checkLot(lot, toteMap)
+      const { issues, tote, copies } = checkLot(lot, toteMap)
       // Nothing to correct against — a missing or unknown tote is reported, not
       // guessed at.
       if (!tote) { if (issues.length) skipped++; continue }
 
       const data: Record<string, string> = {}
-      if (issues.includes("receipt_mismatch") || issues.includes("receipt_missing")) {
+      // ⚠⚠ NEVER guess when the tote number sits on more than one receipt. A customer can
+      // have duplicated receipts sharing a tote (F109, 2026-08-20), and then "the receipt this
+      // tote belongs to" has no single answer - writing one would be a coin flip that puts the
+      // lot out of step with BC. Leave it for a human; the check still reports it.
+      const ambiguous = copies.length > 1
+      if (!ambiguous && (issues.includes("receipt_mismatch") || issues.includes("receipt_missing"))) {
         if (tote.receiptNo) data.receipt = tote.receiptNo
       }
-      if (issues.includes("vendor_mismatch") || issues.includes("vendor_missing")) {
+      if (!ambiguous && (issues.includes("vendor_mismatch") || issues.includes("vendor_missing"))) {
         if (tote.vendorNo) data.vendor = tote.vendorNo
       }
       if (Object.keys(data).length === 0) continue
