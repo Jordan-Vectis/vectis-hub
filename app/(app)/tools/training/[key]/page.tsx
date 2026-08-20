@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { hasAppAccess, type AppKey } from "@/lib/apps"
-import { ensureTrainingSeed } from "@/lib/actions/training"
+import { ensureTrainingSeed, hasSignedTraining } from "@/lib/actions/training"
 import {
   loadTrainingModule, loadTrainingSlides, loadTrainingExercises, loadMyTrainingProgress,
 } from "@/lib/training-data"
@@ -23,7 +23,7 @@ export default async function TrainingModulePage({ params }: { params: Promise<{
 
   const dbUser = await prisma.user.findUnique({
     where:  { id: session.user.id },
-    select: { role: true, allowedApps: true },
+    select: { role: true, allowedApps: true, name: true, email: true },
   })
   const isAdmin = dbUser?.role === "ADMIN"
 
@@ -34,10 +34,11 @@ export default async function TrainingModulePage({ params }: { params: Promise<{
   // A hidden course is hidden from the people being trained, not from the person writing it.
   if (!m.active && !isAdmin) notFound()
 
-  const [slides, exercises, progress] = await Promise.all([
+  const [slides, exercises, progress, alreadySigned] = await Promise.all([
     loadTrainingSlides(m.id, { activeOnly: !isAdmin }),
     loadTrainingExercises(m.id, { activeOnly: !isAdmin }),
     loadMyTrainingProgress(session.user.id),
+    hasSignedTraining(session.user.id, m.id),
   ])
 
   const mine = progress.find(p => p.moduleId === m.id)
@@ -55,6 +56,8 @@ export default async function TrainingModulePage({ params }: { params: Promise<{
       deckRead={!!mine?.deckDoneAt}
       passedIds={mine?.passedIds ?? []}
       completed={!!mine?.completedAt}
+      alreadySigned={alreadySigned}
+      userName={dbUser?.name || dbUser?.email || "Unknown"}
     />
   )
 }

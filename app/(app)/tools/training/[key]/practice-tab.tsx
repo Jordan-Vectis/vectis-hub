@@ -5,6 +5,7 @@ import Link from "next/link"
 import { accent, CARD, INPUT } from "@/lib/training-ui"
 import { panelLabel } from "@/lib/training"
 import { embedFor } from "../panel-embeds"
+import TrainingSignOff from "@/components/training-sign-off"
 import type { TrainingExerciseRow } from "@/lib/training-data"
 
 // "Now you do it." The task on the left, the REAL panel on the right.
@@ -36,18 +37,28 @@ type Marked = {
 }
 
 export default function PracticeTab({
-  moduleKey, accentName, exercises, panelHref, canOpenPanel, passedIds,
+  moduleId, moduleKey, moduleTitle, accentName, exercises, panelHref, canOpenPanel,
+  passedIds, alreadySigned, userName,
 }: {
+  moduleId: string
   moduleKey: string
+  moduleTitle: string
   accentName: string
   exercises: TrainingExerciseRow[]
   panelHref: string | null
   canOpenPanel: boolean
   passedIds: string[]
+  alreadySigned: boolean
+  userName: string
 }) {
   const a = accent(accentName)
   const [at, setAt] = useState(0)
   const [passed, setPassed] = useState<Set<string>>(new Set(passedIds))
+  const [signed, setSigned] = useState(alreadySigned)
+  // ⚠ Separate from `signed`. Somebody who closes the popup with "Not now" should not have it
+  // reappear on the next answer of the same sitting — it offers itself again next visit.
+  const [signOffOpen, setSignOffOpen] = useState(false)
+  const [signOffDismissed, setDismissed] = useState(false)
 
   /**
    * Jump to a random task — the "come back to it next week" button.
@@ -123,6 +134,28 @@ export default function PracticeTab({
         </span>
       </div>
 
+      {signed && (
+        <div className="rounded-xl border-2 border-green-500/50 bg-green-50 dark:bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-800 dark:text-green-300">
+          ✓ You have signed to say you have been trained on this. Your signature is on file.
+        </div>
+      )}
+
+      {/* Finished everything but not signed — the popup only fires on the answer that completes
+          the course, so somebody returning later needs a way back to it. */}
+      {!signed && exercises.length > 0 && passed.size >= exercises.length && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-green-500/50 bg-green-50 dark:bg-green-500/10 px-4 py-3">
+          <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+            🎓 Every task passed — sign to record that you have been trained on this.
+          </p>
+          <button
+            onClick={() => setSignOffOpen(true)}
+            className="ml-auto px-5 py-2.5 min-h-[44px] rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-bold"
+          >
+            Sign it off
+          </button>
+        </div>
+      )}
+
       <TaskPane
         key={ex.id}
         exerciseId={ex.id}
@@ -132,14 +165,27 @@ export default function PracticeTab({
         canOpenPanel={canOpenPanel}
         alreadyPassed={passed.has(ex.id)}
         onPassed={() => setPassed(p => new Set(p).add(ex.id))}
+        onCompleted={() => { if (!signed && !signOffDismissed) setSignOffOpen(true) }}
         onNext={at < exercises.length - 1 ? () => setAt(at + 1) : null}
       />
+
+      {signOffOpen && (
+        <TrainingSignOff
+          moduleId={moduleId}
+          moduleTitle={moduleTitle}
+          tasksPassed={passed.size}
+          tasksTotal={exercises.length}
+          userName={userName}
+          onClose={() => { setSignOffOpen(false); setDismissed(true) }}
+          onSigned={() => { setSignOffOpen(false); setSigned(true) }}
+        />
+      )}
     </div>
   )
 }
 
 function TaskPane({
-  exerciseId, moduleKey, accentBtn, panelHref, canOpenPanel, alreadyPassed, onPassed, onNext,
+  exerciseId, moduleKey, accentBtn, panelHref, canOpenPanel, alreadyPassed, onPassed, onCompleted, onNext,
 }: {
   exerciseId: string
   moduleKey: string
@@ -148,6 +194,7 @@ function TaskPane({
   canOpenPanel: boolean
   alreadyPassed: boolean
   onPassed: () => void
+  onCompleted: () => void
   onNext: (() => void) | null
 }) {
   const [task, setTask] = useState<Task | null>(null)
@@ -185,6 +232,7 @@ function TaskPane({
       if (!res.ok) throw new Error(json.error ?? res.statusText)
       setResult(json)
       if (json.correct) onPassed()
+      if (json.correct && json.progress?.completed) onCompleted()
     } catch (e: any) {
       setLoadError(e.message)
     } finally { setMarking(false) }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
-import { isSlideLayout, isSlideGraphic, isExerciseKind } from "@/lib/training"
+import { isSlideLayout, isSlideGraphic, isExerciseKind, trainingDeclaration } from "@/lib/training"
 import { MODULE_SEEDS, BUILT_IN_COURSES, builtInCourse } from "@/lib/training-seed"
 
 // IT & Admin → Training.
@@ -377,4 +377,77 @@ export async function markDeckRead(moduleId: string, slidesSeen: number): Promis
     })
     return { ok: true }
   } catch (e) { return fail(e) }
+}
+
+// ─── Sign-off ───────────────────────────────────────────────────────────────
+
+/**
+ * Sign a completed course.
+ *
+ * ⚠ Only accepted once EVERY active task has been passed. The popup only appears at that point,
+ * but the popup is a client and a client proves nothing — the count is re-checked here.
+ */
+export async function signTrainingModule(
+  moduleId: string, signature: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const me = await requireSignedIn()
+
+    if (!signature.startsWith("data:image/png;base64,") || signature.length < 200) {
+      return { ok: false, error: "Please draw your signature before submitting" }
+    }
+    // A drawn signature is a few tens of KB. Anything far larger is not one.
+    if (signature.length > 400_000) return { ok: false, error: "That signature is too large to store" }
+
+    const mod = await prisma.trainingModule.findUnique({
+      where:  { id: moduleId },
+      select: { id: true, key: true, title: true, _count: { select: { slides: true } } },
+    })
+    if (!mod) return { ok: false, error: "That course no longer exists" }
+
+    const [tasksTotal, progress, dbUser] = await Promise.all([
+      prisma.trainingExercise.count({ where: { moduleId, active: true } }),
+      prisma.trainingProgress.findUnique({
+        where:  { userId_moduleId: { userId: me.id, moduleId } },
+        select: { passedIds: true },
+      }),
+      prisma.user.findUnique({ where: { id: me.id }, select: { email: true } }),
+    ])
+
+    const active = await prisma.trainingExercise.findMany({
+      where: { moduleId, active: true }, select: { id: true },
+    })
+    const passed = new Set(progress?.passedIds ?? [])
+    const tasksPassed = active.filter(e => passed.has(e.id)).length
+    if (tasksTotal === 0 || tasksPassed < tasksTotal) {
+      return { ok: false, error: "Finish every practice task before signing — that is what you are signing for." }
+    }
+
+    // ⚠ Signing twice is allowed and is NOT an error: courses get updated and people are
+    // re-trained, so the honest record is every signature with its date, not one that gets
+    // quietly replaced. The admin list shows them all.
+    await prisma.trainingSignature.create({
+      data: {
+        userId: me.id, userName: me.name, userEmail: dbUser?.email ?? null,
+        moduleId: mod.id, moduleKey: mod.key, moduleTitle: mod.title,
+        slidesTotal: mod._count.slides, tasksTotal, tasksPassed,
+        declaration: trainingDeclaration(mod.title),
+        signature,
+      },
+    })
+
+    refresh(mod.key)
+    revalidatePath("/admin/training-records")
+    return { ok: true }
+  } catch (e) {
+    const r = fail(e)
+    return { ok: false, error: r.ok ? undefined : r.error }
+  }
+}
+
+/** Has this person already signed this course? Drives whether the popup appears at all. */
+export async function hasSignedTraining(userId: string, moduleId: string): Promise<boolean> {
+  try {
+    return (await prisma.trainingSignature.count({ where: { userId, moduleId } })) > 0
+  } catch { return false }
 }

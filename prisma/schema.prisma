@@ -2556,4 +2556,34 @@ model JordanDocFile {
   createdAt DateTime @default(now())
 
   @@index([folderId])
+
+// ─── Training → sign-off ─────────────────────────────────────────────────────
+// Signed at the end of a course, once every practice task has been passed.
+//
+// ⚠ DELIBERATELY NO FOREIGN KEY to TrainingModule, and the course title, the declaration wording
+// and the counts are all COPIED onto the row. A signed record must outlive the thing it refers
+// to: courses are editable and deletable, and "Jack confirmed he was trained" is worth nothing
+// if what he was trained ON can be reworded afterwards. Same reasoning as InductionSignature.
+model TrainingSignature {
+  id          String  @id @default(cuid())
+  userId      String
+  userName    String
+  userEmail   String?
+
+  moduleId    String
+  moduleKey   String
+  moduleTitle String
+
+  // What they actually completed, at the moment they signed.
+  slidesTotal Int     @default(0)
+  tasksTotal  Int     @default(0)
+  tasksPassed Int     @default(0)
+
+  declaration String  @db.Text // the exact wording shown above the signature
+  signature   String  @db.Text // drawn signature, PNG data URL
+  signedAt    DateTime @default(now())
+
+  @@index([moduleKey])
+  @@index([userId])
+  @@index([signedAt])
 }

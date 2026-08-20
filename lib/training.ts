@@ -194,3 +194,15 @@ export function codeMatches(answer: string, correct: string): boolean {
   if (!a || !c) return false
   return a === c || a.includes(c)
 }
+
+/**
+ * The wording somebody puts their name to when they sign off a course.
+ *
+ * ⚠ Lives here, not in the client and not in the action file — a "use server" module may only
+ * export async functions. The SERVER builds this and snapshots it onto the signed row, so a
+ * browser cannot create a record against wording of its own, and rewording it later cannot
+ * change what a past signature appears to say.
+ */
+export function trainingDeclaration(moduleTitle: string): string {
+  return `I confirm that I have completed the ${moduleTitle} training in the Vectis Hub — I have read the material, worked through the practice tasks, and I understand how to use this part of the system. I know who to ask if I am unsure.`
+}

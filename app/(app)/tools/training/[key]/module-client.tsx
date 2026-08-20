@@ -18,6 +18,7 @@ type Tab = "learn" | "practice" | "edit"
 
 export default function ModuleClient({
   module: m, slides, exercises, canOpenPanel, isAdmin, deckRead, passedIds, completed,
+  alreadySigned, userName,
 }: {
   module: TrainingModuleRow
   slides: TrainingSlideRow[]
@@ -27,6 +28,8 @@ export default function ModuleClient({
   deckRead: boolean
   passedIds: string[]
   completed: boolean
+  alreadySigned: boolean
+  userName: string
 }) {
   const a = accent(m.accent)
   const [tab, setTab] = useState<Tab>(slides.length === 0 && exercises.length > 0 ? "practice" : "learn")
@@ -103,12 +106,16 @@ export default function ModuleClient({
 
       {tab === "practice" && (
         <PracticeTab
+          moduleId={m.id}
           moduleKey={m.key}
+          moduleTitle={m.title}
           accentName={m.accent}
           exercises={exercises}
           panelHref={m.href}
           canOpenPanel={canOpenPanel}
           passedIds={passedIds}
+          alreadySigned={alreadySigned}
+          userName={userName}
         />
       )}
 

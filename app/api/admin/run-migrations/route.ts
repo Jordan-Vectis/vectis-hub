@@ -1726,6 +1726,27 @@ const MIGRATIONS = [
   `ALTER TABLE "SavedAiFlag" ADD COLUMN IF NOT EXISTS "kpFixedBy" TEXT`,
   `ALTER TABLE "SavedAiFlag" ADD COLUMN IF NOT EXISTS "kpFixedAt" TIMESTAMP(3)`,
   `ALTER TABLE "SavedAiFlag" ADD COLUMN IF NOT EXISTS "kpMode" TEXT NOT NULL DEFAULT 'strict'`,
+  // ── Training → sign-off ──
+  // No foreign keys on purpose: a signed record must outlive the course it refers to.
+  `CREATE TABLE IF NOT EXISTS "TrainingSignature" (
+     "id"          TEXT NOT NULL,
+     "userId"      TEXT NOT NULL,
+     "userName"    TEXT NOT NULL,
+     "userEmail"   TEXT,
+     "moduleId"    TEXT NOT NULL,
+     "moduleKey"   TEXT NOT NULL,
+     "moduleTitle" TEXT NOT NULL,
+     "slidesTotal" INTEGER NOT NULL DEFAULT 0,
+     "tasksTotal"  INTEGER NOT NULL DEFAULT 0,
+     "tasksPassed" INTEGER NOT NULL DEFAULT 0,
+     "declaration" TEXT NOT NULL,
+     "signature"   TEXT NOT NULL,
+     "signedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     CONSTRAINT "TrainingSignature_pkey" PRIMARY KEY ("id")
+   )`,
+  `CREATE INDEX IF NOT EXISTS "TrainingSignature_moduleKey_idx" ON "TrainingSignature"("moduleKey")`,
+  `CREATE INDEX IF NOT EXISTS "TrainingSignature_userId_idx" ON "TrainingSignature"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "TrainingSignature_signedAt_idx" ON "TrainingSignature"("signedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
