@@ -53,7 +53,6 @@ const TOTE_LABEL: Record<ToteCheckIssue, string> = {
   no_tote:            "No tote on the lot",
   tote_unknown:       "Tote not found in BC",
   receipt_mismatch:   "Receipt ≠ BC",
-  tote_receipt_mismatch: "Tote is on another receipt",
   receipt_missing:    "No receipt",
   vendor_mismatch:    "Vendor ≠ BC",
   vendor_missing:     "No vendor",

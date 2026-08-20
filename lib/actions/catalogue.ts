@@ -10,7 +10,7 @@ import {
 } from "@/lib/lot-log"
 import { headers } from "next/headers"
 import { evaluateIdleGate, logIdleDecision, clockLooksTampered } from "@/lib/idle-gate"
-import { buildToteMap, checkLot, toteLookupVariants } from "@/lib/tote-check"
+import { buildToteMap, checkLot, toteLookupVariants, duplicateToteNumbers, norm } from "@/lib/tote-check"
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 import { getDepartmentAccessForSession, canSeeAuction } from "@/lib/departments"
 import { shouldKeepFlag } from "@/lib/measurement-check"
@@ -550,27 +550,29 @@ export async function autocorrectLotsFromTotes(auctionId: string, apply: boolean
         })
       : []
     const toteMap = buildToteMap(totes)
+    // ⚠⚠ Tote numbers booked onto two receipts in BC. The checks still report these lots
+    // exactly as before; what changes is that we will not WRITE a receipt or vendor for them,
+    // because there is no single right answer and the map's winner is decided by row order.
+    // On F109 this would have rewritten four CORRECT lots to the wrong receipt.
+    const ambiguousTotes = duplicateToteNumbers(totes)
 
     const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "tote_autocorrect", batchId: newBatchId() }
     let updated = 0, corrections = 0, skipped = 0
     const changes: AutocorrectChange[] = []
 
     for (const lot of lots) {
-      const { issues, tote, copies } = checkLot(lot, toteMap)
+      const { issues, tote } = checkLot(lot, toteMap)
       // Nothing to correct against — a missing or unknown tote is reported, not
       // guessed at.
       if (!tote) { if (issues.length) skipped++; continue }
 
       const data: Record<string, string> = {}
-      // ⚠⚠ NEVER guess when the tote number sits on more than one receipt. A customer can
-      // have duplicated receipts sharing a tote (F109, 2026-08-20), and then "the receipt this
-      // tote belongs to" has no single answer - writing one would be a coin flip that puts the
-      // lot out of step with BC. Leave it for a human; the check still reports it.
-      const ambiguous = copies.length > 1
-      if (!ambiguous && (issues.includes("receipt_mismatch") || issues.includes("receipt_missing"))) {
+      // Reported, never auto-written - see ambiguousTotes above.
+      if (ambiguousTotes.has(norm(lot.tote))) { skipped++; continue }
+      if (issues.includes("receipt_mismatch") || issues.includes("receipt_missing")) {
         if (tote.receiptNo) data.receipt = tote.receiptNo
       }
-      if (!ambiguous && (issues.includes("vendor_mismatch") || issues.includes("vendor_missing"))) {
+      if (issues.includes("vendor_mismatch") || issues.includes("vendor_missing")) {
         if (tote.vendorNo) data.vendor = tote.vendorNo
       }
       if (Object.keys(data).length === 0) continue

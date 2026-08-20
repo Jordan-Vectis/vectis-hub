@@ -44,10 +44,6 @@ const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "w
     label: "Receipt doesn't exist in BC", tone: "bad", order: 1,
     hint: "No synced BC tote or item carries this receipt number — likely a typo, or a receipt not booked into BC yet. Still on the sheet, but the overnight run will fail on it.",
   },
-  tote_receipt_mismatch: {
-    label: "Tote belongs to another receipt", tone: "warn", order: 2,
-    hint: "The receipt on the lot is confirmed by BC's own unique ID, so the receipt is right and the tote is the odd one out. Still on the sheet. Do NOT correct the receipt from the tote.",
-  },
   receipt_mismatch: {
     label: "Receipt doesn't match the tote", tone: "bad", order: 2,
     hint: "The receipt saved on the lot isn't the one this tote belongs to in BC. Either the wrong receipt was typed, or the item is in the wrong tote. If the tote is right: tick them, type the tote in the bar below, Apply — the receipt is corrected from BC.",
@@ -993,12 +989,6 @@ function IssueLine({ checkKey, l }: { checkKey: string; l: CheckLot }) {
         <Chip tone="bad" label="on the lot">no vendor</Chip>
         <span className="opacity-70">BC says</span>
         <Chip tone="good" label={`tote ${l.tote} in BC`}>{vend(l.bcVendor, l.bcVendorName)}</Chip>
-      </>)
-    case "tote_receipt_mismatch":
-      return (<>
-        <Chip tone="good" label="on the lot, confirmed by BC">{l.receipt || "—"}</Chip>
-        <span className="opacity-70">but tote {l.tote} is on</span>
-        <Chip tone="plain" label="in BC">{l.bcReceipt || "—"}</Chip>
       </>)
     case "receipt_mismatch":
       return (<>
