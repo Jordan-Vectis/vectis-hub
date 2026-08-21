@@ -755,7 +755,7 @@ function hostRoom(){
 
   sock.on('connect', () => {
     const rejoining = TS.seen;
-    sock.emit('trainer:host', { state:bidderState(), label: (S && S.saleName) || 'Practice lots' }, res => {
+    sock.emit('trainer:host', { state:bidderState(), label: (S && S.saleName) || 'Practice lots', platform: 'vectis' }, res => {
       if(!res || !res.ok){ lkStatus((res && res.error) || 'Could not open a room.', 'err'); return; }
       TS.code = res.code; TS.ready = true; TS.seen = true;
       TS.bidders = []; TS.hover = new Set();

@@ -37,6 +37,9 @@ body {
 #conn { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
 #conn.on  { background: #14532d; color: #4ade80; }
 #conn.off { background: #4a1d1d; color: #f87171; }
+.plat { font-size: 10px; font-weight: 800; letter-spacing: .05em; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.plat.vectis { background: #8e2596; color: #fff; }
+.plat.saleroom { background: #111; color: #fff; font-style: italic; letter-spacing: 0; }
 
 /* ── JOIN CARD ── */
 #join {
@@ -160,6 +163,7 @@ body {
 <div id="sale">
   <div id="top">
     <div class="who">Paddle <b id="myPaddle">—</b> · <span id="myName">—</span></div>
+    <span id="plat" class="plat" style="display:none"></span>
     <div id="conn" class="off">connecting…</div>
   </div>
 
@@ -226,11 +230,21 @@ function pollRooms(){
     el.innerHTML = '<div class="run-lbl">Running now — tap to join</div>' + rooms.map(r =>
       `<button class="run-chip" onclick="pickRoom('${esc(r.code)}')">` +
         `<b>${esc(r.code)}</b>` +
+        `<span class="plat ${r.platform === 'vectis' ? 'vectis' : 'saleroom'}">${r.platform === 'vectis' ? 'VECTIS' : 'the saleroom'}</span>` +
         `<span class="rc-label">${esc(r.label || 'Practice lots')}</span>` +
         `<span class="rc-n">${r.bidders} bidding</span>` +
       `</button>`).join('');
   });
 }
+/* Which platform this practice sale mimics — so a bidder always knows
+   whether they are "on Vectis" or "on the saleroom". */
+function setPlatform(p){
+  const el = $('plat');
+  if(p === 'vectis'){ el.textContent = 'VECTIS LIVE'; el.className = 'plat vectis'; el.style.display = ''; }
+  else if(p === 'saleroom'){ el.textContent = 'the saleroom'; el.className = 'plat saleroom'; el.style.display = ''; }
+  else { el.style.display = 'none'; }
+}
+
 function pickRoom(code){
   $('code').value = code;
   if(($('name').value || '').trim()) doJoin();
@@ -309,6 +323,7 @@ function doJoin(){
         return;
       }
       myCode = res.code; myPaddle = res.paddle; myName = res.name;
+      setPlatform(res.platform);
       $('myPaddle').textContent = myPaddle;
       $('myName').textContent = myName;
       $('join').style.display = 'none';
