@@ -91,8 +91,11 @@ export default function ToteCheckTab({
       if (!res.ok) { setError(res.error ?? "Couldn't correct the lots"); return }
       setFixResult(
         `Corrected ${res.updated ?? 0} lot${res.updated === 1 ? "" : "s"} to match BC.` +
+        // ⚠ This used to end "— see the BC Corrections tab". Since 2026-08-20 that tab
+        // lists LIVE mismatches only, so correcting the Hub here is exactly what takes
+        // these lots OFF it. Sending someone there afterwards finds nothing.
         ((res.corrections ?? 0) > 0
-          ? ` ${res.corrections} had a wrong value that has most likely gone into BC — see the BC Corrections tab.`
+          ? ` ${res.corrections} had a wrong value that has most likely gone into BC — they've now dropped off the BC Corrections tab, which lists live mismatches only. The Lot Change Log holds the record.`
           : "") +
         ((res.skipped ?? 0) > 0 ? ` ${res.skipped} couldn't be checked (no tote, or the tote isn't in BC).` : ""),
       )
@@ -169,7 +172,7 @@ export default function ToteCheckTab({
               The vendor and receipt on these lots will be set to whatever BC has for their tote. BC is treated as correct.
             </p>
             <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5 mb-4 list-disc pl-4">
-              <li>Any lot that held a <span className="font-semibold">wrong</span> value is saved to the <span className="font-semibold">BC Corrections</span> tab first — that wrong value most likely went into BC, and this is the only record of it afterwards.</li>
+              <li>Any lot that held a <span className="font-semibold">wrong</span> value most likely went into BC carrying it. Deal with those on the <span className="font-semibold">BC Corrections</span> tab <span className="font-semibold">before</span> running this — that tab lists live mismatches only, so correcting them here takes them off it. The Lot Change Log keeps the record either way.</li>
               <li>Unique IDs are <span className="font-semibold">not</span> changed, so a corrected lot may still show &ldquo;unique ID against a different receipt&rdquo;.</li>
               <li>Lots with no tote, or a tote BC doesn&apos;t have, are left alone.</li>
               <li>Every change is recorded in the Lot Change Log.</li>

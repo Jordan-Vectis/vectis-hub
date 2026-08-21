@@ -274,7 +274,11 @@ export default function EndOfDayPage() {
       } else {
         setFixResult(
           `Fixed ${res.updated} lot${res.updated === 1 ? "" : "s"} from the BC tote data` +
-          (res.corrections ? ` · ${res.corrections} had already gone into BC wrong — they're on the BC Corrections list to put right in BC` : "") +
+          // ⚠ This used to say "they're on the BC Corrections list to put right in BC".
+          // Both halves are now wrong: these lots are on tonight's sheet, so they
+          // aren't in BC at all — and since 2026-08-20 that tab lists LIVE mismatches
+          // only, so correcting the Hub is precisely what takes a lot OFF it.
+          (res.corrections ? ` · ${res.corrections} held a wrong value rather than a blank — they aren't in BC yet, so there's nothing to put right in BC` : "") +
           (res.skipped ? ` · ${res.skipped} couldn't be fixed (tote not in BC)` : "") +
           (res.lockedSales ? ` · ${res.lockedSales} sale${res.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only)` : "")
         )
@@ -653,7 +657,7 @@ export default function EndOfDayPage() {
               </h3>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                 Nothing has been changed yet. Each line shows what will be corrected from the BC tote data — red is what&apos;s on the lot now, green is what BC says.
-                Every change is logged in the Lot Change Log, and anything already pushed to BC wrong lands on the BC Corrections list.
+                Every change is logged in the Lot Change Log.
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                 Only lots on tonight&apos;s sheet are looked at — nothing already in Business Central is touched.
