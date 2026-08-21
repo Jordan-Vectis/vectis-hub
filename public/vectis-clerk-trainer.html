@@ -429,15 +429,15 @@ button:disabled{ opacity:.45; cursor:default; }
         <div id="sources">
           <div class="src-row">
             <button class="src-btn src-room" id="src-room" onclick="srcBid('room')">Room: £0</button>
-            <button class="src-bang src-room" title="Split bid — take half an increment" onclick="srcSplit('room')">!</button>
+            <button class="src-bang src-room" title="Simultaneous bid — give the standing bid to Room at the same price" onclick="srcBang('room')">!</button>
             <button class="src-btn src-telephone" id="src-telephone" onclick="srcBid('telephone')">Telephone: £0</button>
-            <button class="src-bang src-telephone" title="Split bid — take half an increment" onclick="srcSplit('telephone')">!</button>
+            <button class="src-bang src-telephone" title="Simultaneous bid — give the standing bid to Telephone at the same price" onclick="srcBang('telephone')">!</button>
           </div>
           <div class="src-row">
             <button class="src-btn src-invaluable" id="src-invaluable" onclick="srcBid('invaluable')">Invaluable: £0</button>
-            <button class="src-bang src-invaluable" title="Split bid — take half an increment" onclick="srcSplit('invaluable')">!</button>
+            <button class="src-bang src-invaluable" title="Simultaneous bid — give the standing bid to Invaluable at the same price" onclick="srcBang('invaluable')">!</button>
             <button class="src-btn src-saleroom" id="src-saleroom" onclick="srcBid('saleroom')">Saleroom: £0</button>
-            <button class="src-bang src-saleroom" title="Split bid — take half an increment" onclick="srcSplit('saleroom')">!</button>
+            <button class="src-bang src-saleroom" title="Simultaneous bid — give the standing bid to Saleroom at the same price" onclick="srcBang('saleroom')">!</button>
           </div>
           <div class="hammer-row">
             <button id="btn-fw" onclick="fairWarning()">Fair Warning</button>
@@ -901,18 +901,19 @@ function srcBid(src){
   placeBid({ src, amount, user:SRC_LABEL[src], chip:src, key:src });
   feedback(`${SRC_LABEL[src]} bid: £${fmt(amount)}`, 'good');
 }
-function srcSplit(src){
+/* "!" — simultaneous bid. Two platforms bid the same money at once and the
+   auctioneer gives it to THIS source at the SAME price: the amount does not
+   move, the displaced bidder loses the lead and can come back in at the next
+   increment. */
+function srcBang(src){
   if(!guardOpen()) return;
-  const half = Math.max(1, Math.ceil(incNow() / 2));
-  const amount = S.current + half;
-  if(amount >= asking()){ srcBid(src); return; }
-  const fullStep = asking();          // the bid the split is halfway to
-  placeBid({ src, amount, user:SRC_LABEL[src], chip:src, key:src });
-  // The splitter is "in for half" — the other side is asked the original step,
-  // which also keeps the bidding on the increment ladder.
-  S.askingManual = fullStep;
-  renderMoney(); pushState(); runAutos();
-  feedback(`${SRC_LABEL[src]} split bid: £${fmt(amount)} — asking £${fmt(fullStep)}`, 'warn');
+  if(S.current <= 0 || !S.leader){ feedback('No standing bid to reassign', 'bad'); return; }
+  if(S.leader.key === src){ feedback(`${SRC_LABEL[src]} already holds the bid`, 'bad'); return; }
+  const from = S.leader.user;
+  S.leader = { key:src, user:SRC_LABEL[src], chip:src, remotePaddle:null };
+  S.log.push({ key:src, user:SRC_LABEL[src], chip:src, remotePaddle:null, amount:S.current });
+  renderMoney(); renderBidLog(); pushState(); runAutos();
+  feedback(`! Simultaneous bid — ${SRC_LABEL[src]} given £${fmt(S.current)}; ${from} can come back at £${fmt(asking())}`, 'warn');
 }
 
 function onRemoteBid({ bidderId, paddle, name, amount } = {}){
