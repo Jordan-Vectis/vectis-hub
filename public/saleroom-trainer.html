@@ -122,15 +122,12 @@ body {
   overflow: hidden; text-overflow: ellipsis;
 }
 .action-row {
-  display: flex; border-top: 1px solid rgb(179,179,179); margin-top: 0.5vh; flex-shrink: 0;
+  display: flex; gap: 0.4vw; margin-top: 0.5vh; padding-top: 0.5vh;
+  border-top: 1px solid rgb(220,220,220); flex-shrink: 0;
 }
 .action-row .btn {
-  flex: 1; border-radius: 0; margin: 0; width: auto;
-  border-top: none; border-bottom: none; border-right: none;
-  border-left: 1px solid rgb(179,179,179);
-  padding: 0.6vmin 2px;
+  flex: 1; margin: 0; width: auto; padding: 0.55vmin 2px; font-size: 1.8vmin;
 }
-.action-row .btn:first-child { border-left: none; }
 
 /* ── BID LOG ── */
 #cell-bidlog .card {
@@ -169,12 +166,12 @@ body {
 .ctrl-left {
   display: flex; flex-direction: column; gap: 0.4vh; align-self: stretch;
 }
-.ctrl-left .btn { width: 9vw; padding: 0.5vmin 0.5vw; font-size: 1.9vmin; }
+.ctrl-left .btn { width: 7.5vw; padding: 0.45vmin 0.4vw; font-size: 1.7vmin; }
 
 /* Centre col: Provisional + H + A + table + manual + notif — stretches full height */
 .ctrl-center {
   display: flex; flex-direction: column; gap: 0.4vh;
-  align-self: stretch; min-height: 0; overflow: hidden;
+  align-self: stretch; min-height: 0; min-width: 0; overflow: hidden;
 }
 .prov-row { display: flex; align-items: center; gap: 4px; font-size: 1.7vmin; white-space: nowrap; }
 .ha-row   { display: flex; align-items: center; gap: 4px; }
@@ -185,18 +182,18 @@ body {
   border: none; background: transparent; padding: 0 2px;
 }
 .amt-disp {
-  min-width: 9vw; text-align: right; font-weight: bold; font-size: 2.2vmin;
+  min-width: 8vw; text-align: right; font-weight: bold; font-size: 2vmin;
   border: 1px solid rgb(153,153,153); padding: 0 3px; background: white;
   transition: background 0.3s; display: inline-block;
 }
 .amt-disp.lit { background: #c8eeff; }
 .bid-override {
-  width: 4vw; text-align: right; font-family: inherit;
+  width: 3.5vw; text-align: right; font-family: inherit;
   font-size: inherit; font-weight: bold;
   border: 1px solid rgb(153,153,153); padding: 0 2px;
 }
 .stepper { display: flex; gap: 1px; }
-.stepper .btn { width: auto; min-width: 3vw; padding: 0.2vmin 0.6vw; font-size: 1.8vmin; }
+.stepper .btn { width: auto; min-width: 2.2vw; padding: 0.2vmin 0.45vw; font-size: 1.7vmin; }
 
 /* Increment table — grows to fill remaining height */
 .inc-scroll {
@@ -215,8 +212,8 @@ body {
 
 /* Ladder + increment-steps side by side, exactly as the operator screen */
 .lists-row  { flex: 1; min-height: 0; display: flex; gap: 1.2vw; }
-.ladder-col { flex: 0 0 46%; display: flex; flex-direction: column; gap: 0.5vh; min-height: 0; }
-.steps-col  { flex: 0 0 38%; display: flex; flex-direction: column; min-height: 0; padding-bottom: 5vh; }
+.ladder-col { flex: 0 0 42%; display: flex; flex-direction: column; gap: 0.5vh; min-height: 0; }
+.steps-col  { flex: 0 0 30%; display: flex; flex-direction: column; min-height: 0; padding-bottom: 5vh; }
 .steps-col .inc-scroll { flex: 1; }
 .lon-btn { width: 100%; margin: 0; }
 
@@ -226,7 +223,7 @@ body {
 .amt-disp.src-auto { background: #d668d6 !important; color: #fff; border-color: #b44fb4; }
 .amt-disp.src-live { background: #e05252 !important; color: #fff; border-color: #c03e3e; }
 #maxbox {
-  width: 9vw; margin-top: 0.8vh; padding: 1vh 0.4vw; border-radius: 5px;
+  width: 7.5vw; margin-top: 0.8vh; padding: 1vh 0.4vw; border-radius: 5px;
   background: #8e1a96; color: #fff; text-align: center;
   display: flex; flex-direction: column; line-height: 1.35;
   font-size: 2vmin; font-weight: bold;
@@ -234,7 +231,7 @@ body {
 #maxbox span { font-weight: normal; font-size: 1.7vmin; }
 .ctrl-spacer { flex: 1; }
 .sr-square {
-  width: 9vw; height: 9vw; max-height: 15vh; margin-top: 3vh; border-radius: 3px;
+  width: 7.5vw; height: 7.5vw; max-height: 15vh; margin-top: 3vh; border-radius: 3px;
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-weight: bold; font-size: 1.9vmin; visibility: hidden;
 }
@@ -243,19 +240,19 @@ body {
 
 /* Right col: Pause, Once */
 .ctrl-right { display: flex; flex-direction: column; gap: 0.4vh; align-self: start; }
-.ctrl-right .btn { width: 9vw; padding: 0.5vmin 0.5vw; font-size: 1.9vmin; }
+.ctrl-right .btn { width: 7.5vw; padding: 0.45vmin 0.4vw; font-size: 1.7vmin; }
 
 /* ── CHAT ── */
 #cell-chat .card {
   flex: 1; padding: 0; display: grid;
   grid-template-columns: 1fr auto; min-height: 0; overflow: hidden;
 }
-.chat-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid rgb(179,179,179); }
+.chat-left { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid rgb(179,179,179); }
 .ann-list  {
   list-style-type: none; line-height: 3.7vmin; white-space: nowrap;
   padding-inline-start: 0; margin: 0; overflow-y: auto; flex: 1;
 }
-.ann-item { padding-left: 1vh; padding-right: 1vh; background: white; }
+.ann-item { padding-left: 1vh; padding-right: 1vh; background: white; overflow: hidden; text-overflow: ellipsis; }
 .ann-item:hover { background: lightblue; }
 .chat-foot {
   display: flex; padding: 0.5vh; border-top: 1px solid rgb(179,179,179); gap: 0.5vh;
@@ -949,7 +946,7 @@ function buildIncTable(){
   for(const band of INC_TABLE){
     const ceiling = Math.min(band.to === Infinity ? MAX : band.to, MAX);
     for(let v = band.from + band.inc; v <= ceiling; v += band.inc){
-      rows.push(`<tr data-bid="${v}" style="cursor:pointer"><td>£${v.toLocaleString()}</td></tr>`);
+      rows.push(`<tr data-bid="${v}" style="cursor:pointer"><td>${v.toLocaleString()}</td></tr>`);
     }
     if(ceiling >= MAX) break;
   }
@@ -1871,7 +1868,12 @@ function hiInc(bid){
   document.querySelectorAll('#itbl-body tr').forEach(r=>r.classList.remove('hi'));
   const next = nextBid(bid);
   const target = document.querySelector(`#itbl-body tr[data-bid="${next}"]`);
-  if(target){ target.classList.add('hi'); target.scrollIntoView({block:'nearest'}); }
+  if(target){
+    target.classList.add('hi');
+    // The real screen's ladder starts at the asking price — keep it at the top.
+    const sc = target.closest('.inc-scroll');
+    if(sc) sc.scrollTop = target.offsetTop;
+  }
 }
 
 function updateLot(){
