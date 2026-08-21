@@ -16,6 +16,30 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "auto_clerk_ahk.md",
+    content: `---
+name: Auto Clerk.ahk - the screen-reading clerk (v1)
+purpose: Jordan's chosen direction for the Auto Clerk (2026-08-21) - an AutoHotkey clerk that works ANY clerking screen by calibrated coordinates and Windows OCR, no page changes. Read before touching Auto Clerk.ahk / Auto Clerk OCR.ps1 or proposing a browser-side auto-clerk.
+metadata:
+  type: reference
+---
+
+Jordan, after a full review of the browser rigs: "make something new that can just read the screen and I can program coordinates into where each button is like the macro one we made the other day using the logic we have already made." Chosen because it needs NO change to any page - the Saleroom Trainer is frozen, and the real Saleroom/Bidpath pages cannot be edited on the day either. He chose "read the bid amounts" (OCR) over change-only detection so the full rule card is possible. The half-built browser "Scenario 2" pieces from the same day were dropped uncommitted.
+
+FILES (Jordan's Downloads, not in git): Auto Clerk.ahk (AutoHotkey v2), Auto Clerk OCR.ps1 (helper), generated Auto Clerk.ini (calibration + settings) and Auto Clerk.log. Validate with AutoHotkey64.exe /Validate before handing over, as for the BC macro.
+
+HOW IT WORKS
+- Profiles = which screen is on the monitor: saleroom (GAP) or vectis (Bidpath clerk screen). Calibration like the Macro Calibrator (hover + F8 or middle-click, F10 keep, F7 back, Esc stop, dodging banner); buttons are points, the CURRENT-BID figure is a rectangle captured by two corners. Every button the v2 sync will need is calibrated now.
+- Reading the screen: the .ahk starts a hidden PowerShell helper and talks to it by files in %TEMP%\\AutoClerkOCR (ocr-req.txt "x y w h" -> ocr-res.txt). The helper grabs the rectangle, scales it x3 and runs Windows.Media.Ocr - built into Windows, en-GB present on Jordan's PC, nothing installed, no internet, no download. Raw OCR ~10 ms; ~170-300 ms per read through the file link; the poll is 250 ms with a busy guard. Only digits are parsed (the pound sign OCRs as E/f); "1,250"/"1.250" -> 1250. A reading must hold for two polls before it counts.
+- v1 = the rule-card timers on ONE screen: a new bid resets the clock; 15 s quiet -> Fair Warning; 20 s more -> Sell/Hammer, settle, Next (Vectis: Hammer again = Next Lot); a lot with no bids at all -> Pass after the same time (explicit checkbox, default on - the card has no rule for it). After Next it verifies the figure reads 0, retries Next once, then PAUSES with a red status rather than churning. Saleroom's Fair warn is a toggle, so a bid during FW presses it again to un-toggle; Vectis clears its own. A dropping amount (undo) is logged only.
+- Hotkeys F9 start/stop, F10 pause, Esc stop. Status banner bottom-right. Every press logged with coordinates and reason. CLI checks: --selftest (parser), --ocrtest x y w h. Verified 2026-08-21 reading "Current Bid: 1,250" off a live test window -> 1250.
+
+PITFALLS HIT (do not repeat): AHK built-in names as variables fail to LOAD - RUN (the Run command) and Log( (maths) - renamed RS / WriteLog; a load error leaves a dialog open so headless tests hang - validate first. PowerShell: inside New-Object Type($a * $b, $c * $d) the comma binds tighter than * ("op_Multiply" on Object[]) - compute first, use -ArgumentList. A killed .ahk does not kill its PowerShell child - StopOcr sends quit, waits, then closes; find strays with wmic on the command line.
+
+NEXT: v2 = two screens in step using the browser rig's logic (public/auto-clerk-fake-saleroom.html): OCR both figures, drive the lower platform to the exact amount, undo-down, tie-break favouring Vectis, FW/sell on both. The launcher card wording for Scenario 2/3 is updated when v2 ships, not before.
+`,
+  },
+  {
     filename: "saleroom_trainer_frozen.md",
     content: `---
 name: The Saleroom Trainer is FROZEN while the Auto Clerk is being worked on
