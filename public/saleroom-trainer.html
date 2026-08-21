@@ -20,7 +20,7 @@ body {
 .btn {
   background: linear-gradient(white, rgb(230,230,230));
   border: 1px solid rgb(179,179,179);
-  border-radius: 5px;
+  border-radius: 8px;
   box-shadow: black 0.25vh 0.25vh 0.5vh -0.5vh;
   margin: 1px;
   padding: 2px 10px;
@@ -149,7 +149,6 @@ body {
   padding: 1px 0; white-space: nowrap;
 }
 .blog-row span { overflow: hidden; padding: 0 0 0 10px; text-overflow: ellipsis; }
-.blog-row.cur  { background: rgb(93,173,236); }
 .blog-row.sold { background: #d0f5d0; font-weight: bold; }
 .blog-row.room { background: #ede; }
 @keyframes rowflash { from { background: #ffffc0; } }
@@ -168,7 +167,7 @@ body {
 }
 /* Left col: Fair warn, Bid, Undo, Room, AV Check */
 .ctrl-left {
-  display: flex; flex-direction: column; gap: 0.4vh; align-self: start;
+  display: flex; flex-direction: column; gap: 0.4vh; align-self: stretch;
 }
 .ctrl-left .btn { width: 9vw; padding: 0.5vmin 0.5vw; font-size: 1.9vmin; }
 
@@ -182,11 +181,11 @@ body {
 .ha-lbl   { font-weight: bold; font-size: 1.9vmin; width: 1.4vw; }
 .h-field  {
   width: 6vw; text-align: right; font-family: inherit;
-  font-size: inherit; font-weight: bold;
-  border: 1px solid rgb(153,153,153); padding: 0 2px;
+  font-size: 2.1vmin; font-weight: bold;
+  border: none; background: transparent; padding: 0 2px;
 }
 .amt-disp {
-  min-width: 6vw; text-align: right; font-weight: bold; font-size: 2.2vmin;
+  min-width: 9vw; text-align: right; font-weight: bold; font-size: 2.2vmin;
   border: 1px solid rgb(153,153,153); padding: 0 3px; background: white;
   transition: background 0.3s; display: inline-block;
 }
@@ -212,22 +211,35 @@ body {
   white-space: nowrap; border: none; color: #222;
 }
 .inc-tbl tr.hi td { background: rgb(173,216,230); }
-.inc-tbl tr.lon td {
-  background: #c55; color: white; font-weight: bold;
-  text-align: center; white-space: nowrap;
-}
 .man-chk { font-size: 1.6vmin; flex-shrink: 0; }
 
-/* Notif bar */
-.notif-bar {
-  border: 1px solid rgb(176,176,176); background: white;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.5vmin; font-weight: bold; transition: background 0.2s;
-  padding: 1px 0; flex-shrink: 0;
+/* Ladder + increment-steps side by side, exactly as the operator screen */
+.lists-row  { flex: 1; min-height: 0; display: flex; gap: 1.2vw; }
+.ladder-col { flex: 0 0 46%; display: flex; flex-direction: column; gap: 0.5vh; min-height: 0; }
+.steps-col  { flex: 0 0 38%; display: flex; flex-direction: column; min-height: 0; padding-bottom: 5vh; }
+.steps-col .inc-scroll { flex: 1; }
+.lon-btn { width: 100%; margin: 0; }
+
+/* ── BID SOURCE COLOURS — purple = auto bid, red = live internet bidder ── */
+#bBid.bid-src-auto { background: #8e1a96; color: #fff; border-color: #6f1076; }
+#bBid.bid-src-live { background: #d32f2f; color: #fff; border-color: #a82222; }
+.amt-disp.src-auto { background: #d668d6 !important; color: #fff; border-color: #b44fb4; }
+.amt-disp.src-live { background: #e05252 !important; color: #fff; border-color: #c03e3e; }
+#maxbox {
+  width: 9vw; margin-top: 0.8vh; padding: 1vh 0.4vw; border-radius: 5px;
+  background: #8e1a96; color: #fff; text-align: center;
+  display: flex; flex-direction: column; line-height: 1.35;
+  font-size: 2vmin; font-weight: bold;
 }
-.notif-bar.ng { background: #4caf50; color: white; }
-.notif-bar.nr { background: #f44336; color: white; }
-.notif-bar.np { background: #e91e63; color: white; }
+#maxbox span { font-weight: normal; font-size: 1.7vmin; }
+.ctrl-spacer { flex: 1; }
+.sr-square {
+  width: 9vw; height: 9vw; max-height: 15vh; margin-top: 3vh; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: bold; font-size: 1.9vmin; visibility: hidden;
+}
+.sr-square.on-auto { visibility: visible; background: #d668d6; }
+.sr-square.on-live { visibility: visible; background: #d32f2f; }
 
 /* Right col: Pause, Once */
 .ctrl-right { display: flex; flex-direction: column; gap: 0.4vh; align-self: start; }
@@ -281,12 +293,6 @@ body {
 }
 .tab-inactive:focus { outline: 0; }
 .tab-filler { flex: 1; border-bottom: 0.3vh solid rgb(191,191,191); }
-.logo {
-  background: #111; color: white; font-style: italic; font-weight: bold;
-  letter-spacing: 2px; padding: 0.5vh 1.5vw;
-  display: flex; align-items: center; white-space: nowrap;
-  border-bottom: 0.3vh solid rgb(191,191,191);
-}
 
 /* Tab content */
 .tab-content {
@@ -783,7 +789,9 @@ body {
           <button class="btn" id="bBid" onclick="act('bid')">Bid</button>
           <button class="btn" onclick="act('undo')">Undo</button>
           <button class="btn" id="bRoom" onclick="act('room')">Room</button>
-          <button class="btn" style="margin-top:0.5vh">AV Check</button>
+          <div id="maxbox" style="visibility:hidden"><span>Next Bid:</span><b>MAX</b><b>Autobid</b></div>
+          <div class="ctrl-spacer"></div>
+          <button class="btn" onclick="fb('AV Check — checks sound and video in the real software','info')">AV Check</button>
         </div>
 
         <!-- Col2: Provisional + H + A + Increment table + Manual + Notif -->
@@ -794,7 +802,7 @@ body {
           </div>
           <div class="ha-row">
             <span class="ha-lbl">H</span>
-            <input type="text" id="fH" value="0" class="h-field">
+            <input type="text" id="fH" value="0" class="h-field" readonly>
           </div>
           <div class="ha-row">
             <span class="ha-lbl">A</span>
@@ -807,20 +815,30 @@ body {
               <button class="btn" onclick="act('plus')">+</button>
             </div>
           </div>
-          <div class="inc-scroll">
-            <table class="inc-tbl" id="itbl">
-              <colgroup><col></colgroup>
-              <tbody id="itbl-body"></tbody>
-            </table>
+          <div class="lists-row">
+            <div class="ladder-col">
+              <div class="inc-scroll">
+                <table class="inc-tbl" id="itbl">
+                  <colgroup><col></colgroup>
+                  <tbody id="itbl-body"></tbody>
+                </table>
+              </div>
+              <button class="btn lon-btn" onclick="fb('London Bidding — links the London saleroom in the real software','info')">London Bidding</button>
+              <div class="man-chk"><label><input type="checkbox"> Manual increments</label></div>
+            </div>
+            <div class="steps-col">
+              <div class="inc-scroll">
+                <table class="inc-tbl"><tbody id="steps-body"></tbody></table>
+              </div>
+            </div>
           </div>
-          <div class="man-chk"><label><input type="checkbox"> Manual increments</label></div>
-          <div class="notif-bar" id="notif">Bidding Notification Box</div>
         </div>
 
-        <!-- Col3: Pause + Once -->
+        <!-- Col3: Pause + Once + bid-source square (purple = auto, red = live) -->
         <div class="ctrl-right">
-          <button class="btn" id="bPause" onclick="act('pause')">⏸ Pause</button>
+          <button class="btn" id="bPause" onclick="act('pause')">Pause</button>
           <button class="btn" id="bOnce" onclick="act('once')">Once...</button>
+          <div class="sr-square" id="srsq"></div>
         </div>
 
       </div>
@@ -832,9 +850,10 @@ body {
     <div class="card">
       <div class="chat-left">
         <ul class="ann-list" id="chat">
+          <li class="ann-item">The next bid could make it yours!</li>
+          <li class="ann-item">We are currently experiencing some technical difficulties and will resume shortly</li>
           <li class="ann-item">You need to be in it to win it! Bid now before it's too late!</li>
           <li class="ann-item">Auction starts at 9.30am</li>
-          <li class="ann-item">We will resume again at 12.00 p.m.</li>
           <li class="ann-item">Todays sale is a timed sale</li>
           <li class="ann-item">Hello the auction today is a timed sale and therefore will not have an auctioneer.</li>
           <li class="ann-item">apologies for the delay we will resume very shortly</li>
@@ -868,7 +887,6 @@ body {
     <button class="tab-inactive" id="nav-title-displays">Displays</button>
     <button class="tab-inactive" id="nav-title-settings">Settings</button>
     <div class="tab-filler"></div>
-    <div class="logo">the saleroom</div>
   </div>
 
   <!-- Tab content -->
@@ -895,7 +913,7 @@ body {
           <span id="rphoto-e">📦</span>
         </div>
         <div class="sel-controls">
-          <button class="btn" disabled>History</button>
+          <button class="btn">History</button>
           <button class="btn">New lot</button>
           <button class="btn">Edit lot</button>
         </div>
@@ -907,7 +925,6 @@ body {
             <hr class="tbl-hr">
             <div class="sel-tbl-body" id="rlog"></div>
           </div>
-          <div class="bid-notif" id="bnotif">&nbsp;</div>
         </div>
       </div>
     </div>
@@ -936,7 +953,6 @@ function buildIncTable(){
     }
     if(ceiling >= MAX) break;
   }
-  rows.push(`<tr class="lon"><td>London Bidding</td></tr>`);
   tbody.innerHTML = rows.join('');
 
   // Click any row to place a room bid at that amount
@@ -950,7 +966,7 @@ function buildIncTable(){
     S.pending = null;
     S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM'; S.lpaddle = null;
     addLog('ROOM', v, 'ROOM', 'room');
-    setNotif(''); setAmt(v); hiInc(v);
+    setBidSrc(null); setAmt(v); hiInc(v);
     fb(`Room bid: £${v}`, 'good');
     if(S.free) freeScheduleBid();
     if(S.test) pushState();
@@ -981,7 +997,7 @@ function overrideEnter(){
   S.pending = null;
   S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM'; S.lpaddle = null;
   addLog('ROOM', v, 'ROOM', 'room');
-  setNotif('');
+  setBidSrc(null);
   setAmt(v); hiInc(v);
   fb(`Room bid: £${v}`, 'good');
   if(S.free) freeScheduleBid();
@@ -1024,9 +1040,9 @@ const LOTS = [
 ───────────────────────────────────────── */
 const SCENARIOS = [
   { name:'Basic Sale', lot:LOTS[0], steps:[
-    { g:'Online bids are arriving automatically for Lot 508...', auto:{b:'B1042',n:'Smith J',a:50}, autoAdv:true },
-    { g:'Another online bid coming in...', auto:{b:'B2317',n:'Jones A',a:60}, autoAdv:true },
-    { g:'One more online bid...', auto:{b:'B1042',n:'Smith J',a:70}, autoAdv:true },
+    { g:'Online bids are arriving automatically for Lot 508...', auto:{b:'SR1766576',n:'Smith J',a:50}, autoAdv:true },
+    { g:'Another online bid coming in...', auto:{b:'SR2231785',n:'Jones A',a:60}, autoAdv:true },
+    { g:'One more online bid...', auto:{b:'SR1766576',n:'Smith J',a:70}, autoAdv:true },
     { g:'🏁 Bidding has stopped. Issue FAIR WARNING.', expect:'fairwarn', auto:null },
     { g:'⚠️ Fair Warning sent! Click SELL to close the lot.', expect:'sell', auto:null },
   ]},
@@ -1034,15 +1050,15 @@ const SCENARIOS = [
     { g:'💡 No bids are coming in for Lot 509. Click PASS to move on.', expect:'pass', auto:null },
   ]},
   { name:'Room Bid', lot:LOTS[2], steps:[
-    { g:'Online bid at £40 coming in...', auto:{b:'B3301',n:'Taylor R',a:40}, autoAdv:true },
-    { g:'Online bid at £45 coming in...', auto:{b:'B3301',n:'Taylor R',a:45}, autoAdv:true },
-    { g:'⚠️ Online bid at £50 arrived — but a room customer bid simultaneously and the auctioneer did not give it to the platform. Click ROOM to take the bid for the room.', expect:'room', auto:{b:'B3301',n:'Taylor R',a:50} },
+    { g:'Online bid at £40 coming in...', auto:{b:'SR3301442',n:'Taylor R',a:40}, autoAdv:true },
+    { g:'Online bid at £45 coming in...', auto:{b:'SR3301442',n:'Taylor R',a:45}, autoAdv:true },
+    { g:'⚠️ Online bid at £50 arrived — but a room customer bid simultaneously and the auctioneer did not give it to the platform. Click ROOM to take the bid for the room.', expect:'room', auto:{b:'SR3301442',n:'Taylor R',a:50} },
     { g:'✅ Room bid taken at £50. The online platform has dropped out — hammer stays at £50. Issue FAIR WARNING.', expect:'fairwarn', auto:null },
     { g:'⚠️ Fair Warning done. SELL to the room bidder at £50.', expect:'sell', auto:null },
   ]},
   { name:'Fair Warning & Once', lot:LOTS[3], steps:[
-    { g:'Online bid at £100 arriving...', auto:{b:'B4412',n:'Brown K',a:100}, autoAdv:true },
-    { g:'Another online bid coming in...', auto:{b:'B5521',n:'White M',a:110}, autoAdv:true },
+    { g:'Online bid at £100 arriving...', auto:{b:'SR4412990',n:'Brown K',a:100}, autoAdv:true },
+    { g:'Another online bid coming in...', auto:{b:'SR5521303',n:'White M',a:110}, autoAdv:true },
     { g:'🤔 Bidding has stalled. Issue FAIR WARNING.', expect:'fairwarn', auto:null },
     { g:'⏱️ Now use ONCE — it cycles: Once → Twice → Final!', expect:'once', auto:null },
     { g:'⏱️ Click ONCE again (Twice…)', expect:'once', auto:null },
@@ -1050,36 +1066,36 @@ const SCENARIOS = [
     { g:'🔨 SELL the lot!', expect:'sell', auto:null },
   ]},
   { name:'Undo a Mistake', lot:LOTS[4], steps:[
-    { g:'Online bid at £50 arriving...', auto:{b:'B6600',n:'Davis P',a:50}, autoAdv:true },
+    { g:'Online bid at £50 arriving...', auto:{b:'SR6600411',n:'Davis P',a:50}, autoAdv:true },
     { g:'💡 Now practice BID — place a room counter, but you\'ll undo it next!', expect:'bid', auto:null },
     { g:'⚠️ That BID was a mistake! Click UNDO to reverse it.', expect:'undo', auto:null },
-    { g:'↩️ Undone! A new online bid arrives at £60...', auto:{b:'B7701',n:'Evans L',a:60}, autoAdv:true },
+    { g:'↩️ Undone! A new online bid arrives at £60...', auto:{b:'SR7701255',n:'Evans L',a:60}, autoAdv:true },
     { g:'🏁 Issue Fair Warning.', expect:'fairwarn', auto:null },
     { g:'🔨 SELL!', expect:'sell', auto:null },
   ]},
   { name:'Full Auction Run', lot:LOTS[0], steps:[
-    { g:'🏁 FULL RUN — Lot 508. Online bids arriving...', auto:{b:'B1042',n:'Smith J',a:80}, autoAdv:true },
-    { g:'Another online bid coming in...', auto:{b:'B2317',n:'Jones A',a:90}, autoAdv:true },
+    { g:'🏁 FULL RUN — Lot 508. Online bids arriving...', auto:{b:'SR1766576',n:'Smith J',a:80}, autoAdv:true },
+    { g:'Another online bid coming in...', auto:{b:'SR2231785',n:'Jones A',a:90}, autoAdv:true },
     { g:'🏁 Bidding stopped. Issue FAIR WARNING.', expect:'fairwarn', auto:null },
     { g:'🔨 SELL.', expect:'sell', auto:null },
     { g:'Click NEXT to move to Lot 509.', expect:'next', auto:null, nl:LOTS[1] },
     { g:'💡 Lot 509 — No bids. PASS the lot.', expect:'pass', auto:null },
     { g:'Click NEXT to move to Lot 510.', expect:'next', auto:null, nl:LOTS[2] },
-    { g:'Online bids coming in for Lot 510...', auto:{b:'B3301',n:'Taylor R',a:40}, autoAdv:true },
-    { g:'Another online bid...', auto:{b:'B3301',n:'Taylor R',a:45}, autoAdv:true },
-    { g:'⚠️ Online bid at £50 — room customer bid simultaneously, auctioneer did not give it to the platform. Click ROOM to take it for the room.', expect:'room', auto:{b:'B3301',n:'Taylor R',a:50} },
+    { g:'Online bids coming in for Lot 510...', auto:{b:'SR3301442',n:'Taylor R',a:40}, autoAdv:true },
+    { g:'Another online bid...', auto:{b:'SR3301442',n:'Taylor R',a:45}, autoAdv:true },
+    { g:'⚠️ Online bid at £50 — room customer bid simultaneously, auctioneer did not give it to the platform. Click ROOM to take it for the room.', expect:'room', auto:{b:'SR3301442',n:'Taylor R',a:50} },
     { g:'Room bid taken at £50. Issue FAIR WARNING.', expect:'fairwarn', auto:null },
     { g:'🔨 SELL.', expect:'sell', auto:null },
     { g:'Click NEXT to move to Lot 511.', expect:'next', auto:null, nl:LOTS[3] },
-    { g:'Lot 511 — Online bids arriving...', auto:{b:'B4412',n:'Brown K',a:100}, autoAdv:true },
-    { g:'Another online bid coming in...', auto:{b:'B5521',n:'White M',a:110}, autoAdv:true },
+    { g:'Lot 511 — Online bids arriving...', auto:{b:'SR4412990',n:'Brown K',a:100}, autoAdv:true },
+    { g:'Another online bid coming in...', auto:{b:'SR5521303',n:'White M',a:110}, autoAdv:true },
     { g:'Issue FAIR WARNING.', expect:'fairwarn', auto:null },
     { g:'⏱️ ONCE…', expect:'once', auto:null },
     { g:'⏱️ TWICE…', expect:'once', auto:null },
     { g:'🔴 FINAL!', expect:'once', auto:null },
     { g:'🔨 SELL.', expect:'sell', auto:null },
     { g:'Click NEXT to move to Lot 512.', expect:'next', auto:null, nl:LOTS[4] },
-    { g:'Lot 512 — Online bid arriving...', auto:{b:'B6600',n:'Davis P',a:50}, autoAdv:true },
+    { g:'Lot 512 — Online bid arriving...', auto:{b:'SR6600411',n:'Davis P',a:50}, autoAdv:true },
     { g:'Issue FAIR WARNING.', expect:'fairwarn', auto:null },
     { g:'🔨 SELL — final lot!', expect:'sell', auto:null },
   ]},
@@ -1089,11 +1105,11 @@ const SCENARIOS = [
    FREE MODE
 ───────────────────────────────────────── */
 const FREE_BIDDERS = [
-  {b:'B1042', n:'Smith J'},
-  {b:'B2317', n:'Jones A'},
-  {b:'B3301', n:'Taylor R'},
-  {b:'B4412', n:'Brown K'},
-  {b:'B5521', n:'White M'},
+  {b:'SR1766576', n:'Smith J'},
+  {b:'SR2231785', n:'Jones A'},
+  {b:'SR3301442', n:'Taylor R'},
+  {b:'SR4412990', n:'Brown K'},
+  {b:'SR5521303', n:'White M'},
   {b:'SR500486', n:'SR500486'},
 ];
 const FREE_LIMITS = [95, 65, 55, 130, 60, 55, 40, 145, 260, 175];
@@ -1108,7 +1124,7 @@ function goFree(){
     li:0, once:0, sold:{}, pending:null, _at:null, _ft:null,
     freeLotSold:false, freeBidderIdx:0, freePaused:false
   };
-  clearLogs(); setNotif(''); setAmt(0);
+  clearLogs(); setBidSrc(null); setAmt(0);
   document.getElementById('fH').value = '0';
   resetOnce(); updateLot(); renderLL();
   document.getElementById('dots').innerHTML = '';
@@ -1118,7 +1134,7 @@ function goFree(){
   setG('No guidance — run the auction freely. Online bids will arrive automatically.');
   document.getElementById('fb').style.opacity = '0';
   const pauseBtn = document.getElementById('bPause');
-  pauseBtn.textContent = '⏸ Pause'; pauseBtn.style.background = '';
+  pauseBtn.textContent = 'Pause'; pauseBtn.style.background = '';
   freeScheduleBid();
   setTimeout(focusOverride, 200);
 }
@@ -1290,7 +1306,7 @@ function beginTest(){
     : 'Waiting for bidders — share the link, then run the sale as normal.');
 
   const pauseBtn = document.getElementById('bPause');
-  pauseBtn.textContent = '⏸ Hold bids';
+  pauseBtn.textContent = 'Pause';
   pauseBtn.style.background = '';
 
   hostTestSale();
@@ -1478,8 +1494,8 @@ function onRemoteBid({ bidderId, paddle, name, amount } = {}){
   S.pending = null;
   S.bid = amount; S.hi = amount;
   S.lbdr = paddle; S.lname = name; S.lpaddle = paddle;
-  addLog(paddle, amount, name, '');
-  setNotif('ng'); setAmt(amount); hiInc(amount);
+  addLog(paddle, amount, 'INTERNET', '');
+  setBidSrc('live', paddle); setAmt(amount); hiInc(amount);
   fb(`Online bid: £${amount} — ${name} (${paddle})`, 'info');
   reply(true, 'Bid taken');
   pushState();
@@ -1513,9 +1529,11 @@ function freeScheduleBid(){
     if(!S.free || S.freeLotSold) return;
     if(S.hi >= limit) return;
     const amount = nextBid(S.hi);
-    S.bid = amount; S.hi = amount; S.lbdr = 'ONLINE'; S.lname = 'Online';
-    addLog('ONLINE', amount, 'Online', '');
-    setNotif(''); setAmt(amount); hiInc(amount);
+    const rb = FREE_BIDDERS[S.freeBidderIdx % FREE_BIDDERS.length];
+    if(Math.random() < 0.35) S.freeBidderIdx++;   // now and then a new bidder takes over
+    S.bid = amount; S.hi = amount; S.lbdr = rb.b; S.lname = 'INTERNET';
+    addLog(rb.b, amount, 'INTERNET', '');
+    setBidSrc('auto', rb.b); setAmt(amount); hiInc(amount);
     fb(`Online bid: £${amount}`, 'info');
     freeScheduleBid();
   }, delay);
@@ -1549,7 +1567,7 @@ function go(idx){
   endTestSale();
   document.getElementById('overlay').style.display = 'none';
   resetState(SCENARIOS[idx]);
-  clearLogs(); setNotif(''); setAmt(0);
+  clearLogs(); setBidSrc(null); setAmt(0);
   document.getElementById('fH').value = '0';
   document.getElementById('gbar-label').textContent = 'TRAINER:';
   document.getElementById('gbar-label').style.color = '#4ade80';
@@ -1568,7 +1586,7 @@ function runStep(){
       if(step.autoAdv){
         // Auto-register and advance — no button press needed
         S._at = setTimeout(() => {
-          if(S.pending){ const {a:am}=S.pending; S.pending=null; S.bid=am; setNotif(''); }
+          if(S.pending){ const {a:am}=S.pending; S.pending=null; S.bid=am; }
           advance();
         }, 1200);
       }
@@ -1578,10 +1596,10 @@ function runStep(){
 
 function triggerOnline(b,n,a){
   const amount = a || nextBid(S.hi);
-  S.bid = amount; S.hi = amount; S.lbdr = 'ONLINE'; S.lname = 'Online';
+  S.bid = amount; S.hi = amount; S.lbdr = b; S.lname = 'INTERNET';
   S.pending = {b, n, a:amount};
-  addLog('ONLINE', amount, 'Online', '');   // always log — online bids arrive automatically
-  setNotif('ng'); setAmt(amount); hiInc(amount);
+  addLog(b, amount, 'INTERNET', '');   // always log — online bids arrive automatically
+  setBidSrc('auto', b); setAmt(amount); hiInc(amount);
   fb(`Online bid: £${amount}`, 'info');
 }
 
@@ -1600,23 +1618,23 @@ function act(a){
       const amount = nextBid(S.hi);
       S.bid = amount; S.hi = amount; S.lbdr = 'ROOM'; S.lname = 'ROOM';
       S.pending = null;
-      setNotif(''); addLog('ROOM', amount, 'ROOM', 'room');
+      setBidSrc(null); addLog('ROOM', amount, 'ROOM', 'room');
       setAmt(amount); hiInc(amount);
       fb(`Room bid: £${amount}`, 'good');
       freeScheduleBid();
     } else if(a === 'room'){
       S.pending = null; S.lbdr = 'ROOM'; S.lname = 'ROOM';
       addLog('ROOM', S.hi, 'ROOM', 'room');
-      setNotif('');
+      setBidSrc(null);
       fb(`Room — staying at £${S.hi}`, 'good');
     } else if(a === 'sell'){
       if(S.hi === 0){ fb('No bids to sell at', 'bad'); return; }
       const lot = S.lots[S.li];
       S.sold[lot.id] = S.hi; lot.hammer = S.hi; lot.buyer = S.lbdr;
-      addLog(S.lbdr, S.hi, S.lname, 'sold');
+      addLog(S.lbdr, S.hi, S.lbdr === 'ROOM' ? 'ROOM' : 'INTERNET', 'sold');
       document.getElementById('fH').value = `${S.hi}`;
       fb(`🔨 SOLD — Lot ${lot.id} £${S.hi} to ${S.lname}`, 'good');
-      setNotif(''); renderLL();
+      setBidSrc(null); renderLL();
       S.freeLotSold = true;
       S.lotOutcome = 'sold';
       setG(`Lot ${lot.id} sold at £${S.hi}. Click NEXT to move on.`);
@@ -1636,7 +1654,7 @@ function act(a){
       }
       S.li++; S.bid=0; S.hi=0; S.log=[]; S.freeLotSold=false;
       S.lotOutcome=null; S.fairWarned=false; S.lpaddle=null; S.lbdr=''; S.lname='';
-      clearLogs(); setAmt(0);
+      clearLogs(); setBidSrc(null); setAmt(0);
       document.getElementById('fH').value = '0';
       resetOnce(); updateLot(); renderLL();
       fb('Next lot','info');
@@ -1681,7 +1699,7 @@ function act(a){
       // which is the control a clerk actually reaches for.
       S.testHold = !S.testHold;
       const btn = document.getElementById('bPause');
-      btn.textContent = S.testHold ? '▶ Resume bids' : '⏸ Hold bids';
+      btn.textContent = S.testHold ? 'Resume' : 'Pause';
       btn.style.background = S.testHold ? '#e65100' : '';
       fb(S.testHold ? '⏸ Bidding held — devices cannot bid' : '▶ Bidding open again',
          S.testHold ? 'warn' : 'good');
@@ -1690,11 +1708,11 @@ function act(a){
       const btn = document.getElementById('bPause');
       if(S.freePaused){
         clearTimeout(S._at);
-        btn.textContent = '▶ Resume';
+        btn.textContent = 'Resume';
         btn.style.background = '#e65100';
         fb('⏸ Auto-bids paused', 'warn');
       } else {
-        btn.textContent = '⏸ Pause';
+        btn.textContent = 'Pause';
         btn.style.background = '';
         fb('▶ Auto-bids resumed', 'good');
         freeScheduleBid();
@@ -1716,32 +1734,31 @@ function act(a){
 
   if(a==='bid'){
     if(S.pending){
-      const {a:amount}=S.pending; S.pending=null;
-      S.bid=amount; S.hi=amount; S.lbdr='ONLINE'; S.lname='Online';
-      setNotif('');
+      const {a:amount, b:pb}=S.pending; S.pending=null;
+      S.bid=amount; S.hi=amount; S.lbdr=pb; S.lname='INTERNET';
       fb(`Online bid: £${amount}`,'info');
     } else {
       const amount=nextBid(S.hi);
       S.bid=amount; S.hi=amount; S.lbdr='ROOM'; S.lname='ROOM';
       addLog('ROOM',amount,'ROOM','room');
-      setNotif(''); setAmt(amount); hiInc(amount);
+      setBidSrc(null); setAmt(amount); hiInc(amount);
       fb(`Room bid: £${amount}`,'info');
     }
     if(ok) advance();
   } else if(a==='room'){
     S.pending=null;
     S.lbdr='ROOM'; S.lname='ROOM';
-    addLog('ROOM',S.hi,'ROOM','room'); setNotif('');
+    addLog('ROOM',S.hi,'ROOM','room'); setBidSrc(null);
     fb(`Room — £${S.hi}`,'info');
     if(ok) advance();
   } else if(a==='sell'){
     if(ok){
       const lot=S.lots[S.li];
       S.sold[lot.id]=S.hi; lot.hammer=S.hi;
-      addLog(S.lbdr,S.hi,S.lname,'sold');
+      addLog(S.lbdr,S.hi,S.lbdr==='ROOM' ? 'ROOM' : 'INTERNET','sold');
       document.getElementById('fH').value=`${S.hi}`;
       fb(`🔨 SOLD! Lot ${lot.id} — £${S.hi} to ${S.lname}`,'good');
-      setNotif(''); renderLL(); S.lotClosed=true; advance();
+      setBidSrc(null); renderLL(); S.lotClosed=true; advance();
     } else { fb(`Sell: £${S.hi} to ${S.lname}`,'info'); }
   } else if(a==='pass'){
     if(ok){
@@ -1754,7 +1771,7 @@ function act(a){
       if(ns&&ns.nl) S.li=LOTS.findIndex(l=>l.id===ns.nl.id);
       else S.li=Math.min(S.li+1,LOTS.length-1);
       S.bid=0; S.hi=0; S.log=[]; S.lotClosed=false;
-      clearLogs(); setAmt(0);
+      clearLogs(); setBidSrc(null); setAmt(0);
       document.getElementById('fH').value='0';
       updateLot(); renderLL(); fb('➡️ Next lot','info'); advance();
     }
@@ -1796,8 +1813,10 @@ function advance(){ S.si++; clearTO(); setTimeout(runStep,300); setTimeout(focus
    UI HELPERS
 ───────────────────────────────────────── */
 function setAmt(v){
+  // H = the standing hammer bid, A = the asking (next) bid — real-screen semantics.
+  document.getElementById('fH').value = v > 0 ? v : '0';
   const el=document.getElementById('amt');
-  el.textContent=v>0?v:'0';
+  el.textContent = v > 0 ? nextBid(v) : nextBid(0);
   el.classList.add('lit');
   setTimeout(()=>el.classList.remove('lit'),600);
 }
@@ -1824,23 +1843,28 @@ function clearLogs(){
   document.getElementById('rlog').innerHTML='';
 }
 
-function setNotif(cls){
-  const bar=document.getElementById('notif');
-  const big=document.getElementById('bnotif');
-  bar.className='notif-bar'; big.className='bid-notif';
-  if(cls==='ng'){
-    bar.classList.add('ng'); bar.textContent='● BID RECEIVED';
-    big.classList.add('ng'); big.textContent='● BID RECEIVED';
-  } else if(cls==='nr'){
-    bar.classList.add('nr'); bar.textContent='● ROOM BID';
-    big.classList.add('nr'); big.textContent='● ROOM BID';
-  } else if(cls==='np'){
-    bar.classList.add('np'); bar.textContent='● COMMISSION BID';
-    big.classList.add('np'); big.textContent='● COMMISSION BID';
-  } else {
-    bar.textContent='Bidding Notification Box';
-    big.textContent='';
+/* Bid-source colouring, exactly as the real operator screen behaves:
+   an AUTO bid turns the Bid button, the A field and the customer square PURPLE
+   (and shows the "Next Bid: MAX Autobid" box); a LIVE internet bidder turns
+   them RED. The square carries the customer's SR number. A room bid clears it. */
+function setBidSrc(origin, who){
+  const sq  = document.getElementById('srsq');
+  const bid = document.getElementById('bBid');
+  const abox = document.getElementById('amt');
+  const max = document.getElementById('maxbox');
+  bid.classList.remove('bid-src-auto','bid-src-live');
+  abox.classList.remove('src-auto','src-live');
+  if(!origin){
+    sq.className = 'sr-square'; sq.textContent = '';
+    max.style.visibility = 'hidden';
+    return;
   }
+  const cls = origin === 'live' ? 'live' : 'auto';
+  sq.className = 'sr-square on-' + cls;
+  sq.textContent = who || '';
+  bid.classList.add('bid-src-' + cls);
+  abox.classList.add('src-' + cls);
+  max.style.visibility = origin === 'auto' ? 'visible' : 'hidden';
 }
 
 function hiInc(bid){
@@ -1959,8 +1983,18 @@ function updateDots(){
 
 function clearTO(){ if(S._at){clearTimeout(S._at);S._at=null;} }
 
+/* Increment steps list — the narrow list to the right of the ladder. */
+function buildStepsList(){
+  const STEPS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 500, 1000];
+  const body = document.getElementById('steps-body');
+  body.innerHTML = STEPS.map(v => `<tr><td>${v}</td></tr>`).join('');
+  body.addEventListener('click', () =>
+    fb('Increments follow the standard ladder in training', 'info'));
+}
+
 // init
 buildIncTable();
+buildStepsList();
 renderLL();
 
 // Global: any digit key routes straight to the bid override input
