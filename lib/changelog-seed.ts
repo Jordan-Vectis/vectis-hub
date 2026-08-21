@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"6c53fc9e7697f7abff6337834893396fe9eaf495","author":"Jordan Orange","date":"2026-08-21T16:33:35+01:00","subject":"Memory: Auto Clerk.ahk — Test read warns when the Saleroom A box is unset"},
   {"sha":"25d9b26dd37accf7e5b9bd7173c979996503bada","author":"Jordan Orange","date":"2026-08-21T16:27:46+01:00","subject":"Memory: Auto Clerk.ahk — function-scope global list lesson (won't-open fix)"},
   {"sha":"be8765431336442b85c977d8820b34f0d24b2829","author":"Jordan Orange","date":"2026-08-21T16:17:38+01:00","subject":"Memory: Auto Clerk.ahk — lone-digit OCR limit, asking-box fallback, set-just-one calibration"},
   {"sha":"01a45d0e2a4f81f52db1382fcf486d1ecac31430","author":"Jordan Orange","date":"2026-08-21T15:40:21+01:00","subject":"Memory: Auto Clerk.ahk v2 — both screens in step, simulation-proven"},
