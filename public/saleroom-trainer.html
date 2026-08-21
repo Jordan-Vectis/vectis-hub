@@ -9,7 +9,7 @@
 body {
   -webkit-font-smoothing: antialiased;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-  background: rgb(230,230,230);
+  background: white;
   color: black;
   font-size: 2vmin;
   overflow: hidden;
@@ -119,15 +119,17 @@ body {
 .curlot-desc {
   grid-area: desc;
   font-size: 1.7vmin; line-height: 1.35;
-  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .action-row {
-  display: flex; gap: 0.4vw; margin-top: 0.5vh; padding-top: 0.5vh;
-  border-top: 1px solid rgb(220,220,220); flex-shrink: 0;
+  display: flex; gap: 0.5vw; margin-top: 0.8vh; flex-shrink: 0;
 }
 .action-row .btn {
-  flex: 1; margin: 0; width: auto; padding: 0.55vmin 2px; font-size: 1.8vmin;
+  flex: 0 0 6.8vw; margin: 0; width: auto; padding: 0.6vmin 2px; font-size: 1.8vmin;
 }
+.action-row .btn.gap-l { margin-left: 1.6vw; }
+#bUndoTop.dim { color: rgb(179,179,179); }
 
 /* ── BID LOG ── */
 #cell-bidlog .card {
@@ -143,11 +145,10 @@ body {
 .blog-body { flex: 1; overflow-y: auto; font-size: 1.5vmin; }
 .blog-row {
   display: grid; grid-template-columns: 33% 33% 34%;
-  padding: 1px 0; white-space: nowrap;
+  padding: 0.45vh 0; white-space: nowrap;
 }
 .blog-row span { overflow: hidden; padding: 0 0 0 10px; text-overflow: ellipsis; }
-.blog-row.sold { background: #d0f5d0; font-weight: bold; }
-.blog-row.room { background: #ede; }
+.blog-row.sold { font-weight: bold; }
 @keyframes rowflash { from { background: #ffffc0; } }
 .blog-row.new  { animation: rowflash 0.4s; }
 
@@ -177,7 +178,7 @@ body {
 .ha-row   { display: flex; align-items: center; gap: 4px; }
 .ha-lbl   { font-weight: bold; font-size: 1.9vmin; width: 1.4vw; }
 .h-field  {
-  width: 6vw; text-align: right; font-family: inherit;
+  width: 8vw; text-align: center; font-family: inherit;
   font-size: 2.1vmin; font-weight: bold;
   border: none; background: transparent; padding: 0 2px;
 }
@@ -207,7 +208,10 @@ body {
   padding: 0 6px; text-align: right; line-height: 1.65;
   white-space: nowrap; border: none; color: #222;
 }
-.inc-tbl tr.hi td { background: rgb(173,216,230); }
+.inc-tbl tr.hi td { background: none; }
+.ladder-col .inc-scroll { border: none; }
+.ladder-col .inc-tbl td { font-size: 1.7vmin; line-height: 2; padding-right: 2vw; }
+.steps-col .inc-tbl td { font-size: 1.7vmin; line-height: 1.9; padding-right: 1.2vw; }
 .man-chk { font-size: 1.6vmin; flex-shrink: 0; }
 
 /* Ladder + increment-steps side by side, exactly as the operator screen */
@@ -218,13 +222,13 @@ body {
 .lon-btn { width: 100%; margin: 0; }
 
 /* ── BID SOURCE COLOURS — purple = auto bid, red = live internet bidder ── */
-#bBid.bid-src-auto { background: #8e1a96; color: #fff; border-color: #6f1076; }
+#bBid.bid-src-auto { background: #8e2596; color: #fff; border-color: #6f1076; }
 #bBid.bid-src-live { background: #d32f2f; color: #fff; border-color: #a82222; }
-.amt-disp.src-auto { background: #d668d6 !important; color: #fff; border-color: #b44fb4; }
+.amt-disp.src-auto { background: #da70da !important; color: #fff; border-color: #b44fb4; }
 .amt-disp.src-live { background: #e05252 !important; color: #fff; border-color: #c03e3e; }
 #maxbox {
   width: 7.5vw; margin-top: 0.8vh; padding: 1vh 0.4vw; border-radius: 5px;
-  background: #8e1a96; color: #fff; text-align: center;
+  background: #8e2596; color: #fff; text-align: center;
   display: flex; flex-direction: column; line-height: 1.35;
   font-size: 2vmin; font-weight: bold;
 }
@@ -235,7 +239,7 @@ body {
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-weight: bold; font-size: 1.9vmin; visibility: hidden;
 }
-.sr-square.on-auto { visibility: visible; background: #d668d6; }
+.sr-square.on-auto { visibility: visible; background: #da70da; }
 .sr-square.on-live { visibility: visible; background: #d32f2f; }
 
 /* Right col: Pause, Once */
@@ -331,34 +335,15 @@ body {
 .ll-head-shadow { box-shadow: black 0px 0.5vh 1vh -1vh; }
 .ll-body { overflow-y: auto; font-size: 1.7vmin; }
 
-.ll-row {
-  display: grid; grid-template-columns: 16vmin 1fr;
-  height: 48px; cursor: pointer;
-}
-.ll-row:hover .ll-highlight { border-top-color: lightblue; background: lightblue; }
-.ll-row.cur .ll-highlight {
-  background: rgb(93,173,236);
-  border-top: 1px solid rgb(93,173,236);
-  border-bottom: 1px solid rgb(93,173,236);
-}
-.ll-highlight {
-  display: contents;
-}
-.ll-left {
-  display: grid; grid-template-columns: 1fr auto;
-  overflow: hidden; padding: 4px 6px 4px 8px; align-items: start;
-}
-.ll-num { font-size: 1.7vmin; font-weight: normal; }
-.ll-dot { color: rgb(255,51,85); font-size: 1.4vmin; }
-.ll-right { overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 3px 6px; }
-.ll-status {
-  display: flex; justify-content: flex-end; gap: 8px;
-  font-weight: 600; font-size: 1.6vmin;
-}
-.ll-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.6vmin; }
-.ll-row-border {
-  border-top: 1px solid white; border-bottom: 1px solid rgb(219,219,219);
-  display: contents;
+.ll-row { display: block; padding: 0.6vh 1.2vh 0.7vh; cursor: pointer; }
+.ll-row:hover { background: #f2f8fd; }
+.ll-row.cur { border-bottom: 2px solid rgb(93,173,236); }
+.ll-line1 { display: flex; justify-content: space-between; align-items: baseline; }
+.ll-num { font-size: 1.8vmin; }
+.ll-status { font-weight: 600; font-size: 1.6vmin; }
+.ll-desc {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 1.7vmin; padding-left: 14%; margin-top: 0.3vh;
 }
 
 /* Selected lot */
@@ -754,13 +739,13 @@ body {
         </div>
         <div class="curlot-desc" id="ldesc">—</div>
       </div>
-      <div class="action-row">
-        <button class="btn" onclick="act('sell')">Sell</button>
-        <button class="btn" onclick="act('pass')">Pass</button>
-        <button class="btn" onclick="act('undo')">Undo</button>
-        <button class="btn" onclick="act('offer')">Offer</button>
-        <button class="btn" onclick="act('next')">Next</button>
-      </div>
+    </div>
+    <div class="action-row">
+      <button class="btn" onclick="act('sell')">Sell</button>
+      <button class="btn" onclick="act('pass')">Pass</button>
+      <button class="btn gap-l" id="bUndoTop" onclick="act('undo')">Undo</button>
+      <button class="btn gap-l" onclick="act('offer')">Offer</button>
+      <button class="btn" onclick="act('next')">Next</button>
     </div>
   </div>
 
@@ -1822,6 +1807,11 @@ function addLog(b,a,n,cls){
   S.log.push({b,a,n,cls}); renderLogFull();
 }
 
+function updateUndoDim(){
+  const b=document.getElementById('bUndoTop');
+  if(b) b.classList.toggle('dim', !S || !S.log || S.log.length===0);
+}
+
 function renderLogFull(){
   const rows=[...S.log].reverse();
   const html=rows.map((r,i)=>{
@@ -1833,11 +1823,13 @@ function renderLogFull(){
   }).join('');
   document.getElementById('log').innerHTML=html;
   document.getElementById('rlog').innerHTML=html;
+  updateUndoDim();
 }
 
 function clearLogs(){
   document.getElementById('log').innerHTML='';
   document.getElementById('rlog').innerHTML='';
+  updateUndoDim();
 }
 
 /* Bid-source colouring, exactly as the real operator screen behaves:
@@ -1917,17 +1909,11 @@ function renderLL(){
       const hammer=(S.sold&&S.sold[l.id]!==undefined)?S.sold[l.id]:(l.hammer!==undefined?l.hammer:null);
       const buyer=hammer!==null?(l.buyer||'Room'):'';
       const status=hammer!==null
-        ? `<div class="ll-status"><span>${buyer}</span><span>${hammer}.00</span></div>`
-        : `<div class="ll-status"></div>`;
+        ? `<span class="ll-status">${buyer}&nbsp;&nbsp;${hammer}.00</span>`
+        : '';
       return `<div class="ll-row${isCur?' cur':''}">
-        <div class="ll-left">
-          <span class="ll-num">${l.id}</span>
-          <span class="ll-dot">●</span>
-        </div>
-        <div class="ll-right">
-          ${status}
-          <div class="ll-desc">${l.desc}</div>
-        </div>
+        <div class="ll-line1"><span class="ll-num">${l.id}</span>${status}</div>
+        <div class="ll-desc">${l.desc}</div>
       </div><hr class="row-hr">`;
     }).join('');
   setTimeout(()=>{
