@@ -6,7 +6,7 @@ import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, del
 import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
-import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
+import { parseCondition, buildCondition, withConditionSentence, type BoxPrefixMode } from "@/lib/condition"
 import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -2625,12 +2625,9 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
 
   function addConditionToDesc() {
     if (!condValue) return
-    const condText = `Condition appears ${condValue}.`
-    setDescVal(prev => {
-      const trimmed = prev.trimEnd()
-      // New line, not a space — matches bulkAddConditionsToDescriptions. Keep the two in step.
-      return trimmed ? `${trimmed}\n${condText}` : condText
-    })
+    // Same helper as the bulk Add Conditions button: replaces any condition sentence already
+    // in the description with the current one (never two), on its own line at the end.
+    setDescVal(prev => withConditionSentence(prev, condValue))
   }
 
   // Parcel size is stored in notes

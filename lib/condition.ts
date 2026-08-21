@@ -104,6 +104,50 @@ export function checkConditionInDescription(description: string, condition?: str
   return containsConditionGrade(description) ? { state: "reworded" } : { state: "missing" }
 }
 
+// ─── The "Condition appears …" sentence in the description ──────────────────
+// Add Conditions (bulk + the per-lot button) appends this sentence on its own line;
+// Remove Conditions takes it out. ⚠ ONE shared rule for all three call sites.
+//
+// ⚠ Why these match ANY condition sentence rather than the exact current one
+// (2026-08-20, Jordan: "we are now getting duplicate conditions and removing them
+// only removes one"): the old check was `description.includes("Condition appears
+// <current condition>.")`. The moment a lot was regraded after its sentence went in
+// — a box condition added, a Locking Check suggestion accepted — the old sentence no
+// longer matched, so Add appended a SECOND one and Remove only stripped the one for
+// the current grade. Add now REPLACES whatever condition sentence is there, so a
+// description carries exactly one, always the current one; Remove strips them all.
+//
+// A sentence is taken to run from "Condition appears" to the end of its line — that
+// is where the tool always writes it (and a box condition has its own full stop in
+// the middle, so "first full stop" would cut it short).
+const CONDITION_SENTENCE_RE = /(?<![A-Za-z])[ \t]*\n?[ \t]*Condition appears [^\n]*/g
+
+/** The sentence Add Conditions writes. No doubled full stop when the condition
+ *  already ends in one ("Near Mint. Box is Good."). */
+export function conditionSentence(condition: string): string {
+  const c = (condition ?? "").trim()
+  return c.endsWith(".") ? `Condition appears ${c}` : `Condition appears ${c}.`
+}
+
+/** Does the description carry a condition sentence at all (any wording)? */
+export function hasConditionSentence(description: string | null | undefined): boolean {
+  return new RegExp(CONDITION_SENTENCE_RE.source).test(description ?? "")
+}
+
+/** The description with every "Condition appears …" sentence removed, together
+ *  with the new line or space that joined it. */
+export function stripConditionSentences(description: string | null | undefined): string {
+  return (description ?? "").replace(CONDITION_SENTENCE_RE, "").trim()
+}
+
+/** The description carrying exactly one condition sentence — the current one —
+ *  on its own line at the end. Any earlier sentence is replaced, never doubled. */
+export function withConditionSentence(description: string | null | undefined, condition: string): string {
+  const body = stripConditionSentences(description)
+  const sentence = conditionSentence(condition)
+  return body ? `${body}\n${sentence}` : sentence
+}
+
 export function buildCondition(p: ConditionParts): string {
   const item = gradeRange(p.cond1, p.cond2)
   const prefix = (p.boxPrefixMode === "custom" ? p.boxCustomPrefix.trim() : p.boxPrefixMode)

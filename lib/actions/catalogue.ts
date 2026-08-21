@@ -14,6 +14,7 @@ import { buildToteMap, checkLot, toteLookupVariants, duplicateToteNumbers, norm 
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 import { getDepartmentAccessForSession, canSeeAuction } from "@/lib/departments"
 import { shouldKeepFlag } from "@/lib/measurement-check"
+import { withConditionSentence, stripConditionSentences, hasConditionSentence } from "@/lib/condition"
 
 // titleFromDescription lives in lib/lot-title.ts so the Locking Check can VERIFY against the
 // exact rule this generates with — see the note there.
@@ -1907,8 +1908,6 @@ export async function bulkAssignUniqueIds(
   return { updated, skipped }
 }
 
-const conditionText = (condition: string) => `Condition appears ${condition}.`
-
 // Scope a bulk action to the selected lot ids, or the whole auction when none are
 // selected — the house pattern (setStartingBids does the same). An empty array
 // means "nothing selected → all"; a non-empty array constrains to those ids.
@@ -1938,13 +1937,13 @@ export async function bulkAddConditionsToDescriptions(
   for (const lot of lots) {
     const condition = lot.condition?.trim()
     if (!condition) { skipped++; continue }
-    const condText = conditionText(condition)
     const oldDesc = lot.description ?? ""
-    if (oldDesc.includes(condText)) { skipped++; continue }   // already present
-
-    // ⚠ Joined with a NEW LINE, not a space (Jordan, 2026-08-19) — the condition is its own
-    // statement, not the tail of the last sentence of the description.
-    const newDesc = oldDesc.trimEnd() ? `${oldDesc.trimEnd()}\n${condText}` : condText
+    // ⚠ REPLACES any condition sentence already there rather than checking for the exact
+    // current one (2026-08-20) — a lot regraded after its sentence went in used to get a
+    // second sentence, and Remove could only find the current one. Joined with a NEW LINE
+    // (Jordan, 2026-08-19): the condition is its own statement. See lib/condition.ts.
+    const newDesc = withConditionSentence(oldDesc, condition)
+    if (newDesc === oldDesc) { skipped++; continue }   // already present and current
     await updateLotLogged(lot.id, { description: newDesc, title: titleFromDescription(newDesc) }, ctx)
     undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: newDesc } } })
     updated++
@@ -1955,10 +1954,12 @@ export async function bulkAddConditionsToDescriptions(
   return { updated, skipped }
 }
 
-// The inverse: strip the "Condition appears [condition]." sentence this tool adds
-// back out of the description, leaving the rest intact. ⚠ It must strip BOTH joins — the
-// new line used since 2026-08-19 AND the single space used before it, because every lot
-// conditioned before that change still carries the space form.
+// The inverse: strip EVERY "Condition appears …" sentence back out of the description,
+// leaving the rest intact. ⚠ Any wording, not just the current condition's (2026-08-20) —
+// matching only the current one left behind the sentence from a previous grading, which
+// is the "removing them only removes one" report. Both joins go with it (the new line used
+// since 2026-08-19 and the single space before that). Lots whose condition field is now
+// blank are in scope too: the sentence is in the description whatever the field says.
 export async function bulkRemoveConditionsFromDescriptions(
   auctionId: string,
   lotIds?: string[],
@@ -1967,7 +1968,7 @@ export async function bulkRemoveConditionsFromDescriptions(
   await requireNotBCLocked(auctionId, session)
 
   const lots = await prisma.catalogueLot.findMany({
-    where:  { ...scopeWhere(auctionId, lotIds), condition: { not: null } },
+    where:  scopeWhere(auctionId, lotIds),
     select: { id: true, condition: true, description: true },
   })
 
@@ -1977,18 +1978,10 @@ export async function bulkRemoveConditionsFromDescriptions(
   const undo: UndoEntry[] = []
 
   for (const lot of lots) {
-    const condition = lot.condition?.trim()
     const oldDesc = lot.description ?? ""
-    if (!condition || !oldDesc.includes(conditionText(condition))) { skipped++; continue }
+    if (!hasConditionSentence(oldDesc)) { skipped++; continue }
 
-    // Remove the sentence together with whatever joined it — newline first, then space,
-    // then bare (a description that is nothing but the condition sentence).
-    const condText = conditionText(condition)
-    const newDesc = oldDesc
-      .split(`\n${condText}`).join("")
-      .split(` ${condText}`).join("")
-      .split(condText).join("")
-      .trim()
+    const newDesc = stripConditionSentences(oldDesc)
     if (newDesc === oldDesc) { skipped++; continue }
     await updateLotLogged(lot.id, { description: newDesc, title: titleFromDescription(newDesc) }, ctx)
     undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: newDesc } } })
