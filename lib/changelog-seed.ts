@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"9a5fb8c85517bcc487755af1381e9bc7f6f74bd8","author":"Jack Collings","date":"2026-08-21T10:06:03+01:00","subject":"Clerk Trainer: \"!\" is a simultaneous-bid reassignment, not a split"},
+  {"sha":"98f74c0d4bfb72f07d135039f2fe77af9529c752","author":"Jack Collings","date":"2026-08-21T09:48:15+01:00","subject":"Refresh changelog seed"},
   {"sha":"246d290814c45b0f24f2256c14662a2a6da78c6e","author":"Jack Collings","date":"2026-08-21T09:48:14+01:00","subject":"Saleroom Trainer skin: stop the bid log bleeding over the action strip"},
   {"sha":"13efc92ddf798156883a893315d3af4e9e5c32b6","author":"Jack Collings","date":"2026-08-21T09:38:48+01:00","subject":"Refresh changelog seed"},
   {"sha":"4522403b85b2ab85ea06477c16957262e43602c1","author":"Jack Collings","date":"2026-08-21T09:38:47+01:00","subject":"Saleroom Trainer skin: the top area and lot list, matched to the real screen"},
