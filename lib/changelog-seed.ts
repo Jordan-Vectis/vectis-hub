@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"28b7a912dc89781dde8d92391e62eeb13cbedbc3","author":"Jack Collings","date":"2026-08-21T09:34:14+01:00","subject":"Saleroom Trainer skin: bare numbers, unclipped controls, GAP-sized buttons"},
+  {"sha":"f658561ab2eae146c7181674e475930f0695c297","author":"Jack Collings","date":"2026-08-21T09:28:22+01:00","subject":"Refresh changelog seed"},
   {"sha":"5f89a217b09ba75635c4f1462d521c8a85b35999","author":"Jack Collings","date":"2026-08-21T09:28:21+01:00","subject":"Saleroom Trainer: exact GAP Live Operator skin — purple for auto bids, red for live"},
   {"sha":"1acaf8bcd2d38a5a79b22cfe8ce9f56c01759b73","author":"Jack Collings","date":"2026-08-21T09:07:12+01:00","subject":"Refresh changelog seed"},
   {"sha":"43958fabefbadc1a3f00f806f40f2f1b493da3b5","author":"Jack Collings","date":"2026-08-21T09:07:09+01:00","subject":"Clerk Trainer: patch the screen in place instead of rebuilding it — kills the input lag"},
