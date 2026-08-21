@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"246d290814c45b0f24f2256c14662a2a6da78c6e","author":"Jack Collings","date":"2026-08-21T09:48:14+01:00","subject":"Saleroom Trainer skin: stop the bid log bleeding over the action strip"},
+  {"sha":"13efc92ddf798156883a893315d3af4e9e5c32b6","author":"Jack Collings","date":"2026-08-21T09:38:48+01:00","subject":"Refresh changelog seed"},
   {"sha":"4522403b85b2ab85ea06477c16957262e43602c1","author":"Jack Collings","date":"2026-08-21T09:38:47+01:00","subject":"Saleroom Trainer skin: the top area and lot list, matched to the real screen"},
   {"sha":"e789bb4ed548e647490fea1c5d25bb9b9f3bd7d8","author":"Jack Collings","date":"2026-08-21T09:34:15+01:00","subject":"Refresh changelog seed"},
   {"sha":"28b7a912dc89781dde8d92391e62eeb13cbedbc3","author":"Jack Collings","date":"2026-08-21T09:34:14+01:00","subject":"Saleroom Trainer skin: bare numbers, unclipped controls, GAP-sized buttons"},
