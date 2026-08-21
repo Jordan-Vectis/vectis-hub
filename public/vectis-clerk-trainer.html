@@ -153,6 +153,7 @@ button:disabled{ opacity:.45; cursor:default; }
   padding:9px 4px; border-radius:3px; white-space:nowrap;
 }
 .gbtn:hover{ background:var(--indigo-hi); }
+.gbtn:active{ filter:brightness(0.8); }
 .gbtn.cur{ background:#fff; color:var(--indigo); border:2px solid var(--indigo); padding:7px 4px; }
 .gbtn.span2{ grid-column:1 / -1; }
 
@@ -160,6 +161,7 @@ button:disabled{ opacity:.45; cursor:default; }
 #sources{ display:flex; flex-direction:column; gap:8px; min-height:0; }
 .src-row{ display:grid; grid-template-columns:1fr auto 1fr auto; gap:8px; }
 .src-btn{ color:#fff; font-weight:700; font-size:16px; padding:12px 6px; border-radius:3px; white-space:nowrap; overflow:hidden; }
+.src-btn:active, .src-bang:active, #btn-hammer:active, #btn-fw:active, #btn-pass:active, #btn-quicker:active{ filter:brightness(0.8); }
 .src-bang{ color:#fff; font-weight:700; font-size:16px; width:44px; border-radius:3px; }
 .src-room{ background:var(--room); }        .src-room:hover{ filter:brightness(1.06); }
 .src-telephone{ background:var(--tel); }    .src-telephone:hover{ filter:brightness(1.08); }
@@ -247,6 +249,7 @@ button:disabled{ opacity:.45; cursor:default; }
   display:flex; flex-direction:column;
 }
 .slot:hover{ border-color:var(--indigo-hi); }
+.slot{ contain:content; }   /* isolates each slot's layout — 500 of them stay cheap */
 .slot.cur{ border:2px solid var(--indigo); box-shadow:0 0 0 2px rgba(46,49,146,.25); }
 .slot-img{
   height:88px; display:flex; align-items:center; justify-content:center;
@@ -1035,7 +1038,7 @@ function hammerOrNext(){
   S.justClosed = true;
   S.fw = false;
   clearTimeout(S._autoT);
-  renderMoney(); renderStrip(); pushState();
+  renderMoney(); patchStrip(); pushState();
   feedback(`🔨 SOLD — Lot ${l.id} at £${fmt(S.current)} to ${S.leader.user}. Click Next Lot.`, 'good');
 }
 function passLot(){
@@ -1045,7 +1048,7 @@ function passLot(){
   S.justClosed = true;
   S.fw = false;
   clearTimeout(S._autoT);
-  renderMoney(); renderStrip(); pushState();
+  renderMoney(); patchStrip(); pushState();
   feedback(`Lot ${l.id} passed — no sale. Click Next Lot.`, 'warn');
 }
 function withdrawLot(){
@@ -1055,7 +1058,7 @@ function withdrawLot(){
   S.justClosed = true;
   S.fw = false;
   clearTimeout(S._autoT);
-  renderMoney(); renderStrip(); pushState();
+  renderMoney(); patchStrip(); pushState();
   feedback(`Lot ${l.id} withdrawn. Click Next Lot.`, 'warn');
 }
 function nextLot(){
@@ -1098,7 +1101,7 @@ function moveLot(i, dir, ev){
   S.lots.splice(j, 0, m);
   if(i < S.li && j >= S.li) S.li--;
   else if(i > S.li && j <= S.li) S.li++;
-  renderStrip();
+  patchStrip();   // order changed → falls back to the full rebuild
   feedback(`Lot ${m.id} moved ${dir < 0 ? 'earlier' : 'later'} in the running order`, '');
 }
 
@@ -1116,7 +1119,7 @@ function undoBid(){
     const was = l.outcome;
     l.outcome = null; delete l.hammer; delete l.buyer;
     S.justClosed = false;
-    renderMoney(); renderStrip(); pushState();
+    renderMoney(); patchStrip(); pushState();
     feedback(`↩ Undone — lot re-opened (was ${was})`, 'warn');
     return;
   }
@@ -1225,7 +1228,7 @@ function removeAuto(i){
    or replace the header thumbnail — on a full sale that is visible jank. */
 function renderAll(){
   if(!S) return;
-  renderTop(); renderMoney(); renderBidLog(); renderAutos(); renderStrip();
+  renderTop(); renderMoney(); renderBidLog(); renderAutos(); patchStrip();
 }
 function renderMoney(){
   if(!S) return;
@@ -1265,20 +1268,31 @@ function renderTop(){
 function renderCB(){
   $('cb-amt').textContent = '£' + fmt(S.current);
 }
+/* The grids are built ONCE and then patched in place. Rebuilding them with
+   innerHTML after every action replaced the button between a fast double-click's
+   mousedown and mouseup, so the browser dropped the second click — which read
+   as the screen lagging. Patching keeps the same nodes alive under the mouse. */
+function buildGrids(){
+  $('askgrid').innerHTML = QUICK_STEPS.map((_, i) =>
+    `<button class="gbtn" onclick="quickAskAt(${i})"></button>`).join('');
+  $('incgrid').innerHTML = INC_CHOICES.map((v, i) =>
+    `<button class="gbtn${i === INC_CHOICES.length - 1 ? ' span2' : ''}" onclick="pinInc(${v})">£${fmt(v)}</button>`).join('');
+}
+/* The quick-ask value is computed at CLICK time, not baked into the button, so
+   the node never needs replacing when the current bid moves. */
+function quickAskAt(i){ if(S) quickAsk(S.current + QUICK_STEPS[i]); }
 function renderAskGrid(){
-  const grid = $('askgrid');
-  grid.innerHTML = QUICK_STEPS.map(step => {
-    const v = S.current + step;
-    return `<button class="gbtn${asking() === v ? ' cur' : ''}" onclick="quickAsk(${v})">£${fmt(v)}</button>`;
-  }).join('');
+  const ask = asking();
+  [...$('askgrid').children].forEach((btn, i) => {
+    const v = S.current + QUICK_STEPS[i];
+    btn.textContent = '£' + fmt(v);
+    btn.classList.toggle('cur', ask === v);
+  });
 }
 function renderIncGrid(){
   const active = incNow();
-  const grid = $('incgrid');
-  grid.innerHTML = INC_CHOICES.map((v, i) => {
-    const last = i === INC_CHOICES.length - 1;
-    return `<button class="gbtn${v === active ? ' cur' : ''}${last ? ' span2' : ''}" onclick="pinInc(${v})">£${fmt(v)}</button>`;
-  }).join('');
+  [...$('incgrid').children].forEach((btn, i) =>
+    btn.classList.toggle('cur', INC_CHOICES[i] === active));
 }
 function renderSources(){
   const ask = asking();
@@ -1326,6 +1340,10 @@ function renderAutos(){
 function renderHover(){
   $('hovern').textContent = TS.hover.size;
 }
+function stripSig(){ return S.lots.map(l => l.id).join('|'); }
+
+/* Full rebuild — init and lot reorders only. Hammering must never rebuild a
+   500-slot strip: that stalled the main thread at the most important click. */
 function renderStrip(){
   const strip = $('strip');
   strip.innerHTML = S.lots.map((l, i) => {
@@ -1334,22 +1352,40 @@ function renderStrip(){
     const img = l.img
       ? `<img alt="" loading="lazy" src="${esc(l.img)}" onerror="this.parentNode.textContent='📦'">`
       : (l.e || '📦');
-    const ribbon = l.outcome === 'sold' ? '<span class="ribbon sold">Sold</span>'
-                 : l.outcome === 'passed' ? '<span class="ribbon passed">Passed</span>'
-                 : l.outcome === 'withdrawn' ? '<span class="ribbon withdrawn">W/drawn</span>'
-                 : '';
-    const arrows = (!l.outcome && i !== S.li)
-      ? `<span class="slot-arrows">` +
-        `<button title="Move earlier" onclick="moveLot(${i},-1,event)">▲</button>` +
-        `<button title="Move later" onclick="moveLot(${i},1,event)">▼</button>` +
-        `</span>`
-      : '';
-    return `<div class="slot${i === S.li ? ' cur' : ''}" onclick="jumpToLot(${i})" title="Lot ${esc(l.id)}">` +
-      `<div class="slot-img">${img}</div>${ribbon}` +
+    return `<div class="slot" onclick="jumpToLot(${i})" title="Lot ${esc(l.id)}">` +
+      `<div class="slot-img">${img}</div>` +
       `<div class="slot-num">Lot #${esc(l.id)}</div>` +
       `<div class="slot-name">${esc((l.desc || '').slice(0, 52))}</div>` +
-      `${arrows}</div>`;
+      `<span class="slot-arrows">` +
+        `<button title="Move earlier" onclick="moveLot(${i},-1,event)">▲</button>` +
+        `<button title="Move later" onclick="moveLot(${i},1,event)">▼</button>` +
+      `</span></div>`;
   }).join('');
+  renderStrip._sig = stripSig();
+  renderStrip._centredLi = -1;
+  patchStrip();
+}
+
+/* Per-lot updates (ribbons, current highlight, arrows) patch the existing
+   nodes. Falls back to a full rebuild when the lot order actually changed. */
+const STRIP_RIBBONS = { sold:['sold','Sold'], passed:['passed','Passed'], withdrawn:['withdrawn','W/drawn'] };
+function patchStrip(){
+  const strip = $('strip');
+  if(renderStrip._sig !== stripSig() || strip.children.length !== S.lots.length){ renderStrip(); return; }
+  S.lots.forEach((l, i) => {
+    const el = strip.children[i];
+    el.classList.toggle('cur', i === S.li);
+    const want = STRIP_RIBBONS[l.outcome] || null;
+    let rib = el.querySelector('.ribbon');
+    if(!want){
+      if(rib) rib.remove();
+    } else {
+      if(!rib){ rib = document.createElement('span'); el.appendChild(rib); }
+      rib.className = 'ribbon ' + want[0];
+      rib.textContent = want[1];
+    }
+    el.querySelector('.slot-arrows').style.display = (!l.outcome && i !== S.li) ? '' : 'none';
+  });
   // Recentre only when the rostrum actually moved — a ribbon appearing on the
   // current lot must not yank the strip back to centre mid-scroll.
   if(S.li !== renderStrip._centredLi){
@@ -1374,6 +1410,7 @@ $('inc-input').addEventListener('keydown', e => { if(e.key === 'Enter') setIncFr
 $('auto-amt').addEventListener('keydown', e => { if(e.key === 'Enter') addAuto(); });
 
 // init
+buildGrids();
 loadSales();
 </script>
 </body>
