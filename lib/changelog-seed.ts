@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"01a45d0e2a4f81f52db1382fcf486d1ecac31430","author":"Jordan Orange","date":"2026-08-21T15:40:21+01:00","subject":"Memory: Auto Clerk.ahk v2 — both screens in step, simulation-proven"},
   {"sha":"f9cf87c5fdc1f28077248904b392f9a4dbdce7be","author":"Jordan Orange","date":"2026-08-21T15:27:49+01:00","subject":"Memory: Auto Clerk.ahk — first live calibration lessons (padded bid box, look-alike digits, Test read picture)"},
   {"sha":"942dff1357a37604b6f051479c52a45f1c5f1a52","author":"Jordan Orange","date":"2026-08-21T15:05:08+01:00","subject":"Memory: Auto Clerk.ahk — top-level globals must precede the start-up calls"},
   {"sha":"e26034dbe636ab47aca0c914a457dd11f389daa4","author":"Jordan Orange","date":"2026-08-21T14:57:27+01:00","subject":"Memory: Auto Clerk.ahk — the screen-reading AutoHotkey clerk (v1)"},
