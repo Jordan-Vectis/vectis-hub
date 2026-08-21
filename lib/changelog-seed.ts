@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"27ca9492ccb625902a27233f67f512bd15a8172e","author":"Jack Collings","date":"2026-08-21T10:33:56+01:00","subject":"Trainer: say which platform a practice sale is on — Vectis or the saleroom"},
+  {"sha":"23ffeaca3759b7c0444ce9d5415a597ba6ec8402","author":"Jack Collings","date":"2026-08-21T10:26:47+01:00","subject":"Refresh changelog seed"},
   {"sha":"2b2c3d8a4852f9dbf708a09690e3225ac3e57a5a","author":"Jack Collings","date":"2026-08-21T10:26:45+01:00","subject":"Trainer menu: fit the screen — scroll when the cards outgrow it"},
   {"sha":"05541179115a9c41b9394b87e46470fc532233f5","author":"Jack Collings","date":"2026-08-21T10:22:08+01:00","subject":"Refresh changelog seed"},
   {"sha":"4794c582ab045681ca330e5bc44a01c8e97bbbd5","author":"Jack Collings","date":"2026-08-21T10:22:07+01:00","subject":"Trainer: join any running practice sale from a live list — no links needed"},
