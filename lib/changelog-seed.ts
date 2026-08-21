@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-08-20, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-08-21, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"43958fabefbadc1a3f00f806f40f2f1b493da3b5","author":"Jack Collings","date":"2026-08-21T09:07:09+01:00","subject":"Clerk Trainer: patch the screen in place instead of rebuilding it — kills the input lag"},
+  {"sha":"571d6c9ac58904dc0039db1e8985d61efc63c605","author":"Jack Collings","date":"2026-08-20T21:25:22+01:00","subject":"Refresh changelog seed"},
   {"sha":"e3af24f4d4b0a046d8d24ad96722f559a2540465","author":"Jack Collings","date":"2026-08-20T21:25:11+01:00","subject":"Vectis Clerk Trainer — practice clerking on a faithful copy of the live software"},
   {"sha":"0f71c9559a7ad5c7df03f3ba779d991176850b01","author":"Jordan Orange","date":"2026-08-20T17:01:43+01:00","subject":"Overnight AI Upgrade runs — queue kind on the Overnight page, rewrites held for morning review"},
   {"sha":"04b8af27291805b13e74ccbaf7fcc9863a638750","author":"Jordan Orange","date":"2026-08-20T15:54:51+01:00","subject":"Memory: Macro Calibrator confirmed working on PC + laptop (middle-click)"},
