@@ -233,13 +233,25 @@ export default function EndOfDayPage() {
   // totes are never guessed at, so it can't fix everything the checks flag.
   // Two steps: the button runs a PREVIEW (nothing written) and shows every
   // planned change in a modal; Apply then runs the same fix for real.
+  //
+  // ⚠ SCOPE = TONIGHT'S SHEET AND NOTHING ELSE (Jordan, 2026-08-21). The exact
+  // barcodes on screen are sent with the call, so the preview can only ever
+  // count lots the checks above it looked at. It used to send sale ids alone,
+  // and the action then scanned EVERY lot in those sales — including the
+  // thousands already in BC — so 8 flagged lots previewed as "70 would change".
+  // Preview and Apply must send the SAME list or Apply does more than it showed.
+  const sheetBarcodes = useMemo(
+    () => (data ? [...new Set(data.receipts.flatMap(r => r.barcodes))] : []),
+    [data],
+  )
+
   async function fixFromBc() {
     if (!data) return
     const ids = data.sales.map(s => s.id).filter(Boolean)
-    if (ids.length === 0) return
+    if (ids.length === 0 || sheetBarcodes.length === 0) return
     setFixing(true); setFixResult(null)
     try {
-      const res = await autocorrectLotsForAuctions(ids, false)
+      const res = await autocorrectLotsForAuctions(ids, false, sheetBarcodes)
       if (!res.ok && res.error) {
         setFixResult(`Couldn't check what's fixable: ${res.error}`)
       } else {
@@ -255,7 +267,7 @@ export default function EndOfDayPage() {
     const ids = data.sales.map(s => s.id).filter(Boolean)
     setFixing(true)
     try {
-      const res = await autocorrectLotsForAuctions(ids, true)
+      const res = await autocorrectLotsForAuctions(ids, true, sheetBarcodes)
       setFixPreview(null)
       if (!res.ok && res.error) {
         setFixResult(`Couldn't fix: ${res.error}`)
@@ -440,7 +452,7 @@ export default function EndOfDayPage() {
                 <button
                   onClick={fixFromBc}
                   disabled={fixing}
-                  title="The same fix as Match BC on each sale's Tote Check tab — corrects receipt and vendor from the BC tote data wherever the tote is known. Unknown totes are never guessed at. Shows every planned change first — nothing happens until you Apply."
+                  title="The same fix as Match BC on each sale's Tote Check tab, but only over the lots on tonight's sheet — nothing already in BC is touched. Corrects receipt and vendor from the BC tote data wherever the tote is known; unknown totes are never guessed at. Shows every planned change first — nothing happens until you Apply."
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
                 >
                   {fixing && !fixPreview ? "Checking what's fixable…" : "🔧 Fix what BC can prove"}
@@ -642,6 +654,9 @@ export default function EndOfDayPage() {
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                 Nothing has been changed yet. Each line shows what will be corrected from the BC tote data — red is what&apos;s on the lot now, green is what BC says.
                 Every change is logged in the Lot Change Log, and anything already pushed to BC wrong lands on the BC Corrections list.
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                Only lots on tonight&apos;s sheet are looked at — nothing already in Business Central is touched.
               </p>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-1.5">

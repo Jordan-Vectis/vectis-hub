@@ -519,7 +519,13 @@ export type AutocorrectChange = {
   wasWrong: boolean            // true = a value changes (BC correction); false = a blank being filled
 }
 
-export async function autocorrectLotsFromTotes(auctionId: string, apply: boolean = true): Promise<{
+// `onlyBarcodes` NARROWS the fix to a named set of lots (End of Day passes the
+// barcodes actually on tonight's sheet). Omit it and the whole sale is checked,
+// which is what the Tote Check tab wants. ⚠ Without it the End of Day button
+// scanned every lot in the sale INCLUDING the thousands already in BC, so its
+// preview said "70 lots would change" against check panels showing 8 — same
+// engine, different set of lots (Jordan, 2026-08-21).
+export async function autocorrectLotsFromTotes(auctionId: string, apply: boolean = true, onlyBarcodes?: string[] | null): Promise<{
   ok: boolean
   error?: string
   updated?: number
@@ -534,7 +540,7 @@ export async function autocorrectLotsFromTotes(auctionId: string, apply: boolean
     // then refuse is worse than reporting the sale as locked up front.
     await requireNotBCLocked(auctionId, session)
 
-    const lots = await prisma.catalogueLot.findMany({
+    const all = await prisma.catalogueLot.findMany({
       where:  { auctionId },
       select: {
         id: true, barcode: true, receiptUniqueId: true, title: true,
@@ -542,6 +548,11 @@ export async function autocorrectLotsFromTotes(auctionId: string, apply: boolean
       },
       orderBy: { createdAt: "asc" },
     })
+
+    // An EMPTY list is a real scope ("nothing on the sheet from this sale"),
+    // not a missing one — undefined/null means the whole sale.
+    const scope = onlyBarcodes == null ? null : new Set(onlyBarcodes.map(b => b.trim().toUpperCase()).filter(Boolean))
+    const lots  = scope ? all.filter(l => l.barcode && scope.has(l.barcode.trim().toUpperCase())) : all
 
     const variants = toteLookupVariants(lots)
     const totes = variants.length > 0
@@ -745,7 +756,14 @@ export async function massRemapPendingLots(
 // tab (and the End of Day checks, which share lib/tote-check.ts) report.
 // A BC-locked sale fails ITS OWN call for non-admins and is reported as
 // skipped; the rest still get fixed.
-export async function autocorrectLotsForAuctions(auctionIds: string[], apply: boolean = true): Promise<{
+//
+// ⚠ SCOPE (2026-08-21, Jordan: "it should only be trying to fix anything on the
+// night's sheet"): the page passes `sheetBarcodes` — every barcode on tonight's
+// sheet — and nothing else is touched. Lots already in BC are out of scope by
+// definition (they aren't on the sheet); their wrong values belong to the BC
+// Corrections flow, exactly as with the Mass re-map. Without this the preview
+// counted the whole sale and disagreed with the check panels above it.
+export async function autocorrectLotsForAuctions(auctionIds: string[], apply: boolean = true, sheetBarcodes?: string[] | null): Promise<{
   ok: boolean
   error?: string
   updated: number
@@ -764,7 +782,7 @@ export async function autocorrectLotsForAuctions(auctionIds: string[], apply: bo
         })).map(a => [a.id, a.code]))
       : new Map<string, string>()
     for (const id of ids) {
-      const res = await autocorrectLotsFromTotes(id, apply)
+      const res = await autocorrectLotsFromTotes(id, apply, sheetBarcodes)
       if (!res.ok) { lockedSales++; continue }
       updated     += res.updated     ?? 0
       corrections += res.corrections ?? 0
