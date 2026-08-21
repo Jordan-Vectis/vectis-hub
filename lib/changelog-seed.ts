@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"d9b9126edf668fd579fe162d2f386c4fd421c3f2","author":"Jordan Orange","date":"2026-08-21T17:14:53+01:00","subject":"Say what BC Corrections actually does now the list is live-only"},
+  {"sha":"3c809b3579a261a990d808ab5c57fe6433df6613","author":"Jordan Orange","date":"2026-08-21T17:08:03+01:00","subject":"Refresh changelog seed"},
   {"sha":"5bd6d29044c9249e8ac7432548db039844866041","author":"Jordan Orange","date":"2026-08-21T17:07:57+01:00","subject":"End of Day: \"Fix what BC can prove\" only looks at tonight's sheet"},
   {"sha":"b09a9cd991c0dbab004508bf697475f04eec58e7","author":"Jordan Orange","date":"2026-08-21T17:04:10+01:00","subject":"Memory: Auto Clerk.ahk — same-amount tie (rule 3) automated via top-row labels; case-insensitive name trap"},
   {"sha":"e7b2c20de83395fbb918151ef61768e884c821ba","author":"Jordan Orange","date":"2026-08-21T16:47:24+01:00","subject":"Memory: Auto Clerk.ahk — first live two-screen run: Enter vs Bid on the trainer, misread-proof drops, no self-pausing"},
