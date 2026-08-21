@@ -142,6 +142,26 @@ On the Copier specifically:
 - *The failure:* Change Vendor reported "✓ Changed 0 lots" when it had changed nothing, so a real
   problem read as done. If a count is zero, say so plainly and say why.
 
+### 8. ⚠ The SALEROOM TRAINER is FROZEN while the Auto Clerk is being worked on (2026-08-21)
+Jordan: *"we made some great changes for training our staff and the design of the clerking
+screens so I want a rule made first you cannot change anything in here while working on the
+autoclerk."* The trainer (`/tools/saleroom-trainer`) is a finished staff-training tool with
+screens skinned to match the real clerking software; it is **not** Auto Clerk scratch space.
+
+**Do not edit ANY of these while doing Auto Clerk work — not a line, not a colour, not a comment:**
+- `app/(app)/tools/saleroom-trainer/` (layout.tsx, page.tsx)
+- `public/saleroom-trainer.html`, `public/saleroom-trainer-bid.html`, `public/vectis-clerk-trainer.html`
+- `app/api/trainer/**` (qr, sales, sales/lots)
+- `lib/trainer-socket.js` and its `setupTrainerSocket` hook in `server.js`
+- the trainer's registrations in `lib/app-cards.ts` and `components/nav.tsx`
+
+**If the Auto Clerk needs a replica screen, COPY the trainer file into a new `public/auto-clerk-*.html`
+and change the copy** — exactly how the Scenario 1 rig (`auto-clerk-fake-saleroom.html`) was made from
+the Saleroom replica. A copy may drift from the trainer afterwards; that is accepted, and it is why the
+rule exists. The trainer's room protocol (`trainer:*` socket events) is likewise read-only from the
+Auto Clerk's side. A genuine trainer bug found during Auto Clerk work is reported to Jordan, not fixed
+in passing.
+
 ## ⚠ Claude memory sync (multi-developer) — check freshness before trusting local memory
 
 The in-app memory page — the `ENTRIES` array in `app/(app)/admin/memory/page.tsx`, shown at
