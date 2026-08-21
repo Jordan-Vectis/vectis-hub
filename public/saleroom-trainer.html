@@ -489,6 +489,21 @@ body {
 }
 .tm-start:hover { background: #2ecc71; }
 
+/* ── JOIN A RUNNING SALE ── */
+.join-list { display: flex; flex-direction: column; gap: 0.8vh; margin-top: 1vh; }
+.join-list.empty { color: #8fa6b8; font-size: 1.6vmin; }
+.join-row {
+  display: flex; align-items: center; gap: 1.5vw; text-align: left;
+  background: #22323f; border: 2px solid #3a4f60; border-radius: 6px;
+  color: #ddd; font-family: inherit; font-size: 1.7vmin;
+  padding: 1vh 1.4vh; cursor: pointer;
+}
+.join-row:hover { border-color: #4ade80; background: #24384a; }
+.jr-code { color: #4ade80; font-family: Consolas, Menlo, monospace; font-weight: 800; letter-spacing: 0.2em; font-size: 2vmin; }
+.jr-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jr-lot, .jr-n { color: #8fa6b8; white-space: nowrap; }
+.jr-go { color: #4ade80; font-weight: bold; white-space: nowrap; }
+
 /* ── TEST MODE — SALE PICKER ── */
 #tmSetup {
   display: none; position: fixed; inset: 0; z-index: 10001;
@@ -605,6 +620,11 @@ body {
       <h3 style="color:#8b8ef5;font-size:2.2vmin">🔨 Vectis Clerk Trainer — Real Software Skin</h3>
       <p>Clerk a practice sale on a faithful copy of the live operator screen — asking bids, increments, Room / Telephone / Invaluable / Saleroom, auto bids, Fair Warning, then Hammer and Next Lot. Generates the same phone link, so colleagues' bids arrive as Vectis Live bids. Built-in lots or a real sale from the Hub.</p>
       <span class="diff" style="background:#8b8ef5;color:#111">Real Software</span>
+    </div>
+    <div class="sc-card" style="grid-column:1/-1;border-color:#4ade80;cursor:default" onclick="event.stopPropagation()">
+      <h3 style="color:#4ade80;font-size:2.2vmin">🎫 Join a Running Sale — bid from this device</h3>
+      <p>Practice sales running right now. Click one to jump straight in as a bidder — nobody needs to send a link.</p>
+      <div id="joinlist" class="join-list empty">No practice sales are running right now — start one with Test Mode or the Vectis Clerk Trainer.</div>
     </div>
   </div>
   <div class="overlay-footer">
@@ -957,7 +977,7 @@ function buildIncTable(){
     setBidSrc(null); setAmt(v); hiInc(v);
     fb(`Room bid: £${v}`, 'good');
     if(S.free) freeScheduleBid();
-    if(S.test) pushState();
+    if(S.live) pushState();
     setTimeout(focusOverride, 50);
   });
 }
@@ -989,7 +1009,7 @@ function overrideEnter(){
   setAmt(v); hiInc(v);
   fb(`Room bid: £${v}`, 'good');
   if(S.free) freeScheduleBid();
-  if(S.test) pushState();
+  if(S.live) pushState();
   setTimeout(focusOverride, 50);
 }
 
@@ -1123,6 +1143,11 @@ function goFree(){
   document.getElementById('fb').style.opacity = '0';
   const pauseBtn = document.getElementById('bPause');
   pauseBtn.textContent = 'Pause'; pauseBtn.style.background = '';
+  // Free Mode is joinable too: host a room quietly (no link modal popping up
+  // over solo practice) so it appears in the "join a running sale" lists —
+  // colleagues' bids arrive as live (red) bids alongside the robot.
+  S.live = true;
+  hostTestSale({ label: 'Free Mode — practice lots', openModal: false });
   freeScheduleBid();
   setTimeout(focusOverride, 200);
 }
@@ -1267,7 +1292,7 @@ async function startTest(){
 /* ── Start the run ─────────────────────────────────────────────────────────── */
 function beginTest(){
   goFree();                 // reuse the whole free-run setup: lots, list, buttons
-  S.test = true;
+  S.test = true; S.live = true;
   S.freePaused = true;      // the robot bidder stays out of a human test
   clearTO();                // cancel the auto-bid goFree just scheduled
 
@@ -1300,7 +1325,8 @@ function beginTest(){
   hostTestSale();
 }
 
-function hostTestSale(){
+function hostTestSale(opts){
+  const o = opts || {};
   if(TS.socket){ try { TS.socket.disconnect(); } catch(e) {} }
   TS = { socket:null, code:'', bidders:[], ready:false, seen:false };
   renderBidders();
@@ -1311,17 +1337,19 @@ function hostTestSale(){
   document.getElementById('tmQr').style.display = 'none';
   document.getElementById('tmQrWait').style.display = '';
   tmStatus('Connecting…', '');
-  showLinkModal();
+  if(o.openModal !== false) showLinkModal();
 
   const sock = io(location.origin, { transports:['websocket','polling'] });
   TS.socket = sock;
 
   sock.on('connect', () => {
+    if(TS.socket !== sock) return;   // superseded by a newer host — stand down
     // The server drops a room the moment its host disconnects, so a reconnect
     // genuinely needs a fresh code — say so rather than leaving people pressing
     // a dead one.
     const rejoining = TS.seen;
-    sock.emit('trainer:host', { state:testState() }, res => {
+    sock.emit('trainer:host', { state:testState(), label: o.label || TEST_LABEL || 'Practice lots' }, res => {
+      if(TS.socket !== sock) return;
       if(!res || !res.ok){ tmStatus((res && res.error) || 'Could not open a room.', 'err'); return; }
       TS.code = res.code; TS.ready = true; TS.seen = true; TS.bidders = [];
       applyCode(res.code);
@@ -1444,7 +1472,7 @@ function testState(){
     leaderName: (S && S.lname) || '',
     leaderType: (S && S.lbdr === 'ROOM') ? 'ROOM' : 'ONLINE',
     status: (S && S.testFinished) ? 'finished' : ((S && S.lotOutcome) || 'open'),
-    hold: !!(S && S.testHold),
+    hold: !!(S && (S.testHold || (S.free && !S.test && S.freePaused))),
     fairWarning: !!(S && S.fairWarned),
     once: (S && S.once) || 0,
     bidders: TS.bidders.length,
@@ -1458,7 +1486,7 @@ function pushState(){
 }
 
 function onRemoteBid({ bidderId, paddle, name, amount } = {}){
-  if(!S || !S.test) return;
+  if(!S || !S.live) return;
 
   const reply = (accepted, message) => {
     if(TS.socket && TS.code){
@@ -1466,7 +1494,7 @@ function onRemoteBid({ bidderId, paddle, name, amount } = {}){
     }
   };
 
-  if(S.testHold){ reply(false, 'The clerk has paused bidding'); return; }
+  if(S.testHold || (S.free && !S.test && S.freePaused)){ reply(false, 'The clerk has paused bidding'); return; }
   if(S.testFinished || S.lotOutcome){ reply(false, 'That lot is already closed'); pushState(); return; }
   // The phone bids exactly the "next" amount it was last shown, so anything
   // else is a stale press — most importantly one racing NEXT, which would
@@ -1487,6 +1515,7 @@ function onRemoteBid({ bidderId, paddle, name, amount } = {}){
   fb(`Online bid: £${amount} — ${name} (${paddle})`, 'info');
   reply(true, 'Bid taken');
   pushState();
+  if(S.free && !S.test) freeScheduleBid();   // the robot bids back against live rivals
 }
 
 /* Tear the room down when the clerk leaves Test Mode, so the code is released
@@ -1510,6 +1539,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt
 ───────────────────────────────────────── */
 function freeScheduleBid(){
   if(!S.free || S.freePaused || S.test) return;
+  clearTimeout(S._at);
   const limit = FREE_LIMITS[S.li] || 80;
   if(S.hi >= limit) return;
   const delay = 2000 + Math.random() * 2000;
@@ -1523,6 +1553,7 @@ function freeScheduleBid(){
     addLog(rb.b, amount, 'INTERNET', '');
     setBidSrc('auto', rb.b); setAmt(amount); hiInc(amount);
     fb(`Online bid: £${amount}`, 'info');
+    if(S.live) pushState();
     freeScheduleBid();
   }, delay);
 }
@@ -1637,7 +1668,7 @@ function act(a){
       if(S.li >= S.lots.length-1){
         setG('🏆 All lots complete!'); fb('Auction finished','good');
         S.testFinished = true;
-        if(S.test) pushState();
+        if(S.live) pushState();
         return;
       }
       S.li++; S.bid=0; S.hi=0; S.log=[]; S.freeLotSold=false;
@@ -1668,7 +1699,7 @@ function act(a){
         const prev = top && typeof top.a==='number' ? top.a : 0;
         S.bid=prev; setAmt(prev); hiInc(prev);
         fb('Bid undone','warn');
-        if(S.test){
+        if(S.live){
           // Devices bid against S.hi and are locked out once the lot closes, so
           // an undo has to actually reopen the lot and hand it back to whoever
           // now sits on top of the log — otherwise the phones stay stuck.
@@ -1707,7 +1738,7 @@ function act(a){
       }
     } else if(a==='minus'){ S.bid=Math.max(0,S.bid-getInc(S.bid)); setAmt(S.bid); hiInc(S.bid);
     } else if(a==='plus'){  S.bid=nextBid(S.bid); setAmt(S.bid); hiInc(S.bid); }
-    if(S.test) pushState();
+    if(S.live) pushState();
     setTimeout(focusOverride, 50);
     return;
   }
@@ -1830,7 +1861,7 @@ function amtEnter(){
   setAmt(v); hiInc(v);
   fb(`Room bid: £${v}`, 'good');
   if(S.free) freeScheduleBid();
-  if(S.test) pushState();
+  if(S.live) pushState();
 }
 function amtBlur(){
   const el = document.getElementById('amt');
@@ -2013,6 +2044,40 @@ function buildStepsList(){
   body.addEventListener('click', () =>
     fb('Increments follow the standard ladder in training', 'info'));
 }
+
+/* ── Join a running sale (menu overlay) ─────────────────────────────────────
+   One lightweight socket polls the server's open practice rooms so the menu
+   can list them live. Rendering is cheap; the list only shows on the overlay. */
+let MENU_SOCK = null;
+function pollRunningRooms(){
+  if(typeof io === 'undefined') return;
+  if(!MENU_SOCK) MENU_SOCK = io(location.origin, { transports:['websocket','polling'] });
+  if(!MENU_SOCK.connected) return;   // try again next tick
+  MENU_SOCK.emit('trainer:listRooms', res => {
+    if(res && res.ok) renderRunningRooms(res.rooms || []);
+  });
+}
+function renderRunningRooms(rooms){
+  const el = document.getElementById('joinlist');
+  if(!el) return;
+  if(rooms.length === 0){
+    el.className = 'join-list empty';
+    el.textContent = 'No practice sales are running right now — start one with Test Mode or the Vectis Clerk Trainer.';
+    return;
+  }
+  el.className = 'join-list';
+  el.innerHTML = rooms.map(r =>
+    `<button class="join-row" onclick="location.href='saleroom-trainer-bid.html?room=${esc(r.code)}'">` +
+      `<span class="jr-code">${esc(r.code)}</span>` +
+      `<span class="jr-label">${esc(r.label || 'Practice lots')}</span>` +
+      (r.lot ? `<span class="jr-lot">Lot ${esc(r.lot)}</span>` : '') +
+      `<span class="jr-n">${r.bidders} bidder${r.bidders === 1 ? '' : 's'}</span>` +
+      `<span class="jr-go">Join ▸</span>` +
+    `</button>`
+  ).join('');
+}
+setInterval(pollRunningRooms, 5000);
+setTimeout(pollRunningRooms, 800);
 
 // init
 buildIncTable();

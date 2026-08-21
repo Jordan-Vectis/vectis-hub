@@ -58,6 +58,17 @@ body {
 }
 #joinBtn:disabled { background: #3a4f60; color: #7d8f9e; }
 #joinErr { color: #f87171; font-size: 14px; margin-top: 14px; min-height: 20px; }
+#running { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.run-lbl { font-size: 12px; color: #8fa6b8; text-transform: uppercase; letter-spacing: .06em; }
+.run-chip {
+  display: flex; gap: 10px; align-items: center; text-align: left; width: 100%;
+  background: #22323f; border: 2px solid #3a4f60; border-radius: 8px;
+  color: #e8eef4; font-family: inherit; font-size: 14px; padding: 10px 12px; cursor: pointer;
+}
+.run-chip:active { border-color: #4ade80; }
+.run-chip b { color: #4ade80; font-family: Consolas, Menlo, monospace; letter-spacing: .15em; }
+.run-chip .rc-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-chip .rc-n { color: #8fa6b8; white-space: nowrap; }
 
 /* ── SALE VIEW ── */
 #sale { display: none; flex: 1; flex-direction: column; min-height: 0; }
@@ -136,6 +147,7 @@ body {
   <label for="code">Room code</label>
   <input id="code" type="text" inputmode="text" autocapitalize="characters" autocomplete="off"
          maxlength="8" placeholder="––––">
+  <div id="running"></div>
 
   <label for="name">Your name</label>
   <input id="name" type="text" autocomplete="off" maxlength="24" placeholder="e.g. Jack">
@@ -194,6 +206,38 @@ let lastNudge = null;  // "Bid quicker!" counter from the clerk (null until firs
 let hovering = false;  // finger on the bid button — relayed to the clerk's Hovering count
 
 const $ = id => document.getElementById(id);
+
+/* Running practice sales — tap one instead of typing its code. The list uses
+   its own throwaway socket and stops once you have joined a sale. */
+let listSock = null;
+function pollRooms(){
+  if($('sale').classList.contains('on')){
+    if(listSock){ try{ listSock.disconnect(); }catch(e){} listSock = null; }
+    return;
+  }
+  if(typeof io === 'undefined') return;
+  if(!listSock) listSock = io(location.origin, { transports:['websocket','polling'] });
+  if(!listSock.connected) return;
+  listSock.emit('trainer:listRooms', res => {
+    const el = $('running');
+    if(!el || $('sale').classList.contains('on')) return;
+    const rooms = (res && res.ok && res.rooms) || [];
+    if(rooms.length === 0){ el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="run-lbl">Running now — tap to join</div>' + rooms.map(r =>
+      `<button class="run-chip" onclick="pickRoom('${esc(r.code)}')">` +
+        `<b>${esc(r.code)}</b>` +
+        `<span class="rc-label">${esc(r.label || 'Practice lots')}</span>` +
+        `<span class="rc-n">${r.bidders} bidding</span>` +
+      `</button>`).join('');
+  });
+}
+function pickRoom(code){
+  $('code').value = code;
+  if(($('name').value || '').trim()) doJoin();
+  else $('name').focus();
+}
+setInterval(pollRooms, 5000);
+setTimeout(pollRooms, 700);
 
 /* Prefill the code from the QR / shared link, and the name from a previous join. */
 (function init(){
