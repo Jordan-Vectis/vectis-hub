@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"942dff1357a37604b6f051479c52a45f1c5f1a52","author":"Jordan Orange","date":"2026-08-21T15:05:08+01:00","subject":"Memory: Auto Clerk.ahk — top-level globals must precede the start-up calls"},
   {"sha":"e26034dbe636ab47aca0c914a457dd11f389daa4","author":"Jordan Orange","date":"2026-08-21T14:57:27+01:00","subject":"Memory: Auto Clerk.ahk — the screen-reading AutoHotkey clerk (v1)"},
   {"sha":"3371613cd6bdf4f9a7e2e41dca05398b90f93d29","author":"Jordan Orange","date":"2026-08-21T13:21:17+01:00","subject":"Rule: the Saleroom Trainer is frozen while the Auto Clerk is worked on"},
   {"sha":"727fe320354cf94fafe75be1ab5c105ce97c1965","author":"Jordan Orange","date":"2026-08-21T12:43:45+01:00","subject":"Add Conditions replaces the existing sentence; Remove strips every one"},
