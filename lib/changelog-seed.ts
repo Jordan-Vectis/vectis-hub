@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2b2c3d8a4852f9dbf708a09690e3225ac3e57a5a","author":"Jack Collings","date":"2026-08-21T10:26:45+01:00","subject":"Trainer menu: fit the screen — scroll when the cards outgrow it"},
+  {"sha":"05541179115a9c41b9394b87e46470fc532233f5","author":"Jack Collings","date":"2026-08-21T10:22:08+01:00","subject":"Refresh changelog seed"},
   {"sha":"4794c582ab045681ca330e5bc44a01c8e97bbbd5","author":"Jack Collings","date":"2026-08-21T10:22:07+01:00","subject":"Trainer: join any running practice sale from a live list — no links needed"},
   {"sha":"ff3ea1307e909307a4513c423a0cacc4b841c8ba","author":"Jack Collings","date":"2026-08-21T10:12:17+01:00","subject":"Refresh changelog seed"},
   {"sha":"ae5af24f2119dd167ad765dc1c2b5bd5ae54b2b9","author":"Jack Collings","date":"2026-08-21T10:12:16+01:00","subject":"Saleroom Trainer: type straight into the A box"},
