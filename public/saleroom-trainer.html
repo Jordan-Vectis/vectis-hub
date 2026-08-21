@@ -184,7 +184,8 @@ body {
   border: none; background: transparent; padding: 0 2px;
 }
 .amt-disp {
-  min-width: 8vw; text-align: right; font-weight: bold; font-size: 2vmin;
+  width: 8vw; min-width: 8vw; font-family: inherit; cursor: text;
+  text-align: right; font-weight: bold; font-size: 2vmin;
   border: 1px solid rgb(153,153,153); padding: 0 3px; background: white;
   transition: background 0.3s; display: inline-block;
 }
@@ -791,7 +792,9 @@ body {
           </div>
           <div class="ha-row">
             <span class="ha-lbl">A</span>
-            <span class="amt-disp" id="amt">0</span>
+            <input class="amt-disp" id="amt" value="0" inputmode="numeric" autocomplete="off"
+              onfocus="const i=this;setTimeout(()=>i.select(),0)" onblur="amtBlur()"
+              onkeydown="if(event.key==='Enter'){amtEnter();event.preventDefault();}">
             <input type="text" id="bidOverride" class="bid-override" placeholder=""
               oninput="overrideInput(this.value)"
               onkeydown="if(event.key==='Enter'){if(this.value.trim()){overrideEnter();}else{act('bid');}event.preventDefault();}">
@@ -964,7 +967,7 @@ function buildIncTable(){
 ───────────────────────────────────────── */
 function overrideInput(v){
   const n = parseInt(v, 10);
-  if(!isNaN(n) && n > 0) document.getElementById('amt').textContent = n;
+  if(!isNaN(n) && n > 0) document.getElementById('amt').value = n;
 }
 
 function focusOverride(){
@@ -1801,9 +1804,37 @@ function setAmt(v){
   // H = the standing hammer bid, A = the asking (next) bid — real-screen semantics.
   document.getElementById('fH').value = v > 0 ? v : '0';
   const el=document.getElementById('amt');
-  el.textContent = v > 0 ? nextBid(v) : nextBid(0);
+  if(document.activeElement !== el) el.value = v > 0 ? nextBid(v) : nextBid(0);
   el.classList.add('lit');
   setTimeout(()=>el.classList.remove('lit'),600);
+}
+
+/* Typing straight into the A box: Enter with a changed amount takes a room bid
+   at that figure; Enter with the asking untouched behaves like the Bid button.
+   Leaving the box puts the current asking back. */
+function amtEnter(){
+  if(!S || (!S.sc && !S.free)) return;
+  const el = document.getElementById('amt');
+  const v = parseInt(el.value, 10);
+  const askNow = nextBid(S.hi || 0);
+  if(isNaN(v) || v <= 0 || v === askNow){
+    el.blur(); amtBlur(); act('bid');
+    return;
+  }
+  if(S.free && S.freeLotSold){ fb('Lot is closed — click NEXT to continue', 'info'); return; }
+  el.blur();
+  S.pending = null;
+  S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM'; S.lpaddle = null;
+  addLog('ROOM', v, 'ROOM', 'room');
+  setBidSrc(null);
+  setAmt(v); hiInc(v);
+  fb(`Room bid: £${v}`, 'good');
+  if(S.free) freeScheduleBid();
+  if(S.test) pushState();
+}
+function amtBlur(){
+  const el = document.getElementById('amt');
+  el.value = nextBid((S && (S.hi || 0)) || 0);
 }
 
 function addLog(b,a,n,cls){
