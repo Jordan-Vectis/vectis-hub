@@ -680,7 +680,9 @@ MissingForRun(name) {
 WriteLog(msg) {
     if IsObject(SIM)                    ; simulation runs stay out of the real log
         return
-    try FileAppend FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "  " msg "`r`n", LOGF
+    ; ⚠ MILLISECONDS. Seconds alone made the sniping question unanswerable: the last look
+    ; and the hammer both stamped "16:31:19", so a 450 ms watch was invisible in the log.
+    try FileAppend FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "." Format("{:03}", A_MSec) "  " msg "`r`n", LOGF
 }
 
 ; ══════════════════════════════════════════════════════════════════════════════
@@ -1881,8 +1883,11 @@ FinalWatch(names, floor) {
     fp.Clear()
     for nm in names
         fp[nm] := SnapRegion(nm)
+    looks := 0
+    started := A_TickCount
     t0 := A_TickCount
     while A_TickCount - t0 < FINAL_WATCH_MS {
+        looks++
         for nm in names {
             now := SnapRegion(nm)
             if now = fp[nm]
@@ -1900,6 +1905,7 @@ FinalWatch(names, floor) {
         }
         Sleep 12
     }
+    WriteLog("  · final watch: the figures sat still for " (A_TickCount - started) " ms (" looks " looks at them)")
     return -1
 }
 
@@ -2000,6 +2006,14 @@ CloseLotBoth(how) {
         }
         PressOn("vectis", "btn_hammer", "HAMMER at £" price)
         PressOn("saleroom", "btn_sell", "SELL at £" price)
+        ; ⚠ Straight after the hammer, look again. If a figure is now HIGHER, the bid was
+        ; accepted by the platform before the press but only appeared afterwards — that is
+        ; render lag, not a miss, and it is the one window no screen-reading clerk can
+        ; close. Recorded plainly so it can be told apart from a guard that failed.
+        after := LastLook(["saleroom", "vectis"])
+        if IsObject(RS) && after > price
+            WriteLog("⚠ A BID APPEARED IMMEDIATELY AFTER THE HAMMER (£" after " vs £" price " sold) — it reached the "
+                . "platform before the press but only reached the screen after it. Nothing on screen could have shown it in time.")
     } else {
         ; The last look before a PASS: any bid at all means the lot is no longer bidless.
         peak := LastLook(["saleroom", "vectis"])
