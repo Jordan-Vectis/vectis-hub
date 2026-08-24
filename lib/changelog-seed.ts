@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-08-21, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-08-24, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c07c7959f27c4bb9a58b1e74ea9ff409b5b698a1","author":"Jordan Orange","date":"2026-08-24T09:58:03+01:00","subject":"Memory: Auto Clerk.ahk — Test read walks every calibrated box with its own picture and verdict"},
   {"sha":"782a770710fc62b853583eacd85c0a01bd889bd8","author":"Jordan Orange","date":"2026-08-21T17:14:59+01:00","subject":"Refresh changelog seed"},
   {"sha":"d9b9126edf668fd579fe162d2f386c4fd421c3f2","author":"Jordan Orange","date":"2026-08-21T17:14:53+01:00","subject":"Say what BC Corrections actually does now the list is live-only"},
   {"sha":"3c809b3579a261a990d808ab5c57fe6433df6613","author":"Jordan Orange","date":"2026-08-21T17:08:03+01:00","subject":"Refresh changelog seed"},
