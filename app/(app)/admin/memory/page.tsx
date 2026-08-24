@@ -67,6 +67,8 @@ READ-ONLY during Auto Clerk work - not a line, not a colour, not a comment:
 - lib/trainer-socket.js and its setupTrainerSocket hook in server.js
 - the trainer's registrations in lib/app-cards.ts and components/nav.tsx
 
+THE ONE SANCTIONED EXCEPTION (2026-08-24): Jordan chose - offered a trainer-free alternative and picking the trainer anyway - a single static link row in the trainer menu's "Join a Running Sale" section pointing to the Stress Tester (public/auto-clerk-bidders.html, an auto-clerk file that joins BOTH practice rooms as a bidder and fires clash / rapid / alternating bid patterns; bids only at each platform's next asking, and room-bid/! stay clerk-side). A link row only; no trainer logic changed; no further trainer edits are covered.
+
 HOW: when the Auto Clerk needs a replica screen (a fake Vectis for Scenario 2, say), COPY the trainer file into a new public/auto-clerk-*.html and change the copy - exactly how the Scenario 1 rig (auto-clerk-fake-saleroom.html) was made from the Saleroom replica. The copy is allowed to drift afterwards; that is the point. The trainer's room protocol (trainer:* socket events) is read-only from the Auto Clerk side too. A genuine trainer bug found on the way is reported to Jordan, not fixed in passing. Recorded in RULES.md -> Design philosophy section 8.
 `,
   },

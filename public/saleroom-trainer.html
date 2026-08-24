@@ -629,6 +629,15 @@ body {
       <h3 style="color:#4ade80;font-size:2.2vmin">🎫 Join a Running Sale — bid from this device</h3>
       <p>Practice sales running right now. Click one to jump straight in as a bidder — nobody needs to send a link.</p>
       <div id="joinlist" class="join-list empty">No practice sales are running right now — start one with Test Mode or the Vectis Clerk Trainer.</div>
+      <!-- ⚠ The ONE sanctioned Auto Clerk edit to the frozen trainer (Jordan, 2026-08-24,
+           RULES.md §8): a static link row to the Stress Tester, which itself lives in the
+           auto-clerk family (/auto-clerk-bidders.html). Nothing else here may change. -->
+      <button class="join-row" style="margin-top:8px" onclick="location.href='auto-clerk-bidders.html'">
+        <span class="jr-code">🤖</span>
+        <span class="jr-plat vectis">BOTH</span>
+        <span class="jr-label">Stress Tester — bid on BOTH platforms at once (Auto Clerk testing)</span>
+        <span class="jr-go">Open ▸</span>
+      </button>
     </div>
   </div>
   <div class="overlay-footer">

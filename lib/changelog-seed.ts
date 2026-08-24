@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b33517b085b241bbfc3bbcd4a5d7b951f5ba23c9","author":"Jordan Orange","date":"2026-08-24T10:16:15+01:00","subject":"Memory: Auto Clerk.ahk — the painted 'Bid' word counts as a parser marker (Bid IO → 10)"},
   {"sha":"c7a3e8b51a4872d63ef20f59f181afa87544020b","author":"Jordan Orange","date":"2026-08-24T10:06:51+01:00","subject":"Memory: Auto Clerk.ahk — composed 'Bid <box>' line makes lone digits readable; the real numeric fix"},
   {"sha":"c07c7959f27c4bb9a58b1e74ea9ff409b5b698a1","author":"Jordan Orange","date":"2026-08-24T09:58:03+01:00","subject":"Memory: Auto Clerk.ahk — Test read walks every calibrated box with its own picture and verdict"},
   {"sha":"782a770710fc62b853583eacd85c0a01bd889bd8","author":"Jordan Orange","date":"2026-08-21T17:14:59+01:00","subject":"Refresh changelog seed"},

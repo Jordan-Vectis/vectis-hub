@@ -155,6 +155,11 @@ screens skinned to match the real clerking software; it is **not** Auto Clerk sc
 - `lib/trainer-socket.js` and its `setupTrainerSocket` hook in `server.js`
 - the trainer's registrations in `lib/app-cards.ts` and `components/nav.tsx`
 
+**The ONE sanctioned exception (Jordan, 2026-08-24):** a single static link row in the trainer menu's
+"Join a Running Sale" section pointing to the Stress Tester (`public/auto-clerk-bidders.html`, an
+auto-clerk file). Jordan chose this placement knowingly when offered a trainer-free alternative.
+It is a link only — no trainer logic changed, and no further trainer edits are covered by it.
+
 **If the Auto Clerk needs a replica screen, COPY the trainer file into a new `public/auto-clerk-*.html`
 and change the copy** — exactly how the Scenario 1 rig (`auto-clerk-fake-saleroom.html`) was made from
 the Saleroom replica. A copy may drift from the trainer afterwards; that is accepted, and it is why the

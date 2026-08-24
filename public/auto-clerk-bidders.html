@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stress Tester — bid on both platforms</title>
+<!--
+  AUTO CLERK STRESS TESTER (2026-08-24)
+
+  Joins BOTH running practice sales at once — the Vectis Clerk Trainer's room and
+  the Saleroom Trainer's room — as an ordinary bidder (the same trainer:* room
+  protocol the phones use), and fires the bid patterns the old auto-clerk manual
+  controls had: single bids, a simultaneous clash, rapid runs, and an alternating
+  storm. Built to exercise the AutoHotkey Auto Clerk while it clerks both screens.
+
+  ⚠ Bids can only go in at each platform's NEXT ASKING price — the trainers
+  validate every remote bid against their own ladder and reject anything else
+  (that is their stale-press protection, not a fault here). "Room bid" and
+  "drop bidder (!)" are CLERK-side presses which the room protocol cannot reach:
+  those belong to the trainer screens and the Auto Clerk itself.
+
+  ⚠ This file is part of the AUTO CLERK family. The Saleroom Trainer stays frozen
+  (RULES.md §8) — the single sanctioned trainer edit is the menu row that links
+  here (Jordan, 2026-08-24).
+-->
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  background: #0c1426; color: #e2e8f0; min-height: 100vh; font-size: 15px;
+}
+header { padding: 14px 22px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+header h1 { font-size: 19px; color: #fff; }
+header .note { font-size: 12px; color: #94a3b8; max-width: 700px; }
+main { padding: 18px 22px; max-width: 1200px; margin: 0 auto; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+.panel { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; }
+.panel h2 { font-size: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.tag { font-size: 10px; font-weight: 800; letter-spacing: .06em; padding: 3px 8px; border-radius: 99px; }
+.tag.vectis { background: #a21caf33; color: #e879f9; border: 1px solid #a21caf66; }
+.tag.saleroom { background: #ffffff22; color: #f1f5f9; border: 1px solid #ffffff44; font-style: italic; }
+select, input { background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #f1f5f9; padding: 6px 9px; font-size: 13px; font-family: inherit; }
+button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; font-weight: 700; }
+button:disabled { opacity: .4; cursor: default; }
+.join-btn { background: #2563eb; color: #fff; padding: 7px 14px; font-size: 13px; }
+.leave-btn { background: #334155; color: #cbd5e1; padding: 7px 14px; font-size: 13px; }
+.roomline { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.stat { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat div { background: #0b1222; border: 1px solid #1e293b; border-radius: 8px; padding: 8px 10px; }
+.stat .k { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .08em; }
+.stat .v { font-size: 17px; font-weight: 800; color: #fff; margin-top: 2px; }
+.bigbid { width: 100%; padding: 16px; font-size: 17px; border-radius: 10px; }
+.bigbid.vectis { background: linear-gradient(#7c3aed, #5b21b6); color: #fff; }
+.bigbid.saleroom { background: linear-gradient(#16a34a, #15803d); color: #fff; }
+.bigbid:active { transform: translateY(1px); }
+.conn { font-size: 12px; font-weight: 700; }
+.conn.on { color: #4ade80; } .conn.off { color: #64748b; } .conn.err { color: #f87171; }
+.stress { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; margin-top: 16px; }
+.stress h2 { font-size: 15px; margin-bottom: 4px; }
+.stress p.hint { font-size: 12px; color: #94a3b8; margin-bottom: 12px; }
+.stress .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.sbtn { padding: 12px 16px; font-size: 13px; color: #fff; }
+.sbtn.clash { background: linear-gradient(#c2410c, #9a3412); }
+.sbtn.rv { background: #6d28d9; }
+.sbtn.rs { background: #15803d; }
+.sbtn.alt { background: linear-gradient(#7c3aed, #16a34a); }
+.sbtn.stop { background: #b91c1c; }
+.logbox { background: #0b1222; border: 1px solid #1e293b; border-radius: 12px; margin-top: 16px; padding: 12px 14px; height: 260px; overflow-y: auto; font: 12px/1.7 ui-monospace, Consolas, monospace; }
+.logbox .ok { color: #4ade80; } .logbox .rej { color: #fbbf24; } .logbox .err { color: #f87171; } .logbox .info { color: #94a3b8; }
+a.back { color: #7dd3fc; font-size: 13px; text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/tools/auto-clerk">← Auto Clerk</a>
+  <h1>🤖 Stress Tester — bid on BOTH platforms at once</h1>
+  <span class="note">Joins the two running practice sales as an ordinary bidder and fires the old manual-control patterns,
+    so the Auto Clerk can be watched keeping the screens in step. Bids always go in at each platform's <b>next asking</b> —
+    the trainers reject anything else. Room bids and the ! are clerk-side presses and stay on the screens.</span>
+</header>
+<main>
+  <div class="cols">
+    <div class="panel" id="p-vectis">
+      <h2><span class="tag vectis">VECTIS</span> Clerk Trainer room <span class="conn off" id="conn-vectis">not joined</span></h2>
+      <div class="roomline">
+        <select id="rooms-vectis" style="flex:1;min-width:200px"></select>
+        <button class="join-btn" id="join-vectis">Join</button>
+        <button class="leave-btn" id="leave-vectis" disabled>Leave</button>
+      </div>
+      <div class="stat">
+        <div><div class="k">Lot</div><div class="v" id="lot-vectis">—</div></div>
+        <div><div class="k">Current</div><div class="v" id="cur-vectis">—</div></div>
+        <div><div class="k">Next asking</div><div class="v" id="next-vectis">—</div></div>
+        <div><div class="k">My paddle</div><div class="v" id="pad-vectis">—</div></div>
+      </div>
+      <button class="bigbid vectis" id="bid-vectis" disabled>Bid on VECTIS — £—</button>
+    </div>
+
+    <div class="panel" id="p-saleroom">
+      <h2><span class="tag saleroom">the saleroom</span> Trainer room <span class="conn off" id="conn-saleroom">not joined</span></h2>
+      <div class="roomline">
+        <select id="rooms-saleroom" style="flex:1;min-width:200px"></select>
+        <button class="join-btn" id="join-saleroom">Join</button>
+        <button class="leave-btn" id="leave-saleroom" disabled>Leave</button>
+      </div>
+      <div class="stat">
+        <div><div class="k">Lot</div><div class="v" id="lot-saleroom">—</div></div>
+        <div><div class="k">Current</div><div class="v" id="cur-saleroom">—</div></div>
+        <div><div class="k">Next asking</div><div class="v" id="next-saleroom">—</div></div>
+        <div><div class="k">My paddle</div><div class="v" id="pad-saleroom">—</div></div>
+      </div>
+      <button class="bigbid saleroom" id="bid-saleroom" disabled>Bid on SALEROOM — £—</button>
+    </div>
+  </div>
+
+  <div class="stress">
+    <h2>⚡ Clash &amp; stress patterns</h2>
+    <p class="hint">The patterns from the old manual controls, sent through the trainers' own bidder protocol.
+      Each room accepts at most one bid every 350 ms (its machine-gun guard), so the runs pace themselves to that.</p>
+    <div class="row">
+      <button class="sbtn clash" id="s-clash">⚡ Simultaneous clash — both platforms, 150 ms apart</button>
+      <button class="sbtn rv" id="s-rapid-vectis">🌀 Rapid ×5 — Vectis (400 ms apart)</button>
+      <button class="sbtn rs" id="s-rapid-saleroom">🌀 Rapid ×5 — Saleroom (400 ms apart)</button>
+      <button class="sbtn alt" id="s-alt">🔀 Alternating ×10 — both, 250 ms steps</button>
+      <button class="sbtn stop" id="s-stop" disabled>⛔ Stop the run</button>
+    </div>
+  </div>
+
+  <div class="logbox" id="log"><span class="info">Join a room on each side, then fire away. Every bid, acceptance and rejection lands here.</span></div>
+</main>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const S = {
+  vectis:   { sock: null, code: '', paddle: '', state: null, joined: false },
+  saleroom: { sock: null, code: '', paddle: '', state: null, joined: false },
+};
+let ROOMS = [];
+let RUNTIMERS = [];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function log(msg, cls) {
+  const el = $('log');
+  const line = document.createElement('div');
+  line.className = cls || 'info';
+  line.textContent = new Date().toLocaleTimeString('en-GB') + '  ' + msg;
+  el.appendChild(line);
+  while (el.childNodes.length > 400) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ── room list ─────────────────────────────────────────────────────────────── */
+let LIST_SOCK = null;
+function pollRooms() {
+  if (!LIST_SOCK) LIST_SOCK = io(location.origin, { transports: ['websocket', 'polling'] });
+  if (!LIST_SOCK.connected) return;
+  LIST_SOCK.emit('trainer:listRooms', res => {
+    if (res && res.ok) { ROOMS = res.rooms || []; renderRooms(); }
+  });
+}
+function renderRooms() {
+  for (const side of ['vectis', 'saleroom']) {
+    const sel = $('rooms-' + side);
+    const keep = sel.value;
+    const mine = ROOMS.filter(r => r.platform === side);
+    sel.innerHTML = mine.length
+      ? mine.map(r => `<option value="${esc(r.code)}">${esc(r.code)} — ${esc(r.label || 'Practice lots')} · ${r.bidders} bidder${r.bidders === 1 ? '' : 's'}${r.lot ? ' · Lot ' + esc(r.lot) : ''}</option>`).join('')
+      : '<option value="">no ' + (side === 'vectis' ? 'Vectis' : 'saleroom') + ' practice sale running</option>';
+    if (mine.some(r => r.code === keep)) sel.value = keep;
+  }
+}
+setInterval(pollRooms, 5000);
+setTimeout(pollRooms, 600);
+
+/* ── joining ───────────────────────────────────────────────────────────────── */
+function setConn(side, cls, text) {
+  const el = $('conn-' + side);
+  el.className = 'conn ' + cls;
+  el.textContent = text;
+}
+function renderSide(side) {
+  const x = S[side];
+  const st = x.state;
+  $('lot-' + side).textContent  = st && st.lot ? st.lot.id : '—';
+  $('cur-' + side).textContent  = st ? '£' + Number(st.hi || 0).toLocaleString('en-GB') : '—';
+  $('next-' + side).textContent = st ? '£' + Number(st.next || 0).toLocaleString('en-GB') : '—';
+  $('pad-' + side).textContent  = x.paddle || '—';
+  const btn = $('bid-' + side);
+  btn.disabled = !(x.joined && st && st.status === 'open' && !st.hold);
+  btn.textContent = 'Bid on ' + (side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ' — £' + (st ? Number(st.next || 0).toLocaleString('en-GB') : '—');
+}
+function join(side) {
+  const code = $('rooms-' + side).value;
+  if (!code) { log('No ' + side + ' room to join — start one on the trainer first.', 'err'); return; }
+  const x = S[side];
+  if (!x.sock) {
+    x.sock = io(location.origin, { transports: ['websocket', 'polling'] });
+    x.sock.on('trainer:state', st => { x.state = st; renderSide(side); });
+    x.sock.on('trainer:bidResult', r => {
+      log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': ' + (r.accepted ? '✓ bid taken' : '✗ ' + (r.message || 'rejected')), r.accepted ? 'ok' : 'rej');
+    });
+    x.sock.on('trainer:closed', info => {
+      x.joined = false; x.state = null;
+      setConn(side, 'err', 'room closed');
+      renderSide(side);
+      log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': the practice sale ended (' + ((info && info.reason) || 'closed') + ')', 'err');
+    });
+    x.sock.on('disconnect', () => { if (x.joined) setConn(side, 'err', 'reconnecting…'); });
+  }
+  x.sock.emit('trainer:join', { code, name: 'Stress Tester' }, res => {
+    if (!res || !res.ok) { log(side + ': could not join — ' + ((res && res.error) || 'no reply'), 'err'); return; }
+    x.joined = true; x.code = res.code; x.paddle = res.paddle; x.state = res.state;
+    setConn(side, 'on', 'joined ' + res.code);
+    $('leave-' + side).disabled = false;
+    renderSide(side);
+    log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': joined room ' + res.code + ' as ' + res.paddle, 'ok');
+  });
+}
+function leave(side) {
+  const x = S[side];
+  if (x.sock) { try { x.sock.disconnect(); } catch (e) {} }
+  S[side] = { sock: null, code: '', paddle: '', state: null, joined: false };
+  setConn(side, 'off', 'not joined');
+  $('leave-' + side).disabled = true;
+  renderSide(side);
+}
+
+/* ── bidding ───────────────────────────────────────────────────────────────── */
+function bid(side) {
+  const x = S[side];
+  if (!x.joined || !x.state) { log(side + ': not joined.', 'err'); return; }
+  const amount = Number(x.state.next || 0);
+  if (!(amount > 0)) { log(side + ': no asking price to bid.', 'err'); return; }
+  x.sock.emit('trainer:bid', { code: x.code, amount });
+  log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': bid £' + amount.toLocaleString('en-GB') + ' sent…');
+}
+$('bid-vectis').onclick = () => bid('vectis');
+$('bid-saleroom').onclick = () => bid('saleroom');
+$('join-vectis').onclick = () => join('vectis');
+$('join-saleroom').onclick = () => join('saleroom');
+$('leave-vectis').onclick = () => leave('vectis');
+$('leave-saleroom').onclick = () => leave('saleroom');
+
+/* ── stress patterns ───────────────────────────────────────────────────────── */
+function running(on) {
+  RUNTIMERS.forEach(clearTimeout);
+  RUNTIMERS = [];
+  $('s-stop').disabled = !on;
+  for (const id of ['s-clash', 's-rapid-vectis', 's-rapid-saleroom', 's-alt']) $(id).disabled = on;
+}
+function later(ms, fn) { RUNTIMERS.push(setTimeout(fn, ms)); }
+function done(after) { later(after, () => { running(false); log('— pattern finished —'); }); }
+
+$('s-clash').onclick = () => {
+  running(true);
+  log('⚡ CLASH: Vectis bids, Saleroom follows 150 ms later — a same-amount tie when the screens are level', 'info');
+  bid('vectis');
+  later(150, () => bid('saleroom'));
+  done(600);
+};
+$('s-rapid-vectis').onclick = () => {
+  running(true);
+  log('🌀 Rapid ×5 on VECTIS…', 'info');
+  for (let i = 0; i < 5; i++) later(i * 400, () => bid('vectis'));
+  done(5 * 400 + 300);
+};
+$('s-rapid-saleroom').onclick = () => {
+  running(true);
+  log('🌀 Rapid ×5 on SALEROOM…', 'info');
+  for (let i = 0; i < 5; i++) later(i * 400, () => bid('saleroom'));
+  done(5 * 400 + 300);
+};
+$('s-alt').onclick = () => {
+  running(true);
+  log('🔀 Alternating ×10 — both platforms…', 'info');
+  for (let i = 0; i < 10; i++) later(i * 250, () => bid(i % 2 === 0 ? 'vectis' : 'saleroom'));
+  done(10 * 250 + 300);
+};
+$('s-stop').onclick = () => { running(false); log('⛔ pattern stopped'); };
+</script>
+</body>
+</html>

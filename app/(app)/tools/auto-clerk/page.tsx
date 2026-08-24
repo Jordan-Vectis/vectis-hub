@@ -210,6 +210,23 @@ export default function AutoClerkPage() {
           <p className="text-xs text-sky-400 mt-3 group-hover:underline">Open the fake Saleroom screen ↗</p>
         </a>
 
+        {/* Stress Tester — dual-platform bidder console (2026-08-24) */}
+        <a href="/auto-clerk-bidders.html" target="_blank" rel="noopener noreferrer"
+          className="block bg-gradient-to-r from-emerald-900/40 to-green-900/40 hover:from-emerald-800/40 hover:to-green-800/40 border border-emerald-700/40 rounded-xl p-5 transition-all group">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">Stress Tester</span>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Ready</span>
+          </div>
+          <p className="font-bold text-white text-base">🤖 Bid on BOTH platforms at once</p>
+          <p className="text-sm text-emerald-100/90 mt-1 leading-relaxed">
+            Joins the two running practice sales as an ordinary bidder and fires the old manual-control
+            patterns — a simultaneous clash, rapid ×5 on either side, an alternating ×10 storm — so the
+            AutoHotkey Auto Clerk can be watched keeping the screens in step. Bids go in at each
+            platform&apos;s next asking; room bids and the ! stay clerk-side.
+          </p>
+          <p className="text-xs text-emerald-400 mt-3 group-hover:underline">Open the Stress Tester ↗</p>
+        </a>
+
         {/* Scenario 2 — coming next */}
         <div className="block bg-gray-100 dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5 opacity-70">
           <div className="flex items-center gap-2 mb-1.5">
