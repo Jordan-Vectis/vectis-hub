@@ -44,6 +44,7 @@ global PROFILES := Map(
             { key: "reg_bid",    kind: "reg", label: "the CURRENT BID figure — the H box. Box the WHOLE white box, not just the digits: the number grows as bids climb" },
             { key: "reg_ask",    kind: "reg", label: "the NEXT ASKING figure — the A box (Windows cannot read a lone single digit such as £5, so the asking is read and stepped back one increment instead)" },
             { key: "reg_sname",  kind: "reg", label: "the NAME cell of the TOP row of the bid log — it reads INTERNET or ROOM (needed to spot a same-amount tie, rule 3)" },
+            { key: "reg_lot",    kind: "reg", label: "the LOT NUMBER on this screen (optional, but strongly recommended: it spots the lot moving on by itself, and refuses to work when the two screens are on different lots)" },
             { key: "btn_fw",     kind: "btn", label: "Fair warn button" },
             { key: "btn_sell",   kind: "btn", label: "Sell button" },
             { key: "btn_next",   kind: "btn", label: "Next button" },
@@ -60,6 +61,7 @@ global PROFILES := Map(
         items: [
             { key: "reg_bid",      kind: "reg", label: "the CURRENT BID figure after 'Current Bid:'. Box a WIDE area — from the £ to well past it, the number grows as bids climb" },
             { key: "reg_vtype",    kind: "reg", label: "the BID TYPE chip on the TOP row of the bid list — it reads Vectis Live / Room / Telephone / Saleroom (needed to spot a same-amount tie, rule 3)" },
+            { key: "reg_lot",      kind: "reg", label: "the LOT NUMBER on this screen (optional, but strongly recommended: it spots the lot moving on by itself, and refuses to work when the two screens are on different lots)" },
             { key: "btn_fw",       kind: "btn", label: "Fair Warning button" },
             { key: "btn_hammer",   kind: "btn", label: "Hammer button (it becomes Next Lot after a sale)" },
             { key: "btn_pass",     kind: "btn", label: "Pass Lot button" },
@@ -86,6 +88,11 @@ global RISE_CONFIRM := 2, DROP_CONFIRM := 4
 ; runs out the clerk stops pressing, goes red and waits for F10 — it never converts "I can't
 ; see" into "the bids vanished" (which once meant passing live lots and undoing real bids).
 global BLIND_PAUSE_MS := 10000
+; Lot watching (optional — only when the lot-number boxes are calibrated). Read once a
+; second rather than every tick: a lot change is not a fast event and each read costs
+; ~150 ms. Two screens must disagree for this many consecutive checks before the clerk
+; holds — one platform legitimately advances a moment before the other.
+global LOT_EVERY_N := 4, LOT_MISMATCH_HOLD := 3
 ; Rule 3 — same-amount tie. Both figures equal, yet EACH platform holds its OWN bidder
 ; (Vectis's top bid is not from the Saleroom source; Saleroom's top bid is not ROOM).
 ; Needs the two label boxes (reg_vtype, reg_sname). Checked once per price, a moment
@@ -124,7 +131,8 @@ OnExit((*) => StopOcr())
 ; ── CLI test modes (Claude's checks — ignore) ────────────────────────────────
 if A_Args.Length >= 1 && A_Args[1] = "--selftest" {
     out := ""
-    for s in ["Current Bid: E 1,250", "£640", "Hammer: (f640)", "1.250", "0", "", "E 12,500 Asking", "Bid 45", "Jrrent Bid: EIO", "urrent Bid: £1O", "E I,25O", "OM 15", "ROOM", "£O", "Lot: 508 ROOM Est: ROOM 80-110", "Est: 80-110", "ES", "Est", "Jrrent Bid: EGO", "Jrrent Bid: E 15", "Bid 5", "Bid H 5", "Bid O", "Bid 1,250", "Bid IO", "Bid I,25O", "Bid EGO"]
+    for s in ["Current Bid: E 1,250", "£640", "Hammer: (f640)", "1.250", "0", "", "E 12,500 Asking", "Bid 45", "Jrrent Bid: EIO", "urrent Bid: £1O", "E I,25O", "OM 15", "ROOM", "£O", "Lot: 508 ROOM Est: ROOM 80-110", "Est: 80-110", "ES", "Est", "Jrrent Bid: EGO", "Jrrent Bid: E 15", "Bid 5", "Bid H 5", "Bid O", "Bid 1,250", "Bid IO", "Bid I,25O", "Bid EGO",
+                "Bid 15.00", "Bid 1,250.00", "Bid 45.00", "15.00", "£1,250.00", "Bid 1.250", "Bid 5.00", "Bid I5.OO"]
         out .= "[" s "] -> " ParseAmount(s) "`n"
     for a in [10, 15, 45, 50, 60, 110, 220, 550, 1100, 2200, 5500, 5, 7, 0]
         out .= "asking " a " -> bid " BidBeforeAsking(a) "`n"
@@ -145,12 +153,14 @@ if A_Args.Length >= 1 && A_Args[1] = "--simboth" {
                 m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_sname"
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
         CAL[nm] := m
     }
-    SIM := { s: 0, v: 0, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM" }
+    SIM := { s: 0, v: 0, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
     RS := NewRunState(true)
     ; (appends to a PROPERTY — a fat-arrow assigning a plain variable would make a local copy)
     ; Also streamed to stdout as it happens, so a hang still leaves the trace so far.
@@ -250,12 +260,14 @@ if A_Args.Length >= 1 && A_Args[1] = "--snipetest" {
                 m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_sname"
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
         CAL[nm] := m
     }
-    SIM := { s: 0, v: 0, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM" }
+    SIM := { s: 0, v: 0, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
     RS := NewRunState(true)
     SIM.t0 := A_TickCount
     SayS(t) => FileAppend(t "`n", "*")
@@ -295,6 +307,53 @@ if A_Args.Length >= 1 && A_Args[1] = "--snipetest" {
     SayS((RS.lots = 1 && SIM.s = 0 && SIM.v = 0 ? "PASS " : "FAIL ") "the lot then sold and both screens reset (S=" SIM.s " V=" SIM.v ")")
     ExitApp
 }
+; ── --lottest: a lot moves on by itself, then the two screens end up on DIFFERENT lots.
+;    Neither may be mistaken for an undo, and the mismatch must HOLD the run. ───────────
+if A_Args.Length >= 1 && A_Args[1] = "--lottest" {
+    CFG.mode := "both", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayL(t) => FileAppend(t "`n", "*")
+    t0 := A_TickCount, moved := false, held := 0
+    while A_TickCount - t0 < 20000 {
+        el := A_TickCount - t0
+        if !moved && el >= 2500 {
+            moved := true
+            SIM.slot := "514", SIM.s := 0        ; Saleroom jumps to the next lot on its own
+            SayL("── t=" el " Saleroom moves to lot 514 by itself (its figure falls to £0); Vectis stays on 513 at £20")
+        }
+        TickBoth()
+        if RS.paused {
+            held := el
+            break
+        }
+        Sleep 100
+    }
+    seq := ""
+    for p in SIM.presses
+        seq .= p " "
+    SayL((!InStr(seq, "btn_undo") ? "PASS " : "FAIL ") "the healthy screen was NOT undone (presses: " (seq = "" ? "none" : seq) ")")
+    SayL((held ? "PASS " : "FAIL ") "the run HELD when the screens sat on different lots (at t=" held "ms)")
+    SayL((RS.blind ? "PASS " : "FAIL ") "it is showing the red held banner, waiting for F10")
+    ExitApp
+}
 ; ── --blindtest: one screen goes unreadable mid-lot — the clerk must PAUSE, not act ──────
 if A_Args.Length >= 1 && A_Args[1] = "--blindtest" {
     CFG.mode := "both", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
@@ -307,12 +366,14 @@ if A_Args.Length >= 1 && A_Args[1] = "--blindtest" {
                 m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_sname"
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
         CAL[nm] := m
     }
-    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM" }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
     RS := NewRunState(true)
     SIM.t0 := A_TickCount
     Say2(t) => FileAppend(t "`n", "*")
@@ -524,6 +585,8 @@ RefreshMain() {
         txt .= miss.Length ? "  ⚠ Still needed: " Join(miss, ", ") : "  ✓ Ready to run both."
         if !(CAL["vectis"].Has("reg_vtype") && CAL["saleroom"].Has("reg_sname"))
             txt .= "  (Tie-break off until the two top-row label boxes are set.)"
+        if !(CAL["vectis"].Has("reg_lot") && CAL["saleroom"].Has("reg_lot"))
+            txt .= "  (Lot watch off until both lot-number boxes are set.)"
         M_STATUS.Text := txt
         return
     }
@@ -687,12 +750,15 @@ TestRead() {
             continue
         r := BidRegion(CFG.profile, it.key)
         isLabel := it.key = "reg_vtype" || it.key = "reg_sname"
+        isLot := it.key = "reg_lot"
         txt := OcrRead(r.x, r.y, r.w, r.h, isLabel ? "txt" : "num")
         pic := OCR_DIR "\test-" it.key ".png"
         try FileCopy OCR_DIR "\last.png", pic, 1
         meaning := isLabel
             ? (Trim(txt) = "" ? "nothing — is the top bid row inside the box?" : "label used by the tie check")
-            : (ParseAmount(txt) >= 0 ? "£" ParseAmount(txt) : "no number here by itself")
+            : isLot
+                ? (LotToken(CFG.profile) != "" ? "lot " LotToken(CFG.profile) : "no lot number found")
+                : (ParseAmount(txt) >= 0 ? "£" ParseAmount(txt) : "no number here by itself")
         rows.Push({ key: it.key, r: r, txt: txt, meaning: meaning, pic: pic })
     }
     verdict := ReadBid(CFG.profile)
@@ -703,7 +769,8 @@ TestRead() {
 /** Every box's picture and reading, then the verdict. */
 ShowTestRead(rows, verdict) {
     NAMES := Map("reg_bid", "CURRENT BID box", "reg_ask", "A — next asking box",
-                 "reg_vtype", "Vectis top-row Bid Type (tie check)", "reg_sname", "Saleroom top-row Name (tie check)")
+                 "reg_vtype", "Vectis top-row Bid Type (tie check)", "reg_sname", "Saleroom top-row Name (tie check)",
+                 "reg_lot", "LOT NUMBER box (lot watch)")
     g := Gui("+AlwaysOnTop +Owner" MAIN.Hwnd, "Auto Clerk — test read")
     g.SetFont("s10", "Segoe UI")
     for row in rows {
@@ -951,7 +1018,11 @@ StopOcr() {
  *  so a lone digit reads. mode "txt" = plain text (the tie-check labels). */
 OcrRead(x, y, w, h, mode := "num") {
     if IsObject(SIM) {                   ; --simboth: the screens are a model, not pixels
-        if x >= 3500                     ; label boxes (see the sim's CAL): 4000 = Vectis type, 3000 = Saleroom name
+        if x >= 5500                     ; 6000 = Vectis lot, 5000 = Saleroom lot
+            return "Bid " SIM.vlot
+        if x >= 4500
+            return "Bid " SIM.slot
+        if x >= 3500                     ; label boxes: 4000 = Vectis type, 3000 = Saleroom name
             return SIM.vtype
         if x >= 2500
             return SIM.sname
@@ -1047,13 +1118,9 @@ ParseAmount(txt) {
     ; "Bid" counts as a marker too — the helper paints that word in front of every number
     ; box, so "Bid IO" must translate the look-alikes exactly as "£IO" would.
     if RegExMatch(txt, "(?:[£Ef]|Bid)\s?([0-9OoIl|SBG][0-9OoIl|SBG.,]*)(?![A-Za-z])", &m) {
-        tok := m[1]
-        tok := RegExReplace(tok, "[Oo]", "0")
-        tok := RegExReplace(tok, "[Il|]", "1")
-        tok := StrReplace(StrReplace(StrReplace(tok, "S", "5"), "B", "8"), "G", "6")
-        tok := RegExReplace(tok, "[.,]", "")
-        if RegExMatch(tok, "^\d+$")
-            return Integer(tok)
+        v := MoneyFromToken(m[1])
+        if v >= 0
+            return v
     }
     if !RegExMatch(txt, "(\d+(?:[.,]\d{3})*)", &m) {
         ; A lone zero comes back as the letter O ("Bid O") — accept it as £0 when the
@@ -1062,7 +1129,24 @@ ParseAmount(txt) {
             return 0
         return -1
     }
-    return Integer(RegExReplace(m[1], "[.,]", ""))
+    return MoneyFromToken(m[1])
+}
+
+/** Whole POUNDS from an OCR money token, or -1.
+ *  ⚠⚠ PENCE (2026-08-24). Every separator used to be stripped, so a screen showing
+ *  "15.00" read as £1,500 and "1,250.00" as £125,000 — a hundredfold error that would
+ *  have driven the other platform to a nonsense figure and hammered at it. The trainers
+ *  show whole pounds, which is why it was never seen; the live pages may not.
+ *  A trailing group of ONE or TWO digits after a . or , is a decimal → dropped.
+ *  A trailing group of THREE is a thousands separator → kept ("1.250" is still 1250).
+ *  Pence are truncated, never rounded up: the figure may never overstate the bid. */
+MoneyFromToken(tok) {
+    tok := RegExReplace(tok, "[Oo]", "0")
+    tok := RegExReplace(tok, "[Il|]", "1")
+    tok := StrReplace(StrReplace(StrReplace(tok, "S", "5"), "B", "8"), "G", "6")
+    tok := RegExReplace(tok, "[.,](\d{1,2})$", "")      ; drop the pence
+    tok := RegExReplace(tok, "[.,]", "")                ; thousands separators
+    return RegExMatch(tok, "^\d+$") ? Integer(tok) : -1
 }
 
 ; ══════════════════════════════════════════════════════════════════════════════
@@ -1102,13 +1186,13 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0,
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0,
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
     }
     for nm in ["saleroom", "vectis"]
-        r.side[nm] := { bid: -1, stable: -1, stableN: 0, lastRead: "", high: 0, expect: 0, syncAt: 0, tries: 0, behindSince: 0, warned: false, blindSince: 0 }
+        r.side[nm] := { bid: -1, stable: -1, stableN: 0, lastRead: "", high: 0, expect: 0, syncAt: 0, tries: 0, behindSince: 0, warned: false, blindSince: 0, lot: "" }
     return r
 }
 StopRun(why) {
@@ -1138,20 +1222,29 @@ PauseRun() {
     }
 }
 
-/** The screen (or one of them) has been unreadable for BLIND_PAUSE_MS. Stop pressing,
- *  go red, wait for a person. Resuming (F10) starts the lot state afresh. */
-BlindPause(label) {
+/** Stop pressing, go red, wait for a person. The one way the clerk ever downs tools:
+ *  it holds everything exactly where it is rather than acting on something it does not
+ *  understand. F10 resumes and reads the screens afresh. */
+HoldRun(l1, l2, logMsg) {
     global RS
     if !IsObject(RS) || RS.blind
         return
     RS.blind := true
     RS.paused := true
-    WriteLog("⚠ BLIND — could not read " label " screen for " Round(BLIND_PAUSE_MS / 1000) "s. PAUSED — nothing will be pressed. Check the screen, then F10 to resume.")
+    WriteLog(logMsg)
     try {
         STATUS.BackColor := "7f1d1d"
-        S_L1.Text := "⚠ CAN'T READ " StrUpper(label) " SCREEN — paused. Check it, then F10."
-        S_L2.Text := "Nothing legible for " Round(BLIND_PAUSE_MS / 1000) "s. Nothing is being pressed."
+        S_L1.Text := l1
+        S_L2.Text := l2
     }
+}
+
+/** The screen (or one of them) has been unreadable for BLIND_PAUSE_MS. */
+BlindPause(label) {
+    secs := Round(BLIND_PAUSE_MS / 1000)
+    HoldRun("⚠ CAN'T READ " StrUpper(label) " SCREEN — paused. Check it, then F10.",
+            "Nothing legible for " secs "s. Nothing is being pressed.",
+            "⚠ BLIND — could not read " label " screen for " secs "s. PAUSED — nothing will be pressed. Check the screen, then F10 to resume.")
 }
 
 BuildStatus() {
@@ -1213,6 +1306,9 @@ RunTick() {
 ; ══════════════════════════════════════════════════════════════════════════════
 TickBoth() {
     global RS
+    WatchLots(true)                     ; the lot watch comes first — it can reset the lot
+    if !IsObject(RS) || RS.paused
+        return
     s := ReadSide("saleroom"), v := ReadSide("vectis")
     if !IsObject(RS)                    ; Esc pressed while those reads were in flight
         return
@@ -1320,6 +1416,75 @@ TickBoth() {
             SetStatus("No bids on either screen · quiet " Round(quiet) "s", "Waiting — lots are not passed automatically" reading)
         }
     }
+}
+
+/** The lot number a screen is showing, as a comparable token ("Lot: 513" → "513",
+ *  "514A" → "514A"), or "" when nothing legible. Read through the composed path so a
+ *  single-digit lot number is readable too, hence the "Bid" prefix to strip. */
+LotToken(nm) {
+    if !CAL[nm].Has("reg_lot")
+        return ""
+    r := BidRegion(nm, "reg_lot")
+    txt := OcrRead(r.x, r.y, r.w, r.h)
+    txt := RegExReplace(txt, "i)\bBid\b", " ")
+    if !RegExMatch(txt, "(\d+[A-Za-z]?)", &m)
+        return ""
+    return StrUpper(m[1])
+}
+
+/** ⚠ THE LOT WATCH (2026-08-24). Without it, a lot moving on by itself — the auctioneer
+ *  skipping one, someone pressing Next by hand, the platform advancing — looks exactly
+ *  like an undo: the figure falls to zero and the clerk "corrects" the OTHER, perfectly
+ *  healthy screen down with it. Worse, two screens sitting on DIFFERENT lots would have
+ *  bids synced between them. So: a lot change that we did not cause starts the lot afresh,
+ *  and a lasting disagreement holds the run. Optional — nothing changes until the
+ *  lot-number boxes are calibrated. */
+WatchLots(both) {
+    global RS
+    RS.lotTick++
+    if Mod(RS.lotTick, LOT_EVERY_N) != 0
+        return
+    if both {
+        ls := LotToken("saleroom"), lv := LotToken("vectis")
+        if !IsObject(RS)
+            return
+        moved := ""
+        for nm, tok in Map("saleroom", ls, "vectis", lv) {
+            x := RS.side[nm]
+            if tok = "" || tok = x.lot
+                continue
+            ; x.lot = "" means "not adopted yet" (a fresh lot, or straight after our own
+            ; Next) — take it quietly. Anything else is the lot moving without us.
+            if x.lot != ""
+                moved .= (moved ? " and " : "") (nm = "saleroom" ? "Saleroom" : "Vectis") " " x.lot " → " tok
+            x.lot := tok
+        }
+        if moved != "" {
+            WriteLog("↪ the lot moved on without us (" moved ") — starting this lot afresh, nothing corrected")
+            keepS := RS.side["saleroom"].lot, keepV := RS.side["vectis"].lot
+            ResetLotState()
+            RS.side["saleroom"].lot := keepS, RS.side["vectis"].lot := keepV
+            return
+        }
+        if ls != "" && lv != "" && ls != lv {
+            RS.mismatchN++
+            if RS.mismatchN >= LOT_MISMATCH_HOLD
+                HoldRun("⚠ THE SCREENS ARE ON DIFFERENT LOTS — Saleroom " ls " · Vectis " lv,
+                        "Nothing is being pressed. Put them on the same lot, then F10.",
+                        "⚠ DIFFERENT LOTS — Saleroom " ls " · Vectis " lv ". HELD — nothing will be pressed until F10.")
+        } else {
+            RS.mismatchN := 0
+        }
+        return
+    }
+    tok := LotToken(RS.name)
+    if !IsObject(RS) || tok = ""
+        return
+    if RS.lot != "" && tok != RS.lot {
+        WriteLog("↪ the lot moved on without us (" RS.lot " → " tok ") — starting this lot afresh")
+        ResetLotState()
+    }
+    RS.lot := tok
 }
 
 /** Rule 3. Both figures are equal — but are they the SAME bid? Read the top-row labels:
@@ -1510,8 +1675,10 @@ ResetLotState() {
     for nm, x in RS.side {
         x.bid := -1, x.stable := -1, x.stableN := 0, x.high := 0, x.blindSince := 0
         x.expect := 0, x.tries := 0, x.behindSince := 0, x.warned := false
+        x.lot := ""                     ; re-adopt whatever the screen shows, silently
     }
     RS.bid := -1, RS.stable := -1, RS.stableN := 0, RS.blindSince := 0
+    RS.lot := "", RS.mismatchN := 0
     RS.price := 0, RS.phase := "open", RS.fwPressed := false
     RS.priceSide := "", RS.priceAt := 0, RS.tieCheckedPrice := 0
     RS.lastChangeAt := A_TickCount, RS.fwAt := 0
@@ -1519,6 +1686,9 @@ ResetLotState() {
 
 Tick() {
     global RS
+    WatchLots(false)
+    if !IsObject(RS) || RS.paused
+        return
     rb := ReadBid(RS.name)
     if !IsObject(RS)                    ; Esc pressed while the read was in flight
         return

@@ -235,7 +235,9 @@ export default function AutoClerkPage() {
                 <strong> drag a box</strong> round the number, like the snipping tool — crosshair guides, a live size
                 readout, and it reads the box straight back so you know at once whether it can see the figure. Changing one
                 thing later doesn&apos;t mean redoing the lot: pick it in <strong>Set just one</strong> and set that alone.
-                Calibration is saved, so it only happens once per machine.
+                Calibration is saved, so it only happens once per machine. Mark the <strong>lot number</strong> box on
+                both screens while you&apos;re there — it&apos;s optional, but it&apos;s what stops the two platforms ever
+                being worked as if they were on the same lot when they aren&apos;t.
               </p>
             </div>
 
@@ -266,6 +268,7 @@ export default function AutoClerkPage() {
               <li><strong>Catches the other platform up to the exact amount</strong> (not one increment at a time, so it can&apos;t lag): on Saleroom by typing into the box next to A, on Vectis by setting the Asking bid and pressing the Saleroom button. An online bid that appears on both by itself gets no press at all.</li>
               <li><strong>Quiet for your Fair Warning time</strong> → Fair Warning on both. <strong>Quiet again</strong> → Hammer and Sell, then Next on both.</li>
               <li><strong>An undo on one screen</strong> pulls the other down with Undo until they match.</li>
+              <li><strong>It watches the lot number on each screen</strong> (once you&apos;ve marked those boxes). A lot moving on by itself is recognised as exactly that rather than mistaken for an undo, and if the two screens end up on different lots it stops and says so instead of syncing bids between them.</li>
               <li><strong>Two bidders landing on the same amount</strong> — it reads the top row of each bid list to tell a mirrored bid from a real tie, then follows the rule card: whoever bid first keeps it (Room on Saleroom, or the ! on Vectis).</li>
             </ul>
           </div>
@@ -276,6 +279,7 @@ export default function AutoClerkPage() {
               <li><strong>A last look before every sale.</strong> In the instant before Hammer and Sell it re-reads both screens; a bid that lands at the last second stops the sale, and the Fair Warning cycle starts again. Sniping cannot be hammered through at the old price.</li>
               <li><strong>Being unable to read is never treated as &quot;the bids vanished&quot;.</strong> An unreadable screen holds the last figure; after 10 seconds it stops pressing anything, goes red and waits for you (F10 to resume).</li>
               <li><strong>Drops are slower to believe than rises</strong> — one bad frame can&apos;t undo a real bid.</li>
+              <li><strong>Pence are understood, not multiplied.</strong> A screen showing £15.00 reads as fifteen pounds; a trailing pair of digits is treated as pence and never as part of the figure.</li>
               <li><strong>It checks each lot really moved on</strong> after Next, and says so in the log if it couldn&apos;t confirm it.</li>
               <li><strong>Every press is logged</strong> with its coordinates and the reason for it, so the whole run can be read back afterwards.</li>
             </ul>
