@@ -93,6 +93,9 @@ global BLIND_PAUSE_MS := 10000
 ; ~150 ms. Two screens must disagree for this many consecutive checks before the clerk
 ; holds — one platform legitimately advances a moment before the other.
 global LOT_EVERY_N := 4, LOT_MISMATCH_HOLD := 3
+; How long the bid boxes must sit perfectly still before a hammer. Pixel-watching is
+; ~1 ms, so this is continuous rather than a snapshot — see FinalWatch.
+global FINAL_WATCH_MS := 450
 ; Rule 3 — same-amount tie. Both figures equal, yet EACH platform holds its OWN bidder
 ; (Vectis's top bid is not from the Saleroom source; Saleroom's top bid is not ROOM).
 ; Needs the two label boxes (reg_vtype, reg_sname). Checked once per price, a moment
@@ -305,6 +308,47 @@ if A_Args.Length >= 1 && A_Args[1] = "--snipetest" {
     SayS((closedAt && closedAt >= tFw + 3400 ? "PASS " : "FAIL ") "the sale did NOT go through at the old price — lot closed at t=" closedAt " (FW at " tFw ", snipe at ~" (tFw + 1500) ")")
     SayS((fwCount >= 2 ? "PASS " : "FAIL ") "Fair Warning was re-issued after the snipe (vectis FW pressed " fwCount "×)")
     SayS((RS.lots = 1 && SIM.s = 0 && SIM.v = 0 ? "PASS " : "FAIL ") "the lot then sold and both screens reset (S=" SIM.s " V=" SIM.v ")")
+    ExitApp
+}
+; ── --watchtest: the nastiest snipe — the bid lands AFTER the last look has already read
+;    the screens, in the gap that used to be pressed straight through. ─────────────────
+if A_Args.Length >= 1 && A_Args[1] = "--watchtest" {
+    CFG.mode := "both", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayW(t) => FileAppend(t "`n", "*")
+    loop 6 {
+        TickBoth()
+        Sleep 60
+    }
+    SayW("settled at £" RS.price " on both")
+    ; The snipe lands 200 ms into the close — after the last look has read, while the
+    ; boxes are being watched. This is the case that was being hammered through.
+    SetTimer(() => (SIM.v := 25, FileAppend("── snipe: Vectis £25, 200 ms into the close (after the last look read)`n", "*")), -200)
+    CloseLotBoth("sold")
+    seq := ""
+    for p in SIM.presses
+        seq .= p " "
+    hammered := InStr(seq, "vectis.btn_hammer") || InStr(seq, "saleroom.btn_sell")
+    SayW((!hammered ? "PASS " : "FAIL ") "the final watch caught it — nothing hammered (presses: " (seq = "" ? "none" : seq) ")")
+    SayW((RS.lots = 0 ? "PASS " : "FAIL ") "the lot did NOT close (lots closed: " RS.lots ")")
     ExitApp
 }
 ; ── --lastlooktest: the sniping guard on its own. Both screens settled at £20, then a bid
@@ -1680,6 +1724,58 @@ LastLook(names) {
     return top
 }
 
+/** A cheap fingerprint of a bid box — a grid of pixels, about a millisecond to take.
+ *  Reading the number costs 200 ms; noticing that the number CHANGED costs almost
+ *  nothing, which is what lets the final watch be continuous instead of a snapshot. */
+SnapRegion(nm) {
+    if IsObject(SIM)                     ; the model's figure IS its pixels
+        return nm = "vectis" ? "V" SIM.v : "S" SIM.s
+    r := BidRegion(nm)
+    out := ""
+    Loop 3 {
+        y := r.y + Round(r.h * (A_Index - 0.5) / 3)
+        Loop 6 {
+            x := r.x + Round(r.w * (A_Index - 0.5) / 6)
+            try out .= PixelGetColor(x, y) ","
+        }
+    }
+    return out
+}
+
+/** THE FINAL WATCH — the last thing before a hammer.
+ *  ⚠⚠ The last look alone was not enough (Jordan, twice: "still able to snipe bids").
+ *  Reading the figures takes ~200 ms per screen, so a bid landing after the final read —
+ *  or rendering a moment after it was accepted — was pressed straight through. So after
+ *  the last look, the bid boxes are WATCHED pixel-by-pixel for FINAL_WATCH_MS: any change
+ *  triggers a real read, and a higher figure aborts. Nothing is pressed until the boxes
+ *  have sat still, so the exposed window shrinks from ~200 ms to the press itself.
+ *  Returns the aborting figure, or -1 when it is safe to press. */
+FinalWatch(names, floor) {
+    fp := Map()
+    for nm in names
+        fp[nm] := SnapRegion(nm)
+    t0 := A_TickCount
+    while A_TickCount - t0 < FINAL_WATCH_MS {
+        for nm in names {
+            now := SnapRegion(nm)
+            if now = fp[nm]
+                continue
+            fp[nm] := now
+            peak := LastLook(names)          ; something moved — read what it really says
+            if !IsObject(RS)
+                return -1
+            WriteLog("  · the " (nm = "saleroom" ? "Saleroom" : "Vectis") " figure moved during the final watch — reads £" peak)
+            if peak > floor
+                return peak
+            t0 := A_TickCount                ; it must sit still again before we press
+            for n2 in names
+                fp[n2] := SnapRegion(n2)
+        }
+        Sleep 12
+    }
+    return -1
+}
+
 /** Drive one platform to the exact amount — the rule-card way for each screen. */
 CatchUp(nm, target) {
     x := RS.side[nm]
@@ -1739,6 +1835,11 @@ CloseLotBoth(how) {
         peak := LastLook(["saleroom", "vectis"])
         if !IsObject(RS)
             return
+        WriteLog("  · last look before selling: highest anything shows is £" peak " (agreed £" price ")")
+        if peak <= price
+            peak := FinalWatch(["saleroom", "vectis"], price)   ; then watch until they sit still
+        if !IsObject(RS)
+            return
         if peak > price {
             WriteLog("🛑 LAST-SECOND BID £" peak " — sale stopped, bidding continues")
             RS.lastChangeAt := A_TickCount
@@ -1749,6 +1850,10 @@ CloseLotBoth(how) {
     } else {
         ; The last look before a PASS: any bid at all means the lot is no longer bidless.
         peak := LastLook(["saleroom", "vectis"])
+        if !IsObject(RS)
+            return
+        if peak <= 0
+            peak := FinalWatch(["saleroom", "vectis"], 0)
         if !IsObject(RS)
             return
         if peak > 0 {
@@ -1894,11 +1999,16 @@ Tick() {
 CloseLot(how) {
     global RS
     before := RS.bid
-    ; THE LAST LOOK — a bid in the final instant aborts the sale/pass (sniping).
+    ; THE LAST LOOK, then the pixel watch — a bid in the final instant aborts the sale/pass.
+    floor := how = "sold" ? before : 0
     fresh := LastLook([RS.name])
     if !IsObject(RS)
         return
-    if (how = "sold" && fresh > before) || (how = "passed" && fresh > 0) {
+    if fresh <= floor
+        fresh := FinalWatch([RS.name], floor)
+    if !IsObject(RS)
+        return
+    if fresh > floor {
         WriteLog("🛑 LAST-SECOND BID £" fresh " — " (how = "sold" ? "sale stopped" : "not passing") ", bidding continues")
         RS.lastChangeAt := A_TickCount
         return

@@ -277,7 +277,7 @@ export default function AutoClerkPage() {
           <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border border-green-200 dark:border-green-900">
             <p className="font-semibold text-green-900 dark:text-green-200 text-sm mb-2">Safeguards — what stops it doing something daft</p>
             <ul className="text-xs text-green-900 dark:text-green-200 space-y-1.5">
-              <li><strong>A last look before every sale.</strong> In the instant before Hammer and Sell it re-reads both screens; a bid that lands at the last second stops the sale, and the Fair Warning cycle starts again. Sniping cannot be hammered through at the old price.</li>
+              <li><strong>A last look, then a final watch, before every sale.</strong> It re-reads both screens, then watches the bid figures pixel-by-pixel — about a millisecond a look, against 200 for reading the number — and will not press until they have sat perfectly still. Anything that moves is read properly, and a higher figure stops the sale and starts the Fair Warning cycle again. A bid landing in the gap between reading and pressing is caught, which a snapshot alone could not do.</li>
               <li><strong>Being unable to read is never treated as &quot;the bids vanished&quot;.</strong> An unreadable screen holds the last figure; after 10 seconds it stops pressing anything, goes red and waits for you (F10 to resume).</li>
               <li><strong>Drops are slower to believe than rises</strong> — one bad frame can&apos;t undo a real bid.</li>
               <li><strong>Pence are understood, not multiplied.</strong> A screen showing £15.00 reads as fifteen pounds; a trailing pair of digits is treated as pence and never as part of the figure.</li>

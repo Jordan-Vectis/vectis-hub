@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"9eae219b2a4f6cb3d600b92eeebc051fdcc51288","author":"Jordan Orange","date":"2026-08-24T15:33:57+01:00","subject":"Auto Clerk: a tickbox for the lot watch, and it can never hold the run twice"},
   {"sha":"3303a576ee942210cffeeecade7c3300c7b6241e","author":"Jordan Orange","date":"2026-08-24T15:08:03+01:00","subject":"Auto Clerk: the last look was reading through the debounce, so snipes still got through"},
   {"sha":"6a9e57d27739156659e3635040fd955d19337483","author":"Jordan Orange","date":"2026-08-24T14:28:08+01:00","subject":"Auto Clerk: read pence correctly, and watch the lot number on both screens"},
   {"sha":"cd85c9bc3420a573657ba9c466c784b9a2865d23","author":"Jordan Orange","date":"2026-08-24T14:19:07+01:00","subject":"Auto Clerk: draw the figure boxes like the snipping tool"},
