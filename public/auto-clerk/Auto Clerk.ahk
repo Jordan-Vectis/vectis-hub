@@ -564,7 +564,7 @@ StartCalibration(name, onlyKey := "") {
     if !items.Length
         return
     MAIN.Hide()
-    CALST := { name: name, items: items, i: 1, corner: 1, p1: 0, busy: false }
+    CALST := { name: name, items: items, i: 1, busy: false }
     try StartOcr()      ; so a captured bid box can be read back immediately
     BuildBanner()
     Hotkey "F8",      (*) => OnCalKey("ok"),     "On"
@@ -574,6 +574,7 @@ StartCalibration(name, onlyKey := "") {
     Hotkey "Esc",     (*) => OnCalKey("cancel"), "On"
     ShowCalItem()
     SetTimer CalTick, 100
+    MaybeDragCurrent()
 }
 ShowCalItem() {
     global CALST
@@ -586,16 +587,18 @@ ShowCalItem() {
     have := CAL[CALST.name].Has(it.key) ? "  (currently set)" : ""
     B_L1.SetFont("cFFFFFF")
     if it.kind = "reg" {
-        B_L1.Text := "▶  " CALST.i " of " items.Length "  —  " (CALST.corner = 1 ? "TOP-LEFT corner of " : "BOTTOM-RIGHT corner of ") it.label
-        B_L2.Text := "Two presses: hover the top-left corner of the number and press F8, then the bottom-right corner and press F8." have
+        B_L1.Text := "▶  " CALST.i " of " items.Length "  —  " it.label
+        B_L2.Text := "Draw a box round it — the screen dims and you drag, like the snipping tool. (F8 draws it again, F10 keeps the old one.)" have
+        B_L3.Text := "DRAG to draw the box   ·   F8 = draw it again   ·   F10 = keep the old one   ·   F7 = back one   ·   Esc = stop"
     } else {
         B_L1.Text := "▶  " CALST.i " of " items.Length "  —  " it.label
         B_L2.Text := "Hover over it and press F8 (or middle-click)." have
+        B_L3.Text := "F8 or MIDDLE-CLICK = capture   ·   F10 = keep the old position   ·   F7 = back one   ·   Esc = stop"
     }
 }
 CalTick() {
     global CALST, BANNER, BANNER_TOP
-    if !IsObject(CALST)
+    if !IsObject(CALST) || CALST.busy      ; nothing over the top of the snipping overlay
         return
     MouseGetPos &mx, &my
     ToolTip "F8 / middle-click = capture here   (" mx ", " my ")"
@@ -615,41 +618,25 @@ OnCalKey(action) {
     items := CALST.items
     it := items[CALST.i]
     if action = "ok" {
-        MouseGetPos &cx, &cy
         if it.kind = "reg" {
-            if CALST.corner = 1 {
-                CALST.p1 := { x: cx, y: cy }, CALST.corner := 2
-                FlashBanner("✔  top-left " cx ", " cy " — now the bottom-right corner", "22C55E")
-            } else {
-                x1 := Min(CALST.p1.x, cx), y1 := Min(CALST.p1.y, cy)
-                w := Abs(cx - CALST.p1.x), h := Abs(cy - CALST.p1.y)
-                if w < 6 || h < 6 {
-                    FlashBanner("✖  that box is too small — start again from the top-left corner", "F87171")
-                    CALST.corner := 1
-                } else {
-                    CAL[CALST.name][it.key] := { x: x1, y: y1, w: w, h: h }
-                    ; Read it straight back so a mis-drawn box shows itself NOW, not mid-run.
-                    readTxt := ""
-                    try {
-                        rr := BidRegion(CALST.name, it.key)
-                        readTxt := OcrRead(rr.x, rr.y, rr.w, rr.h, (it.key = "reg_vtype" || it.key = "reg_sname") ? "txt" : "num")
-                    }
-                    amtNow := ParseAmount(readTxt)
-                    FlashBanner("✔  box " w "×" h " — it reads [" Short(readTxt, 30) "]" (amtNow >= 0 ? " = £" amtNow : " — no number (fine if the figure is a single digit; otherwise F7 and try a wider box)"), amtNow >= 0 ? "22C55E" : "FBBF24", 2200)
-                    CALST.corner := 1, CALST.i++
-                }
-            }
-        } else {
-            CAL[CALST.name][it.key] := { x: cx, y: cy }
-            FlashBanner("✔  captured " cx ", " cy, "22C55E")
-            CALST.i++
+            ; Regions are drawn, not hovered — F8 here just re-opens the snipping overlay.
+            CALST.busy := false
+            StartDragForCurrent()
+            return
         }
+        MouseGetPos &cx, &cy
+        CAL[CALST.name][it.key] := { x: cx, y: cy }
+        FlashBanner("✔  captured " cx ", " cy, "22C55E")
+        CALST.i++
     } else if action = "skip" {
         FlashBanner("⏭  kept as it was", "FBBF24")
-        CALST.corner := 1, CALST.i++
+        CALST.i++
     } else if action = "back" {
-        CALST.corner := 1, CALST.i := Max(1, CALST.i - 1)
+        CALST.i := Max(1, CALST.i - 1)
         ShowCalItem()
+        CALST.busy := false
+        MaybeDragCurrent()
+        return
     } else if action = "cancel" {
         if MsgBox("Stop calibrating? Positions captured so far are kept.", "Auto Clerk", "YesNo Icon?") = "Yes" {
             EndCalibration()
@@ -660,8 +647,11 @@ OnCalKey(action) {
         EndCalibration()
         return
     }
-    if IsObject(CALST)
+    if IsObject(CALST) {
         CALST.busy := false
+        ShowCalItem()
+        MaybeDragCurrent()      ; the next item may be a box to draw
+    }
 }
 EndCalibration() {
     global CALST
@@ -741,6 +731,154 @@ ShowTestRead(rows, verdict) {
     g.Add("Button", "w100 y+10 Default", "OK").OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Close", (*) => g.Destroy())
     g.Show()
+}
+
+/** Snipping-tool style region picker: drag a box round something on screen.
+ *  Returns {x,y,w,h} in screen coordinates, or 0 if Esc cancelled it.
+ *  ⚠ The dimmed overlay covers the WHOLE virtual desktop — both monitors, negative
+ *  coordinates included — which is what makes this accurate: the drag can never reach
+ *  the page underneath, and the pointer can never turn into a text I-beam over the very
+ *  field you are trying to mark (Jordan, 2026-08-24: "my cursor changes to a typing one
+ *  so its hard to mark"). Crosshair guides follow the mouse for precision. */
+DragRegion(title, sub) {
+    ; ⚠ Physical OR logical: the MButton hotkey installs the mouse hook, and the hook
+    ; reports injected input as NOT physical — so a "P" test alone can never see a
+    ; scripted drag, which is how this gets tested. A real hand satisfies both.
+    Held(k) => GetKeyState(k, "P") || GetKeyState(k)
+    vx := SysGet(76), vy := SysGet(77), vw := SysGet(78), vh := SysGet(79)
+
+    ov := Gui("-Caption +AlwaysOnTop +ToolWindow", "AutoClerkSnip")
+    ov.BackColor := "0B1222"
+    ov.Show("NoActivate x" vx " y" vy " w" vw " h" vh)
+    WinSetTransparent 110, ov.Hwnd
+
+    guideX := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20")
+    guideX.BackColor := "38BDF8"
+    guideX.Show("NoActivate x" vx " y" vy " w" vw " h1")
+    guideY := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20")
+    guideY.BackColor := "38BDF8"
+    guideY.Show("NoActivate x" vx " y" vy " w1 h" vh)
+
+    band := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20")
+    band.BackColor := "7DD3FC"
+    bandShown := false
+
+    hint := Gui("-Caption +AlwaysOnTop +ToolWindow +E0x20")
+    hint.BackColor := "111827"
+    hint.MarginX := 24, hint.MarginY := 14
+    hint.SetFont("s16 Bold cFFFFFF", "Segoe UI")
+    hint.Add("Text", "w880 Center", title)
+    hint.SetFont("s11 Norm c93C5FD", "Segoe UI")
+    hint.Add("Text", "w880 Center", sub)
+    hint.SetFont("s11 Norm cD1D5DB", "Segoe UI")
+    hSize := hint.Add("Text", "w880 Center", "Click and drag a box round it   ·   Esc to cancel")
+    hint.Show("NoActivate")
+    hint.GetPos(,, &hw, &hh)
+    hintTop := true
+    hint.Move(vx + Round((vw - hw) / 2), vy + 14)
+    WinSetTransparent 245, hint.Hwnd
+
+    rect := 0
+    KeyWait "LButton"
+    KeyWait "Esc"
+    loop {
+        if Held("Esc")
+            break
+        MouseGetPos &mx, &my
+        guideX.Move(, my)
+        guideY.Move(mx)
+        ; The hint sits opposite the pointer, decided by position (never a flip-flop).
+        wantTop := my > vy + 260
+        if wantTop != hintTop {
+            hintTop := wantTop
+            hint.Move(, hintTop ? vy + 14 : vy + vh - hh - 70)
+        }
+        if Held("LButton") {
+            x1 := mx, y1 := my
+            while Held("LButton") && !Held("Esc") {
+                MouseGetPos &cx, &cy
+                bx := Min(x1, cx), by := Min(y1, cy)
+                bw := Max(1, Abs(cx - x1)), bh := Max(1, Abs(cy - y1))
+                if !bandShown {
+                    band.Show("NoActivate x" bx " y" by " w" bw " h" bh)
+                    WinSetTransparent 120, band.Hwnd
+                    bandShown := true
+                } else {
+                    band.Move(bx, by, bw, bh)
+                }
+                guideX.Move(, cy), guideY.Move(cx)
+                hSize.Text := bw " × " bh " px"
+                Sleep 15
+            }
+            if Held("Esc")
+                break
+            MouseGetPos &ex, &ey
+            rect := { x: Min(x1, ex), y: Min(y1, ey), w: Abs(ex - x1), h: Abs(ey - y1) }
+            break
+        }
+        Sleep 15
+    }
+    for g in [ov, band, guideX, guideY, hint]
+        try g.Destroy()
+    return rect
+}
+
+/** Run the drag for the region the calibration is currently on, store it, read it back
+ *  and move on. Regions are ALWAYS drawn, never hovered — buttons stay hover + F8. */
+StartDragForCurrent() {
+    global CALST
+    if !IsObject(CALST) || CALST.i > CALST.items.Length
+        return
+    it := CALST.items[CALST.i]
+    if it.kind != "reg"
+        return
+    CALST.busy := true
+    ToolTip
+    try BANNER.Hide()
+    r := DragRegion("Draw a box round " it.label,
+        "Include the WHOLE area the figure sits in — wide enough for a big number — but nothing else: a lot number or an estimate inside the box can be read INSTEAD of the bid.")
+    try BANNER.Show("NoActivate")
+    if !IsObject(r) {
+        FlashBanner("drag cancelled — F8 to draw it again, F10 to keep the old box", "FBBF24", 1800)
+        CALST.busy := false
+        return
+    }
+    if r.w < 6 || r.h < 6 {
+        FlashBanner("✖ that box was too small — F8 to draw it again", "F87171", 1800)
+        CALST.busy := false
+        return
+    }
+    CAL[CALST.name][it.key] := r
+    ; Read it straight back so a mis-drawn box shows itself NOW, not mid-run.
+    readTxt := ""
+    try {
+        rr := BidRegion(CALST.name, it.key)
+        readTxt := OcrRead(rr.x, rr.y, rr.w, rr.h, (it.key = "reg_vtype" || it.key = "reg_sname") ? "txt" : "num")
+    }
+    amtNow := ParseAmount(readTxt)
+    isLabel := it.key = "reg_vtype" || it.key = "reg_sname"
+    ok := isLabel ? (Trim(readTxt) != "") : (amtNow >= 0)
+    FlashBanner("✔ box " r.w "×" r.h " — it reads [" Short(readTxt, 30) "]"
+        . (isLabel ? "" : (amtNow >= 0 ? " = £" amtNow : " — no number (fine if the figure is a single digit; otherwise F8 and draw it wider)")),
+        ok ? "22C55E" : "FBBF24", 2200)
+    CALST.i++
+    if CALST.i > CALST.items.Length {
+        EndCalibration()
+        return
+    }
+    CALST.busy := false
+    ShowCalItem()
+    MaybeDragCurrent(1800)      ; read the confirmation before the screen dims again
+}
+/** A region item starts its drag by itself — no key to press first. `after` is longer when
+ *  we have just captured one, so the "it reads […]" confirmation can be read before the
+ *  screen dims again for the next box. */
+MaybeDragCurrent(after := 150) {
+    global CALST
+    if !IsObject(CALST) || CALST.i > CALST.items.Length
+        return
+    if CALST.items[CALST.i].kind = "reg"
+        SetTimer StartDragForCurrent, -after
 }
 
 BuildBanner() {

@@ -230,10 +230,12 @@ export default function AutoClerkPage() {
               <p className="font-semibold text-gray-900 dark:text-white">1. Calibrate — tell it where things are</p>
               <p className="text-gray-600 dark:text-gray-400 mt-0.5">
                 Pick the screen (Saleroom or Vectis), press <strong>🎯 Calibrate</strong>, and a banner walks you through
-                each button in turn: hover over it and press <strong>F8</strong> (or middle-click, for laptops whose
-                F-keys do something else). For the figures you press F8 twice — top-left corner, then bottom-right — to
-                draw a box round them. Changing one button later doesn&apos;t mean redoing the lot: pick it in
-                <strong> Set just one</strong> and set that alone. Calibration is saved, so it only happens once per machine.
+                each thing in turn. <strong>Buttons</strong>: hover over one and press <strong>F8</strong> (or middle-click,
+                for laptops whose F-keys do something else). <strong>Figures</strong>: the screen dims and you
+                <strong> drag a box</strong> round the number, like the snipping tool — crosshair guides, a live size
+                readout, and it reads the box straight back so you know at once whether it can see the figure. Changing one
+                thing later doesn&apos;t mean redoing the lot: pick it in <strong>Set just one</strong> and set that alone.
+                Calibration is saved, so it only happens once per machine.
               </p>
             </div>
 

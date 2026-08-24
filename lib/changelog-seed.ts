@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"208b0e7ddd3a6b4620d485e156ffead60127d0ac","author":"Jordan Orange","date":"2026-08-24T13:44:35+01:00","subject":"Auto Clerk: an AutoHotkey Clerk section with the scripts to download and how it works"},
   {"sha":"787116461a2febbed8dabc03bae1d2432d8f1cb6","author":"Jordan Orange","date":"2026-08-24T12:04:10+01:00","subject":"Memory: Auto Clerk.ahk — the last look (a bid in the final instant aborts the sale)"},
   {"sha":"6e0af86173e7cf3b12fa0ae04d76377c7e193cd9","author":"Jordan Orange","date":"2026-08-24T11:38:06+01:00","subject":"Memory: Auto Clerk.ahk — 10s blindness guard (never converts unreadable screens into actions)"},
   {"sha":"a0c5c18032d713d3ff78c8c03098f75ff997f11b","author":"Jordan Orange","date":"2026-08-24T10:59:41+01:00","subject":"Stress Tester: bid on both practice sales at once, with the old clash/rapid patterns"},
