@@ -233,7 +233,9 @@ export default function AutoClerkPage() {
                 each thing in turn. <strong>Buttons</strong>: hover over one and press <strong>F8</strong> (or middle-click,
                 for laptops whose F-keys do something else). <strong>Figures</strong>: the screen dims and you
                 <strong> drag a box</strong> round the number, like the snipping tool — crosshair guides, a live size
-                readout, and it reads the box straight back so you know at once whether it can see the figure. Changing one
+                readout, and it reads the box straight back so you know at once whether it can see the figure.
+                What you draw is exactly what it reads, so include the whole area the figure sits in (it grows as the
+                bidding climbs) and nothing else — another number inside the box can be read instead of the bid. Changing one
                 thing later doesn&apos;t mean redoing the lot: pick it in <strong>Set just one</strong> and set that alone.
                 Calibration is saved, so it only happens once per machine. The <strong>lot number</strong> box on each
                 screen is worth marking where the lot number sits still — it&apos;s what stops the two platforms ever

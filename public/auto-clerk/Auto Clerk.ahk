@@ -112,7 +112,13 @@ global RS := 0         ; 0 = idle, object while running
 global BANNER := 0, B_L1 := 0, B_L2 := 0, B_L3 := 0, BANNER_TOP := true
 global OCR_PID := 0
 global SIM := 0        ; --simboth only: a model of the two screens instead of pixels
-global PAD_X := 90, PAD_Y := 6   ; bid-box padding (see BidRegion) — declared up here, see the note below
+; ⚠ WHAT YOU DRAW IS WHAT IT READS. This was 90 px each side, from the days when a box was
+; two hovered corners round "£0" and needed rescuing. Once boxes are DRAWN, padding is
+; actively harmful: it drags in neighbouring numbers (an estimate, a lot number, the row
+; below) and means the picture you lined up is not the picture it reads — Jordan,
+; 2026-08-24: "the padding you are adding is making things way harder to line up".
+; All that is left is a hair, so a pixel of drawing wobble cannot clip a digit.
+global PAD_X := 4, PAD_Y := 4
 ; ⚠ EVERY top-level "global X := 0" must sit up here, ABOVE LoadIni()/BuildMainGui().
 ; AutoHotkey runs all top-level lines in file order at start-up, so a declaration
 ; placed further down the file executes AFTER the window is built and wipes the
@@ -893,7 +899,7 @@ ShowTestRead(rows, verdict, lotLine := "") {
         g.SetFont("s10 Bold")
         g.Add("Text", "w620 " (A_Index > 1 ? "y+12" : ""), NAMES.Has(row.key) ? NAMES[row.key] : row.key)
         g.SetFont("s9 Norm c606060")
-        g.Add("Text", "w620", row.r.x ", " row.r.y "  ·  " row.r.w " × " row.r.h " px (your box plus " PAD_X " px padding each side)")
+        g.Add("Text", "w620", row.r.x ", " row.r.y "  ·  " row.r.w " × " row.r.h " px — the box you drew (plus a " PAD_X " px hair, so nothing clips)")
         g.SetFont("s10 Norm")
         if FileExist(row.pic)
             g.Add("Picture", "w620 h-1 Border", row.pic)
@@ -1025,7 +1031,7 @@ StartDragForCurrent() {
     ToolTip
     try BANNER.Hide()
     r := DragRegion("Draw a box round " it.label,
-        "Include the WHOLE area the figure sits in — wide enough for a big number — but nothing else: a lot number or an estimate inside the box can be read INSTEAD of the bid.")
+        "Exactly what you draw is what it reads. Include the whole area the figure sits in — wide enough for a big number — and nothing else: another number inside the box can be read INSTEAD of the bid.")
     try BANNER.Show("NoActivate")
     if !IsObject(r) {
         FlashBanner("drag cancelled — F8 to draw it again, F10 to keep the old box", "FBBF24", 1800)
@@ -1165,10 +1171,11 @@ OcrRead(x, y, w, h, mode := "num") {
     try FileDelete res
     return Trim(txt, " `t`r`n")
 }
-/** The rectangle actually read for a profile's bid figure: the calibrated box PLUS padding.
- *  ⚠ A box drawn round "£0" is tiny (Jordan's first calibration: 28×23 and 43×46 px) and
- *  "£1,250" spills straight out of it — so no bid was ever seen. Saleroom's figure is
- *  right-aligned (grows LEFT), Vectis's is left-aligned (grows RIGHT): pad both ways. */
+/** The rectangle actually read: the box you drew, plus a hair so nothing clips.
+ *  ⚠ Draw the box round the whole area the figure sits in, not round the digits showing
+ *  now: Saleroom's figure is right-aligned (it grows LEFT) and Vectis's is left-aligned
+ *  (it grows RIGHT), so a box that fits "£5" today is spilled out of by "£1,250". Include
+ *  nothing else — another number in the box can be read instead of the bid. */
 BidRegion(name, key := "reg_bid") {
     r := CAL[name][key]
     return { x: r.x - PAD_X, y: r.y - PAD_Y, w: r.w + 2 * PAD_X, h: r.h + 2 * PAD_Y }
