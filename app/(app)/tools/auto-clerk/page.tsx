@@ -183,6 +183,124 @@ export default function AutoClerkPage() {
         </p>
       </div>
 
+      {/* ═══════════ AUTOHOTKEY CLERK ═══════════ */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🤖</span>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">AutoHotkey Clerk</h2>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 -mt-1">
+          The real tool. It runs on the clerking PC — not in a browser — so it works on <strong>any</strong> clerking
+          screen: the trainers now, the live Saleroom and Bidpath pages later. Nothing is installed into those pages
+          and nothing is pasted into a console: it reads the bid figures off the screen and presses the buttons where
+          you told it they are.
+        </p>
+
+        {/* Downloads */}
+        <div className="bg-gradient-to-r from-slate-800/60 to-slate-900/60 border border-slate-600/50 rounded-xl p-5 space-y-3">
+          <p className="font-bold text-white text-base">⬇ Download — put BOTH files in the same folder</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <a href="/auto-clerk/Auto%20Clerk.ahk" download="Auto Clerk.ahk"
+              className="block bg-black/30 hover:bg-black/50 border border-slate-600 rounded-lg p-4 transition-colors group">
+              <p className="font-mono font-bold text-sm text-emerald-300">Auto Clerk.ahk</p>
+              <p className="text-xs text-gray-400 mt-1">The clerk itself. Double-click to open its window — calibrate, then Start.</p>
+              <p className="text-xs text-emerald-400 mt-2 group-hover:underline">Download ↓</p>
+            </a>
+            <a href="/auto-clerk/Auto%20Clerk%20OCR.ps1" download="Auto Clerk OCR.ps1"
+              className="block bg-black/30 hover:bg-black/50 border border-slate-600 rounded-lg p-4 transition-colors group">
+              <p className="font-mono font-bold text-sm text-sky-300">Auto Clerk OCR.ps1</p>
+              <p className="text-xs text-gray-400 mt-1">The screen reader it starts for itself. Never opened by hand — it just has to be there.</p>
+              <p className="text-xs text-sky-400 mt-2 group-hover:underline">Download ↓</p>
+            </a>
+          </div>
+          <ul className="text-xs text-gray-400 space-y-1 pt-1">
+            <li>• Needs <strong className="text-gray-300">AutoHotkey v2</strong> on the PC (already installed on Jordan&apos;s). Nothing else — the screen reading uses Windows&apos; own text recognition, with no internet and nothing to install.</li>
+            <li>• Keep the filenames exactly as they are: the clerk looks for its reader by name, in its own folder.</li>
+            <li>• Chrome may ask you to keep the files — it says that about any script.</li>
+            <li>• It writes <span className="font-mono text-gray-300">Auto Clerk.ini</span> (your calibration) and <span className="font-mono text-gray-300">Auto Clerk.log</span> (everything it did and why) alongside itself.</li>
+          </ul>
+        </div>
+
+        {/* How it works */}
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">How it works</p>
+
+          <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">1. Calibrate — tell it where things are</p>
+              <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+                Pick the screen (Saleroom or Vectis), press <strong>🎯 Calibrate</strong>, and a banner walks you through
+                each button in turn: hover over it and press <strong>F8</strong> (or middle-click, for laptops whose
+                F-keys do something else). For the figures you press F8 twice — top-left corner, then bottom-right — to
+                draw a box round them. Changing one button later doesn&apos;t mean redoing the lot: pick it in
+                <strong> Set just one</strong> and set that alone. Calibration is saved, so it only happens once per machine.
+              </p>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">2. Test read — prove it can see</p>
+              <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+                <strong>🔍 Test read</strong> shows every box you&apos;ve set: the exact enlarged picture the reader saw,
+                what Windows made of it, and the bid figure the clerk would act on. If a picture shows the wrong spot,
+                re-calibrate that one box. Do this on both screens before a run.
+              </p>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">3. Run — one screen, or both in step</p>
+              <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+                Choose <strong>One screen</strong> (it clerks that screen on the timers) or <strong>BOTH screens</strong>
+                (it also keeps the two platforms level with each other). Set the timers — 15 and 20 seconds is the real
+                sale rule, 6 and 8 makes a practice run quick — then press Start and keep your hands off the mouse.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-900">
+            <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">What it actually does</p>
+            <ul className="text-xs text-blue-900 dark:text-blue-200 space-y-1.5">
+              <li><strong>Reads the bid four times a second.</strong> It photographs your bid box, and Windows reads the number. A reading only counts once it has held steady, so a flicker never counts as a bid.</li>
+              <li><strong>A rising figure is a bid</strong> — that resets the quiet clock. It never needs to know <em>who</em> bid to know the price.</li>
+              <li><strong>Catches the other platform up to the exact amount</strong> (not one increment at a time, so it can&apos;t lag): on Saleroom by typing into the box next to A, on Vectis by setting the Asking bid and pressing the Saleroom button. An online bid that appears on both by itself gets no press at all.</li>
+              <li><strong>Quiet for your Fair Warning time</strong> → Fair Warning on both. <strong>Quiet again</strong> → Hammer and Sell, then Next on both.</li>
+              <li><strong>An undo on one screen</strong> pulls the other down with Undo until they match.</li>
+              <li><strong>Two bidders landing on the same amount</strong> — it reads the top row of each bid list to tell a mirrored bid from a real tie, then follows the rule card: whoever bid first keeps it (Room on Saleroom, or the ! on Vectis).</li>
+            </ul>
+          </div>
+
+          <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border border-green-200 dark:border-green-900">
+            <p className="font-semibold text-green-900 dark:text-green-200 text-sm mb-2">Safeguards — what stops it doing something daft</p>
+            <ul className="text-xs text-green-900 dark:text-green-200 space-y-1.5">
+              <li><strong>A last look before every sale.</strong> In the instant before Hammer and Sell it re-reads both screens; a bid that lands at the last second stops the sale, and the Fair Warning cycle starts again. Sniping cannot be hammered through at the old price.</li>
+              <li><strong>Being unable to read is never treated as &quot;the bids vanished&quot;.</strong> An unreadable screen holds the last figure; after 10 seconds it stops pressing anything, goes red and waits for you (F10 to resume).</li>
+              <li><strong>Drops are slower to believe than rises</strong> — one bad frame can&apos;t undo a real bid.</li>
+              <li><strong>It checks each lot really moved on</strong> after Next, and says so in the log if it couldn&apos;t confirm it.</li>
+              <li><strong>Every press is logged</strong> with its coordinates and the reason for it, so the whole run can be read back afterwards.</li>
+            </ul>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-gray-50 dark:bg-black/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">⌨ While it runs</p>
+              <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                <li><strong>F9</strong> — start / stop</li>
+                <li><strong>F10</strong> — pause / resume (resuming re-reads the screens from scratch)</li>
+                <li><strong>Esc</strong> — stop, always</li>
+                <li>Don&apos;t use the mouse — it&apos;s driving it.</li>
+              </ul>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-900/60">
+              <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm mb-2">⚠ Before a real sale</p>
+              <ul className="space-y-1 text-xs text-amber-900 dark:text-amber-200">
+                <li>Switch <strong>Saleroom amount</strong> to &quot;type, then press BID&quot; — the trainer takes Enter, the real page uses the Bid button.</li>
+                <li>Re-calibrate: the real pages sit differently from the trainers.</li>
+                <li>The tie-break reads the words on the bid rows; those are confirmed on the trainers but not yet on the live pages — watch the log the first time.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ═══════════ TESTING ═══════════ */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">

@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"787116461a2febbed8dabc03bae1d2432d8f1cb6","author":"Jordan Orange","date":"2026-08-24T12:04:10+01:00","subject":"Memory: Auto Clerk.ahk — the last look (a bid in the final instant aborts the sale)"},
   {"sha":"6e0af86173e7cf3b12fa0ae04d76377c7e193cd9","author":"Jordan Orange","date":"2026-08-24T11:38:06+01:00","subject":"Memory: Auto Clerk.ahk — 10s blindness guard (never converts unreadable screens into actions)"},
   {"sha":"a0c5c18032d713d3ff78c8c03098f75ff997f11b","author":"Jordan Orange","date":"2026-08-24T10:59:41+01:00","subject":"Stress Tester: bid on both practice sales at once, with the old clash/rapid patterns"},
   {"sha":"b33517b085b241bbfc3bbcd4a5d7b951f5ba23c9","author":"Jordan Orange","date":"2026-08-24T10:16:15+01:00","subject":"Memory: Auto Clerk.ahk — the painted 'Bid' word counts as a parser marker (Bid IO → 10)"},

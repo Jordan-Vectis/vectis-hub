@@ -1,0 +1,1549 @@
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+Persistent
+CoordMode "Mouse", "Screen"
+CoordMode "Pixel", "Screen"
+
+; ══════════════════════════════════════════════════════════════════════════════
+; Auto Clerk — v1 (2026-08-21)
+;
+; A clerk that works ANY clerking screen by screen coordinates, like the BC
+; macro: you point at each button once (hover + F8 / middle-click, as in the
+; Macro Calibrator) and mark the "current bid" figure; from then on it reads
+; that figure off the screen with Windows' own OCR and presses the buttons.
+; Nothing on the page changes, no scripts pasted — works on the Saleroom
+; Trainer, the Vectis Clerk Trainer, and later the real Saleroom / Bidpath pages.
+;
+; v1 = ONE screen, the rule-card timers (Sync Logic Reference on /tools/auto-clerk):
+;   · a new bid resets the clock
+;   · 15 s with no new bid          → Fair Warning
+;   · 20 s more with no new bid     → Sell / Hammer, then Next
+;   · a lot that never gets a bid   → Pass after the same time (optional)
+; The two-screen sync (catch the other platform up to the exact amount) is v2 —
+; every button it will need is calibrated now so nothing has to be redone.
+;
+; Hotkeys while it runs:  F9 start/stop · F10 pause · Esc stop (always)
+; Files next to this script: Auto Clerk.ini (your calibration + settings),
+; Auto Clerk.log (what it did and why), Auto Clerk OCR.ps1 (the reader).
+;
+; ⚠ This is a COPY-NOTHING tool: it never touches the trainer or any page.
+; ══════════════════════════════════════════════════════════════════════════════
+
+global INI := A_ScriptDir "\Auto Clerk.ini"
+global LOGF := A_ScriptDir "\Auto Clerk.log"
+global OCR_PS1 := A_ScriptDir "\Auto Clerk OCR.ps1"
+global OCR_DIR := A_Temp "\AutoClerkOCR"
+
+; ── What each screen has. Order = calibration order. ──────────────────────────
+; kind: "btn" = a point to click · "reg" = a rectangle to read (two corners)
+global PROFILES := Map(
+    "saleroom", {
+        title: "Saleroom (GAP) screen",
+        fwIsToggle: true,           ; Fair warn on Saleroom toggles — a new bid means we must un-toggle it
+        items: [
+            { key: "reg_bid",    kind: "reg", label: "the CURRENT BID figure — the H box. Box the WHOLE white box, not just the digits: the number grows as bids climb" },
+            { key: "reg_ask",    kind: "reg", label: "the NEXT ASKING figure — the A box (Windows cannot read a lone single digit such as £5, so the asking is read and stepped back one increment instead)" },
+            { key: "reg_sname",  kind: "reg", label: "the NAME cell of the TOP row of the bid log — it reads INTERNET or ROOM (needed to spot a same-amount tie, rule 3)" },
+            { key: "btn_fw",     kind: "btn", label: "Fair warn button" },
+            { key: "btn_sell",   kind: "btn", label: "Sell button" },
+            { key: "btn_next",   kind: "btn", label: "Next button" },
+            { key: "btn_pass",   kind: "btn", label: "Pass button" },
+            { key: "btn_bid",    kind: "btn", label: "Bid button (v2 sync)" },
+            { key: "btn_room",   kind: "btn", label: "Room button (v2 sync)" },
+            { key: "btn_undo",   kind: "btn", label: "Undo button (v2 sync)" },
+            { key: "box_amount", kind: "btn", label: "the small custom-amount box next to A (v2 sync — click target)" },
+        ],
+    },
+    "vectis", {
+        title: "Vectis (Bidpath) clerk screen",
+        fwIsToggle: false,          ; Vectis clears its own Fair Warning when a bid arrives
+        items: [
+            { key: "reg_bid",      kind: "reg", label: "the CURRENT BID figure after 'Current Bid:'. Box a WIDE area — from the £ to well past it, the number grows as bids climb" },
+            { key: "reg_vtype",    kind: "reg", label: "the BID TYPE chip on the TOP row of the bid list — it reads Vectis Live / Room / Telephone / Saleroom (needed to spot a same-amount tie, rule 3)" },
+            { key: "btn_fw",       kind: "btn", label: "Fair Warning button" },
+            { key: "btn_hammer",   kind: "btn", label: "Hammer button (it becomes Next Lot after a sale)" },
+            { key: "btn_pass",     kind: "btn", label: "Pass Lot button" },
+            { key: "btn_saleroom", kind: "btn", label: "Saleroom: £ button (v2 sync)" },
+            { key: "btn_bang",     kind: "btn", label: "the ! beside Saleroom (v2 sync)" },
+            { key: "btn_undo",     kind: "btn", label: "Undo Bid button (v2 sync)" },
+            { key: "box_asking",   kind: "btn", label: "the Asking Bid £ box (v2 sync — click target)" },
+            { key: "btn_askset",   kind: "btn", label: "the SET button beside Asking Bid (v2 sync)" },
+        ],
+    },
+)
+
+; ── Settings (saved in the ini) ───────────────────────────────────────────────
+; mode: "single" = clerk the selected screen on the timers · "both" = clerk BOTH screens and keep them in step
+; srExact: how an EXACT amount is entered on the Saleroom screen — "enter" = type in the box
+; next to A and press Enter (the Saleroom Trainer), "bid" = type then press the Bid button
+; (the real Saleroom page, per the rule card).
+global CFG := { profile: "saleroom", mode: "single", fwSecs: 15, sellSecs: 20, passNoBids: true, pollMs: 250, srExact: "enter" }
+; A reading must hold this many polls before it counts: rises quickly, DROPS slowly — one
+; misread frame ("E60" read as "EGO" → nothing) once undid a whole lot.
+global RISE_CONFIRM := 2, DROP_CONFIRM := 4
+; ⚠ BLINDNESS IS NEVER BIDS DISAPPEARING (Jordan, 2026-08-24). Only a LEGIBLE number ever
+; changes a figure. An illegible read holds the last figure and starts this clock; when it
+; runs out the clerk stops pressing, goes red and waits for F10 — it never converts "I can't
+; see" into "the bids vanished" (which once meant passing live lots and undoing real bids).
+global BLIND_PAUSE_MS := 10000
+; Rule 3 — same-amount tie. Both figures equal, yet EACH platform holds its OWN bidder
+; (Vectis's top bid is not from the Saleroom source; Saleroom's top bid is not ROOM).
+; Needs the two label boxes (reg_vtype, reg_sname). Checked once per price, a moment
+; after the figures settle.
+global TIE_SETTLE_MS := 1200
+; Two-screen sync tunables (the browser rig's values)
+global SYNC_GRACE_MS := 1500      ; an online bid shows up on the other platform by itself — wait this long before catching up
+global SYNC_RETRY_MS := 1800      ; how long a catch-up press gets to land before it is tried again
+global MAX_SYNC_TRIES := 4        ; after this many, warn (keep trying every few seconds — never give up silently)
+global CAL := Map()     ; profile -> Map(key -> {x,y} or {x,y,w,h})
+
+; ── Run state ─────────────────────────────────────────────────────────────────
+global RS := 0         ; 0 = idle, object while running
+global BANNER := 0, B_L1 := 0, B_L2 := 0, B_L3 := 0, BANNER_TOP := true
+global OCR_PID := 0
+global SIM := 0        ; --simboth only: a model of the two screens instead of pixels
+global PAD_X := 90, PAD_Y := 6   ; bid-box padding (see BidRegion) — declared up here, see the note below
+; ⚠ EVERY top-level "global X := 0" must sit up here, ABOVE LoadIni()/BuildMainGui().
+; AutoHotkey runs all top-level lines in file order at start-up, so a declaration
+; placed further down the file executes AFTER the window is built and wipes the
+; references it just made (that was "Calibrate does nothing", 2026-08-21).
+global MAIN := 0, M_STATUS := 0, M_PROF := 0, M_FW := 0, M_SELL := 0, M_PASS := 0, M_CAL := 0, M_MODE := 0, M_ONE := 0, M_EXACT := 0
+global CALST := 0
+global STATUS := 0, S_L1 := 0, S_L2 := 0, S_L3 := 0
+
+; any unexpected error → readable log + message, never a cryptic popup
+OnError ErrLog
+ErrLog(err, mode) {
+    ; Written directly (not via WriteLog) so a fault inside the simulation is recorded too.
+    try FileAppend FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "  ERROR " (IsObject(err) ? err.Message " (" err.What ") " err.File ":" err.Line : String(err)) "`r`n", LOGF
+    MsgBox "Something went wrong inside the Auto Clerk.`n`nDetails are in:`n" LOGF "`n`nTell Claude and send that file.", "Auto Clerk", "Iconx"
+    return 1
+}
+OnExit((*) => StopOcr())
+
+; ── CLI test modes (Claude's checks — ignore) ────────────────────────────────
+if A_Args.Length >= 1 && A_Args[1] = "--selftest" {
+    out := ""
+    for s in ["Current Bid: E 1,250", "£640", "Hammer: (f640)", "1.250", "0", "", "E 12,500 Asking", "Bid 45", "Jrrent Bid: EIO", "urrent Bid: £1O", "E I,25O", "OM 15", "ROOM", "£O", "Lot: 508 ROOM Est: ROOM 80-110", "Est: 80-110", "ES", "Est", "Jrrent Bid: EGO", "Jrrent Bid: E 15", "Bid 5", "Bid H 5", "Bid O", "Bid 1,250", "Bid IO", "Bid I,25O", "Bid EGO"]
+        out .= "[" s "] -> " ParseAmount(s) "`n"
+    for a in [10, 15, 45, 50, 60, 110, 220, 550, 1100, 2200, 5500, 5, 7, 0]
+        out .= "asking " a " -> bid " BidBeforeAsking(a) "`n"
+    FileAppend out, "*"
+    ExitApp
+}
+; ── --simboth: the two-screen logic run against a MODEL of the two screens ──────
+; No OCR, no clicks: OcrRead answers from SIM, PressOn updates SIM. Real timers,
+; shortened. Proves the rule-card state machine before it meets a real screen.
+if A_Args.Length >= 1 && A_Args[1] = "--simboth" {
+    CFG.mode := "both", CFG.fwSecs := 2, CFG.sellSecs := 2, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 0, v: 0, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM" }
+    RS := NewRunState(true)
+    ; (appends to a PROPERTY — a fat-arrow assigning a plain variable would make a local copy)
+    ; Also streamed to stdout as it happens, so a hang still leaves the trace so far.
+    Say(t) => (SIM.out .= t "`n", FileAppend(t "`n", "*"))
+    t0 := A_TickCount
+    SIM.t0 := t0
+    lastTrace := 0
+    steps := [
+        { at: 500,  do: () => (SIM.v := 10),  say: "Vectis room bid £10 — Saleroom should be caught up (box + Bid) after the grace" },
+        { at: 3600, do: () => (SIM.s := 20),  say: "Saleroom online bid £20 …" },
+        { at: 3800, do: () => (SIM.v := 20),  say: "… and Vectis follows by itself — NO catch-up press expected" },
+        { at: 5200, do: () => (SIM.s := 10),  say: "Undo on Saleroom £20 → £10 — Vectis should be brought down with Undo" },
+        ; second lot: a same-amount TIE — two different bidders at £45 at nearly the same moment
+        { at: 10500, do: () => (SIM.v := 45, SIM.vtype := "Vectis Live"), say: "Lot 2: Vectis Live bidder £45 …" },
+        { at: 10700, do: () => (SIM.s := 45, SIM.sname := "INTERNET"),    say: "… and a saleroom.com bidder £45 — a TIE: Vectis was first → ROOM on Saleroom expected" },
+    ]
+    while A_TickCount - t0 < 26000 {
+        el := A_TickCount - t0
+        for st in steps {
+            if !st.HasProp("done") && el >= st.at {
+                st.done := true
+                st.do.Call()
+                Say("── t=" el "ms  " st.say)
+            }
+        }
+        TickBoth()
+        if el - lastTrace >= 500 {
+            lastTrace := el
+            sS := RS.side["saleroom"], sV := RS.side["vectis"]
+            Say("   t=" el " model S=" SIM.s " V=" SIM.v " | seen S=" sS.bid "(high " sS.high ", expect " sS.expect ", behind " (sS.behindSince ? el - (sS.behindSince - t0) : 0) ") V=" sV.bid "(high " sV.high ", expect " sV.expect ") | price " RS.price " phase " RS.phase)
+        }
+        if RS.lots >= 2
+            break
+        Sleep 100
+    }
+    Say("presses: " Join(SIM.presses, " › "))
+    ; What must have happened, in order.
+    seq := Join(SIM.presses, " ")
+    Check(ok, msg) => Say((ok ? "PASS " : "FAIL ") msg)
+    Check(InStr(seq, "saleroom.box_amount saleroom.btn_bid"), "Saleroom caught up to the Vectis room bid via the amount box + Bid")
+    Check(!InStr(seq, "vectis.btn_saleroom"), "no Vectis catch-up press for the online bid that synced itself")
+    Check(InStr(seq, "vectis.btn_undo"), "Vectis brought down with Undo after the Saleroom undo")
+    Check(InStr(seq, "vectis.btn_fw") && InStr(seq, "saleroom.btn_fw"), "Fair Warning pressed on both")
+    Check(InStr(seq, "vectis.btn_hammer saleroom.btn_sell"), "Hammer on Vectis then Sell on Saleroom")
+    Check(InStr(seq, "vectis.btn_hammer saleroom.btn_next"), "Next Lot on Vectis and Next on Saleroom")
+    Check(InStr(seq, "saleroom.btn_room"), "tie at £45 resolved with ROOM on Saleroom (Vectis bid first)")
+    Check(!InStr(seq, "vectis.btn_bang"), "the ! on Vectis was NOT pressed for that tie")
+    Check(RS.lots = 2 && SIM.s = 0 && SIM.v = 0, "two lots closed and both screens back to £0 (S=" SIM.s " V=" SIM.v ")")
+    ExitApp
+}
+/** The model's reaction to a press — what the real screens would do. */
+SimPress(nm, key) {
+    SIM.presses.Push(nm "." key)
+    FileAppend "   t=" (A_TickCount - SIM.t0) " PRESS " nm "." key "`n", "*"
+    if nm = "saleroom" {
+        if key = "btn_bid"
+            SIM.s := SIM.typed, SIM.sname := "ROOM"
+        else if key = "btn_room"
+            SIM.sname := "ROOM"                           ; the saleroom bidder dropped, price kept
+        else if key = "btn_undo"
+            SIM.s := SIM.v < SIM.s ? SIM.v : 0          ; one undo removes the top row
+        else if key = "btn_sell"
+            SIM.soldS := true
+        else if key = "btn_pass"
+            SIM.soldS := true
+        else if key = "btn_next"
+            SIM.s := 0, SIM.soldS := false, SIM.sname := "ROOM"
+    } else {
+        if key = "btn_askset"
+            SIM.askV := SIM.typed
+        else if key = "btn_saleroom"
+            SIM.v := SIM.askV, SIM.vtype := "Saleroom"
+        else if key = "btn_bang"
+            SIM.vtype := "Saleroom"                       ; the Vectis bidder dropped, price kept
+        else if key = "btn_undo"
+            SIM.v := SIM.s < SIM.v ? SIM.s : 0
+        else if key = "btn_pass"
+            SIM.soldV := true
+        else if key = "btn_hammer" {
+            if SIM.soldV
+                SIM.v := 0, SIM.soldV := false, SIM.vtype := "Saleroom"   ; second press = Next Lot
+            else
+                SIM.soldV := true
+        }
+    }
+}
+; ── --snipetest: a bid lands after Fair Warning, near the sell — the sale must NOT go
+;    through at the old price; the clock resets, FW is re-issued, the lot sells later ────
+if A_Args.Length >= 1 && A_Args[1] = "--snipetest" {
+    CFG.mode := "both", CFG.fwSecs := 2, CFG.sellSecs := 2, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 0, v: 0, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayS(t) => FileAppend(t "`n", "*")
+    t0 := A_TickCount
+    tFw := 0, sniped := false, closedAt := 0
+    while A_TickCount - t0 < 20000 {
+        el := A_TickCount - t0
+        if el >= 300 && SIM.s = 0 {
+            SIM.s := 20, SIM.v := 20
+            SayS("── t=" el " both screens at £20")
+        }
+        if !tFw {
+            for p in SIM.presses
+                if p = "vectis.btn_fw"
+                    tFw := el
+            if tFw
+                SayS("── t=" tFw " Fair Warning seen — snipe arms in 1.5s (sell would fire at +2s)")
+        } else if !sniped && el - tFw >= 1500 {
+            sniped := true
+            SIM.v := 25
+            SayS("── t=" el " SNIPE — Vectis £25, half a second before the sell")
+        }
+        TickBoth()
+        if RS.lots >= 1 {
+            closedAt := el
+            break
+        }
+        Sleep 100
+    }
+    fwCount := 0
+    for p in SIM.presses
+        if p = "vectis.btn_fw"
+            fwCount++
+    SayS((sniped ? "PASS " : "FAIL ") "the snipe was planted after Fair Warning")
+    SayS((closedAt && closedAt >= tFw + 3400 ? "PASS " : "FAIL ") "the sale did NOT go through at the old price — lot closed at t=" closedAt " (FW at " tFw ", snipe at ~" (tFw + 1500) ")")
+    SayS((fwCount >= 2 ? "PASS " : "FAIL ") "Fair Warning was re-issued after the snipe (vectis FW pressed " fwCount "×)")
+    SayS((RS.lots = 1 && SIM.s = 0 && SIM.v = 0 ? "PASS " : "FAIL ") "the lot then sold and both screens reset (S=" SIM.s " V=" SIM.v ")")
+    ExitApp
+}
+; ── --blindtest: one screen goes unreadable mid-lot — the clerk must PAUSE, not act ──────
+if A_Args.Length >= 1 && A_Args[1] = "--blindtest" {
+    CFG.mode := "both", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    Say2(t) => FileAppend(t "`n", "*")
+    t0 := A_TickCount
+    wentBlind := false
+    while A_TickCount - t0 < 16000 {
+        el := A_TickCount - t0
+        if !wentBlind && el >= 2000 {
+            wentBlind := true
+            SIM.s := ""                          ; the Saleroom box becomes unreadable ("£" → nothing)
+            Say2("── t=" el " Saleroom goes UNREADABLE while both screens hold £20")
+        }
+        TickBoth()
+        if RS.paused
+            break
+        Sleep 100
+    }
+    seq := ""
+    for p in SIM.presses
+        seq .= p " "
+    blindAt := A_TickCount - t0
+    Say2((RS.paused && RS.blind ? "PASS " : "FAIL ") "clerk went BLIND-paused (at t=" blindAt "ms — expect ~12000)")
+    Say2((!InStr(seq, "btn_undo") && !InStr(seq, "btn_pass") && !InStr(seq, "btn_sell") && !InStr(seq, "btn_hammer") ? "PASS " : "FAIL ") "no undo/pass/sell pressed while blind (presses: " (seq = "" ? "none" : seq) ")")
+    Say2((RS.side["saleroom"].bid = 20 ? "PASS " : "FAIL ") "the held figure stayed £20 (was " RS.side["saleroom"].bid ")")
+    ExitApp
+}
+if A_Args.Length >= 1 && A_Args[1] = "--helpertest" {
+    StartOcr()
+    pidStarted := OCR_PID
+    alive1 := ProcessExist(pidStarted)
+    t0 := A_TickCount
+    StopOcr()
+    alive2 := ProcessExist(pidStarted)
+    Sleep 300
+    alive3 := ProcessExist(pidStarted)
+    FileAppend "helper pid " pidStarted " · alive after start: " alive1 " · alive right after StopOcr (" (A_TickCount - t0) " ms): " alive2 " · 300 ms later: " alive3 "`n", "*"
+    ExitApp
+}
+if A_Args.Length >= 5 && A_Args[1] = "--ocrtest" {
+    StartOcr()
+    t0 := A_TickCount
+    txt := OcrRead(Integer(A_Args[2]), Integer(A_Args[3]), Integer(A_Args[4]), Integer(A_Args[5]))
+    t1 := A_TickCount
+    txt2 := OcrRead(Integer(A_Args[2]), Integer(A_Args[3]), Integer(A_Args[4]), Integer(A_Args[5]))
+    t2 := A_TickCount
+    FileAppend "first read " (t1 - t0) " ms: [" txt "]`nsecond read " (t2 - t1) " ms: [" txt2 "]`namount: " ParseAmount(txt2) "`n", "*"
+    StopOcr()
+    ExitApp
+}
+
+LoadIni()
+BuildMainGui()
+
+; ══════════════════════════════════════════════════════════════════════════════
+; Settings file
+; ══════════════════════════════════════════════════════════════════════════════
+LoadIni() {
+    global CFG, CAL
+    CFG.profile    := IniRead(INI, "settings", "profile", "saleroom")
+    CFG.mode       := IniRead(INI, "settings", "mode", "single") = "both" ? "both" : "single"
+    CFG.srExact    := IniRead(INI, "settings", "srExact", "enter") = "bid" ? "bid" : "enter"
+    CFG.fwSecs     := Integer(IniRead(INI, "settings", "fwSecs", 15))
+    CFG.sellSecs   := Integer(IniRead(INI, "settings", "sellSecs", 20))
+    CFG.passNoBids := IniRead(INI, "settings", "passNoBids", "1") = "1"
+    CFG.pollMs     := Integer(IniRead(INI, "settings", "pollMs", 250))
+    if !PROFILES.Has(CFG.profile)
+        CFG.profile := "saleroom"
+    for name, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            v := IniRead(INI, "cal_" name, it.key, "")
+            if v = ""
+                continue
+            p := StrSplit(v, ",")
+            if it.kind = "btn" && p.Length >= 2
+                m[it.key] := { x: Integer(p[1]), y: Integer(p[2]) }
+            else if it.kind = "reg" && p.Length >= 4
+                m[it.key] := { x: Integer(p[1]), y: Integer(p[2]), w: Integer(p[3]), h: Integer(p[4]) }
+        }
+        CAL[name] := m
+    }
+}
+SaveIni() {
+    IniWrite CFG.profile, INI, "settings", "profile"
+    IniWrite CFG.mode, INI, "settings", "mode"
+    IniWrite CFG.srExact, INI, "settings", "srExact"
+    IniWrite CFG.fwSecs, INI, "settings", "fwSecs"
+    IniWrite CFG.sellSecs, INI, "settings", "sellSecs"
+    IniWrite (CFG.passNoBids ? "1" : "0"), INI, "settings", "passNoBids"
+    IniWrite CFG.pollMs, INI, "settings", "pollMs"
+    for name, m in CAL {
+        for key, v in m {
+            if v.HasProp("w")
+                IniWrite v.x "," v.y "," v.w "," v.h, INI, "cal_" name, key
+            else
+                IniWrite v.x "," v.y, INI, "cal_" name, key
+        }
+    }
+}
+CalCount(name) {
+    n := 0
+    for it in PROFILES[name].items
+        if CAL[name].Has(it.key)
+            n++
+    return n
+}
+/** The things a run cannot start without. "both" needs both screens plus the catch-up buttons. */
+MissingForRun(name) {
+    if name = "both" {
+        miss := []
+        for k in ["reg_bid", "btn_fw", "btn_sell", "btn_next", "btn_pass", "btn_bid", "btn_undo", "box_amount"]
+            if !CAL["saleroom"].Has(k)
+                miss.Push("Saleroom " k)
+        for k in ["reg_bid", "btn_fw", "btn_hammer", "btn_pass", "btn_saleroom", "btn_undo", "box_asking", "btn_askset"]
+            if !CAL["vectis"].Has(k)
+                miss.Push("Vectis " k)
+        return miss
+    }
+    need := name = "saleroom" ? ["reg_bid", "btn_fw", "btn_sell", "btn_next", "btn_pass"]
+                              : ["reg_bid", "btn_fw", "btn_hammer", "btn_pass"]
+    miss := []
+    for k in need
+        if !CAL[name].Has(k)
+            miss.Push(k)
+    return miss
+}
+
+WriteLog(msg) {
+    if IsObject(SIM)                    ; simulation runs stay out of the real log
+        return
+    try FileAppend FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "  " msg "`r`n", LOGF
+}
+
+; ══════════════════════════════════════════════════════════════════════════════
+; Main window
+; ══════════════════════════════════════════════════════════════════════════════
+BuildMainGui() {
+    ; ⚠ EVERY control variable assigned in here must be in this list, or the assignment
+    ; quietly makes a LOCAL copy and the real global stays 0 (M_MODE/M_ONE were missed
+    ; → "won't open", Integer has no property Value, 2026-08-21 16:22).
+    global MAIN, M_STATUS, M_PROF, M_FW, M_SELL, M_PASS, M_CAL, M_MODE, M_ONE, M_EXACT
+    MAIN := Gui("+AlwaysOnTop", "Auto Clerk")
+    MAIN.SetFont("s10", "Segoe UI")
+    MAIN.Add("Text", "w560", "Works whatever clerking screen is on the monitor — the trainers now, the real pages later. "
+        . "Calibrate once per screen, get the screen fully visible, press Start and keep your hands off the mouse.")
+    MAIN.Add("Text", "xm y+12 w120", "Screen:")
+    M_PROF := MAIN.Add("DropDownList", "x+4 w260", ["Saleroom (GAP) screen", "Vectis (Bidpath) clerk screen"])
+    M_PROF.Value := CFG.profile = "vectis" ? 2 : 1
+    M_PROF.OnEvent("Change", (*) => (CFG.profile := M_PROF.Value = 2 ? "vectis" : "saleroom", SaveIni(), RefreshMain()))
+    M_CAL := MAIN.Add("Button", "x+10 w160", "🎯 Calibrate this screen")
+    M_CAL.OnEvent("Click", (*) => StartCalibration(CFG.profile))
+    MAIN.Add("Button", "xm+124 y+6 w110", "🔍 Test read").OnEvent("Click", (*) => TestRead())
+    ; One position at a time — changing a single button must not mean redoing them all.
+    MAIN.Add("Text", "xm y+10 w120", "Set just one:")
+    M_ONE := MAIN.Add("DropDownList", "x+4 w430", ["—"])
+    MAIN.Add("Button", "x+10 w160", "🎯 Set just this one").OnEvent("Click", (*) => SetOne())
+
+    MAIN.Add("Text", "xm y+12 w120", "Run:")
+    M_MODE := MAIN.Add("DropDownList", "x+4 w430", ["One screen — the one selected above, on the timers", "BOTH screens — clerk Saleroom and Vectis together and keep them in step"])
+    M_MODE.Value := CFG.mode = "both" ? 2 : 1
+    M_MODE.OnEvent("Change", (*) => (CFG.mode := M_MODE.Value = 2 ? "both" : "single", SaveIni(), RefreshMain()))
+    MAIN.Add("Text", "xm y+6 w120", "Saleroom amount:")
+    M_EXACT := MAIN.Add("DropDownList", "x+4 w430", ["type in the box next to A, then press ENTER  (the Saleroom Trainer)", "type in the box next to A, then press the BID button  (the real Saleroom page)"])
+    M_EXACT.Value := CFG.srExact = "bid" ? 2 : 1
+    M_EXACT.OnEvent("Change", (*) => (CFG.srExact := M_EXACT.Value = 2 ? "bid" : "enter", SaveIni()))
+
+    MAIN.Add("Text", "xm y+14 w120", "Fair Warning after")
+    M_FW := MAIN.Add("Edit", "x+4 w50 Number", CFG.fwSecs)
+    MAIN.Add("Text", "x+4 w150", "seconds with no new bid")
+    MAIN.Add("Text", "xm y+6 w120", "Sell / Hammer after")
+    M_SELL := MAIN.Add("Edit", "x+4 w50 Number", CFG.sellSecs)
+    MAIN.Add("Text", "x+4 w230", "more seconds with no new bid, then Next")
+    M_PASS := MAIN.Add("CheckBox", "xm y+8 w560 Checked" (CFG.passNoBids ? 1 : 0), "A lot that gets NO bids at all is Passed after the same time (otherwise it waits for you)")
+    MAIN.Add("Text", "xm y+4 w560 c808080", "Real sale = 15 / 20. For a quick practice run try 6 / 8.")
+
+    M_STATUS := MAIN.Add("Text", "xm y+12 w560 h40", "")
+    b := MAIN.Add("Button", "xm y+6 w200 Default", "▶  Start  (F9)")
+    b.OnEvent("Click", (*) => ToggleRun())
+    MAIN.Add("Button", "x+10 w120", "Open log").OnEvent("Click", (*) => (FileExist(LOGF) ? Run(LOGF) : MsgBox("Nothing logged yet.")))
+    MAIN.Add("Text", "x+10 w220 c808080", "F9 start/stop · F10 pause · Esc stop")
+    MAIN.OnEvent("Close", (*) => ExitApp())
+    Hotkey "F9", (*) => ToggleRun()
+    Hotkey "F10", (*) => PauseRun()
+    RefreshMain()
+    MAIN.Show()
+}
+/** The "Set just one" list follows the selected screen; a set position shows a tick. */
+FillOneList() {
+    global M_ONE
+    keep := M_ONE.Value
+    M_ONE.Delete()
+    for it in PROFILES[CFG.profile].items
+        M_ONE.Add([(CAL[CFG.profile].Has(it.key) ? "✓ " : "○ ") Short(it.label, 70)])
+    M_ONE.Value := (keep >= 1 && keep <= PROFILES[CFG.profile].items.Length) ? keep : 1
+}
+SetOne() {
+    i := M_ONE.Value
+    if i < 1
+        return
+    StartCalibration(CFG.profile, PROFILES[CFG.profile].items[i].key)
+}
+RefreshMain() {
+    global M_STATUS
+    FillOneList()
+    if CFG.mode = "both" {
+        miss := MissingForRun("both")
+        txt := "Both screens: Saleroom " CalCount("saleroom") "/" PROFILES["saleroom"].items.Length
+             . " · Vectis " CalCount("vectis") "/" PROFILES["vectis"].items.Length " positions set."
+        txt .= miss.Length ? "  ⚠ Still needed: " Join(miss, ", ") : "  ✓ Ready to run both."
+        if !(CAL["vectis"].Has("reg_vtype") && CAL["saleroom"].Has("reg_sname"))
+            txt .= "  (Tie-break off until the two top-row label boxes are set.)"
+        M_STATUS.Text := txt
+        return
+    }
+    name := CFG.profile
+    n := CalCount(name), total := PROFILES[name].items.Length
+    miss := MissingForRun(name)
+    txt := PROFILES[name].title ": " n " of " total " positions set."
+    txt .= miss.Length ? "  ⚠ Still needed to run: " Join(miss, ", ") : "  ✓ Ready to run."
+    M_STATUS.Text := txt
+}
+Join(arr, sep) {
+    s := ""
+    for i, v in arr
+        s .= (i > 1 ? sep : "") v
+    return s
+}
+ReadSettingsFromGui() {
+    CFG.fwSecs := Max(2, Integer(M_FW.Value || 15))
+    CFG.sellSecs := Max(2, Integer(M_SELL.Value || 20))
+    CFG.passNoBids := M_PASS.Value = 1
+    SaveIni()
+}
+
+; ══════════════════════════════════════════════════════════════════════════════
+; Calibration — hover + F8 / middle-click, banner names each thing (as the Macro Calibrator)
+; ══════════════════════════════════════════════════════════════════════════════
+StartCalibration(name, onlyKey := "") {
+    global CALST
+    if IsObject(RS) {
+        MsgBox "Stop the run first (Esc), then calibrate.", "Auto Clerk", "Iconi"
+        return
+    }
+    ; The whole screen, or just the one position asked for.
+    items := []
+    for it in PROFILES[name].items
+        if onlyKey = "" || it.key = onlyKey
+            items.Push(it)
+    if !items.Length
+        return
+    MAIN.Hide()
+    CALST := { name: name, items: items, i: 1, corner: 1, p1: 0, busy: false }
+    try StartOcr()      ; so a captured bid box can be read back immediately
+    BuildBanner()
+    Hotkey "F8",      (*) => OnCalKey("ok"),     "On"
+    Hotkey "MButton", (*) => OnCalKey("ok"),     "On"
+    Hotkey "F10",     (*) => OnCalKey("skip"),   "On"
+    Hotkey "F7",      (*) => OnCalKey("back"),   "On"
+    Hotkey "Esc",     (*) => OnCalKey("cancel"), "On"
+    ShowCalItem()
+    SetTimer CalTick, 100
+}
+ShowCalItem() {
+    global CALST
+    if !IsObject(CALST)
+        return
+    items := CALST.items
+    if CALST.i > items.Length
+        return
+    it := items[CALST.i]
+    have := CAL[CALST.name].Has(it.key) ? "  (currently set)" : ""
+    B_L1.SetFont("cFFFFFF")
+    if it.kind = "reg" {
+        B_L1.Text := "▶  " CALST.i " of " items.Length "  —  " (CALST.corner = 1 ? "TOP-LEFT corner of " : "BOTTOM-RIGHT corner of ") it.label
+        B_L2.Text := "Two presses: hover the top-left corner of the number and press F8, then the bottom-right corner and press F8." have
+    } else {
+        B_L1.Text := "▶  " CALST.i " of " items.Length "  —  " it.label
+        B_L2.Text := "Hover over it and press F8 (or middle-click)." have
+    }
+}
+CalTick() {
+    global CALST, BANNER, BANNER_TOP
+    if !IsObject(CALST)
+        return
+    MouseGetPos &mx, &my
+    ToolTip "F8 / middle-click = capture here   (" mx ", " my ")"
+    try {
+        BANNER.GetPos(&bx, &by, &bw, &bh)
+        if mx >= bx - 40 && mx <= bx + bw + 40 && my >= by - 40 && my <= by + bh + 40 {
+            BANNER.Move(, BANNER_TOP ? A_ScreenHeight - bh - 80 : 12)
+            BANNER_TOP := !BANNER_TOP
+        }
+    }
+}
+OnCalKey(action) {
+    global CALST
+    if !IsObject(CALST) || CALST.busy
+        return
+    CALST.busy := true
+    items := CALST.items
+    it := items[CALST.i]
+    if action = "ok" {
+        MouseGetPos &cx, &cy
+        if it.kind = "reg" {
+            if CALST.corner = 1 {
+                CALST.p1 := { x: cx, y: cy }, CALST.corner := 2
+                FlashBanner("✔  top-left " cx ", " cy " — now the bottom-right corner", "22C55E")
+            } else {
+                x1 := Min(CALST.p1.x, cx), y1 := Min(CALST.p1.y, cy)
+                w := Abs(cx - CALST.p1.x), h := Abs(cy - CALST.p1.y)
+                if w < 6 || h < 6 {
+                    FlashBanner("✖  that box is too small — start again from the top-left corner", "F87171")
+                    CALST.corner := 1
+                } else {
+                    CAL[CALST.name][it.key] := { x: x1, y: y1, w: w, h: h }
+                    ; Read it straight back so a mis-drawn box shows itself NOW, not mid-run.
+                    readTxt := ""
+                    try {
+                        rr := BidRegion(CALST.name, it.key)
+                        readTxt := OcrRead(rr.x, rr.y, rr.w, rr.h, (it.key = "reg_vtype" || it.key = "reg_sname") ? "txt" : "num")
+                    }
+                    amtNow := ParseAmount(readTxt)
+                    FlashBanner("✔  box " w "×" h " — it reads [" Short(readTxt, 30) "]" (amtNow >= 0 ? " = £" amtNow : " — no number (fine if the figure is a single digit; otherwise F7 and try a wider box)"), amtNow >= 0 ? "22C55E" : "FBBF24", 2200)
+                    CALST.corner := 1, CALST.i++
+                }
+            }
+        } else {
+            CAL[CALST.name][it.key] := { x: cx, y: cy }
+            FlashBanner("✔  captured " cx ", " cy, "22C55E")
+            CALST.i++
+        }
+    } else if action = "skip" {
+        FlashBanner("⏭  kept as it was", "FBBF24")
+        CALST.corner := 1, CALST.i++
+    } else if action = "back" {
+        CALST.corner := 1, CALST.i := Max(1, CALST.i - 1)
+        ShowCalItem()
+    } else if action = "cancel" {
+        if MsgBox("Stop calibrating? Positions captured so far are kept.", "Auto Clerk", "YesNo Icon?") = "Yes" {
+            EndCalibration()
+            return
+        }
+    }
+    if IsObject(CALST) && CALST.i > items.Length {
+        EndCalibration()
+        return
+    }
+    if IsObject(CALST)
+        CALST.busy := false
+}
+EndCalibration() {
+    global CALST
+    for k in ["F8", "MButton", "F10", "F7", "Esc"]
+        try Hotkey k, "Off"
+    SetTimer CalTick, 0
+    SetTimer ShowCalItem, 0
+    ToolTip
+    try BANNER.Destroy()
+    CALST := 0
+    StopOcr()
+    SaveIni()
+    RefreshMain()
+    MAIN.Show()
+}
+
+/** One pass over EVERY box calibrated on the selected screen — the picture each box
+ *  produced, what Windows read in it, what that was taken to mean, and the final
+ *  verdict the clerk would act on. The quickest way to prove a calibration. */
+TestRead() {
+    if !CAL[CFG.profile].Has("reg_bid") {
+        MsgBox "Calibrate the current-bid box on this screen first.", "Auto Clerk", "Iconi"
+        return
+    }
+    try StartOcr()
+    catch as e {
+        MsgBox "Could not start the screen reader:`n" e.Message, "Auto Clerk", "Iconx"
+        return
+    }
+    rows := []
+    for it in PROFILES[CFG.profile].items {
+        if it.kind != "reg" || !CAL[CFG.profile].Has(it.key)
+            continue
+        r := BidRegion(CFG.profile, it.key)
+        isLabel := it.key = "reg_vtype" || it.key = "reg_sname"
+        txt := OcrRead(r.x, r.y, r.w, r.h, isLabel ? "txt" : "num")
+        pic := OCR_DIR "\test-" it.key ".png"
+        try FileCopy OCR_DIR "\last.png", pic, 1
+        meaning := isLabel
+            ? (Trim(txt) = "" ? "nothing — is the top bid row inside the box?" : "label used by the tie check")
+            : (ParseAmount(txt) >= 0 ? "£" ParseAmount(txt) : "no number here by itself")
+        rows.Push({ key: it.key, r: r, txt: txt, meaning: meaning, pic: pic })
+    }
+    verdict := ReadBid(CFG.profile)
+    StopOcr()
+    ShowTestRead(rows, verdict)
+}
+
+/** Every box's picture and reading, then the verdict. */
+ShowTestRead(rows, verdict) {
+    NAMES := Map("reg_bid", "CURRENT BID box", "reg_ask", "A — next asking box",
+                 "reg_vtype", "Vectis top-row Bid Type (tie check)", "reg_sname", "Saleroom top-row Name (tie check)")
+    g := Gui("+AlwaysOnTop +Owner" MAIN.Hwnd, "Auto Clerk — test read")
+    g.SetFont("s10", "Segoe UI")
+    for row in rows {
+        g.SetFont("s10 Bold")
+        g.Add("Text", "w620 " (A_Index > 1 ? "y+12" : ""), NAMES.Has(row.key) ? NAMES[row.key] : row.key)
+        g.SetFont("s9 Norm c606060")
+        g.Add("Text", "w620", row.r.x ", " row.r.y "  ·  " row.r.w " × " row.r.h " px (your box plus " PAD_X " px padding each side)")
+        g.SetFont("s10 Norm")
+        if FileExist(row.pic)
+            g.Add("Picture", "w620 h-1 Border", row.pic)
+        g.Add("Text", "w620", "Windows read:  [" Short(row.txt, 70) "]   →   " row.meaning)
+    }
+    g.SetFont("s11 Bold")
+    g.Add("Text", "w620 y+14", "Verdict — the current bid the clerk would act on:   "
+        . (verdict.amt >= 0 ? "£" verdict.amt : "nothing — no bid showing"))
+    g.SetFont("s10 Norm")
+    if CFG.profile = "saleroom" && !CAL["saleroom"].Has("reg_ask") {
+        g.SetFont("s10 Bold cRed")
+        g.Add("Text", "w620 y+6", "⚠ The A (next asking) box is NOT set — a lone single-digit bid (£5–£9) reads as nothing until it is. Use 'Set just one'.")
+        g.SetFont("s10 Norm")
+    }
+    if !(CAL["vectis"].Has("reg_vtype") && CAL["saleroom"].Has("reg_sname"))
+        g.Add("Text", "w620 y+4", "ℹ The same-amount tie check stays off until the two top-row label boxes are set on both screens.")
+    g.Add("Text", "w620 y+6", "The bid verdict tries the CURRENT BID box first; when that shows nothing (a lone digit), the A box is read and stepped back one increment. The label boxes are only consulted when both screens sit at the same figure.")
+    g.Add("Button", "w100 y+10 Default", "OK").OnEvent("Click", (*) => g.Destroy())
+    g.OnEvent("Close", (*) => g.Destroy())
+    g.Show()
+}
+
+BuildBanner() {
+    global BANNER, B_L1, B_L2, B_L3, BANNER_TOP
+    BANNER := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20", "AutoClerkBanner")
+    BANNER.BackColor := "111827"
+    BANNER.MarginX := 28, BANNER.MarginY := 14
+    BANNER.SetFont("s17 Bold cFFFFFF", "Segoe UI")
+    B_L1 := BANNER.Add("Text", "w900 Center", "…")
+    BANNER.SetFont("s11 Norm c93C5FD", "Segoe UI")
+    B_L2 := BANNER.Add("Text", "w900 Center", "…")
+    BANNER.SetFont("s10 Norm cD1D5DB", "Segoe UI")
+    B_L3 := BANNER.Add("Text", "w900 Center", "F8 or MIDDLE-CLICK = capture    ·    F10 = keep the old position    ·    F7 = back one    ·    Esc = stop")
+    BANNER.Show("NoActivate Hide")
+    BANNER.GetPos(,, &w, &h)
+    BANNER.Move(Round((A_ScreenWidth - w) / 2), 12)
+    BANNER.Show("NoActivate")
+    WinSetTransparent 235, BANNER.Hwnd
+    BANNER_TOP := true
+}
+FlashBanner(msg, color, holdMs := 500) {
+    B_L1.SetFont("c" color)
+    B_L1.Text := msg
+    SetTimer ShowCalItem, -holdMs
+}
+
+; ══════════════════════════════════════════════════════════════════════════════
+; OCR — through the PowerShell helper (Windows' own engine)
+; ══════════════════════════════════════════════════════════════════════════════
+StartOcr() {
+    global OCR_PID
+    if OCR_PID && ProcessExist(OCR_PID)
+        return true
+    if !FileExist(OCR_PS1)
+        throw Error("The OCR helper is missing: " OCR_PS1)
+    DirCreate OCR_DIR
+    for f in ["ocr-req.txt", "ocr-res.txt", "ocr-ready.txt", "ocr-res.tmp"]
+        try FileDelete OCR_DIR "\" f
+    ; Our own process id goes along so the helper can leave when this script is gone.
+    Run 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' OCR_PS1 '" "' OCR_DIR '" ' DllCall("GetCurrentProcessId", "uint"), , "Hide", &pid
+    OCR_PID := pid
+    t0 := A_TickCount
+    while !FileExist(OCR_DIR "\ocr-ready.txt") {
+        if A_TickCount - t0 > 15000
+            throw Error("The OCR helper did not start within 15 s.")
+        Sleep 50
+    }
+    ; "powershell -WindowStyle Hidden" re-launches itself, so the pid Run gave us is a
+    ; parent that has already exited. The helper writes its real pid into the ready file.
+    Sleep 30
+    try {
+        real := Integer(Trim(FileRead(OCR_DIR "\ocr-ready.txt"), " `t`r`n"))
+        if real > 0
+            OCR_PID := real
+    }
+    return true
+}
+StopOcr() {
+    global OCR_PID
+    if OCR_PID {
+        try FileAppend "quit", OCR_DIR "\ocr-req.txt"
+        ; Give it a moment to leave on its own, then make sure.
+        try ProcessWaitClose OCR_PID, 2
+        try ProcessClose OCR_PID
+        OCR_PID := 0
+    }
+}
+/** Text Windows reads in the screen rectangle — "" when nothing / on failure.
+ *  mode "num" = a number box: the helper trims it to the ink and paints "Bid" in front,
+ *  so a lone digit reads. mode "txt" = plain text (the tie-check labels). */
+OcrRead(x, y, w, h, mode := "num") {
+    if IsObject(SIM) {                   ; --simboth: the screens are a model, not pixels
+        if x >= 3500                     ; label boxes (see the sim's CAL): 4000 = Vectis type, 3000 = Saleroom name
+            return SIM.vtype
+        if x >= 2500
+            return SIM.sname
+        return "£" (x >= 1500 ? SIM.v : SIM.s)   ; (the padded Vectis box starts at 2000 − PAD_X)
+    }
+    req := OCR_DIR "\ocr-req.txt", res := OCR_DIR "\ocr-res.txt"
+    try FileDelete res
+    try FileAppend x " " y " " w " " h " " mode, req
+    t0 := A_TickCount
+    while !FileExist(res) {
+        if A_TickCount - t0 > 1500
+            return ""
+        Sleep 5
+    }
+    Sleep 2
+    txt := ""
+    try txt := FileRead(res, "UTF-8")
+    try FileDelete res
+    return Trim(txt, " `t`r`n")
+}
+/** The rectangle actually read for a profile's bid figure: the calibrated box PLUS padding.
+ *  ⚠ A box drawn round "£0" is tiny (Jordan's first calibration: 28×23 and 43×46 px) and
+ *  "£1,250" spills straight out of it — so no bid was ever seen. Saleroom's figure is
+ *  right-aligned (grows LEFT), Vectis's is left-aligned (grows RIGHT): pad both ways. */
+BidRegion(name, key := "reg_bid") {
+    r := CAL[name][key]
+    return { x: r.x - PAD_X, y: r.y - PAD_Y, w: r.w + 2 * PAD_X, h: r.h + 2 * PAD_Y }
+}
+
+/** The saleroom's own increment ladder (the Saleroom Trainer / GAP table). */
+SrInc(b) {
+    if b < 50
+        return 5
+    if b < 200
+        return 10
+    if b < 500
+        return 20
+    if b < 1000
+        return 50
+    if b < 2000
+        return 100
+    if b < 5000
+        return 200
+    return 500
+}
+/** The bid that produces this asking figure on the saleroom ladder (10 → 5, 60 → 50), or -1. */
+BidBeforeAsking(ask) {
+    for inc in [5, 10, 20, 50, 100, 200, 500] {
+        b := ask - inc
+        if b >= 0 && b + SrInc(b) = ask
+            return b
+    }
+    return -1
+}
+
+/** One screen's current bid: {txt, amt}. amt is -1 when nothing legible.
+ *  ⚠ Windows' OCR NEVER returns a lone single character (measured: "5", "£5", tiled or
+ *  scaled, always come back empty; "15" and "Current Bid: 5" read fine). On the Saleroom
+ *  screen the H figure sits alone, so a £5–£9 bid is invisible to it. When H reads as
+ *  nothing and the A (next asking) box is calibrated, the asking is read instead and
+ *  stepped back one increment — £10 asking means the bid is £5. Vectis needs none of
+ *  this: its box takes in the words "Current Bid:", and a digit inside a line survives. */
+ReadBid(name) {
+    r := BidRegion(name)
+    txt := OcrRead(r.x, r.y, r.w, r.h)
+    amt := ParseAmount(txt)
+    if amt < 0 && name = "saleroom" && CAL[name].Has("reg_ask") {
+        ra := BidRegion(name, "reg_ask")
+        askTxt := OcrRead(ra.x, ra.y, ra.w, ra.h)
+        ask := ParseAmount(askTxt)
+        if ask > 0 {
+            b := BidBeforeAsking(ask)
+            if b >= 0
+                amt := b
+        }
+        txt .= " | asking [" Short(askTxt, 20) "]" (ask > 0 ? " → bid " amt : "")
+    }
+    return { txt: txt, amt: amt }
+}
+Short(s, n := 40) {
+    s := StrReplace(StrReplace(s, "`r", " "), "`n", " ")
+    return StrLen(s) > n ? SubStr(s, 1, n) "…" : s
+}
+
+/** The money in an OCR string: "Current Bid: E 1,250" → 1250; "1.250" → 1250; nothing → -1.
+ *  ⚠ OCR swaps look-alikes on screen fonts — "£10" came back "EIO" (I for 1, O for 0) on the
+ *  Vectis screen. Straight after a £ sign (which itself OCRs as £, E or f) the token is taken
+ *  as money even if it is letters, and the look-alikes are translated. Elsewhere only real
+ *  digits count, so words like ROOM can never become a bid. */
+ParseAmount(txt) {
+    ; Case-SENSITIVE on purpose: with i) the "s" of "Est:" matched S and read as £5.
+    ; The token must also end cleanly (not run into letters), so "Est" / "ES" never count.
+    ; "Bid" counts as a marker too — the helper paints that word in front of every number
+    ; box, so "Bid IO" must translate the look-alikes exactly as "£IO" would.
+    if RegExMatch(txt, "(?:[£Ef]|Bid)\s?([0-9OoIl|SBG][0-9OoIl|SBG.,]*)(?![A-Za-z])", &m) {
+        tok := m[1]
+        tok := RegExReplace(tok, "[Oo]", "0")
+        tok := RegExReplace(tok, "[Il|]", "1")
+        tok := StrReplace(StrReplace(StrReplace(tok, "S", "5"), "B", "8"), "G", "6")
+        tok := RegExReplace(tok, "[.,]", "")
+        if RegExMatch(tok, "^\d+$")
+            return Integer(tok)
+    }
+    if !RegExMatch(txt, "(\d+(?:[.,]\d{3})*)", &m) {
+        ; A lone zero comes back as the letter O ("Bid O") — accept it as £0 when the
+        ; text holds no other digits at all.
+        if RegExMatch(txt, "(?<![A-Za-z])[Oo](?![A-Za-z])")
+            return 0
+        return -1
+    }
+    return Integer(RegExReplace(m[1], "[.,]", ""))
+}
+
+; ══════════════════════════════════════════════════════════════════════════════
+; The run — the rule-card timers on one screen
+; ══════════════════════════════════════════════════════════════════════════════
+ToggleRun() {
+    if IsObject(RS)
+        StopRun("stopped by you")
+    else
+        StartRun()
+}
+StartRun() {
+    global RS
+    if IsObject(CALST)
+        return
+    ReadSettingsFromGui()
+    both := CFG.mode = "both"
+    miss := MissingForRun(both ? "both" : CFG.profile)
+    if miss.Length {
+        MsgBox "Calibrate first — still needed: " Join(miss, ", "), "Auto Clerk", "Iconi"
+        return
+    }
+    try StartOcr()
+    catch as e {
+        MsgBox "Could not start the screen reader:`n" e.Message, "Auto Clerk", "Iconx"
+        return
+    }
+    RS := NewRunState(both)
+    Hotkey "Esc", (*) => StopRun("Esc"), "On"
+    WriteLog("── START · " (both ? "BOTH screens in step" : PROFILES[RS.name].title) " · FW after " CFG.fwSecs "s · sell after " CFG.sellSecs "s more · pass no-bid lots: " (CFG.passNoBids ? "yes" : "no"))
+    MAIN.Hide()
+    BuildStatus()
+    SetTimer RunTick, CFG.pollMs
+}
+NewRunState(both) {
+    r := {
+        name: CFG.profile, both: both, paused: false, busy: false, blind: false,
+        bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
+        fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
+        blindSince: 0,
+        ; two-screen state
+        price: 0, fwPressed: false, side: Map(),
+        priceSide: "", priceAt: 0, tieCheckedPrice: 0,
+    }
+    for nm in ["saleroom", "vectis"]
+        r.side[nm] := { bid: -1, stable: -1, stableN: 0, lastRead: "", high: 0, expect: 0, syncAt: 0, tries: 0, behindSince: 0, warned: false, blindSince: 0 }
+    return r
+}
+StopRun(why) {
+    global RS
+    SetTimer RunTick, 0
+    try Hotkey "Esc", "Off"
+    if IsObject(RS)
+        WriteLog("── STOP (" why ") · " RS.lots " lots closed · " RS.presses " presses")
+    RS := 0
+    try STATUS.Destroy()
+    ToolTip
+    StopOcr()
+    MAIN.Show()
+}
+PauseRun() {
+    if !IsObject(RS)
+        return
+    RS.paused := !RS.paused
+    WriteLog(RS.paused ? "⏸ paused" : "▶ resumed — reading the screens afresh")
+    if !RS.paused {
+        RS.blind := false
+        try {
+            STATUS.BackColor := "052e16"
+            S_L1.Text := "AUTO CLERK running — hands off the mouse"
+        }
+        ResetLotState()      ; never replay what was on screen before the pause
+    }
+}
+
+/** The screen (or one of them) has been unreadable for BLIND_PAUSE_MS. Stop pressing,
+ *  go red, wait for a person. Resuming (F10) starts the lot state afresh. */
+BlindPause(label) {
+    global RS
+    if !IsObject(RS) || RS.blind
+        return
+    RS.blind := true
+    RS.paused := true
+    WriteLog("⚠ BLIND — could not read " label " screen for " Round(BLIND_PAUSE_MS / 1000) "s. PAUSED — nothing will be pressed. Check the screen, then F10 to resume.")
+    try {
+        STATUS.BackColor := "7f1d1d"
+        S_L1.Text := "⚠ CAN'T READ " StrUpper(label) " SCREEN — paused. Check it, then F10."
+        S_L2.Text := "Nothing legible for " Round(BLIND_PAUSE_MS / 1000) "s. Nothing is being pressed."
+    }
+}
+
+BuildStatus() {
+    global STATUS, S_L1, S_L2, S_L3
+    STATUS := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20", "AutoClerkStatus")
+    STATUS.BackColor := "052e16"
+    STATUS.MarginX := 16, STATUS.MarginY := 8
+    STATUS.SetFont("s12 Bold cFFFFFF", "Segoe UI")
+    S_L1 := STATUS.Add("Text", "w520", "AUTO CLERK running — hands off the mouse")
+    STATUS.SetFont("s10 Norm cBBF7D0", "Segoe UI")
+    S_L2 := STATUS.Add("Text", "w520", "…")
+    STATUS.SetFont("s9 Norm c86EFAC", "Segoe UI")
+    S_L3 := STATUS.Add("Text", "w520", "F9 stop · F10 pause · Esc stop")
+    STATUS.Show("NoActivate Hide")
+    STATUS.GetPos(,, &w, &h)
+    STATUS.Move(A_ScreenWidth - w - 16, A_ScreenHeight - h - 70)
+    STATUS.Show("NoActivate")
+    WinSetTransparent 230, STATUS.Hwnd
+}
+SetStatus(l1, l2) {
+    try {
+        S_L1.Text := l1
+        S_L2.Text := l2
+    }
+}
+
+RunTick() {
+    global RS
+    if !IsObject(RS) || RS.busy
+        return
+    if RS.paused {
+        SetStatus("⏸ PAUSED — F10 to resume", "Current bid £" (RS.bid > 0 ? RS.bid : 0))
+        return
+    }
+    RS.busy := true
+    try (RS.both ? TickBoth() : Tick())
+    catch as e {
+        WriteLog("tick error: " e.Message " (" e.What ") line " e.Line)
+    }
+    if IsObject(RS)
+        RS.busy := false
+}
+
+; ══════════════════════════════════════════════════════════════════════════════
+; BOTH screens — the Sync Logic Reference card, read off two bid figures.
+;
+; The auto-clerk cannot see WHO bid (OCR shows amounts only), and it does not need
+; to. It watches both figures:
+;   · a figure rising above the agreed price   = a genuine bid → clock reset; the
+;     other platform gets SYNC_GRACE_MS to follow by itself (an online bid does),
+;     then it is driven to the EXACT amount (Saleroom: amount box + Bid;
+;     Vectis: Asking box + SET + the Saleroom button) — rules 1 and 2.
+;   · a figure falling below its own high      = an undo there → the other side is
+;     brought down with its Undo until they match — rule 6.
+;   · our own catch-up landing                 = expected, never a clock reset.
+;   · rules 4/5: quiet → Fair Warning on both; quiet still → Hammer + Sell, then
+;     Next on both, after a pre-sell reconcile so nothing sells at the wrong price.
+;   · rule 3 (same-amount tie-break ROOM / !) is NOT automated — the card says so.
+; ══════════════════════════════════════════════════════════════════════════════
+TickBoth() {
+    global RS
+    s := ReadSide("saleroom"), v := ReadSide("vectis")
+    if !IsObject(RS)                    ; Esc pressed while those reads were in flight
+        return
+    if s < 0 || v < 0
+        return                          ; waiting for a steady reading on both
+    now := A_TickCount
+    sS := RS.side["saleroom"], sV := RS.side["vectis"]
+
+    ; ── what changed on each side ──────────────────────────────────────────
+    for nm, x in RS.side {
+        label := nm = "saleroom" ? "Saleroom" : "Vectis"
+        if x.bid > x.high {
+            x.high := x.bid
+            if x.expect && x.bid = x.expect {
+                WriteLog("  ✓ " label " caught up to £" x.bid)
+                x.expect := 0, x.tries := 0, x.behindSince := 0, x.warned := false
+            } else if x.bid > RS.price {
+                RS.price := x.bid
+                RS.priceSide := nm, RS.priceAt := now
+                RS.lastChangeAt := now
+                WriteLog("bid £" x.bid " on " label (RS.phase = "fw" ? " — after Fair Warning; clock reset" : ""))
+                if RS.phase = "fw" && RS.fwPressed && PROFILES["saleroom"].fwIsToggle
+                    PressOn("saleroom", "btn_fw", "Fair warn — cancelled by a new bid")
+                RS.fwPressed := false
+                RS.phase := "open"
+            } else {
+                WriteLog("  " label " followed to £" x.bid " by itself (online bid)")
+                x.expect := 0, x.tries := 0, x.behindSince := 0
+            }
+        } else if x.bid < x.high {
+            WriteLog("↩ " label " dropped £" x.high " → £" x.bid " (undo there)")
+            x.high := x.bid
+            x.expect := 0, x.tries := 0, x.behindSince := 0
+            if x.bid < RS.price
+                RS.price := x.bid
+        }
+    }
+
+    ; ── bring a side into step ─────────────────────────────────────────────
+    for nm, x in RS.side {
+        label := nm = "saleroom" ? "Saleroom" : "Vectis"
+        if x.bid < RS.price {
+            if x.expect = RS.price && now - x.syncAt < SYNC_RETRY_MS
+                continue                                    ; a press is in flight
+            if !x.behindSince
+                x.behindSince := now                        ; give an online bid its grace
+            if now - x.behindSince < SYNC_GRACE_MS
+                continue
+            if x.tries >= MAX_SYNC_TRIES {
+                if !x.warned {
+                    x.warned := true
+                    WriteLog("⚠ " label " stuck at £" x.bid " — target £" RS.price " — will keep trying; check the screen")
+                }
+                if now - x.syncAt < 4000
+                    continue                                ; slow down, but never give up
+            }
+            CatchUp(nm, RS.price)
+        } else if x.bid > RS.price {
+            if x.expect = RS.price && now - x.syncAt < SYNC_RETRY_MS
+                continue
+            if x.tries >= MAX_SYNC_TRIES && now - x.syncAt < 4000
+                continue
+            PressOn(nm, "btn_undo", "UNDO — bring " label " down from £" x.bid " to £" RS.price)
+            x.expect := RS.price, x.syncAt := now, x.tries++
+        } else {
+            x.behindSince := 0
+        }
+    }
+
+    ; ── rule 3: same-amount tie ────────────────────────────────────────────
+    if s = v && s > 0 && RS.tieCheckedPrice != RS.price && s = RS.price
+        && !sS.expect && !sV.expect && now - RS.priceAt >= TIE_SETTLE_MS
+        && CAL["vectis"].Has("reg_vtype") && CAL["saleroom"].Has("reg_sname") {
+        RS.tieCheckedPrice := RS.price
+        CheckTie(s)
+    }
+
+    ; ── the clock ──────────────────────────────────────────────────────────
+    quiet := (now - RS.lastChangeAt) / 1000
+    fwS := CFG.fwSecs, sellS := CFG.sellSecs
+    inStep := (s = v)
+    reading := " · S[" Short(sS.lastRead, 16) "] V[" Short(sV.lastRead, 16) "]"
+    head := "Saleroom £" s " · Vectis £" v (inStep ? "" : " — catching up")
+    if RS.price > 0 {
+        if RS.phase = "open" {
+            SetStatus(head " · quiet " Round(quiet) "s", "Fair Warning on both in " Max(0, Round(fwS - quiet)) "s" reading)
+            if quiet >= fwS {
+                PressOn("vectis", "btn_fw", "Fair Warning — " Round(quiet) "s without a new bid")
+                PressOn("saleroom", "btn_fw", "Fair warn — " Round(quiet) "s without a new bid")
+                RS.fwPressed := true
+                RS.phase := "fw", RS.fwAt := now
+            }
+        } else if RS.phase = "fw" {
+            sinceFw := (now - RS.fwAt) / 1000
+            SetStatus(head " · FAIR WARNING given", "Selling on both in " Max(0, Round(sellS - sinceFw)) "s unless a bid comes" reading)
+            if sinceFw >= sellS
+                CloseLotBoth("sold")
+        }
+    } else {
+        if CFG.passNoBids {
+            SetStatus("No bids on either screen · quiet " Round(quiet) "s", "Pass on both in " Max(0, Round(fwS + sellS - quiet)) "s unless a bid comes" reading)
+            if quiet >= fwS + sellS
+                CloseLotBoth("passed")
+        } else {
+            SetStatus("No bids on either screen · quiet " Round(quiet) "s", "Waiting — lots are not passed automatically" reading)
+        }
+    }
+}
+
+/** Rule 3. Both figures are equal — but are they the SAME bid? Read the top-row labels:
+ *  Vectis's top bid from the Saleroom source, or Saleroom's top bid marked ROOM, means one
+ *  platform is mirroring the other — in step, nothing to do. Anything else means two
+ *  different bidders at one price, and only one can win: whoever bid first keeps it.
+ *    Vectis first (or a dead heat)  → ROOM on Saleroom   (drops the Saleroom bidder, keeps the price)
+ *    Saleroom first                 → ! beside Saleroom on Vectis (drops the Vectis bidder, keeps the price) */
+CheckTie(price) {
+    global RS
+    ; ⚠ AHK names are case-INSENSITIVE: a local "rs" here IS the global RS — it was
+    ; overwritten with a rectangle ("Object has no property lastChangeAt").
+    regV := BidRegion("vectis", "reg_vtype")
+    regS := BidRegion("saleroom", "reg_sname")
+    vt := OcrRead(regV.x, regV.y, regV.w, regV.h, "txt")
+    sn := OcrRead(regS.x, regS.y, regS.w, regS.h, "txt")
+    vectisHoldsSaleroom := InStr(vt, "saleroom") || InStr(vt, "sale room")
+    saleroomHoldsRoom   := InStr(sn, "room") && !InStr(sn, "internet")
+    WriteLog("tie check at £" price ": Vectis top bid [" Short(vt, 24) "] · Saleroom top bid [" Short(sn, 24) "]"
+        . (vectisHoldsSaleroom || saleroomHoldsRoom ? " → same bid on both, in step" : " → TWO bidders at one price"))
+    if vectisHoldsSaleroom || saleroomHoldsRoom
+        return
+    if RS.priceSide = "saleroom" {
+        PressOn("vectis", "btn_bang", "TIE at £" price " — Saleroom bid first → ! beside Saleroom on Vectis (Vectis bidder dropped, price kept)")
+    } else {
+        PressOn("saleroom", "btn_room", "TIE at £" price " — " (RS.priceSide = "vectis" ? "Vectis bid first" : "dead heat, favour Vectis") " → ROOM on Saleroom (Saleroom bidder dropped, price kept)")
+    }
+}
+
+/** One side's steady bid figure, or -1 until two polls agree. Logs what the screen says. */
+ReadSide(nm) {
+    if !IsObject(RS)
+        return -1
+    x := RS.side[nm]
+    rb := ReadBid(nm)
+    if !IsObject(RS)
+        return -1
+    txt := rb.txt, amt := rb.amt
+    if txt != x.lastRead {
+        WriteLog("read " nm ": [" Short(txt, 60) "] → " (amt < 0 ? "nothing" : "£" amt))
+        x.lastRead := txt
+    }
+    ; ⚠ Blindness is never bids disappearing: an illegible read NEVER changes the figure.
+    ; It holds the last one and starts the blind clock; at BLIND_PAUSE_MS the clerk stops
+    ; pressing and goes red rather than acting on what it cannot see.
+    if amt < 0 {
+        if !x.blindSince
+            x.blindSince := A_TickCount
+        else if A_TickCount - x.blindSince >= BLIND_PAUSE_MS
+            BlindPause(nm = "saleroom" ? "Saleroom" : "Vectis")
+        return x.bid
+    }
+    x.blindSince := 0
+    if amt = x.stable
+        x.stableN++
+    else
+        x.stable := amt, x.stableN := 1
+    ; Rises count after RISE_CONFIRM polls, DROPS only after DROP_CONFIRM — and a jump that
+    ; no auction makes in one step (10 → 71,402) is treated like a drop until it persists.
+    need := RISE_CONFIRM
+    if x.bid >= 0 && amt < x.bid
+        need := DROP_CONFIRM
+    else if x.bid > 0 && amt > x.bid * 3 + 1000
+        need := DROP_CONFIRM
+    if x.stableN < need
+        return x.bid >= 0 ? x.bid : -1
+    x.bid := amt
+    return amt
+}
+
+/** Drive one platform to the exact amount — the rule-card way for each screen. */
+CatchUp(nm, target) {
+    x := RS.side[nm]
+    if nm = "saleroom" {
+        ; Type the exact figure in the box next to A, then Bid — lands on that amount.
+        PressOn("saleroom", "box_amount", "amount box → " target)
+        TypeAmount(target)
+        if CFG.srExact = "bid" {
+            PressOn("saleroom", "btn_bid", "BID at £" target " (catching Saleroom up)")
+        } else if IsObject(SIM) {
+            SimPress("saleroom", "btn_bid")          ; the model treats Enter and Bid alike
+        } else {
+            WriteLog("PRESS saleroom.ENTER — bid £" target " (catching Saleroom up)")
+            Send "{Enter}"
+            Sleep 120
+            RS.presses++
+        }
+    } else {
+        ; Set the asking to the exact figure, then the Saleroom button bids that asking.
+        PressOn("vectis", "box_asking", "asking box → " target)
+        TypeAmount(target)
+        PressOn("vectis", "btn_askset", "SET asking £" target)
+        Sleep 160
+        PressOn("vectis", "btn_saleroom", "SALEROOM button at £" target " (catching Vectis up)")
+    }
+    x.expect := target, x.syncAt := A_TickCount, x.tries++
+}
+
+/** Sell (or Pass) on BOTH screens and move both on — reconciling first so nothing
+ *  sells at the wrong price, then checking both figures really went back to 0. */
+CloseLotBoth(how) {
+    global RS
+    s := RS.side["saleroom"], v := RS.side["vectis"]
+    price := RS.price
+    if how = "sold" && price > 0 {
+        ; Pre-sell reconcile: never hammer one side at a different figure.
+        Loop 2 {
+            if s.bid < price
+                CatchUp("saleroom", price)
+            if v.bid < price
+                CatchUp("vectis", price)
+            if s.bid < price || v.bid < price {
+                Sleep 900
+                ReadSide("saleroom"), ReadSide("vectis")
+                ReadSide("saleroom"), ReadSide("vectis")
+            }
+            if s.bid >= price && v.bid >= price
+                break
+        }
+        if s.bid != price || v.bid != price
+            WriteLog("⚠ selling with the screens NOT level: Saleroom £" s.bid " · Vectis £" v.bid " · agreed £" price)
+        ; ── THE LAST LOOK (sniping, Jordan 2026-08-24) ────────────────────────
+        ; One final fresh read of both screens in the instant before the hammer.
+        ; A bid that landed while we were deciding aborts the sale — the clock
+        ; resets and the Fair Warning cycle starts over, exactly as a human clerk
+        ; pulls back when a hand goes up at the last moment.
+        sLast := ReadSide("saleroom"), vLast := ReadSide("vectis")
+        if !IsObject(RS)
+            return
+        if Max(sLast, vLast) > price {
+            WriteLog("🛑 LAST-SECOND BID £" Max(sLast, vLast) " — sale stopped, bidding continues")
+            RS.lastChangeAt := A_TickCount
+            return
+        }
+        PressOn("vectis", "btn_hammer", "HAMMER at £" price)
+        PressOn("saleroom", "btn_sell", "SELL at £" price)
+    } else {
+        ; The last look before a PASS: any bid at all means the lot is no longer bidless.
+        sLast := ReadSide("saleroom"), vLast := ReadSide("vectis")
+        if !IsObject(RS)
+            return
+        if Max(sLast, vLast) > 0 {
+            WriteLog("🛑 LAST-SECOND BID £" Max(sLast, vLast) " — not passing, bidding continues")
+            RS.lastChangeAt := A_TickCount
+            return
+        }
+        PressOn("vectis", "btn_pass", "PASS LOT — no bids")
+        PressOn("saleroom", "btn_pass", "PASS — no bids")
+    }
+    Sleep 700
+    PressOn("vectis", "btn_hammer", "NEXT LOT")
+    PressOn("saleroom", "btn_next", "NEXT lot")
+
+    ; Verify both moved on (figure back to 0); one retry per side, then pause.
+    for nm, x in RS.side {
+        Loop 2 {
+            moved := false
+            t0 := A_TickCount
+            while A_TickCount - t0 < 3000 {
+                Sleep 150
+                if ReadBid(nm).amt <= 0 {
+                    moved := true
+                    break
+                }
+            }
+            if moved
+                break
+            if A_Index = 1 {
+                WriteLog("⚠ " nm " did not go back to 0 after Next — pressing Next once more")
+                PressOn(nm, nm = "saleroom" ? "btn_next" : "btn_hammer", "NEXT (retry)")
+            } else {
+                ; Don't freeze: say so, start the lot state afresh from what the screen shows,
+                ; and carry on. (Pausing here replayed the stale price on resume and stuck again.)
+                WriteLog("⚠ could not confirm " nm " moved to a new lot — carrying on from what the screen shows now")
+            }
+        }
+    }
+    RS.lots++
+    WriteLog((how = "sold" ? "🔨 sold at £" price : "passed") " on both · lot " RS.lots " done · next lot open")
+    ResetLotState()
+}
+
+/** Forget the lot just closed and read the screens afresh. */
+ResetLotState() {
+    global RS
+    if !IsObject(RS)
+        return
+    for nm, x in RS.side {
+        x.bid := -1, x.stable := -1, x.stableN := 0, x.high := 0, x.blindSince := 0
+        x.expect := 0, x.tries := 0, x.behindSince := 0, x.warned := false
+    }
+    RS.bid := -1, RS.stable := -1, RS.stableN := 0, RS.blindSince := 0
+    RS.price := 0, RS.phase := "open", RS.fwPressed := false
+    RS.priceSide := "", RS.priceAt := 0, RS.tieCheckedPrice := 0
+    RS.lastChangeAt := A_TickCount, RS.fwAt := 0
+}
+
+Tick() {
+    global RS
+    rb := ReadBid(RS.name)
+    if !IsObject(RS)                    ; Esc pressed while the read was in flight
+        return
+    txt := rb.txt, amt := rb.amt
+    if txt != RS.lastRead {
+        ; Every change in what the screen says goes in the log — that is how a mis-drawn
+        ; box shows itself ("read: [] → nothing" over and over).
+        WriteLog("read: [" Short(txt, 60) "] → " (amt < 0 ? "nothing" : "£" amt))
+        RS.lastRead := txt
+    }
+    ; ⚠ Blindness is never bids disappearing: an illegible read NEVER changes the figure —
+    ; it starts the blind clock instead, and at BLIND_PAUSE_MS the clerk stops and goes red.
+    if amt < 0 {
+        if !RS.blindSince
+            RS.blindSince := A_TickCount
+        else if A_TickCount - RS.blindSince >= BLIND_PAUSE_MS
+            BlindPause("the")
+        return
+    }
+    RS.blindSince := 0
+
+    ; Debounce — a reading must hold before it counts (rises quickly, drops slowly). A
+    ; screen mid-repaint can read wrong for a moment, and one bad read must never reset
+    ; the clock or pass a lot.
+    if amt = RS.stable
+        RS.stableN++
+    else
+        RS.stable := amt, RS.stableN := 1
+    need := (RS.bid >= 0 && amt < RS.bid) || (RS.bid > 0 && amt > RS.bid * 3 + 1000) ? DROP_CONFIRM : RISE_CONFIRM
+    if RS.stableN < need
+        return
+    if amt != RS.bid {
+        if RS.bid >= 0 && amt < RS.bid && amt > 0
+            WriteLog("↩ bid DROPPED £" RS.bid " → £" amt " (undo on the screen) — noted, nothing to do on one screen")
+        else if amt > 0
+            WriteLog("bid £" amt (RS.phase = "fw" ? " — after Fair Warning; clock reset" : ""))
+        if amt > 0 && RS.phase = "fw" && PROFILES[RS.name].fwIsToggle {
+            ; Saleroom's Fair warn is a toggle: a new bid means un-press it, or the next
+            ; press (after the next quiet spell) would turn it OFF instead of on.
+            Press("btn_fw", "Fair warn — cancelled by a new bid")
+        }
+        RS.bid := amt
+        RS.lastChangeAt := A_TickCount
+        if amt > 0
+            RS.phase := "open"
+    }
+
+    quiet := (A_TickCount - RS.lastChangeAt) / 1000
+    fwS := CFG.fwSecs, sellS := CFG.sellSecs
+
+    reading := " · reads [" Short(RS.lastRead, 24) "]"
+    if RS.bid > 0 {
+        if RS.phase = "open" {
+            SetStatus("Bid £" RS.bid " · quiet " Round(quiet) "s", "Fair Warning in " Max(0, Round(fwS - quiet)) "s" reading)
+            if quiet >= fwS {
+                Press("btn_fw", "Fair Warning — " Round(quiet) "s without a new bid")
+                RS.phase := "fw", RS.fwAt := A_TickCount
+            }
+        } else if RS.phase = "fw" {
+            sinceFw := (A_TickCount - RS.fwAt) / 1000
+            SetStatus("Bid £" RS.bid " · FAIR WARNING given", "Selling in " Max(0, Round(sellS - sinceFw)) "s unless a bid comes")
+            if sinceFw >= sellS
+                CloseLot("sold")
+        }
+    } else {
+        ; No bid showing on this lot.
+        if CFG.passNoBids {
+            SetStatus("No bids yet · quiet " Round(quiet) "s", "Pass in " Max(0, Round(fwS + sellS - quiet)) "s unless a bid comes" reading)
+            if quiet >= fwS + sellS
+                CloseLot("passed")
+        } else {
+            SetStatus("No bids yet · quiet " Round(quiet) "s", "Waiting — this lot will not be passed automatically" reading)
+        }
+    }
+}
+
+/** Sell (or Pass) the lot, move to the next one, and make sure the screen really moved on. */
+CloseLot(how) {
+    global RS
+    before := RS.bid
+    ; THE LAST LOOK — a bid in the final instant aborts the sale/pass (sniping).
+    fresh := ReadBid(RS.name).amt
+    if !IsObject(RS)
+        return
+    if (how = "sold" && fresh > before) || (how = "passed" && fresh > 0) {
+        WriteLog("🛑 LAST-SECOND BID £" fresh " — " (how = "sold" ? "sale stopped" : "not passing") ", bidding continues")
+        RS.lastChangeAt := A_TickCount
+        return
+    }
+    if RS.name = "saleroom" {
+        if how = "sold"
+            Press("btn_sell", "SELL at £" before)
+        else
+            Press("btn_pass", "PASS — no bids")
+        Sleep 700
+        Press("btn_next", "NEXT lot")
+    } else {
+        if how = "sold"
+            Press("btn_hammer", "HAMMER at £" before)
+        else
+            Press("btn_pass", "PASS LOT — no bids")
+        Sleep 700
+        Press("btn_hammer", "NEXT LOT")
+    }
+    ; Verify: the bid figure should now read 0 (a fresh lot). If not, one more Next, then warn.
+    Loop 2 {
+        t0 := A_TickCount
+        moved := false
+        while A_TickCount - t0 < 3000 {
+            Sleep 150
+            if ReadBid(RS.name).amt <= 0 {
+                moved := true
+                break
+            }
+        }
+        if moved
+            break
+        if A_Index = 1 {
+            WriteLog("⚠ the bid figure did not go back to 0 after Next — pressing Next once more")
+            Press(RS.name = "saleroom" ? "btn_next" : "btn_hammer", "NEXT lot (retry)")
+        } else {
+            WriteLog("⚠ could not confirm the new lot — carrying on from what the screen shows now")
+        }
+    }
+    RS.lots++
+    WriteLog((how = "sold" ? "🔨 sold at £" before : "passed") " · lot " RS.lots " done · next lot open")
+    RS.bid := -1, RS.stable := -1, RS.stableN := 0
+    RS.phase := "open"
+    RS.lastChangeAt := A_TickCount
+    RS.fwAt := 0
+}
+
+/** Click a calibrated button — and log it, because that is the whole point. */
+Press(key, why) {
+    PressOn(RS.name, key, why)
+}
+PressOn(nm, key, why) {
+    global RS
+    p := CAL[nm][key]
+    WriteLog("PRESS " nm "." key " @" p.x "," p.y " — " why)
+    RS.presses++
+    if IsObject(SIM) {                   ; --simboth: apply the press to the model instead
+        SimPress(nm, key)
+        return
+    }
+    MouseMove p.x, p.y, 0
+    Sleep 40
+    Click p.x, p.y
+    Sleep 120
+}
+/** Type a figure into the box just clicked (or, in the simulation, remember it).
+ *  ⚠ Select-all then type is NOT enough: the Saleroom Trainer moves the caret to the end on
+ *  every digit, so the typed figures piled up ("102530" = 10, 25, 30). Delete the selection
+ *  with Backspace FIRST, so the box is empty before the first digit goes in. */
+TypeAmount(v) {
+    if IsObject(SIM) {
+        SIM.typed := v
+        return
+    }
+    Send "^a"
+    Sleep 40
+    Send "{BackSpace}"
+    Sleep 40
+    SendText String(v)
+    Sleep 80
+}
