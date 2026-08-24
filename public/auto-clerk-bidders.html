@@ -65,6 +65,24 @@ button:disabled { opacity: .4; cursor: default; }
 .sbtn.rs { background: #15803d; }
 .sbtn.alt { background: linear-gradient(#7c3aed, #16a34a); }
 .sbtn.stop { background: #b91c1c; }
+.sbtn.auto { background: linear-gradient(#0e7490, #155e75); }
+.sbtn.auto.on { background: linear-gradient(#f59e0b, #b45309); }
+.results { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; margin-top: 16px; padding: 16px; }
+.res-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.res-head h2 { font-size: 15px; }
+.res-head span { font-size: 12px; color: #94a3b8; flex: 1; }
+.res-head button { background: #334155; color: #cbd5e1; padding: 5px 12px; font-size: 12px; }
+#res-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#res-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; padding: 6px 8px; border-bottom: 1px solid #1e293b; }
+#res-table td { padding: 7px 8px; border-bottom: 1px solid #16233c; }
+#res-table td.mono { font-family: ui-monospace, Consolas, monospace; }
+#res-table tr.res-empty td { color: #64748b; text-align: center; padding: 18px; }
+.pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+.pill.sold { background: #16a34a33; color: #4ade80; }
+.pill.passed { background: #64748b33; color: #cbd5e1; }
+.pill.same { background: #16a34a33; color: #4ade80; }
+.pill.diff { background: #dc262633; color: #fca5a5; }
+.pill.one { background: #f59e0b33; color: #fcd34d; }
 .logbox { background: #0b1222; border: 1px solid #1e293b; border-radius: 12px; margin-top: 16px; padding: 12px 14px; height: 260px; overflow-y: auto; font: 12px/1.7 ui-monospace, Consolas, monospace; }
 .logbox .ok { color: #4ade80; } .logbox .rej { color: #fbbf24; } .logbox .err { color: #f87171; } .logbox .info { color: #94a3b8; }
 a.back { color: #7dd3fc; font-size: 13px; text-decoration: none; }
@@ -124,9 +142,30 @@ a.back { color: #7dd3fc; font-size: 13px; text-decoration: none; }
       <button class="sbtn alt" id="s-alt">🔀 Alternating ×10 — both, 250 ms steps</button>
       <button class="sbtn stop" id="s-stop" disabled>⛔ Stop the run</button>
     </div>
+    <div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid #1e293b;align-items:center">
+      <button class="sbtn auto" id="s-auto">🎲 Automatic mode — bid like a real sale</button>
+      <span id="auto-state" style="font-size:12px;color:#94a3b8">Off. Bids each lot at random intervals up to a random figure under £100, then goes quiet so the clerk can sell it — lot after lot, unattended.</span>
+    </div>
   </div>
 
   <div class="logbox" id="log"><span class="info">Join a room on each side, then fire away. Every bid, acceptance and rejection lands here.</span></div>
+
+  <!-- Results — the real question: did BOTH platforms close each lot at the same figure? -->
+  <div class="results" id="results">
+    <div class="res-head">
+      <h2>🧾 Results — what each lot closed at</h2>
+      <span id="res-summary">Nothing closed yet.</span>
+      <button id="res-clear">Clear</button>
+    </div>
+    <table id="res-table">
+      <thead>
+        <tr><th>Time</th><th>Lot</th><th>Vectis</th><th>the saleroom</th><th>Same?</th></tr>
+      </thead>
+      <tbody id="res-body">
+        <tr class="res-empty"><td colspan="5">Lots appear here as each platform closes them.</td></tr>
+      </tbody>
+    </table>
+  </div>
 </main>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -196,7 +235,7 @@ function join(side) {
   const x = S[side];
   if (!x.sock) {
     x.sock = io(location.origin, { transports: ['websocket', 'polling'] });
-    x.sock.on('trainer:state', st => { x.state = st; renderSide(side); });
+    x.sock.on('trainer:state', st => { x.state = st; noteState(side, st); renderSide(side); });
     x.sock.on('trainer:bidResult', r => {
       log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': ' + (r.accepted ? '✓ bid taken' : '✗ ' + (r.message || 'rejected')), r.accepted ? 'ok' : 'rej');
     });
@@ -241,6 +280,124 @@ $('join-vectis').onclick = () => join('vectis');
 $('join-saleroom').onclick = () => join('saleroom');
 $('leave-vectis').onclick = () => leave('vectis');
 $('leave-saleroom').onclick = () => leave('saleroom');
+
+/* ── results: what each lot closed at, on each platform ────────────────────────
+   The point of the whole exercise is whether the two platforms end up at the SAME
+   figure, so a lot gets ONE row with both sides on it, filled in as each closes. */
+const RESULTS = [];          // [{ lot, vectis:{amount,status,at}, saleroom:{...} }]
+const LAST_SEEN = { vectis: '', saleroom: '' };
+
+function noteState(side, st) {
+  if (!st || !st.lot) return;
+  const lot = String(st.lot.id);
+  const done = st.status === 'sold' || st.status === 'passed' || st.status === 'withdrawn';
+  const key = lot + ':' + st.status;
+  if (!done || LAST_SEEN[side] === key) return;   // record each lot's close once
+  LAST_SEEN[side] = key;
+
+  let row = RESULTS.find(r => r.lot === lot);
+  if (!row) { row = { lot }; RESULTS.unshift(row); }
+  row[side] = {
+    amount: st.status === 'sold' ? Number(st.hi || 0) : null,
+    status: st.status,
+    at: new Date().toLocaleTimeString('en-GB'),
+  };
+  renderResults();
+  log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': lot ' + lot + ' ' + st.status +
+      (st.status === 'sold' ? ' at £' + Number(st.hi || 0).toLocaleString('en-GB') : ''), 'ok');
+}
+
+function cell(side) {
+  if (!side) return '<span style="color:#64748b">—</span>';
+  if (side.status !== 'sold') return `<span class="pill passed">${side.status}</span>`;
+  return `<span class="pill sold">£${side.amount.toLocaleString('en-GB')}</span>`;
+}
+function renderResults() {
+  const body = $('res-body');
+  if (RESULTS.length === 0) {
+    body.innerHTML = '<tr class="res-empty"><td colspan="5">Lots appear here as each platform closes them.</td></tr>';
+    $('res-summary').textContent = 'Nothing closed yet.';
+    return;
+  }
+  let both = 0, same = 0;
+  body.innerHTML = RESULTS.map(r => {
+    const v = r.vectis, s = r.saleroom;
+    let verdict = '<span class="pill one">one side only</span>';
+    if (v && s) {
+      both++;
+      const matched = v.status === s.status && v.amount === s.amount;
+      if (matched) same++;
+      verdict = matched
+        ? '<span class="pill same">✓ same</span>'
+        : '<span class="pill diff">✗ different</span>';
+    }
+    const at = (v && v.at) || (s && s.at) || '';
+    return `<tr><td class="mono">${esc(at)}</td><td class="mono">${esc(r.lot)}</td>` +
+           `<td>${cell(v)}</td><td>${cell(s)}</td><td>${verdict}</td></tr>`;
+  }).join('');
+  $('res-summary').textContent =
+    `${RESULTS.length} lot${RESULTS.length === 1 ? '' : 's'} closed · ${both} on both platforms · ` +
+    (both === 0 ? 'none to compare yet' : `${same} of ${both} matched${same < both ? ' — check the ones marked different' : ''}`);
+}
+$('res-clear').onclick = () => { RESULTS.length = 0; LAST_SEEN.vectis = LAST_SEEN.saleroom = ''; renderResults(); };
+
+/* ── automatic mode: bid like a real sale ──────────────────────────────────────
+   Each lot gets its own random ceiling under £100 and random gaps between bids;
+   once the price reaches it the bidding stops, leaving the clerk's own timers to
+   Fair Warning and sell. Then the next lot starts again. */
+const AUTO = { on: false, timer: null, lot: null, ceiling: 0 };
+
+function autoLot() {
+  for (const side of ['vectis', 'saleroom']) {
+    const st = S[side].state;
+    if (st && st.lot) return String(st.lot.id);
+  }
+  return null;
+}
+function autoHighest() {
+  let top = 0;
+  for (const side of ['vectis', 'saleroom']) {
+    const st = S[side].state;
+    if (st) top = Math.max(top, Number(st.hi || 0));
+  }
+  return top;
+}
+function autoLive() {
+  return ['vectis', 'saleroom'].filter(side => {
+    const x = S[side], st = x.state;
+    return x.joined && st && st.status === 'open' && !st.hold && Number(st.next || 0) > 0;
+  });
+}
+function autoStep() {
+  if (!AUTO.on) return;
+  const lot = autoLot();
+  if (lot && lot !== AUTO.lot) {                 // a new lot — pick a fresh ceiling
+    AUTO.lot = lot;
+    AUTO.ceiling = 15 + Math.floor(Math.random() * 81);   // £15–£95, always under £100
+    log(`🎲 lot ${lot}: bidding up to about £${AUTO.ceiling}, then leaving it to the clerk`, 'info');
+  }
+  const live = autoLive();
+  if (live.length && autoHighest() < AUTO.ceiling) {
+    bid(live[Math.floor(Math.random() * live.length)]);
+  }
+  // Between 0.6s and 3s, like a real room — never faster than the trainers accept.
+  AUTO.timer = setTimeout(autoStep, 600 + Math.random() * 2400);
+}
+function setAuto(on) {
+  AUTO.on = on;
+  clearTimeout(AUTO.timer);
+  AUTO.timer = null;
+  AUTO.lot = null;
+  const btn = $('s-auto');
+  btn.classList.toggle('on', on);
+  btn.textContent = on ? '⏹ Automatic mode — running' : '🎲 Automatic mode — bid like a real sale';
+  $('auto-state').textContent = on
+    ? 'Running: each lot is bid up to a random figure under £100 at random intervals, then left quiet for the clerk to sell.'
+    : 'Off. Bids each lot at random intervals up to a random figure under £100, then goes quiet so the clerk can sell it — lot after lot, unattended.';
+  log(on ? '🎲 Automatic mode ON' : '⏹ Automatic mode off', on ? 'ok' : 'info');
+  if (on) autoStep();
+}
+$('s-auto').onclick = () => setAuto(!AUTO.on);
 
 /* ── stress patterns ───────────────────────────────────────────────────────── */
 function running(on) {
