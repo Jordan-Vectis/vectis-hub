@@ -307,6 +307,46 @@ if A_Args.Length >= 1 && A_Args[1] = "--snipetest" {
     SayS((RS.lots = 1 && SIM.s = 0 && SIM.v = 0 ? "PASS " : "FAIL ") "the lot then sold and both screens reset (S=" SIM.s " V=" SIM.v ")")
     ExitApp
 }
+; ── --lastlooktest: the sniping guard on its own. Both screens settled at £20, then a bid
+;    lands with NO tick in between — only the last look can catch it. It must not hammer. ──
+if A_Args.Length >= 1 && A_Args[1] = "--lastlooktest" {
+    CFG.mode := "both", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayLL(t) => FileAppend(t "`n", "*")
+    loop 6 {                                  ; settle both screens at £20
+        TickBoth()
+        Sleep 60
+    }
+    SayLL("settled: price £" RS.price " · Saleroom £" RS.side["saleroom"].bid " · Vectis £" RS.side["vectis"].bid)
+    SIM.v := 25                               ; the snipe — no tick sees it first
+    SayLL("── snipe planted: Vectis £25, with no tick between it and the sell")
+    CloseLotBoth("sold")
+    seq := ""
+    for p in SIM.presses
+        seq .= p " "
+    hammered := InStr(seq, "vectis.btn_hammer") || InStr(seq, "saleroom.btn_sell")
+    SayLL((!hammered ? "PASS " : "FAIL ") "the last look caught the fresh bid — nothing hammered (presses: " (seq = "" ? "none" : seq) ")")
+    SayLL((RS.lots = 0 ? "PASS " : "FAIL ") "the lot did NOT close (lots closed: " RS.lots ")")
+    ExitApp
+}
 ; ── --lottest: a lot moves on by itself, then the two screens end up on DIFFERENT lots.
 ;    Neither may be mistaken for an undo, and the mismatch must HOLD the run. ───────────
 if A_Args.Length >= 1 && A_Args[1] = "--lottest" {
@@ -1555,6 +1595,30 @@ ReadSide(nm) {
     return amt
 }
 
+/** THE LAST LOOK. The highest figure anything shows right now — RAW readings, twice, a
+ *  moment apart, so a bid landing during the look itself is still caught.
+ *  ⚠⚠ It must NEVER use the confirmed reader (`ReadSide`). That one waits for two agreeing
+ *  polls before it will report a new figure, so a bid that has only just landed is
+ *  invisible to it — which is precisely how a last-second bid was still being hammered
+ *  through at the old price (Jordan, 2026-08-24: "Im still able to snipe bids... the
+ *  hotkey isnt picking it up"). A false abort costs one Fair Warning cycle; a wrongful
+ *  hammer cannot be undone, so raw-and-jumpy is the right trade here. */
+LastLook(names) {
+    top := -1
+    loop 2 {
+        for nm in names {
+            a := ReadBid(nm).amt
+            if !IsObject(RS)
+                return -1
+            if a > top
+                top := a
+        }
+        if A_Index = 1
+            Sleep 120
+    }
+    return top
+}
+
 /** Drive one platform to the exact amount — the rule-card way for each screen. */
 CatchUp(nm, target) {
     x := RS.side[nm]
@@ -1611,11 +1675,11 @@ CloseLotBoth(how) {
         ; A bid that landed while we were deciding aborts the sale — the clock
         ; resets and the Fair Warning cycle starts over, exactly as a human clerk
         ; pulls back when a hand goes up at the last moment.
-        sLast := ReadSide("saleroom"), vLast := ReadSide("vectis")
+        peak := LastLook(["saleroom", "vectis"])
         if !IsObject(RS)
             return
-        if Max(sLast, vLast) > price {
-            WriteLog("🛑 LAST-SECOND BID £" Max(sLast, vLast) " — sale stopped, bidding continues")
+        if peak > price {
+            WriteLog("🛑 LAST-SECOND BID £" peak " — sale stopped, bidding continues")
             RS.lastChangeAt := A_TickCount
             return
         }
@@ -1623,11 +1687,11 @@ CloseLotBoth(how) {
         PressOn("saleroom", "btn_sell", "SELL at £" price)
     } else {
         ; The last look before a PASS: any bid at all means the lot is no longer bidless.
-        sLast := ReadSide("saleroom"), vLast := ReadSide("vectis")
+        peak := LastLook(["saleroom", "vectis"])
         if !IsObject(RS)
             return
-        if Max(sLast, vLast) > 0 {
-            WriteLog("🛑 LAST-SECOND BID £" Max(sLast, vLast) " — not passing, bidding continues")
+        if peak > 0 {
+            WriteLog("🛑 LAST-SECOND BID £" peak " — not passing, bidding continues")
             RS.lastChangeAt := A_TickCount
             return
         }
@@ -1770,7 +1834,7 @@ CloseLot(how) {
     global RS
     before := RS.bid
     ; THE LAST LOOK — a bid in the final instant aborts the sale/pass (sniping).
-    fresh := ReadBid(RS.name).amt
+    fresh := LastLook([RS.name])
     if !IsObject(RS)
         return
     if (how = "sold" && fresh > before) || (how = "passed" && fresh > 0) {

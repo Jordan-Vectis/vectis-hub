@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"6a9e57d27739156659e3635040fd955d19337483","author":"Jordan Orange","date":"2026-08-24T14:28:08+01:00","subject":"Auto Clerk: read pence correctly, and watch the lot number on both screens"},
   {"sha":"cd85c9bc3420a573657ba9c466c784b9a2865d23","author":"Jordan Orange","date":"2026-08-24T14:19:07+01:00","subject":"Auto Clerk: draw the figure boxes like the snipping tool"},
   {"sha":"208b0e7ddd3a6b4620d485e156ffead60127d0ac","author":"Jordan Orange","date":"2026-08-24T13:44:35+01:00","subject":"Auto Clerk: an AutoHotkey Clerk section with the scripts to download and how it works"},
   {"sha":"787116461a2febbed8dabc03bae1d2432d8f1cb6","author":"Jordan Orange","date":"2026-08-24T12:04:10+01:00","subject":"Memory: Auto Clerk.ahk — the last look (a bid in the final instant aborts the sale)"},
