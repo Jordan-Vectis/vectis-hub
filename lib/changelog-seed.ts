@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"357a38e6061ce55f49ecb44522a16156be756a2e","author":"Jack Collings","date":"2026-08-24T16:24:42+01:00","subject":"AI Presenter: make the Live Feed actually keep up with the auction"},
+  {"sha":"83ee9f37f8cd37575a4d4a370ccca9e49cc4d1b0","author":"Jordan Orange","date":"2026-08-24T16:25:16+01:00","subject":"Auto Clerk: fingerprint boxes with one screen grab, and stop mistaking an empty box for blindness"},
   {"sha":"f5ddf7c0586fc37f1809a1310b35529733ce5fe8","author":"Jordan Orange","date":"2026-08-24T16:06:16+01:00","subject":"Auto Clerk: what you draw is what it reads — the 90px padding is gone"},
   {"sha":"cc0cd5bc551b8b18b6884e832f6398f41d7a1fdb","author":"Jordan Orange","date":"2026-08-24T15:57:18+01:00","subject":"Auto Clerk: watch the bid boxes pixel-by-pixel until they sit still before hammering"},
   {"sha":"9eae219b2a4f6cb3d600b92eeebc051fdcc51288","author":"Jordan Orange","date":"2026-08-24T15:33:57+01:00","subject":"Auto Clerk: a tickbox for the lot watch, and it can never hold the run twice"},
