@@ -79,7 +79,7 @@ global PROFILES := Map(
 ; srExact: how an EXACT amount is entered on the Saleroom screen — "enter" = type in the box
 ; next to A and press Enter (the Saleroom Trainer), "bid" = type then press the Bid button
 ; (the real Saleroom page, per the rule card).
-global CFG := { profile: "saleroom", mode: "single", fwSecs: 15, sellSecs: 20, passNoBids: true, pollMs: 250, srExact: "enter" }
+global CFG := { profile: "saleroom", mode: "single", fwSecs: 15, sellSecs: 20, passNoBids: true, pollMs: 250, srExact: "enter", lotWatch: true }
 ; A reading must hold this many polls before it counts: rises quickly, DROPS slowly — one
 ; misread frame ("E60" read as "EGO" → nothing) once undid a whole lot.
 global RISE_CONFIRM := 2, DROP_CONFIRM := 4
@@ -114,7 +114,7 @@ global PAD_X := 90, PAD_Y := 6   ; bid-box padding (see BidRegion) — declared 
 ; AutoHotkey runs all top-level lines in file order at start-up, so a declaration
 ; placed further down the file executes AFTER the window is built and wipes the
 ; references it just made (that was "Calibrate does nothing", 2026-08-21).
-global MAIN := 0, M_STATUS := 0, M_PROF := 0, M_FW := 0, M_SELL := 0, M_PASS := 0, M_CAL := 0, M_MODE := 0, M_ONE := 0, M_EXACT := 0
+global MAIN := 0, M_STATUS := 0, M_PROF := 0, M_FW := 0, M_SELL := 0, M_PASS := 0, M_CAL := 0, M_MODE := 0, M_ONE := 0, M_EXACT := 0, M_LOT := 0
 global CALST := 0
 global STATUS := 0, S_L1 := 0, S_L2 := 0, S_L3 := 0
 
@@ -392,6 +392,20 @@ if A_Args.Length >= 1 && A_Args[1] = "--lottest" {
     SayL((!InStr(seq, "btn_undo") ? "PASS " : "FAIL ") "the healthy screen was NOT undone (presses: " (seq = "" ? "none" : seq) ")")
     SayL((held ? "PASS " : "FAIL ") "the run HELD when the screens sat on different lots (at t=" held "ms)")
     SayL((RS.blind ? "PASS " : "FAIL ") "it is showing the red held banner, waiting for F10")
+    ; ⚠ And it must never become a trap: resume, and the second disagreement turns the lot
+    ; check OFF instead of holding again (bad boxes are commoner than genuine mismatches).
+    PauseRun()                                   ; the F10 a person would press
+    t1 := A_TickCount, reheld := false
+    while A_TickCount - t1 < 9000 {
+        TickBoth()
+        if RS.paused {
+            reheld := true
+            break
+        }
+        Sleep 100
+    }
+    SayL((!reheld ? "PASS " : "FAIL ") "after F10 it did NOT hold again (it must not be a trap)")
+    SayL((RS.lotWatchOff ? "PASS " : "FAIL ") "the lot check turned itself off and said so, leaving the rest running")
     ExitApp
 }
 ; ── --blindtest: one screen goes unreadable mid-lot — the clerk must PAUSE, not act ──────
@@ -478,6 +492,7 @@ LoadIni() {
     CFG.fwSecs     := Integer(IniRead(INI, "settings", "fwSecs", 15))
     CFG.sellSecs   := Integer(IniRead(INI, "settings", "sellSecs", 20))
     CFG.passNoBids := IniRead(INI, "settings", "passNoBids", "1") = "1"
+    CFG.lotWatch   := IniRead(INI, "settings", "lotWatch", "1") = "1"
     CFG.pollMs     := Integer(IniRead(INI, "settings", "pollMs", 250))
     if !PROFILES.Has(CFG.profile)
         CFG.profile := "saleroom"
@@ -503,6 +518,7 @@ SaveIni() {
     IniWrite CFG.fwSecs, INI, "settings", "fwSecs"
     IniWrite CFG.sellSecs, INI, "settings", "sellSecs"
     IniWrite (CFG.passNoBids ? "1" : "0"), INI, "settings", "passNoBids"
+    IniWrite (CFG.lotWatch ? "1" : "0"), INI, "settings", "lotWatch"
     IniWrite CFG.pollMs, INI, "settings", "pollMs"
     for name, m in CAL {
         for key, v in m {
@@ -554,7 +570,7 @@ BuildMainGui() {
     ; ⚠ EVERY control variable assigned in here must be in this list, or the assignment
     ; quietly makes a LOCAL copy and the real global stays 0 (M_MODE/M_ONE were missed
     ; → "won't open", Integer has no property Value, 2026-08-21 16:22).
-    global MAIN, M_STATUS, M_PROF, M_FW, M_SELL, M_PASS, M_CAL, M_MODE, M_ONE, M_EXACT
+    global MAIN, M_STATUS, M_PROF, M_FW, M_SELL, M_PASS, M_CAL, M_MODE, M_ONE, M_EXACT, M_LOT
     MAIN := Gui("+AlwaysOnTop", "Auto Clerk")
     MAIN.SetFont("s10", "Segoe UI")
     MAIN.Add("Text", "w560", "Works whatever clerking screen is on the monitor — the trainers now, the real pages later. "
@@ -587,6 +603,9 @@ BuildMainGui() {
     M_SELL := MAIN.Add("Edit", "x+4 w50 Number", CFG.sellSecs)
     MAIN.Add("Text", "x+4 w230", "more seconds with no new bid, then Next")
     M_PASS := MAIN.Add("CheckBox", "xm y+8 w560 Checked" (CFG.passNoBids ? 1 : 0), "A lot that gets NO bids at all is Passed after the same time (otherwise it waits for you)")
+    ; ⚠ Off is a legitimate setting, not a failure: a lot number that MOVES about the screen
+    ; cannot be boxed at all (Jordan, 2026-08-24 — the Vectis lot number has no fixed spot).
+    M_LOT := MAIN.Add("CheckBox", "xm y+4 w560 Checked" (CFG.lotWatch ? 1 : 0), "Watch the lot number on each screen (needs a LOT NUMBER box on both — untick it if the lot number moves about)")
     MAIN.Add("Text", "xm y+4 w560 c808080", "Real sale = 15 / 20. For a quick practice run try 6 / 8.")
 
     M_STATUS := MAIN.Add("Text", "xm y+12 w560 h40", "")
@@ -625,7 +644,9 @@ RefreshMain() {
         txt .= miss.Length ? "  ⚠ Still needed: " Join(miss, ", ") : "  ✓ Ready to run both."
         if !(CAL["vectis"].Has("reg_vtype") && CAL["saleroom"].Has("reg_sname"))
             txt .= "  (Tie-break off until the two top-row label boxes are set.)"
-        if !(CAL["vectis"].Has("reg_lot") && CAL["saleroom"].Has("reg_lot"))
+        if !CFG.lotWatch
+            txt .= "  (Lot watch switched off.)"
+        else if !(CAL["vectis"].Has("reg_lot") && CAL["saleroom"].Has("reg_lot"))
             txt .= "  (Lot watch off until both lot-number boxes are set.)"
         M_STATUS.Text := txt
         return
@@ -647,6 +668,7 @@ ReadSettingsFromGui() {
     CFG.fwSecs := Max(2, Integer(M_FW.Value || 15))
     CFG.sellSecs := Max(2, Integer(M_SELL.Value || 20))
     CFG.passNoBids := M_PASS.Value = 1
+    CFG.lotWatch := M_LOT.Value = 1
     SaveIni()
 }
 
@@ -802,12 +824,22 @@ TestRead() {
         rows.Push({ key: it.key, r: r, txt: txt, meaning: meaning, pic: pic })
     }
     verdict := ReadBid(CFG.profile)
+    ; Both lot boxes at once — they must agree, and a mismatch here is what holds a run.
+    lotLine := ""
+    if CAL["saleroom"].Has("reg_lot") && CAL["vectis"].Has("reg_lot") {
+        ls := LotToken("saleroom"), lv := LotToken("vectis")
+        lotLine := ls = "" || lv = ""
+            ? "Lot watch: Saleroom [" (ls = "" ? "nothing" : ls) "] · Vectis [" (lv = "" ? "nothing" : lv) "] — one of the lot boxes can't be read."
+            : ls = lv
+                ? "Lot watch: both screens read lot " ls " — they agree, so the run won't be held."
+                : "Lot watch: Saleroom reads " ls " but Vectis reads " lv " — they must MATCH. Either the screens really are on different lots, or a lot box is picking up the wrong text: re-draw it."
+    }
     StopOcr()
-    ShowTestRead(rows, verdict)
+    ShowTestRead(rows, verdict, lotLine)
 }
 
 /** Every box's picture and reading, then the verdict. */
-ShowTestRead(rows, verdict) {
+ShowTestRead(rows, verdict, lotLine := "") {
     NAMES := Map("reg_bid", "CURRENT BID box", "reg_ask", "A — next asking box",
                  "reg_vtype", "Vectis top-row Bid Type (tie check)", "reg_sname", "Saleroom top-row Name (tie check)",
                  "reg_lot", "LOT NUMBER box (lot watch)")
@@ -827,6 +859,12 @@ ShowTestRead(rows, verdict) {
     g.Add("Text", "w620 y+14", "Verdict — the current bid the clerk would act on:   "
         . (verdict.amt >= 0 ? "£" verdict.amt : "nothing — no bid showing"))
     g.SetFont("s10 Norm")
+    if lotLine != "" {
+        agree := InStr(lotLine, "they agree")
+        g.SetFont(agree ? "s10 Norm" : "s10 Bold cRed")
+        g.Add("Text", "w620 y+6", (agree ? "✓ " : "⚠ ") lotLine)
+        g.SetFont("s10 Norm")
+    }
     if CFG.profile = "saleroom" && !CAL["saleroom"].Has("reg_ask") {
         g.SetFont("s10 Bold cRed")
         g.Add("Text", "w620 y+6", "⚠ The A (next asking) box is NOT set — a lone single-digit bid (£5–£9) reads as nothing until it is. Use 'Set just one'.")
@@ -1226,7 +1264,7 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0,
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false,
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
@@ -1481,6 +1519,8 @@ LotToken(nm) {
  *  lot-number boxes are calibrated. */
 WatchLots(both) {
     global RS
+    if RS.lotWatchOff || !CFG.lotWatch
+        return
     RS.lotTick++
     if Mod(RS.lotTick, LOT_EVERY_N) != 0
         return
@@ -1508,10 +1548,31 @@ WatchLots(both) {
         }
         if ls != "" && lv != "" && ls != lv {
             RS.mismatchN++
-            if RS.mismatchN >= LOT_MISMATCH_HOLD
-                HoldRun("⚠ THE SCREENS ARE ON DIFFERENT LOTS — Saleroom " ls " · Vectis " lv,
-                        "Nothing is being pressed. Put them on the same lot, then F10.",
-                        "⚠ DIFFERENT LOTS — Saleroom " ls " · Vectis " lv ". HELD — nothing will be pressed until F10.")
+            if RS.mismatchN >= LOT_MISMATCH_HOLD {
+                RS.mismatchN := 0
+                RS.lotHolds++
+                ; ⚠ ONE loud warning, never a trap. Holding again the moment you resume
+                ; makes the clerk useless, and the commonest cause of a "mismatch" is not
+                ; two platforms out of step at all — it is a lot box picking up the wrong
+                ; text (Jordan, 2026-08-24: boxes reading "109035" and "1"). So the second
+                ; time, the lot check switches itself off and says so, and the run carries
+                ; on with everything else intact.
+                if RS.lotHolds >= 2 {
+                    RS.lotWatchOff := true
+                    WriteLog("⚠ LOT CHECK TURNED OFF for this run — it has held twice on Saleroom " ls " vs Vectis " lv ". "
+                        . "Those rarely look like lot numbers, so the boxes are probably picking up the wrong text: "
+                        . "stop, press 🔍 Test read on each screen and re-draw the LOT NUMBER box. "
+                        . "Everything else carries on as normal.")
+                    SetStatus("⚠ Lot check off — the two lot boxes disagree (" ls " vs " lv "). Everything else is running.",
+                              "Re-draw the LOT NUMBER boxes when you get a moment — Test read shows what they see.")
+                } else {
+                    HoldRun("⚠ THE LOT BOXES DISAGREE — Saleroom " ls " · Vectis " lv,
+                            "Either the screens really are on different lots, or a lot box is reading the wrong thing. F10 carries on regardless.",
+                            "⚠ LOT BOXES DISAGREE — Saleroom " ls " · Vectis " lv ". HELD. Either the screens are on different lots, "
+                            . "or a lot box is picking up the wrong text (check with Test read). F10 to carry on — if it happens again "
+                            . "the lot check switches itself off rather than holding the run.")
+                }
+            }
         } else {
             RS.mismatchN := 0
         }
