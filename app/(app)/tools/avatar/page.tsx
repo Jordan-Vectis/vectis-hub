@@ -23,12 +23,14 @@ type LotReading = {
 type FeedEventConfig = { enabled: boolean; template: string }
 
 const FEED_EVENTS = [
-  { id: "new_lot",      label: "New lot",        defaultOn: true,  defaultTemplate: "Now, lot {lot}.",                    hints: "{lot}" },
-  { id: "bid",          label: "Bid placed",     defaultOn: false, defaultTemplate: "At {amount}. Can I get {asking}?",  hints: "{lot} {amount} {asking} {platform}" },
-  { id: "fair_warning", label: "Fair warning",   defaultOn: true,  defaultTemplate: "Fair warning on lot {lot}.",         hints: "{lot}" },
-  { id: "lot_sold",     label: "Lot sold",       defaultOn: true,  defaultTemplate: "Sold at {hammer}.",                 hints: "{lot} {hammer}" },
-  { id: "lot_passed",   label: "Lot passed",     defaultOn: false, defaultTemplate: "Lot {lot} is passed.",              hints: "{lot}" },
-  { id: "paused",       label: "Auction paused", defaultOn: false, defaultTemplate: "The auction is briefly paused.",    hints: "" },
+  { id: "new_lot",       label: "New lot",         defaultOn: true,  defaultTemplate: "Now, lot {lot}.",                    hints: "{lot} {title} {asking}" },
+  { id: "bid",           label: "Bid placed",      defaultOn: false, defaultTemplate: "At {amount}. Can I get {asking}?",  hints: "{lot} {amount} {asking} {platform}" },
+  { id: "asking_change", label: "Asking changed",  defaultOn: false, defaultTemplate: "Can I get {asking}?",               hints: "{lot} {asking}" },
+  { id: "fair_warning",  label: "Fair warning",    defaultOn: true,  defaultTemplate: "Fair warning on lot {lot}.",         hints: "{lot}" },
+  { id: "lot_sold",      label: "Lot sold",        defaultOn: true,  defaultTemplate: "Sold at {hammer}.",                 hints: "{lot} {hammer}" },
+  { id: "lot_passed",    label: "Lot passed",      defaultOn: false, defaultTemplate: "Lot {lot} is passed.",              hints: "{lot}" },
+  { id: "bid_undone",    label: "Bid undone",      defaultOn: false, defaultTemplate: "That bid is withdrawn.",            hints: "{lot} {amount}" },
+  { id: "paused",        label: "Auction paused",  defaultOn: false, defaultTemplate: "The auction is briefly paused.",    hints: "" },
 ] as const
 
 function buildDefaultFeedCfg(): Record<string, FeedEventConfig> {
@@ -38,7 +40,12 @@ function buildDefaultFeedCfg(): Record<string, FeedEventConfig> {
 }
 
 function fillFeedTemplate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "")
+  // An empty variable must not leave "Sold at ." artefacts — tidy the gaps it leaves behind
+  return template
+    .replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,!?])/g, "$1")
+    .trim()
 }
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -91,25 +98,28 @@ export default function AvatarPage() {
   // Live Feed state
   const [feedRunning,    setFeedRunning]   = useState(false)
   const [feedConnState,  setFeedConnState] = useState<"idle" | "connecting" | "open" | "error" | "closed">("idle")
-  const [feedAuctionId,  setFeedAuctionId] = useState<string>(() => {
-    if (typeof window === "undefined") return ""
-    return localStorage.getItem("auction_monitor_id") ?? ""
-  })
-  const [feedEventCfg, setFeedEventCfg] = useState<Record<string, FeedEventConfig>>(() => {
-    if (typeof window === "undefined") return buildDefaultFeedCfg()
+  const [feedAuctionId, setFeedAuctionId] = useState("")
+  const [feedEventCfg,  setFeedEventCfg]  = useState<Record<string, FeedEventConfig>>(buildDefaultFeedCfg)
+
+  // Load persisted feed settings after mount — reading localStorage in the initializers
+  // makes the server HTML disagree with the client render and trips hydration
+  useEffect(() => {
+    setFeedAuctionId(localStorage.getItem("auction_monitor_id") ?? "")
     try {
       const raw    = localStorage.getItem("avatar_feed_config")
       const parsed = raw ? JSON.parse(raw) : null
-      const out: Record<string, FeedEventConfig> = {}
-      for (const e of FEED_EVENTS) {
-        out[e.id] = {
-          enabled:  parsed?.[e.id]?.enabled  ?? e.defaultOn,
-          template: parsed?.[e.id]?.template ?? e.defaultTemplate,
+      if (parsed) {
+        const out: Record<string, FeedEventConfig> = {}
+        for (const e of FEED_EVENTS) {
+          out[e.id] = {
+            enabled:  parsed?.[e.id]?.enabled  ?? e.defaultOn,
+            template: parsed?.[e.id]?.template ?? e.defaultTemplate,
+          }
         }
+        setFeedEventCfg(out)
       }
-      return out
-    } catch { return buildDefaultFeedCfg() }
-  })
+    } catch {}
+  }, [])
   const [feedShowCfg,    setFeedShowCfg]   = useState(false)
   const [feedCurrentLot, setFeedCurrentLot] = useState<string | null>(null)
 
@@ -118,10 +128,24 @@ export default function AvatarPage() {
   const feedShouldReconnRef  = useRef(false)
   const feedReconnTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedCurrentLotNumRef = useRef<string | null>(null)
+  const feedCurrentLotIdRef  = useRef<string | null>(null)
+  const feedLotNumByIdRef    = useRef<Record<string, string>>({})
   const feedCurrentHammerRef = useRef<number | null>(null)
+  const feedLastBidRef       = useRef<number | null>(null)
+  const feedSoldSpokenRef    = useRef<Set<string>>(new Set())
   const feedFairWarningRef   = useRef(false)
   const feedPausedRef        = useRef(false)
   const feedEventCfgRef      = useRef(feedEventCfg)
+
+  // Speech queue — feed events wait their turn instead of being dropped while the avatar talks
+  const speakQueueRef     = useRef<{ kind: string; text: string }[]>([])
+  const speakBusyRef      = useRef(false)
+  const speakSeqRef       = useRef(0)
+  const speakStartedAtRef = useRef(0)
+  const didChannelRef     = useRef(false)
+  const connGenRef        = useRef(0)
+  const speakTextDirectRef = useRef<(text: string) => void>(() => {})
+  const finishSpeakingRef  = useRef<() => void>(() => {})
 
   // Keep refs in sync with state
   useEffect(() => { statusRef.current = status }, [status])
@@ -148,9 +172,14 @@ export default function AvatarPage() {
   // ── Avatar connection ────────────────────────────────────────────────────────
 
   const cleanup = useCallback(async (silent = false) => {
+    connGenRef.current++          // abort any in-flight connect()
+    speakSeqRef.current++         // invalidate any pending speak fallback timer
     if (speakTimer.current)     clearTimeout(speakTimer.current)
     if (connectTimer.current)   clearTimeout(connectTimer.current)
     if (keepaliveTimer.current) clearInterval(keepaliveTimer.current)
+    speakQueueRef.current = []
+    speakBusyRef.current  = false
+    didChannelRef.current = false
     if (streamRef.current) {
       const { id, session_id } = streamRef.current
       if (!silent) {
@@ -163,7 +192,7 @@ export default function AvatarPage() {
       streamDataRef.current = null
     }
     if (pcRef.current) {
-      pcRef.current.ontrack = pcRef.current.onicecandidate =
+      pcRef.current.ontrack = pcRef.current.onicecandidate = pcRef.current.ondatachannel =
         pcRef.current.oniceconnectionstatechange = pcRef.current.onconnectionstatechange = null
       pcRef.current.close()
       pcRef.current = null
@@ -171,7 +200,13 @@ export default function AvatarPage() {
     if (videoRef.current) videoRef.current.srcObject = null
   }, [])
 
-  useEffect(() => () => { cleanup(true) }, [cleanup])
+  useEffect(() => () => {
+    cleanup(true)
+    // Screen-watch teardown (refs only — no setState on an unmounted component)
+    if (watchIntervalRef.current) clearInterval(watchIntervalRef.current)
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop())
+    screenStreamRef.current = null
+  }, [cleanup])
 
   const markConnected = useCallback(() => {
     if (connectTimer.current) clearTimeout(connectTimer.current)
@@ -190,6 +225,11 @@ export default function AvatarPage() {
 
   const connect = useCallback(async (presenterId: string) => {
     await cleanup(true)
+    // Generation guard — Cancel / presenter-switch / a second Connect runs cleanup(),
+    // which bumps the generation; this in-flight connect must then abandon, not
+    // resurrect streamRef with a session the user already walked away from
+    const gen = ++connGenRef.current
+    const stale = () => connGenRef.current !== gen
     setStatus("connecting")
     setError(null)
     connectTimer.current = setTimeout(() => {
@@ -207,6 +247,14 @@ export default function AvatarPage() {
       }
       const data = await createRes.json()
       const { id, session_id, offer } = data
+      if (stale()) {
+        // Tell D-ID to drop the session we no longer want
+        fetch("/api/avatar", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", id, session_id }),
+        }).catch(() => {})
+        return
+      }
 
       // Normalise ICE servers — D-ID sometimes returns `url` (string) instead of `urls` (array)
       const rawIce: any[] = data.ice_servers ?? data.iceServers ?? []
@@ -220,6 +268,22 @@ export default function AvatarPage() {
 
       const pc = new RTCPeerConnection({ iceServers })
       pcRef.current = pc
+
+      // D-ID reports clip playback over a data channel — "stream/done" ends the speaking
+      // turn precisely, so the word-count timer below is only a fallback
+      pc.ondatachannel = (event) => {
+        event.channel.onmessage = (msg) => {
+          const data = typeof msg.data === "string" ? msg.data : ""
+          didChannelRef.current = true
+          // Anchor the turn to actual playback: started re-stamps the clock, and a done
+          // landing right after a start belongs to the PREVIOUS clip — acting on it
+          // would cut the new clip short
+          if (data.includes("stream/started") && speakBusyRef.current)
+            speakStartedAtRef.current = Date.now()
+          if (data.includes("stream/done") && speakBusyRef.current &&
+              Date.now() - speakStartedAtRef.current > 1_500) finishSpeakingRef.current()
+        }
+      }
 
       pc.ontrack = (event) => {
         if (videoRef.current && event.streams[0]) {
@@ -258,8 +322,10 @@ export default function AvatarPage() {
       }
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer))
+      if (stale()) { pc.close(); return }
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
+      if (stale()) { pc.close(); return }
       const sdpRes = await fetch("/api/avatar", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sdp", id, session_id, answer: { type: answer.type, sdp: answer.sdp } }),
@@ -267,6 +333,7 @@ export default function AvatarPage() {
       if (!sdpRes.ok) throw new Error("SDP exchange failed")
 
     } catch (err) {
+      if (stale()) return
       if (connectTimer.current) clearTimeout(connectTimer.current)
       setStatus("error"); setError(err instanceof Error ? err.message : "Connection failed"); cleanup(true)
     }
@@ -283,27 +350,79 @@ export default function AvatarPage() {
 
   // ── Speaking ─────────────────────────────────────────────────────────────────
 
+  // Ends the current speaking turn and speaks the next queued phrase, if any
+  const finishSpeaking = useCallback(() => {
+    if (speakTimer.current) { clearTimeout(speakTimer.current); speakTimer.current = null }
+    speakBusyRef.current = false
+    if (statusRef.current === "speaking") {
+      statusRef.current = "connected"
+      setStatus("connected")
+    }
+    const next = speakQueueRef.current.shift()
+    if (next) speakTextDirectRef.current(next.text)
+  }, [])
+  useEffect(() => { finishSpeakingRef.current = finishSpeaking }, [finishSpeaking])
+
   const speakTextDirect = useCallback(async (text: string) => {
     const sd = streamDataRef.current
-    if (!sd || statusRef.current !== "connected") return
+    if (!sd || speakBusyRef.current) return
+    if (statusRef.current !== "connected" && statusRef.current !== "speaking") return
+    speakBusyRef.current      = true
+    speakStartedAtRef.current = Date.now()
+    statusRef.current         = "speaking"
     setStatus("speaking")
+    const seq = ++speakSeqRef.current
     try {
       const res = await fetch("/api/avatar", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "speak", id: sd.id, session_id: sd.session_id, text }),
       })
+      // The session may have been torn down / replaced while the request was in flight —
+      // installing a timer now would prematurely end the NEXT session's first phrase
+      if (streamDataRef.current !== sd || speakSeqRef.current !== seq) return
       if (!res.ok) {
         const { error: msg } = await res.json().catch(() => ({}))
         throw new Error(msg ?? "Speak failed")
       }
       setLastSpoke(new Date().toLocaleTimeString())
-      const words = text.split(/\s+/).length
+      // Fallback end-of-turn timer. When the D-ID data channel is delivering stream/done
+      // events it ends the turn first, so keep this generous to avoid cutting speech off.
+      // Amounts like "£1,250" are one token but ~7 spoken words, so weight them.
+      const words = text.split(/\s+/).reduce((n, w) => n + (/\d/.test(w) ? 6 : 1), 0)
+      if (speakTimer.current) clearTimeout(speakTimer.current)
       speakTimer.current = setTimeout(
-        () => setStatus("connected"),
-        Math.ceil((words / 140) * 60_000) + 2_000,
+        () => { if (speakSeqRef.current === seq) finishSpeakingRef.current() },
+        Math.max(4_000, Math.ceil((words / 140) * 60_000)) + (didChannelRef.current ? 10_000 : 3_000),
       )
     } catch (err) {
+      if (streamDataRef.current !== sd || speakSeqRef.current !== seq) return
+      speakBusyRef.current  = false
+      speakQueueRef.current = []
       setStatus("error"); setError(err instanceof Error ? err.message : "Failed to speak")
+    }
+  }, [])
+  useEffect(() => { speakTextDirectRef.current = speakTextDirect }, [speakTextDirect])
+
+  // Queue a feed phrase. Coalesces so the avatar never reads out stale auction state:
+  // only the newest bid/asking amount matters, and a lot change voids anything queued
+  // about the previous lot's bidding.
+  const enqueueFeedSpeak = useCallback((kind: string, text: string) => {
+    const t = text.trim()
+    if (!t) return
+    if (statusRef.current !== "connected" && statusRef.current !== "speaking") return
+    let q = speakQueueRef.current
+    if (kind === "bid" || kind === "asking_change")
+      q = q.filter(x => x.kind !== "bid" && x.kind !== "asking_change")
+    if (kind === "new_lot")
+      q = q.filter(x => !["bid", "asking_change", "fair_warning", "bid_undone"].includes(x.kind))
+    if (kind === "autoread")
+      q = q.filter(x => x.kind !== "autoread")
+    q.push({ kind, text: t })
+    if (q.length > 6) q = q.slice(-6)
+    speakQueueRef.current = q
+    if (!speakBusyRef.current) {
+      const next = speakQueueRef.current.shift()
+      if (next) speakTextDirectRef.current(next.text)
     }
   }, [])
 
@@ -376,9 +495,9 @@ export default function AvatarPage() {
         if (data.askingBid)  parts.push(`Asking bid ${data.askingBid}.`)
         if (data.currentBid) parts.push(`Current bid ${data.currentBid}.`)
 
-        if (streamDataRef.current && statusRef.current === "connected") {
-          speakTextDirect(parts.join(" "))
-        }
+        // Queue rather than speak directly — a lot spotted while the avatar is
+        // mid-sentence must not be silently lost
+        if (streamDataRef.current) enqueueFeedSpeak("autoread", parts.join(" "))
       }
     } catch (err) {
       setReadError(err instanceof Error ? err.message : "Capture failed")
@@ -386,7 +505,7 @@ export default function AvatarPage() {
     } finally {
       isReadingRef.current = false
     }
-  }, [speakTextDirect])
+  }, [enqueueFeedSpeak])
 
   const doCaptureRef = useRef(doCapture)
   useEffect(() => { doCaptureRef.current = doCapture }, [doCapture])
@@ -439,17 +558,32 @@ export default function AvatarPage() {
   // ── Live Feed WebSocket ──────────────────────────────────────────────────────
 
   useEffect(() => {
+    // Detach handlers BEFORE closing — a bare close() still fires our onclose, which
+    // paints "Reconnecting…" on a deliberate disconnect and can resurrect the socket
+    const dropSocket = () => {
+      const ws = feedWsRef.current
+      if (ws) {
+        ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null
+        try { ws.close() } catch {}
+      }
+      feedWsRef.current = null
+    }
+
     if (!feedRunning) {
       feedShouldReconnRef.current = false
-      try { feedWsRef.current?.close() } catch {}
-      feedWsRef.current = null
+      dropSocket()
       if (feedReconnTimerRef.current) clearTimeout(feedReconnTimerRef.current)
       setFeedConnState("idle")
       setFeedCurrentLot(null)
       feedCurrentLotNumRef.current = null
+      feedCurrentLotIdRef.current  = null
+      feedLotNumByIdRef.current    = {}
       feedCurrentHammerRef.current = null
+      feedLastBidRef.current       = null
+      feedSoldSpokenRef.current    = new Set()
       feedFairWarningRef.current   = false
       feedPausedRef.current        = false
+      speakQueueRef.current        = []
       return
     }
 
@@ -459,7 +593,11 @@ export default function AvatarPage() {
     feedShouldReconnRef.current  = true
     localStorage.setItem("auction_monitor_id", id)
     feedCurrentLotNumRef.current = null
+    feedCurrentLotIdRef.current  = null
+    feedLotNumByIdRef.current    = {}
     feedCurrentHammerRef.current = null
+    feedLastBidRef.current       = null
+    feedSoldSpokenRef.current    = new Set()
     feedFairWarningRef.current   = false
     feedPausedRef.current        = false
 
@@ -488,54 +626,146 @@ export default function AvatarPage() {
           const c   = parsed?.content ?? {}
           const cfg = feedEventCfgRef.current
 
-          function trySpeak(text: string) {
-            const t = text.trim()
-            if (t && statusRef.current === "connected") speakTextDirect(t)
-          }
-
-          // ── activeLotChange: announce previous lot outcome then new lot ──────
+          // ── activeLotChange: previous lot outcome (unless already spoken at
+          //    hammer time), then the new lot ────────────────────────────────────
           if (cmd === "activeLotChange") {
-            const prevNum    = feedCurrentLotNumRef.current
-            const prevHammer = feedCurrentHammerRef.current
+            const prevNum = feedCurrentLotNumRef.current
+            const prevKey = feedCurrentLotIdRef.current ?? prevNum
 
-            if (prevNum && c.previous_lot_type) {
-              if (/sold/i.test(String(c.previous_lot_type))) {
-                if (cfg.lot_sold?.enabled)
-                  trySpeak(fillFeedTemplate(cfg.lot_sold.template, {
+            // update_previous_lot marks a genuine advance — without it the message is a
+            // reload/jump and previous_lot_type must not be re-announced
+            if (prevNum && prevKey && c.previous_lot_type && (c.update_previous_lot ?? true)) {
+              const type = String(c.previous_lot_type)
+              if (/sold/i.test(type)) {
+                const alreadySold = [...feedSoldSpokenRef.current].some(k => k.startsWith(`sold:${prevKey}:`))
+                if (!alreadySold && cfg.lot_sold?.enabled) {
+                  const hammer = feedCurrentHammerRef.current ?? feedLastBidRef.current
+                  feedSoldSpokenRef.current.add(`sold:${prevKey}:${hammer ?? "?"}`)
+                  enqueueFeedSpeak("lot_sold", fillFeedTemplate(cfg.lot_sold.template, {
                     lot:    prevNum,
-                    hammer: prevHammer != null ? `£${prevHammer.toLocaleString()}` : "",
+                    hammer: hammer != null ? `£${hammer.toLocaleString()}` : "",
                   }))
-              } else if (/pass|unsold|withdrawn/i.test(String(c.previous_lot_type))) {
-                if (cfg.lot_passed?.enabled)
-                  trySpeak(fillFeedTemplate(cfg.lot_passed.template, { lot: prevNum }))
+                }
+              } else if (/pass|unsold|withdrawn/i.test(type)) {
+                if (!feedSoldSpokenRef.current.has(`pass:${prevKey}`) && cfg.lot_passed?.enabled) {
+                  feedSoldSpokenRef.current.add(`pass:${prevKey}`)
+                  enqueueFeedSpeak("lot_passed", fillFeedTemplate(cfg.lot_passed.template, { lot: prevNum }))
+                }
               }
             }
 
             if (c.lot_number) {
               const newLot = String(c.lot_number)
+              const asking = Number(c.asking_price ?? c.asking_bid ?? c.asking ?? 0)
               feedCurrentLotNumRef.current = newLot
+              feedCurrentLotIdRef.current  = c.lot_id != null ? String(c.lot_id) : null
+              if (c.lot_id != null) feedLotNumByIdRef.current[String(c.lot_id)] = newLot
               feedCurrentHammerRef.current = null
+              feedLastBidRef.current       = null
               feedFairWarningRef.current   = false
               setFeedCurrentLot(newLot)
               if (cfg.new_lot?.enabled)
-                trySpeak(fillFeedTemplate(cfg.new_lot.template, { lot: newLot }))
+                enqueueFeedSpeak("new_lot", fillFeedTemplate(cfg.new_lot.template, {
+                  lot:    newLot,
+                  title:  String(c.lot_title ?? c.title ?? ""),
+                  asking: asking > 0 ? `£${asking.toLocaleString()}` : "",
+                }))
             }
           }
 
-          // ── lotInformationUpdate: track hammer price ──────────────────────────
-          if (cmd === "lotInformationUpdate" && c.hammer_price != null) {
-            const hp = parseFloat(String(c.hammer_price))
-            if (!isNaN(hp)) feedCurrentHammerRef.current = hp
+          // ── lotInformationUpdate: hammer price, and "Sold" fires AT hammer
+          //    time (twice per lot — debounced), well before the next lot opens.
+          //    Late updates carry the PREVIOUS lot's lot_id — never attribute
+          //    those to the current lot ────────────────────────────────────────
+          if (cmd === "lotInformationUpdate") {
+            const evLotId  = c.lot_id != null ? String(c.lot_id) : null
+            const isCurrent = evLotId == null || feedCurrentLotIdRef.current == null ||
+                              evLotId === feedCurrentLotIdRef.current
+            let evHammer: number | null = null
+            if (c.hammer_price != null) {
+              const hp = parseFloat(String(c.hammer_price))
+              if (!isNaN(hp)) {
+                evHammer = hp
+                if (isCurrent) feedCurrentHammerRef.current = hp
+              }
+            }
+            const keyName  = c.key_name  ?? c.keyName
+            const keyValue = c.key_value ?? c.keyValue
+            if (keyName === "Sold" && (keyValue === true || keyValue === "true" || keyValue === 1)) {
+              const lotNum = (evLotId ? feedLotNumByIdRef.current[evLotId] : null) ??
+                             (isCurrent ? feedCurrentLotNumRef.current : null)
+              const key    = evLotId ?? lotNum ?? "?"
+              const hammer = evHammer ??
+                (isCurrent ? feedCurrentHammerRef.current ?? feedLastBidRef.current : null)
+              const soldKey = `sold:${key}:${hammer ?? "?"}`
+              if (!feedSoldSpokenRef.current.has(soldKey)) {
+                feedSoldSpokenRef.current.add(soldKey)
+                if (cfg.lot_sold?.enabled)
+                  enqueueFeedSpeak("lot_sold", fillFeedTemplate(cfg.lot_sold.template, {
+                    lot:    lotNum ?? "",
+                    hammer: hammer != null ? `£${hammer.toLocaleString()}` : "",
+                  }))
+              }
+            }
           }
 
           // ── liveBidEvent ──────────────────────────────────────────────────────
-          if (cmd === "liveBidEvent" && cfg.bid?.enabled) {
-            trySpeak(fillFeedTemplate(cfg.bid.template, {
-              lot:      feedCurrentLotNumRef.current ?? String(c.lot_id ?? ""),
-              amount:   c.amount  != null ? `£${Number(c.amount).toLocaleString()}`  : "",
-              asking:   c.asking  != null ? `£${Number(c.asking).toLocaleString()}`  : "",
-              platform: String(c.platform ?? ""),
-            }))
+          if (cmd === "liveBidEvent") {
+            const amount = Number(c.amount ?? 0)
+            if (amount > 0) feedLastBidRef.current = amount
+            if (c.lot_id != null) {
+              feedCurrentLotIdRef.current = String(c.lot_id)
+              if (c.lot_number) feedLotNumByIdRef.current[String(c.lot_id)] = String(c.lot_number)
+            }
+            if (c.lot_number && !feedCurrentLotNumRef.current) {
+              feedCurrentLotNumRef.current = String(c.lot_number)
+              setFeedCurrentLot(String(c.lot_number))
+            }
+            if (cfg.bid?.enabled)
+              enqueueFeedSpeak("bid", fillFeedTemplate(cfg.bid.template, {
+                lot:      String(c.lot_number ?? feedCurrentLotNumRef.current ?? c.lot_id ?? ""),
+                amount:   c.amount != null ? `£${Number(c.amount).toLocaleString()}` : "",
+                asking:   c.asking != null ? `£${Number(c.asking).toLocaleString()}` : "",
+                platform: String(c.platform ?? ""),
+              }))
+          }
+
+          // ── liveCommissionBidEvent: only the EXECUTED amount is public —
+          //    c.amount is the bidder's confidential maximum, never speak it ─────
+          if (cmd === "liveCommissionBidEvent") {
+            const amount = Number(c.executed_amount ?? 0)
+            if (amount > 0) {
+              feedLastBidRef.current = amount
+              if (cfg.bid?.enabled)
+                enqueueFeedSpeak("bid", fillFeedTemplate(cfg.bid.template, {
+                  lot:      String(c.lot_number ?? feedCurrentLotNumRef.current ?? c.lot_id ?? ""),
+                  amount:   `£${amount.toLocaleString()}`,
+                  asking:   "",
+                  platform: "commission",
+                }))
+            }
+          }
+
+          // ── setLiveAskingPrice ────────────────────────────────────────────────
+          if (cmd === "setLiveAskingPrice") {
+            const asking = Number(c.asking_bid ?? 0)
+            if (asking > 0 && cfg.asking_change?.enabled)
+              enqueueFeedSpeak("asking_change", fillFeedTemplate(cfg.asking_change.template, {
+                lot:    String(c.lot_number ?? feedCurrentLotNumRef.current ?? ""),
+                asking: `£${asking.toLocaleString()}`,
+              }))
+          }
+
+          // ── undoLiveBid: roll the last-bid fallback back so a withdrawn
+          //    amount can never be announced as the hammer price ─────────────────
+          if (cmd === "undoLiveBid") {
+            if (c.amount != null && feedLastBidRef.current === Number(c.amount))
+              feedLastBidRef.current = null
+            if (cfg.bid_undone?.enabled)
+              enqueueFeedSpeak("bid_undone", fillFeedTemplate(cfg.bid_undone.template, {
+                lot:    feedCurrentLotNumRef.current ?? String(c.lot_id ?? ""),
+                amount: c.amount != null ? `£${Number(c.amount).toLocaleString()}` : "",
+              }))
           }
 
           // ── getFairWarningStatus: fair warning + paused ───────────────────────
@@ -543,7 +773,7 @@ export default function AvatarPage() {
             if (c.fair_warning && !feedFairWarningRef.current) {
               feedFairWarningRef.current = true
               if (cfg.fair_warning?.enabled)
-                trySpeak(fillFeedTemplate(cfg.fair_warning.template, {
+                enqueueFeedSpeak("fair_warning", fillFeedTemplate(cfg.fair_warning.template, {
                   lot: feedCurrentLotNumRef.current ?? "",
                 }))
             } else if (!c.fair_warning) {
@@ -553,8 +783,21 @@ export default function AvatarPage() {
             if (c.paused && !feedPausedRef.current) {
               feedPausedRef.current = true
               if (cfg.paused?.enabled)
-                trySpeak(fillFeedTemplate(cfg.paused.template, {}))
+                enqueueFeedSpeak("paused", fillFeedTemplate(cfg.paused.template, {}))
             } else if (!c.paused) {
+              feedPausedRef.current = false
+            }
+          }
+
+          // ── sensorNetworkEvent: mirrors Auto Clerk's pause/resume handling —
+          //    getFairWarningStatus.paused above is the confirmed signal; this
+          //    branch is belt-and-braces ──────────────────────────────────────────
+          if (cmd === "sensorNetworkEvent") {
+            if (c.action === "pause" && !feedPausedRef.current) {
+              feedPausedRef.current = true
+              if (cfg.paused?.enabled)
+                enqueueFeedSpeak("paused", fillFeedTemplate(cfg.paused.template, {}))
+            } else if (c.action === "resume") {
               feedPausedRef.current = false
             }
           }
@@ -570,12 +813,11 @@ export default function AvatarPage() {
 
     return () => {
       feedShouldReconnRef.current = false
-      try { feedWsRef.current?.close() } catch {}
-      feedWsRef.current = null
+      dropSocket()
       if (feedReconnTimerRef.current) clearTimeout(feedReconnTimerRef.current)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedRunning, feedAuctionId, speakTextDirect])
+  }, [feedRunning, feedAuctionId, enqueueFeedSpeak])
 
   const isLive = status === "connected" || status === "speaking"
 
@@ -805,7 +1047,7 @@ export default function AvatarPage() {
               type="text"
               value={feedAuctionId}
               onChange={e => setFeedAuctionId(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !feedRunning && feedAuctionId.trim()) setFeedRunning(true) }}
+              onKeyDown={e => { if (e.key === "Enter" && !feedRunning && feedAuctionId.trim() && isLive) setFeedRunning(true) }}
               placeholder="Auction ID e.g. 1386"
               disabled={feedRunning}
               className="w-full mb-2 text-xs bg-gray-100 dark:bg-[#111113] text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 font-mono focus:border-[#2AB4A6] focus:outline-none disabled:opacity-50"
