@@ -160,6 +160,15 @@ screens skinned to match the real clerking software; it is **not** Auto Clerk sc
 auto-clerk file). Jordan chose this placement knowingly when offered a trainer-free alternative.
 It is a link only — no trainer logic changed, and no further trainer edits are covered by it.
 
+**Second sanctioned exception (Jordan, 2026-08-24, asked for and confirmed against this rule):**
+ten more built-in practice lots (ids 518–527, identical list in BOTH trainer files, so the two
+platforms stay in step), and **simulated starting bids in the Vectis Clerk Trainer ONLY** — on the
+built-in lots, roughly two lots in three open with a commission-style bid on the grey Auto Bid chip
+at a random ladder figure under £100 (`seedStartBid()`, rolled once per lot and stored on it).
+The Saleroom trainer got the lots but NO starting bids, deliberately — the point is the screens
+start uneven so an auto clerk must catch the other platform up. Nothing else in the trainers is
+covered by this.
+
 **If the Auto Clerk needs a replica screen, COPY the trainer file into a new `public/auto-clerk-*.html`
 and change the copy** — exactly how the Scenario 1 rig (`auto-clerk-fake-saleroom.html`) was made from
 the Saleroom replica. A copy may drift from the trainer afterwards; that is accepted, and it is why the

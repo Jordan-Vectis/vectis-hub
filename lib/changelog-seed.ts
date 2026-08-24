@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8e41fc98430fd6fdf137e27eb914cf71a21e9f8d","author":"Jordan Orange","date":"2026-08-24T16:52:10+01:00","subject":"Stress Tester: a results table of what each lot closed at, and an automatic mode"},
   {"sha":"227350c456098d0ec07c2da7350fd442c75f6955","author":"Jordan Orange","date":"2026-08-24T16:36:42+01:00","subject":"Auto Clerk: millisecond timestamps, watch statistics, and a read straight after the hammer"},
   {"sha":"f9f2d0d1cfd4b6a32dbee1e2f277a628d1837fa5","author":"Jack Collings","date":"2026-08-24T16:24:49+01:00","subject":"Refresh changelog seed"},
   {"sha":"357a38e6061ce55f49ecb44522a16156be756a2e","author":"Jack Collings","date":"2026-08-24T16:24:42+01:00","subject":"AI Presenter: make the Live Feed actually keep up with the auction"},

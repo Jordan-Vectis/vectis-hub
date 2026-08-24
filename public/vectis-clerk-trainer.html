@@ -482,7 +482,7 @@ button:disabled{ opacity:.45; cursor:default; }
       <input type="radio" name="src" value="demo" checked>
       <span>
         <span class="mt">Built-in practice lots</span>
-        <span class="md">Ten Dinky pre-war lots. Nothing to load.</span>
+        <span class="md">Twenty Dinky pre-war lots. Nothing to load. Most open with a starting bid already on the book.</span>
       </span>
     </label>
 
@@ -596,6 +596,16 @@ const DEMO_LOTS = [
   {id:515, est:'120-160', e:'🏎️', desc:'Dinky Toys Pre-War 24h (Type 1) 2-Seater Sports Car - rare issue - Green body, black chassis (underside UN-painted)'},
   {id:516, est:'200-300', e:'🎁', desc:'Dinky Toys Pre-War (1938) 24 Series Gift Set - 3 Open Cream and blue chassis - See Photo - Fair condition'},
   {id:517, est:'150-200', e:'🚛', desc:'Dinky Toys Pre-War 25 Series - Set of 6 commercial vehicles - all original - See Photo - Good condition throughout'},
+  {id:518, est:'50-70',   e:'🚚', desc:'Dinky Toys Pre-War 25b Covered Wagon (Type 1 chassis) - Green body, black chassis and hubs with white tyres - Fair See-Photo'},
+  {id:519, est:'70-90',   e:'⛽', desc:'Dinky Toys Pre-War 25d Petrol Tank Wagon "Petrol" - Red body, black chassis and hubs - some original paint loss - Fair'},
+  {id:520, est:'40-60',   e:'🚚', desc:'Dinky Toys Pre-War 25e Tipping Wagon - Maroon body, black chassis and hubs with white tyres - See-Photo - Fair (some fatigue)'},
+  {id:521, est:'90-120',  e:'🚒', desc:'Dinky Toys Pre-War 25h Streamlined Fire Engine - Red body with silver trim, black hubs with white tyres - Good for age'},
+  {id:522, est:'30-50',   e:'🚜', desc:'Dinky Toys Pre-War 22e Farm Tractor - Yellow and blue body - replacement driver - Fair - some over painting'},
+  {id:523, est:'60-80',   e:'✈️', desc:'Dinky Toys Pre-War 60a Imperial Airways Liner - Gold body with blue wing flashes - See-Photo - Fair (fatigue to wings)'},
+  {id:524, est:'100-150', e:'✈️', desc:'Dinky Toys Pre-War 60r Empire Flying Boat "Caledonia" - Silver body with gliding pin hole - Good - in reproduction box'},
+  {id:525, est:'40-60',   e:'🚢', desc:'Dinky Toys Pre-War 51 Series Ships of the British Navy - HMS Nelson and two others - unboxed - Fair to Good'},
+  {id:526, est:'80-110',  e:'🏍️', desc:'Dinky Toys Pre-War 37a Civilian Motor Cyclist - Green with black wheels - scarce casting - Good - minor chips'},
+  {id:527, est:'120-160', e:'🚌', desc:'Dinky Toys Pre-War 29b Streamlined Bus - Two-tone green with open rear window - Good for age - See-Photo'},
 ];
 
 /* ─────────────────────────────────────────
@@ -700,6 +710,8 @@ async function startSetup(){
 
   if(currentSource() === 'demo'){
     initState('Vectis Practice Sale', DEMO_LOTS.map(l => ({...l})));
+    S.demo = true;          // built-in lots → simulated starting bids (this trainer only)
+    seedStartBid();
     $('setup').classList.remove('open');
     hostRoom();
     return;
@@ -1069,6 +1081,7 @@ function nextLot(){
   resetLotState();
   renderAll(); pushState();
   feedback(`Lot ${lot().id} — ${TS.bidders.length ? 'bidders are live' : 'waiting for bids'}`, '');
+  seedStartBid();
 }
 function resetLotState(){
   S.current = 0; S.leader = null; S.log = [];
@@ -1079,6 +1092,30 @@ function resetLotState(){
   S.autos = [];
   renderAutos();
   // Pinned increment survives across lots on purpose — it was pinned explicitly.
+}
+/* Simulated STARTING BIDS — built-in practice lots, THIS trainer only (Jordan,
+   2026-08-24, a sanctioned edit under the freeze rule): roughly two lots in
+   three open with a commission-style bid already on the book at a random figure
+   under £100, so the screens start uneven and an auto clerk must catch the
+   other platform up straight away. Rolled ONCE per lot and stored on it, so
+   jumping about the strip never re-rolls an amount. Shown on the grey Auto Bid
+   chip — a machine bid, not a person in the room. */
+function seedStartBid(){
+  if(!S || !S.demo) return;
+  const l = lot();
+  if(!l || l.outcome || S.log.length) return;
+  if(l.startBid === undefined){
+    if(Math.random() < 0.7){
+      const raw = 5 + Math.random() * 90;   // ladder-friendly figures £5–£90
+      l.startBid = raw < 50 ? Math.max(5, Math.round(raw / 5) * 5)
+                            : Math.min(90, Math.round(raw / 10) * 10);
+    } else {
+      l.startBid = 0;
+    }
+  }
+  if(!l.startBid) return;
+  placeBid({ src:'auto', amount:l.startBid, user:'Starting bid', chip:'auto', key:'auto' });
+  feedback(`Lot ${l.id} opens with a £${fmt(l.startBid)} starting bid on the book`, '');
 }
 function jumpToLot(i){
   if(!S || S.ended || i === S.li) return;
@@ -1091,6 +1128,7 @@ function jumpToLot(i){
   renderAll(); pushState();
   const l = lot();
   feedback(l.outcome ? `Lot ${l.id} — already ${l.outcome}` : `Jumped to Lot ${l.id}`, '');
+  seedStartBid();
 }
 function moveLot(i, dir, ev){
   ev.stopPropagation();
