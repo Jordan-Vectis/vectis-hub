@@ -112,6 +112,7 @@ global RS := 0         ; 0 = idle, object while running
 global BANNER := 0, B_L1 := 0, B_L2 := 0, B_L3 := 0, BANNER_TOP := true
 global OCR_PID := 0
 global SIM := 0        ; --simboth only: a model of the two screens instead of pixels
+global READ_CACHE := Map()   ; box fingerprint → what it read, so an unchanged box costs nothing
 ; ⚠ WHAT YOU DRAW IS WHAT IT READS. This was 90 px each side, from the days when a box was
 ; two hovered corners round "£0" and needed rescuing. Once boxes are DRAWN, padding is
 ; actively harmful: it drags in neighbouring numbers (an estimate, a lot number, the row
@@ -314,6 +315,75 @@ if A_Args.Length >= 1 && A_Args[1] = "--snipetest" {
     SayS((closedAt && closedAt >= tFw + 3400 ? "PASS " : "FAIL ") "the sale did NOT go through at the old price — lot closed at t=" closedAt " (FW at " tFw ", snipe at ~" (tFw + 1500) ")")
     SayS((fwCount >= 2 ? "PASS " : "FAIL ") "Fair Warning was re-issued after the snipe (vectis FW pressed " fwCount "×)")
     SayS((RS.lots = 1 && SIM.s = 0 && SIM.v = 0 ? "PASS " : "FAIL ") "the lot then sold and both screens reset (S=" SIM.s " V=" SIM.v ")")
+    ExitApp
+}
+; ── --emptytest: a FRESH LOT shows an empty bid box. That is "no bid yet", not blindness,
+;    and it must never pause the run (it used to, ten seconds after every lot change). ──
+if A_Args.Length >= 1 && A_Args[1] = "--emptytest" {
+    CFG.mode := "both", CFG.fwSecs := 1, CFG.sellSecs := 1, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    ; Both boxes EMPTY — exactly what a lot with no bids on it looks like.
+    SIM := { s: "", v: "", typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayE(t) => FileAppend(t "`n", "*")
+    t0 := A_TickCount, paused := 0
+    while A_TickCount - t0 < 14000 {
+        TickBoth()
+        if RS.paused && !paused
+            paused := A_TickCount - t0
+        if RS.lots >= 1
+            break
+        Sleep 100
+    }
+    seq := ""
+    for p in SIM.presses
+        seq .= p " "
+    SayE((!paused ? "PASS " : "FAIL ") "an empty box on a fresh lot did NOT pause the run" (paused ? " (paused at t=" paused "ms)" : ""))
+    SayE((InStr(seq, "btn_pass") ? "PASS " : "FAIL ") "the lot with no bids was PASSED as normal (presses: " (seq = "" ? "none" : seq) ")")
+    ExitApp
+}
+; ── --hashtest: is the box fingerprint real on BOTH monitors (negative coordinates
+;    included) and how fast is it? ───────────────────────────────────────────────────
+if A_Args.Length >= 1 && A_Args[1] = "--hashtest" {
+    out := ""
+    for spot in [{x: 300, y: 300, t: "primary monitor"}, {x: -1600, y: 300, t: "left monitor (negative x)"}] {
+        ; A window with a number in it, so there is something real to fingerprint.
+        g := Gui("-Caption +AlwaysOnTop +ToolWindow", "HashProbe")
+        g.BackColor := "FFFFFF"
+        g.SetFont("s24 Bold c000000", "Segoe UI")
+        t := g.Add("Text", "w180", "45")
+        g.Show("NoActivate x" spot.x " y" spot.y " w200 h50")
+        Sleep 350
+        t0 := A_TickCount
+        h1 := BoxHash(spot.x, spot.y, 200, 50)
+        ms := A_TickCount - t0
+        h2 := BoxHash(spot.x, spot.y, 200, 50)          ; nothing changed
+        t.Text := "50"                                   ; the figure moves on
+        Sleep 250
+        h3 := BoxHash(spot.x, spot.y, 200, 50)
+        g.Destroy()
+        out .= spot.t ": " ms " ms per fingerprint`n"
+        out .= "  " (h1 != "0-0" && h1 != "" ? "PASS" : "FAIL") " it read the screen at all (a failed grab hashes to 0-0) — " h1 "`n"
+        out .= "  " (h1 = h2 ? "PASS" : "FAIL") " STABLE while nothing changes (or the watch would never settle)`n"
+        out .= "  " (h1 != h3 ? "PASS" : "FAIL") " CHANGED when 45 became 50 (this is what catches a snipe)`n"
+    }
+    FileAppend out, "*"
     ExitApp
 }
 ; ── --watchtest: the nastiest snipe — the bid lands AFTER the last look has already read
@@ -1215,6 +1285,17 @@ BidBeforeAsking(ask) {
  *  stepped back one increment — £10 asking means the bid is £5. Vectis needs none of
  *  this: its box takes in the words "Current Bid:", and a digit inside a line survives. */
 ReadBid(name) {
+    ; ⚠ Reading the number costs ~200 ms; fingerprinting the box costs under a
+    ; millisecond. So the box is fingerprinted FIRST and the number is only read when the
+    ; pixels have actually changed. That is what makes the loop quick enough to keep up —
+    ; Jordan, 2026-08-24: "the delay between the bid coming through and the display showing
+    ; what the current bid is at". Every tick used to pay for two full reads regardless.
+    fp := SnapRegion(name)
+    if fp != "" && READ_CACHE.Has(name) {
+        c := READ_CACHE[name]
+        if c.fp = fp
+            return { txt: c.txt, amt: c.amt }
+    }
     r := BidRegion(name)
     txt := OcrRead(r.x, r.y, r.w, r.h)
     amt := ParseAmount(txt)
@@ -1229,6 +1310,7 @@ ReadBid(name) {
         }
         txt .= " | asking [" Short(askTxt, 20) "]" (ask > 0 ? " → bid " amt : "")
     }
+    READ_CACHE[name] := { fp: fp, txt: txt, amt: amt }
     return { txt: txt, amt: amt }
 }
 Short(s, n := 40) {
@@ -1304,6 +1386,7 @@ StartRun() {
         return
     }
     RS := NewRunState(both)
+    READ_CACHE.Clear()
     Hotkey "Esc", (*) => StopRun("Esc"), "On"
     WriteLog("── START · " (both ? "BOTH screens in step" : PROFILES[RS.name].title) " · FW after " CFG.fwSecs "s · sell after " CFG.sellSecs "s more · pass no-bid lots: " (CFG.passNoBids ? "yes" : "no"))
     MAIN.Hide()
@@ -1315,7 +1398,7 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false,
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(),
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
@@ -1679,15 +1762,22 @@ ReadSide(nm) {
         WriteLog("read " nm ": [" Short(txt, 60) "] → " (amt < 0 ? "nothing" : "£" amt))
         x.lastRead := txt
     }
-    ; ⚠ Blindness is never bids disappearing: an illegible read NEVER changes the figure.
-    ; It holds the last one and starts the blind clock; at BLIND_PAUSE_MS the clerk stops
-    ; pressing and goes red rather than acting on what it cannot see.
+    ; ⚠ Blindness is never bids disappearing: an illegible read NEVER changes a figure it
+    ; is holding. It keeps the last one and starts the blind clock; at BLIND_PAUSE_MS the
+    ; clerk stops pressing and goes red rather than acting on what it cannot see.
+    ; ⚠⚠ BUT only when there is a bid to protect. A fresh lot shows an EMPTY box — the
+    ; composed read comes back as just "Bid" — and treating that as blindness paused the
+    ; run ten seconds after every lot change (Jordan, 2026-08-24: "randomly paused after
+    ; moving to the next lot"). Nothing showing and nothing to lose simply means no bid yet.
     if amt < 0 {
-        if !x.blindSince
-            x.blindSince := A_TickCount
-        else if A_TickCount - x.blindSince >= BLIND_PAUSE_MS
-            BlindPause(nm = "saleroom" ? "Saleroom" : "Vectis")
-        return x.bid
+        if x.bid > 0 {
+            if !x.blindSince
+                x.blindSince := A_TickCount
+            else if A_TickCount - x.blindSince >= BLIND_PAUSE_MS
+                BlindPause(nm = "saleroom" ? "Saleroom" : "Vectis")
+            return x.bid
+        }
+        amt := 0
     }
     x.blindSince := 0
     if amt = x.stable
@@ -1738,15 +1828,44 @@ SnapRegion(nm) {
     if IsObject(SIM)                     ; the model's figure IS its pixels
         return nm = "vectis" ? "V" SIM.v : "S" SIM.s
     r := BidRegion(nm)
-    out := ""
-    Loop 3 {
-        y := r.y + Round(r.h * (A_Index - 0.5) / 3)
-        Loop 6 {
-            x := r.x + Round(r.w * (A_Index - 0.5) / 6)
-            try out .= PixelGetColor(x, y) ","
-        }
+    return BoxHash(r.x, r.y, r.w, r.h)
+}
+
+/** A fingerprint of a whole screen box — ONE copy of the box, then a spread of samples
+ *  from the copy.
+ *  ⚠⚠ MEASURED on Jordan's PC 2026-08-24: `PixelGetColor` costs **15.6 ms A CALL** — so
+ *  the first version of this, an 18-point grid, took ~280 ms per box and ~560 ms for the
+ *  pair. The "continuous" watch was therefore slower than reading the number and sampled
+ *  almost nothing, which is why snipes still got through. One BitBlt of the entire box
+ *  costs the SAME 15 ms and sees every pixel, so this is ~35× the coverage for nothing.
+ *  Never go back to per-pixel calls in a loop. */
+BoxHash(x, y, w, h) {
+    static hdcScreen := DllCall("GetDC", "ptr", 0, "ptr")
+    if w < 1 || h < 1
+        return ""
+    hdcMem := DllCall("CreateCompatibleDC", "ptr", hdcScreen, "ptr")
+    hbm := DllCall("CreateCompatibleBitmap", "ptr", hdcScreen, "int", w, "int", h, "ptr")
+    old := DllCall("SelectObject", "ptr", hdcMem, "ptr", hbm, "ptr")
+    DllCall("BitBlt", "ptr", hdcMem, "int", 0, "int", 0, "int", w, "int", h,
+            "ptr", hdcScreen, "int", x, "int", y, "uint", 0x00CC0020)   ; SRCCOPY
+    bi := Buffer(40, 0)
+    NumPut("uint", 40, bi, 0), NumPut("int", w, bi, 4), NumPut("int", -h, bi, 8)
+    NumPut("ushort", 1, bi, 12), NumPut("ushort", 32, bi, 14)
+    px := Buffer(w * h * 4, 0)
+    DllCall("GetDIBits", "ptr", hdcMem, "ptr", hbm, "uint", 0, "uint", h, "ptr", px, "ptr", bi, "uint", 0)
+    total := w * h
+    step := Max(1, total // 600)         ; ~600 samples spread over the box
+    a := 0, b := 0, i := 0
+    while i < total {
+        v := NumGet(px, i * 4, "uint") & 0xFFFFFF
+        a := (a + v) & 0xFFFFFFF
+        b := (b + a) & 0xFFFFFFF
+        i += step
     }
-    return out
+    DllCall("SelectObject", "ptr", hdcMem, "ptr", old)
+    DllCall("DeleteObject", "ptr", hbm)
+    DllCall("DeleteDC", "ptr", hdcMem)
+    return a "-" b
 }
 
 /** THE FINAL WATCH — the last thing before a hammer.
@@ -1758,7 +1877,8 @@ SnapRegion(nm) {
  *  have sat still, so the exposed window shrinks from ~200 ms to the press itself.
  *  Returns the aborting figure, or -1 when it is safe to press. */
 FinalWatch(names, floor) {
-    fp := Map()
+    fp := RS.watchFp
+    fp.Clear()
     for nm in names
         fp[nm] := SnapRegion(nm)
     t0 := A_TickCount
@@ -1781,6 +1901,28 @@ FinalWatch(names, floor) {
         Sleep 12
     }
     return -1
+}
+
+/** Has a bid box moved since the final watch settled? A fingerprint costs under a
+ *  millisecond, so this is affordable in the instant before the press itself. */
+FpMoved(names) {
+    if !IsObject(RS)
+        return false
+    for nm in names
+        if RS.watchFp.Has(nm) && SnapRegion(nm) != RS.watchFp[nm]
+            return true
+    return false
+}
+
+/** The very last instant before pressing: if anything moved, read it properly.
+ *  Returns the aborting figure, or -1 when it is still safe. */
+InstantCheck(names, floor) {
+    if !FpMoved(names)
+        return -1
+    peak := LastLook(names)
+    if !IsObject(RS)
+        return -1
+    return peak > floor ? peak : -1
 }
 
 /** Drive one platform to the exact amount — the rule-card way for each screen. */
@@ -1847,6 +1989,10 @@ CloseLotBoth(how) {
             peak := FinalWatch(["saleroom", "vectis"], price)   ; then watch until they sit still
         if !IsObject(RS)
             return
+        if peak <= price
+            peak := InstantCheck(["saleroom", "vectis"], price)   ; the final instant
+        if !IsObject(RS)
+            return
         if peak > price {
             WriteLog("🛑 LAST-SECOND BID £" peak " — sale stopped, bidding continues")
             RS.lastChangeAt := A_TickCount
@@ -1861,6 +2007,10 @@ CloseLotBoth(how) {
             return
         if peak <= 0
             peak := FinalWatch(["saleroom", "vectis"], 0)
+        if !IsObject(RS)
+            return
+        if peak <= 0
+            peak := InstantCheck(["saleroom", "vectis"], 0)
         if !IsObject(RS)
             return
         if peak > 0 {
@@ -1936,14 +2086,16 @@ Tick() {
         WriteLog("read: [" Short(txt, 60) "] → " (amt < 0 ? "nothing" : "£" amt))
         RS.lastRead := txt
     }
-    ; ⚠ Blindness is never bids disappearing: an illegible read NEVER changes the figure —
-    ; it starts the blind clock instead, and at BLIND_PAUSE_MS the clerk stops and goes red.
+    ; Blindness only counts when there is a figure to protect — see ReadSide.
     if amt < 0 {
-        if !RS.blindSince
-            RS.blindSince := A_TickCount
-        else if A_TickCount - RS.blindSince >= BLIND_PAUSE_MS
-            BlindPause("the")
-        return
+        if RS.bid > 0 {
+            if !RS.blindSince
+                RS.blindSince := A_TickCount
+            else if A_TickCount - RS.blindSince >= BLIND_PAUSE_MS
+                BlindPause("the")
+            return
+        }
+        amt := 0
     }
     RS.blindSince := 0
 
@@ -2015,6 +2167,10 @@ CloseLot(how) {
         fresh := FinalWatch([RS.name], floor)
     if !IsObject(RS)
         return
+    if fresh <= floor
+        fresh := InstantCheck([RS.name], floor)
+    if !IsObject(RS)
+        return
     if fresh > floor {
         WriteLog("🛑 LAST-SECOND BID £" fresh " — " (how = "sold" ? "sale stopped" : "not passing") ", bidding continues")
         RS.lastChangeAt := A_TickCount
@@ -2069,6 +2225,8 @@ Press(key, why) {
 }
 PressOn(nm, key, why) {
     global RS
+    if !IsObject(RS)              ; Esc landed mid-sequence — never press into a dead run
+        return
     p := CAL[nm][key]
     WriteLog("PRESS " nm "." key " @" p.x "," p.y " — " why)
     RS.presses++
