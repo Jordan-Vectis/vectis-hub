@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"782a770710fc62b853583eacd85c0a01bd889bd8","author":"Jordan Orange","date":"2026-08-21T17:14:59+01:00","subject":"Refresh changelog seed"},
   {"sha":"d9b9126edf668fd579fe162d2f386c4fd421c3f2","author":"Jordan Orange","date":"2026-08-21T17:14:53+01:00","subject":"Say what BC Corrections actually does now the list is live-only"},
   {"sha":"3c809b3579a261a990d808ab5c57fe6433df6613","author":"Jordan Orange","date":"2026-08-21T17:08:03+01:00","subject":"Refresh changelog seed"},
   {"sha":"5bd6d29044c9249e8ac7432548db039844866041","author":"Jordan Orange","date":"2026-08-21T17:07:57+01:00","subject":"End of Day: \"Fix what BC can prove\" only looks at tonight's sheet"},
