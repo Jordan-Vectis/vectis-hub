@@ -143,6 +143,9 @@ function Read-Region([int]$x, [int]$y, [int]$w, [int]$h, [string]$mode) {
     $sb  = Await ($dec.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
     $r   = Await ($engine.RecognizeAsync($sb)) ([Windows.Media.Ocr.OcrResult])
     $ms.Dispose()
+    # 'lines' keeps the OCR's line structure (one bid-feed row per line) - .Text
+    # space-joins everything, which mashes a list into one unparseable line.
+    if ($mode -eq 'lines') { return (($r.Lines | ForEach-Object { $_.Text }) -join "`n") }
     return [string]$r.Text
 }
 

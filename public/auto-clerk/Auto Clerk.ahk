@@ -45,6 +45,7 @@ global PROFILES := Map(
             { key: "reg_ask",    kind: "reg", label: "the NEXT ASKING figure — the A box (Windows cannot read a lone single digit such as £5, so the asking is read and stepped back one increment instead)" },
             { key: "reg_sname",  kind: "reg", label: "the NAME cell of the TOP row of the bid log — it reads INTERNET or ROOM (needed to spot a same-amount tie, rule 3)" },
             { key: "reg_lot",    kind: "reg", label: "the LOT NUMBER on this screen (optional, but strongly recommended: it spots the lot moving on by itself, and refuses to work when the two screens are on different lots)" },
+            { key: "reg_feed",  kind: "reg", label: "the WHOLE bid list — every visible row, names and amounts (optional: it lets the clerk PROVE the standing price traces to a real bidder before selling). Box the full list area" },
             { key: "btn_sale_undo", kind: "btn", label: "the UNDO button on the TOP row next to Sell / Pass — it reverses a COMPLETED sale (how a snipe that arrived with the hammer is recovered). OPTIONAL — press F10 to skip on a page without one" },
             { key: "btn_fw",     kind: "btn", label: "Fair warn button" },
             { key: "btn_sell",   kind: "btn", label: "Sell button" },
@@ -63,6 +64,7 @@ global PROFILES := Map(
             { key: "reg_bid",      kind: "reg", label: "the CURRENT BID figure after 'Current Bid:'. Box a WIDE area — from the £ to well past it, the number grows as bids climb" },
             { key: "reg_vtype",    kind: "reg", label: "the BID TYPE chip on the TOP row of the bid list — it reads Vectis Live / Room / Telephone / Saleroom (needed to spot a same-amount tie, rule 3)" },
             { key: "reg_lot",      kind: "reg", label: "the LOT NUMBER on this screen (optional, but strongly recommended: it spots the lot moving on by itself, and refuses to work when the two screens are on different lots)" },
+            { key: "reg_feed",    kind: "reg", label: "the WHOLE bid list — every visible row, names and amounts (optional: it lets the clerk PROVE the standing price traces to a real bidder before selling). Box the full list area" },
             { key: "btn_reopen",   kind: "btn", label: "the RE-OPEN LOT button that appears AFTER a hammer — it reverses the sale (how a snipe that arrived with the hammer is recovered). OPTIONAL — hammer a practice lot first so it is on screen, or press F10 to skip" },
             { key: "btn_fw",       kind: "btn", label: "Fair Warning button" },
             { key: "btn_hammer",   kind: "btn", label: "Hammer button (it becomes Next Lot after a sale)" },
@@ -176,6 +178,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--simboth" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -283,6 +287,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--snipetest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -343,6 +349,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--emptytest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -397,6 +405,97 @@ if A_Args.Length >= 1 && A_Args[1] = "--hashtest" {
     FileAppend out, "*"
     ExitApp
 }
+; ── --feedtest: provenance. A price with a real bidder behind it sells normally; a price
+;    that exists ONLY as our own mirror rows on both feeds is unwound to the best real
+;    figure instead of being Fair-Warned and hammered. ─────────────────────────
+if A_Args.Length >= 1 && A_Args[1] = "--feedtest" {
+    CFG.mode := "both", CFG.fwSecs := 2, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                m[it.key] := { x: nm = "vectis" ? 8000 : 7000, y: 100, w: 200, h: 100 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513",
+             feedS: "SR2418804 20 INTERNET", feedV: "User: SR1 £20 Vectis Live" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayF(t) => FileAppend(t "`n", "*")
+    ; Phase 1 — a real £20: Fair Warning must go out as normal.
+    t0 := A_TickCount, fwGenuine := false
+    while A_TickCount - t0 < 5000 {
+        TickBoth()
+        for pr in SIM.presses
+            if InStr(pr, "btn_fw")
+                fwGenuine := true
+        if fwGenuine
+            break
+        Sleep 80
+    }
+    SayF((fwGenuine ? "PASS " : "FAIL ") "a REAL £20 passed provenance — Fair Warning went out")
+    ; Phase 2 — the phantom: both figures jump to £80 but the feeds show only OUR mirror
+    ; rows there; the best real bid anywhere is £70.
+    SIM.s := 80, SIM.v := 80
+    SIM.feedS := "ROOM 80 ROOM`nSR2418804 70 INTERNET"
+    SIM.feedV := "Saleroom £80`nUser: SR1 £70 Vectis Live"
+    SayF("── phantom planted: both screens £80, feeds show mirrors only; best real bid £70")
+    ; The moment the clerk starts undoing, model both platforms coming back to £70.
+    SetTimer WatchUndo, 25
+    WatchUndo() {
+        global SIM
+        for pr in SIM.presses
+            if InStr(pr, "btn_undo") {
+                SetTimer WatchUndo, 0
+                SIM.s := 70, SIM.v := 70
+                SIM.feedS := "SR2418804 70 INTERNET"
+                SIM.feedV := "User: SR1 £70 Vectis Live"
+                FileAppend "── both platforms undone to the real £70`n", "*"
+                return
+            }
+    }
+    seen := SIM.presses.Length
+    t0 := A_TickCount, fwAt80 := false, fwAt70 := false, undone := false, unwound := false
+    while A_TickCount - t0 < 16000 {
+        TickBoth()
+        if !IsObject(RS)
+            break
+        while seen < SIM.presses.Length {
+            seen++
+            pr := SIM.presses[seen]
+            ; only the Vectis press means FW was GIVEN — a lone saleroom.btn_fw is
+            ; the toggle being CANCELLED after a new bid, which is correct behaviour
+            if InStr(pr, "vectis.btn_fw") && RS.price = 80
+                fwAt80 := true
+            if InStr(pr, "vectis.btn_fw") && RS.price = 70
+                fwAt70 := true
+            if InStr(pr, "btn_undo")
+                undone := true
+        }
+        if RS.price = 70
+            unwound := true
+        if fwAt70
+            break
+        Sleep 80
+    }
+    SetTimer WatchUndo, 0
+    SayF((!fwAt80 ? "PASS " : "FAIL ") "Fair Warning was NEVER given at the phantom £80")
+    SayF((unwound ? "PASS " : "FAIL ") "the price was unwound to the best REAL figure — £70 (price=£" RS.price ")")
+    SayF((undone ? "PASS " : "FAIL ") "the mirrors were undone on the screens")
+    SayF((fwAt70 ? "PASS " : "FAIL ") "Fair Warning then went out at the real £70")
+    ExitApp
+}
 ; ── --phantomtest: Jordan's lot 510. A genuine Vectis bid lands BETWEEN our SET and our
 ;    Saleroom press, re-opening the ladder — so our press mints a bid nobody made. The
 ;    verification must spot the top-row label is OURS, undo the phantom on the spot, and
@@ -414,6 +513,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--phantomtest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -484,6 +585,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--reopentest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -553,6 +656,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--watchtest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -594,6 +699,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--lastlooktest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -634,6 +741,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--lottest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -694,6 +803,8 @@ if A_Args.Length >= 1 && A_Args[1] = "--blindtest" {
                 m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
             else if it.key = "reg_lot"
                 m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
             else
                 m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
         }
@@ -924,6 +1035,8 @@ RefreshMain() {
             txt .= "  (Lot watch off until both lot-number boxes are set.)"
         if !(CAL["vectis"].Has("btn_reopen") && CAL["saleroom"].Has("btn_sale_undo"))
             txt .= "  (Snipe recovery holds for a hand-reverse until the Re-Open Lot / sale-Undo buttons are set.)"
+        if !(CAL["vectis"].Has("reg_feed") && CAL["saleroom"].Has("reg_feed"))
+            txt .= "  (Real-bidder check off until both bid-feed boxes are set.)"
         M_STATUS.Text := txt
         return
     }
@@ -1089,10 +1202,21 @@ TestRead() {
         r := BidRegion(CFG.profile, it.key)
         isLabel := it.key = "reg_vtype" || it.key = "reg_sname"
         isLot := it.key = "reg_lot"
-        txt := OcrRead(r.x, r.y, r.w, r.h, isLabel ? "txt" : "num")
+        isFeed := it.key = "reg_feed"
+        txt := OcrRead(r.x, r.y, r.w, r.h, isFeed ? "lines" : isLabel ? "txt" : "num")
         pic := OCR_DIR "\test-" it.key ".png"
         try FileCopy OCR_DIR "\last.png", pic, 1
-        meaning := isLabel
+        levels := ""
+        if isFeed {
+            for line in StrSplit(txt, "`n") {
+                amt := GenuineLineAmount(line, CFG.profile)
+                if amt > 0
+                    levels .= (levels ? ", " : "") "£" amt
+            }
+        }
+        meaning := isFeed
+            ? (Trim(txt) = "" ? "nothing — is the bid list inside the box?" : levels ? "real bids seen at " levels : "rows read, but no real bids picked out")
+            : isLabel
             ? (Trim(txt) = "" ? "nothing — is the top bid row inside the box?" : "label used by the tie check")
             : isLot
                 ? (LotToken(CFG.profile) != "" ? "lot " LotToken(CFG.profile) : "no lot number found")
@@ -1372,6 +1496,10 @@ StopOcr() {
  *  so a lone digit reads. mode "txt" = plain text (the tie-check labels). */
 OcrRead(x, y, w, h, mode := "num") {
     if IsObject(SIM) {                   ; --simboth: the screens are a model, not pixels
+        if x >= 7500                     ; 8000 = Vectis feed, 7000 = Saleroom feed
+            return SIM.feedV
+        if x >= 6500
+            return SIM.feedS
         if x >= 5500                     ; 6000 = Vectis lot, 5000 = Saleroom lot
             return "Bid " SIM.vlot
         if x >= 4500
@@ -1554,7 +1682,7 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false,
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false, provN: 0, feedNote: false,
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
@@ -1783,6 +1911,19 @@ TickBoth() {
         if RS.phase = "open" {
             SetStatus(head " · quiet " Round(quiet) "s", "Fair Warning on both in " Max(0, Round(fwS - quiet)) "s" reading)
             if quiet >= fwS {
+                ; ── provenance before Fair Warning: is anyone REAL at this price? ──
+                res := Provenance(RS.price)
+                if !IsObject(RS)
+                    return
+                if res.verdict = "mirror-only" {
+                    RS.provN++
+                    if RS.provN = 1
+                        WriteLog("  · no real bidder found at £" RS.price " on either feed — checking once more before acting")
+                    if RS.provN >= 2 && res.proven > 0
+                        UnwindPhantom(res)
+                    return
+                }
+                RS.provN := 0
                 PressOn("vectis", "btn_fw", "Fair Warning — " Round(quiet) "s without a new bid")
                 PressOn("saleroom", "btn_fw", "Fair warn — " Round(quiet) "s without a new bid")
                 RS.fwPressed := true
@@ -1817,6 +1958,77 @@ LotToken(nm) {
     if !RegExMatch(txt, "(\d+[A-Za-z]?)", &m)
         return ""
     return StrUpper(m[1])
+}
+
+/** ⚠⚠ PROVENANCE — does the standing price trace to a REAL bidder? (Jordan, 2026-08-25.)
+ *  Every other guard compares the two screens with each other, and the phantom £80
+ *  passed them all because the screens AGREED. This one asks a different question: on
+ *  either platform's bid feed, is there a genuine row — not our own mirror press — at
+ *  the standing price? A price that exists only on "Saleroom"/"ROOM" rows on BOTH sides
+ *  was manufactured by definition, whatever minted it. Needs BOTH reg_feed boxes (a
+ *  genuine bid legitimately lives on only one platform); best-effort — an unreadable
+ *  feed SKIPS the check and says so, it never blocks the sale on its own failure. */
+FeedText(nm) {
+    r := BidRegion(nm, "reg_feed")
+    return OcrRead(r.x, r.y, r.w, r.h, "lines")
+}
+
+/** The best genuine (non-mirror) amount on one feed line, or 0. Our own presses read
+ *  "Saleroom" on the Vectis feed and "ROOM" on the Saleroom feed. Name tokens like
+ *  SR2418804 cannot leak an amount — a number is only taken standing alone. */
+GenuineLineAmount(line, nm) {
+    if InStr(line, nm = "vectis" ? "Saleroom" : "ROOM")
+        return 0
+    best := 0, pos := 1
+    while pos := RegExMatch(line, "(?<![\dA-Za-z.,])(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?![\dA-Za-z])", &m, pos) {
+        v := MoneyFromToken(m[1])
+        if v > best
+            best := v
+        pos += StrLen(m[0])
+    }
+    return best
+}
+
+/** verdict: "genuine" (a real bid stands at the price) · "mirror-only" (nobody real bid
+ *  it — proven carries the best REAL level to fall back to) · "unreadable" · "skipped". */
+Provenance(price) {
+    global RS
+    if !(CAL["saleroom"].Has("reg_feed") && CAL["vectis"].Has("reg_feed")) {
+        if !RS.feedNote {
+            RS.feedNote := true
+            WriteLog("  · provenance check off — the two bid-feed boxes are not calibrated")
+        }
+        return { verdict: "skipped", proven: price }
+    }
+    fs := FeedText("saleroom")
+    if !IsObject(RS)
+        return { verdict: "unreadable", proven: price }
+    fv := FeedText("vectis")
+    if !IsObject(RS) || Trim(fs) = "" || Trim(fv) = ""
+        return { verdict: "unreadable", proven: price }
+    best := 0
+    for nm, txt in Map("saleroom", fs, "vectis", fv) {
+        for line in StrSplit(txt, "`n") {
+            amt := GenuineLineAmount(line, nm)
+            if amt = price
+                return { verdict: "genuine", proven: price }
+            if amt > best && amt < price
+                best := amt
+        }
+    }
+    return { verdict: "mirror-only", proven: best }
+}
+
+/** The standing price failed provenance twice — fall back to the best level a real
+ *  bidder actually holds. The sync loop then undoes both sides down to it. */
+UnwindPhantom(res) {
+    global RS
+    WriteLog("⚠ NO REAL BIDDER at £" RS.price " — both feeds show only our own mirror rows there. "
+        . "Unwinding to £" res.proven ", the best figure a real bidder holds; bidding continues.")
+    RS.price := res.proven
+    RS.lastChangeAt := A_TickCount
+    RS.provN := 0
+    RS.tieCheckedPrice := 0
 }
 
 /** ⚠ THE LOT WATCH (2026-08-24). Without it, a lot moving on by itself — the auctioneer
@@ -2270,6 +2482,15 @@ CloseLotBoth(how) {
             peak := InstantCheck(["saleroom", "vectis"], price)   ; the final instant
         if !IsObject(RS)
             return
+        if peak <= price {
+            res := Provenance(price)
+            if !IsObject(RS)
+                return
+            if res.verdict = "mirror-only" && res.proven > 0 {
+                UnwindPhantom(res)
+                return
+            }
+        }
         if peak > price {
             WriteLog("🛑 LAST-SECOND BID £" peak " — sale stopped, bidding continues")
             RS.lastChangeAt := A_TickCount
