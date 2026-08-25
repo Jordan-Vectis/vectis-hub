@@ -45,6 +45,7 @@ global PROFILES := Map(
             { key: "reg_ask",    kind: "reg", label: "the NEXT ASKING figure — the A box (Windows cannot read a lone single digit such as £5, so the asking is read and stepped back one increment instead)" },
             { key: "reg_sname",  kind: "reg", label: "the NAME cell of the TOP row of the bid log — it reads INTERNET or ROOM (needed to spot a same-amount tie, rule 3)" },
             { key: "reg_lot",    kind: "reg", label: "the LOT NUMBER on this screen (optional, but strongly recommended: it spots the lot moving on by itself, and refuses to work when the two screens are on different lots)" },
+            { key: "btn_sale_undo", kind: "btn", label: "the UNDO button on the TOP row next to Sell / Pass — it reverses a COMPLETED sale (how a snipe that arrived with the hammer is recovered). OPTIONAL — press F10 to skip on a page without one" },
             { key: "btn_fw",     kind: "btn", label: "Fair warn button" },
             { key: "btn_sell",   kind: "btn", label: "Sell button" },
             { key: "btn_next",   kind: "btn", label: "Next button" },
@@ -62,6 +63,7 @@ global PROFILES := Map(
             { key: "reg_bid",      kind: "reg", label: "the CURRENT BID figure after 'Current Bid:'. Box a WIDE area — from the £ to well past it, the number grows as bids climb" },
             { key: "reg_vtype",    kind: "reg", label: "the BID TYPE chip on the TOP row of the bid list — it reads Vectis Live / Room / Telephone / Saleroom (needed to spot a same-amount tie, rule 3)" },
             { key: "reg_lot",      kind: "reg", label: "the LOT NUMBER on this screen (optional, but strongly recommended: it spots the lot moving on by itself, and refuses to work when the two screens are on different lots)" },
+            { key: "btn_reopen",   kind: "btn", label: "the RE-OPEN LOT button that appears AFTER a hammer — it reverses the sale (how a snipe that arrived with the hammer is recovered). OPTIONAL — hammer a practice lot first so it is on screen, or press F10 to skip" },
             { key: "btn_fw",       kind: "btn", label: "Fair Warning button" },
             { key: "btn_hammer",   kind: "btn", label: "Hammer button (it becomes Next Lot after a sale)" },
             { key: "btn_pass",     kind: "btn", label: "Pass Lot button" },
@@ -96,6 +98,10 @@ global LOT_EVERY_N := 4, LOT_MISMATCH_HOLD := 3
 ; How long the bid boxes must sit perfectly still before a hammer. Pixel-watching is
 ; ~1 ms, so this is continuous rather than a snapshot — see FinalWatch.
 global FINAL_WATCH_MS := 450
+; How long AFTER the hammer the screens are checked before Next is pressed — the recovery
+; window. Both platforms keep a sale reversible until Next (Saleroom: the sale Undo next to
+; Sell/Pass; Vectis: Re-Open Lot), which is what makes this worth doing.
+global SOLD_CHECK_MS := 1500
 ; Rule 3 — same-amount tie. Both figures equal, yet EACH platform holds its OWN bidder
 ; (Vectis's top bid is not from the Saleroom source; Saleroom's top bid is not ROOM).
 ; Needs the two label boxes (reg_vtype, reg_sname). Checked once per price, a moment
@@ -184,10 +190,10 @@ if A_Args.Length >= 1 && A_Args[1] = "--simboth" {
         { at: 3800, do: () => (SIM.v := 20),  say: "… and Vectis follows by itself — NO catch-up press expected" },
         { at: 5200, do: () => (SIM.s := 10),  say: "Undo on Saleroom £20 → £10 — Vectis should be brought down with Undo" },
         ; second lot: a same-amount TIE — two different bidders at £45 at nearly the same moment
-        { at: 10500, do: () => (SIM.v := 45, SIM.vtype := "Vectis Live"), say: "Lot 2: Vectis Live bidder £45 …" },
-        { at: 10700, do: () => (SIM.s := 45, SIM.sname := "INTERNET"),    say: "… and a saleroom.com bidder £45 — a TIE: Vectis was first → ROOM on Saleroom expected" },
+        { at: 12500, do: () => (SIM.v := 45, SIM.vtype := "Vectis Live"), say: "Lot 2: Vectis Live bidder £45 …" },   ; after lot 1's sold check — 1.5s longer since it exists
+        { at: 12700, do: () => (SIM.s := 45, SIM.sname := "INTERNET"),    say: "… and a saleroom.com bidder £45 — a TIE: Vectis was first → ROOM on Saleroom expected" },
     ]
-    while A_TickCount - t0 < 26000 {
+    while A_TickCount - t0 < 29000 {   ; two sold checks longer than it used to need
         el := A_TickCount - t0
         for st in steps {
             if !st.HasProp("done") && el >= st.at {
@@ -384,6 +390,76 @@ if A_Args.Length >= 1 && A_Args[1] = "--hashtest" {
         out .= "  " (h1 != h3 ? "PASS" : "FAIL") " CHANGED when 45 became 50 (this is what catches a snipe)`n"
     }
     FileAppend out, "*"
+    ExitApp
+}
+; ── --reopentest: the UNCATCHABLE snipe — the bid lands only after the hammer is pressed.
+;    The sold check must see it before Next and REVERSE the sale (Re-Open Lot / sale Undo),
+;    and a lot that closes clean must still press Next as normal. ─────────────────
+if A_Args.Length >= 1 && A_Args[1] = "--reopentest" {
+    CFG.mode := "both", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayR(t) => FileAppend(t "`n", "*")
+    loop 6 {
+        TickBoth()
+        Sleep 60
+    }
+    SayR("settled at £" RS.price " on both")
+    ; The snipe appears only once the hammer has ALREADY been pressed — planted by
+    ; watching the press list, the way no pre-press guard could ever see it.
+    SetTimer WatchForHammer, 25
+    WatchForHammer() {
+        global SIM
+        for pr in SIM.presses
+            if InStr(pr, "btn_hammer") {
+                SIM.v := 25
+                SetTimer WatchForHammer, 0
+                FileAppend "── snipe planted: Vectis £25, triggered BY the hammer press itself`n", "*"
+                return
+            }
+    }
+    CloseLotBoth("sold")
+    SetTimer WatchForHammer, 0
+    seq := ""
+    for pr in SIM.presses
+        seq .= pr " "
+    SayR((InStr(seq, "vectis.btn_hammer") ? "PASS " : "FAIL ") "the hammer went down first (the snipe was genuinely uncatchable)")
+    SayR((InStr(seq, "vectis.btn_reopen") ? "PASS " : "FAIL ") "Vectis Re-Open Lot pressed")
+    SayR((InStr(seq, "saleroom.btn_sale_undo") ? "PASS " : "FAIL ") "Saleroom sale-Undo pressed")
+    SayR((!InStr(seq, "btn_next") ? "PASS " : "FAIL ") "Next was NOT pressed — the lot stays live (presses: " seq ")")
+    SayR((RS.lots = 0 ? "PASS " : "FAIL ") "the lot did not count as closed")
+    SayR((!RS.paused ? "PASS " : "FAIL ") "the run is NOT held — bidding simply continues")
+    ; And a clean close must still move on — first let the clerk reconcile at £25
+    ; (the reversed snipe is now just the standing bid), then close cleanly.
+    loop 15 {
+        TickBoth()
+        Sleep 60
+    }
+    SayR("re-settled at £" RS.price " on both after the reversal")
+    SIM.presses := []
+    RS.lastChangeAt := A_TickCount
+    CloseLotBoth("sold")
+    seq2 := ""
+    for pr in SIM.presses
+        seq2 .= pr " "
+    SayR((InStr(seq2, "btn_next") ? "PASS " : "FAIL ") "a clean sale still presses Next (presses: " seq2 ")")
     ExitApp
 }
 ; ── --watchtest: the nastiest snipe — the bid lands AFTER the last look has already read
@@ -770,6 +846,8 @@ RefreshMain() {
             txt .= "  (Lot watch switched off.)"
         else if !(CAL["vectis"].Has("reg_lot") && CAL["saleroom"].Has("reg_lot"))
             txt .= "  (Lot watch off until both lot-number boxes are set.)"
+        if !(CAL["vectis"].Has("btn_reopen") && CAL["saleroom"].Has("btn_sale_undo"))
+            txt .= "  (Snipe recovery holds for a hand-reverse until the Re-Open Lot / sale-Undo buttons are set.)"
         M_STATUS.Text := txt
         return
     }
@@ -1931,6 +2009,64 @@ InstantCheck(names, floor) {
     return peak > floor ? peak : -1
 }
 
+/** THE SOLD CHECK (Jordan's own design, 2026-08-25, from photographing the real platforms).
+ *  Every guard before the hammer still leaves the instant of the press itself — a bid the
+ *  platform accepted but had not yet painted is unseeable. The platforms' answer: a sale
+ *  stays REVERSIBLE until Next (Saleroom has a sale Undo next to Sell/Pass; Vectis grows a
+ *  Re-Open Lot button after the hammer). So after hammering, the screens are watched for
+ *  SOLD_CHECK_MS before Next: a figure ABOVE the hammer price, read TWICE in a row (one
+ *  misread must never reverse a real sale), means a snipe arrived with the hammer.
+ *  Returns the sniped figure, or -1 when the sale stands. */
+SoldCheck(names, price) {
+    hits := 0
+    t0 := A_TickCount
+    while A_TickCount - t0 < SOLD_CHECK_MS {
+        top := -1
+        for nm in names {
+            a := ReadBid(nm).amt
+            if !IsObject(RS)
+                return -1
+            if a > top
+                top := a
+        }
+        if top > price {
+            hits++
+            if hits >= 2
+                return top
+        } else {
+            hits := 0
+        }
+        Sleep 120
+    }
+    return -1
+}
+
+/** Reverse a just-hammered sale on the named screens. True = reversed, bidding continues;
+ *  false = a recovery button is missing, so the run is HELD with instructions instead —
+ *  never press Next over a sale that should not stand. */
+ReverseSale(names, price, peak) {
+    global RS
+    for nm in names {
+        key := nm = "saleroom" ? "btn_sale_undo" : "btn_reopen"
+        if !CAL[nm].Has(key) {
+            HoldRun("⚠ A BID ARRIVED WITH THE HAMMER — £" peak " against £" price " sold",
+                    "Reverse it BY HAND (Vectis: Re-Open Lot · Saleroom: the Undo next to Sell), then F10. Calibrate the recovery buttons to make this automatic.",
+                    "⚠ SNIPE ARRIVED WITH THE HAMMER (£" peak " vs £" price " sold) but the " nm " recovery button is not calibrated. "
+                    . "HELD — reverse the sale by hand (Vectis: Re-Open Lot · Saleroom: the Undo next to Sell/Pass), then F10. "
+                    . "Set the recovery buttons with 'Set just one' to make this automatic.")
+            return false
+        }
+    }
+    for nm in names
+        PressOn(nm, nm = "saleroom" ? "btn_sale_undo" : "btn_reopen",
+                nm = "saleroom" ? "UNDO THE SALE — snipe at £" peak : "RE-OPEN LOT — snipe at £" peak)
+    if !IsObject(RS)
+        return true
+    WriteLog("⏪ SALE REVERSED — £" peak " arrived with the hammer (sold £" price "). The lot is open again and bidding continues.")
+    RS.lastChangeAt := A_TickCount
+    return true
+}
+
 /** Drive one platform to the exact amount — the rule-card way for each screen. */
 CatchUp(nm, target) {
     x := RS.side[nm]
@@ -2006,14 +2142,14 @@ CloseLotBoth(how) {
         }
         PressOn("vectis", "btn_hammer", "HAMMER at £" price)
         PressOn("saleroom", "btn_sell", "SELL at £" price)
-        ; ⚠ Straight after the hammer, look again. If a figure is now HIGHER, the bid was
-        ; accepted by the platform before the press but only appeared afterwards — that is
-        ; render lag, not a miss, and it is the one window no screen-reading clerk can
-        ; close. Recorded plainly so it can be told apart from a guard that failed.
-        after := LastLook(["saleroom", "vectis"])
-        if IsObject(RS) && after > price
-            WriteLog("⚠ A BID APPEARED IMMEDIATELY AFTER THE HAMMER (£" after " vs £" price " sold) — it reached the "
-                . "platform before the press but only reached the screen after it. Nothing on screen could have shown it in time.")
+        ; ── THE SOLD CHECK — the sale is reversible until Next is pressed ─────
+        after := SoldCheck(["saleroom", "vectis"], price)
+        if !IsObject(RS)
+            return
+        if after > price {
+            ReverseSale(["saleroom", "vectis"], price, after)
+            return                      ; no Next either way — the lot is live again, or held
+        }
     } else {
         ; The last look before a PASS: any bid at all means the lot is no longer bidless.
         peak := LastLook(["saleroom", "vectis"])
@@ -2190,21 +2326,22 @@ CloseLot(how) {
         RS.lastChangeAt := A_TickCount
         return
     }
-    if RS.name = "saleroom" {
-        if how = "sold"
-            Press("btn_sell", "SELL at £" before)
-        else
-            Press("btn_pass", "PASS — no bids")
-        Sleep 700
-        Press("btn_next", "NEXT lot")
-    } else {
-        if how = "sold"
-            Press("btn_hammer", "HAMMER at £" before)
-        else
-            Press("btn_pass", "PASS LOT — no bids")
-        Sleep 700
-        Press("btn_hammer", "NEXT LOT")
+    if how = "sold"
+        Press(RS.name = "saleroom" ? "btn_sell" : "btn_hammer", (RS.name = "saleroom" ? "SELL" : "HAMMER") " at £" before)
+    else
+        Press("btn_pass", RS.name = "saleroom" ? "PASS — no bids" : "PASS LOT — no bids")
+    if how = "sold" {
+        ; THE SOLD CHECK — reversible until Next (see CloseLotBoth).
+        after := SoldCheck([RS.name], before)
+        if !IsObject(RS)
+            return
+        if after > before {
+            ReverseSale([RS.name], before, after)
+            return
+        }
     }
+    Sleep 700
+    Press(RS.name = "saleroom" ? "btn_next" : "btn_hammer", RS.name = "saleroom" ? "NEXT lot" : "NEXT LOT")
     ; Verify: the bid figure should now read 0 (a fresh lot). If not, one more Next, then warn.
     Loop 2 {
         t0 := A_TickCount
