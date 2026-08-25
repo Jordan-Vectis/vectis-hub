@@ -72,7 +72,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
   const [result, setResult]   = useState<Result | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [note, setNote]       = useState("")
-  const [copied, setCopied]   = useState(false)
+  const [copied, setCopied]   = useState<"" | "kp" | "desc">("")
   const [file, setFile]       = useState<File | Blob | null>(null)
   const cameraRef  = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
@@ -136,12 +136,12 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
     clearResult()
     setFile(null)
     setNote("")
-    setCopied(false)
+    setCopied("")
     if (preview) URL.revokeObjectURL(preview)
     setPreview(null)
   }
 
-  async function copyKeyPoints(text: string) {
+  async function copyText(text: string, which: "kp" | "desc") {
     try {
       await navigator.clipboard.writeText(text)
     } catch {
@@ -156,11 +156,20 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
       try { document.execCommand("copy") } catch { /* nothing more we can do */ }
       ta.remove()
     }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setCopied(which)
+    setTimeout(() => setCopied(""), 2000)
   }
 
   const id      = result?.identification
+  // The identification as one line, exactly as the card shows it — what the
+  // Copy button beside the confidence badge puts on the clipboard.
+  const descText = id?.identified
+    ? [
+        [id.maker, id.model].filter(Boolean).join(" "),
+        [id.catalogueNumber ? `No. ${id.catalogueNumber}` : null, id.year, id.variant]
+          .filter(Boolean).join(" · "),
+      ].filter(Boolean).join(" — ")
+    : ""
   const singles = (result?.comparables ?? []).filter(c => !c.grouped)
   const groups  = (result?.comparables ?? []).filter(c => c.grouped)
   const prices  = singles.map(c => c.hammerPrice).sort((a, b) => a - b)
@@ -292,9 +301,20 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                             ].filter(Boolean).join(" · ") || "no catalogue number found"}
                           </div>
                         </div>
-                        <span className={`flex-shrink-0 text-[11px] px-2 py-1 rounded-lg border ${CONFIDENCE[id.confidence]?.cls ?? CONFIDENCE.low.cls}`}>
-                          {CONFIDENCE[id.confidence]?.label ?? id.confidence}
-                        </span>
+                        <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
+                          <span className={`text-[11px] px-2 py-1 rounded-lg border ${CONFIDENCE[id.confidence]?.cls ?? CONFIDENCE.low.cls}`}>
+                            {CONFIDENCE[id.confidence]?.label ?? id.confidence}
+                          </span>
+                          {descText && (
+                            <button
+                              onClick={() => copyText(descText, "desc")}
+                              style={{ touchAction: "manipulation" }}
+                              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-600 text-gray-200 hover:bg-white/5 transition-colors whitespace-nowrap"
+                            >
+                              {copied === "desc" ? "✓ Copied" : "📋 Copy"}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {id.reasoning && <p className="text-xs text-gray-500">{id.reasoning}</p>}
 
@@ -334,11 +354,11 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                   <div className="flex items-center justify-between gap-3 mb-2">
                     <h3 className="text-sm font-bold text-gray-200">Suggested key points</h3>
                     <button
-                      onClick={() => copyKeyPoints(id.keyPoints!)}
+                      onClick={() => copyText(id.keyPoints!, "kp")}
                       style={{ touchAction: "manipulation" }}
                       className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-600 text-gray-200 hover:bg-white/5 transition-colors whitespace-nowrap"
                     >
-                      {copied ? "✓ Copied" : "📋 Copy"}
+                      {copied === "kp" ? "✓ Copied" : "📋 Copy"}
                     </button>
                   </div>
                   <p className="text-sm text-gray-200 bg-black/30 rounded-lg px-3 py-2 border border-gray-800">
