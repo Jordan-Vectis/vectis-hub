@@ -65,6 +65,8 @@ button:disabled { opacity: .4; cursor: default; }
 .sbtn.rs { background: #15803d; }
 .sbtn.alt { background: linear-gradient(#7c3aed, #16a34a); }
 .sbtn.stop { background: #b91c1c; }
+.open-tab { display:inline-block; background:#1d4ed8; color:#fff; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; }
+.open-tab:hover { background:#2563eb; }
 .sbtn.auto { background: linear-gradient(#0e7490, #155e75); }
 .sbtn.auto.on { background: linear-gradient(#f59e0b, #b45309); }
 .results { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; margin-top: 16px; padding: 16px; }
@@ -95,6 +97,10 @@ a.back { color: #7dd3fc; font-size: 13px; text-decoration: none; }
   <span class="note">Joins the two running practice sales as an ordinary bidder and fires the old manual-control patterns,
     so the Auto Clerk can be watched keeping the screens in step. Bids always go in at each platform's <b>next asking</b> —
     the trainers reject anything else. Room bids and the ! are clerk-side presses and stay on the screens.</span>
+  <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+    <a class="open-tab" href="/vectis-clerk-trainer.html" target="_blank" rel="noopener">↗ Open the Vectis Clerk Trainer</a>
+    <a class="open-tab" href="/saleroom-trainer.html" target="_blank" rel="noopener">↗ Open the Saleroom Trainer</a>
+  </div>
 </header>
 <main>
   <div class="cols">
@@ -155,6 +161,7 @@ a.back { color: #7dd3fc; font-size: 13px; text-decoration: none; }
     <div class="res-head">
       <h2>🧾 Results — what each lot closed at</h2>
       <span id="res-summary">Nothing closed yet.</span>
+      <button id="res-save" style="background:#15803d;color:#fff">💾 Save the full log</button>
       <button id="res-clear">Clear</button>
     </div>
     <table id="res-table">
@@ -179,14 +186,43 @@ let RUNTIMERS = [];
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+/* Millisecond wall-clock stamps, matching the Auto Clerk.log format, so the two files
+   line up when compared side by side. */
+function stamp() {
+  const d = new Date();
+  return d.toLocaleTimeString('en-GB') + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+const RAWLOG = [];              // every line the panel shows, kept in full for the save
 function log(msg, cls) {
   const el = $('log');
   const line = document.createElement('div');
   line.className = cls || 'info';
-  line.textContent = new Date().toLocaleTimeString('en-GB') + '  ' + msg;
+  const txt = stamp() + '  ' + msg;
+  line.textContent = txt;
+  RAWLOG.push(txt);
   el.appendChild(line);
   while (el.childNodes.length > 400) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
+}
+
+/* ── the BID HISTORY — what actually happened, from the platforms' own state ──
+   Every price change carries who now holds it (name · paddle · type), every close says
+   what sold to whom. Independent of the Auto Clerk's screen-reading, which is exactly
+   what makes it the ground truth to compare Auto Clerk.log against. */
+const HISTORY = [];
+const LAST_BID = { vectis: { lot: '', hi: -1 }, saleroom: { lot: '', hi: -1 } };
+function noteBid(side, st) {
+  if (!st || !st.lot) return;
+  const lb = LAST_BID[side];
+  const lot = String(st.lot.id);
+  const hi = Number(st.hi || 0);
+  if (lot !== lb.lot) { lb.lot = lot; lb.hi = -1; }
+  if (hi === lb.hi || hi <= 0) { lb.hi = hi; return; }
+  lb.hi = hi;
+  const who = [st.leaderName || '', st.leaderPaddle || '', st.leaderType || '']
+    .filter(Boolean).join(' · ') || 'unknown';
+  HISTORY.push(stamp() + '  ' + (side === 'vectis' ? 'VECTIS  ' : 'SALEROOM') +
+    '  lot ' + lot + '  £' + hi.toLocaleString('en-GB') + '  —  ' + who);
 }
 
 /* ── room list ─────────────────────────────────────────────────────────────── */
@@ -235,7 +271,7 @@ function join(side) {
   const x = S[side];
   if (!x.sock) {
     x.sock = io(location.origin, { transports: ['websocket', 'polling'] });
-    x.sock.on('trainer:state', st => { x.state = st; noteState(side, st); renderSide(side); });
+    x.sock.on('trainer:state', st => { x.state = st; noteBid(side, st); noteState(side, st); renderSide(side); });
     x.sock.on('trainer:bidResult', r => {
       log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': ' + (r.accepted ? '✓ bid taken' : '✗ ' + (r.message || 'rejected')), r.accepted ? 'ok' : 'rej');
     });
@@ -303,6 +339,12 @@ function noteState(side, st) {
     at: new Date().toLocaleTimeString('en-GB'),
   };
   renderResults();
+  const buyer = st.status === 'sold'
+    ? ' to ' + ([st.leaderName || '', st.leaderPaddle || '', st.leaderType || ''].filter(Boolean).join(' · ') || 'unknown')
+    : '';
+  HISTORY.push(stamp() + '  ' + (side === 'vectis' ? 'VECTIS  ' : 'SALEROOM') +
+    '  lot ' + lot + '  ' + st.status.toUpperCase() +
+    (st.status === 'sold' ? ' £' + Number(st.hi || 0).toLocaleString('en-GB') : '') + buyer);
   log((side === 'vectis' ? 'VECTIS' : 'SALEROOM') + ': lot ' + lot + ' ' + st.status +
       (st.status === 'sold' ? ' at £' + Number(st.hi || 0).toLocaleString('en-GB') : ''), 'ok');
 }
@@ -340,6 +382,43 @@ function renderResults() {
     (both === 0 ? 'none to compare yet' : `${same} of ${both} matched${same < both ? ' — check the ones marked different' : ''}`);
 }
 $('res-clear').onclick = () => { RESULTS.length = 0; LAST_SEEN.vectis = LAST_SEEN.saleroom = ''; renderResults(); };
+
+/* 💾 One file with everything: the bid history (ground truth), the per-lot results,
+   and the raw event log — made to be shared and compared against Auto Clerk.log. */
+$('res-save').onclick = () => {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-GB') + ' ' + now.toLocaleTimeString('en-GB');
+  const lines = [];
+  lines.push('VECTIS TEST AUCTION LOG — saved ' + dateStr);
+  lines.push('Rooms: Vectis [' + (S.vectis.code || 'not joined') + ']  ·  Saleroom [' + (S.saleroom.code || 'not joined') + ']');
+  lines.push('Times are wall-clock HH:MM:SS.mmm, the same format as Auto Clerk.log, so the two files line up.');
+  lines.push('');
+  lines.push('── BID HISTORY — every price change and close, from the platforms\u2019 own state (independent of the Auto Clerk) ──');
+  lines.push(HISTORY.length ? HISTORY.join('\n') : '(no bids recorded — join both rooms before the lots run)');
+  lines.push('');
+  lines.push('── RESULTS — what each lot closed at on each platform ──');
+  if (RESULTS.length === 0) {
+    lines.push('(nothing closed)');
+  } else {
+    [...RESULTS].reverse().forEach(r => {
+      const c = side => !side ? '—' : side.status !== 'sold' ? side.status.toUpperCase() : '£' + side.amount.toLocaleString('en-GB');
+      const match = r.vectis && r.saleroom
+        ? (r.vectis.status === r.saleroom.status && r.vectis.amount === r.saleroom.amount ? 'SAME' : '⚠ DIFFERENT')
+        : 'one side only';
+      lines.push('lot ' + r.lot + ':  Vectis ' + c(r.vectis) + '  ·  Saleroom ' + c(r.saleroom) + '  —  ' + match);
+    });
+  }
+  lines.push('');
+  lines.push('── RAW EVENT LOG — everything this page saw and did, including its own bids ──');
+  lines.push(RAWLOG.length ? RAWLOG.join('\n') : '(empty)');
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'test-auction-log ' + now.toISOString().slice(0, 16).replace('T', ' ').replace(':', '-') + '.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  log('💾 log saved — ' + HISTORY.length + ' bid-history lines, ' + RESULTS.length + ' lots', 'ok');
+};
 
 /* ── automatic mode: bid like a real sale ──────────────────────────────────────
    Each lot gets its own random ceiling under £100 and random gaps between bids;
