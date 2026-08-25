@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-08-24, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-08-25, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,6 +14,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"e5240fc2cc2512eda90b6f33cd54c4d347fb86c0","author":"Jordan Orange","date":"2026-08-25T10:26:36+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"8b92d71f22486c5d718903db8d6240e1cbe2b117","author":"Jordan Orange","date":"2026-08-25T10:26:14+01:00","subject":"Lens: a Copy button on the identification card"},
+  {"sha":"83c5f7b3148071925e35fc8291858212d46085cd","author":"Jack Collings","date":"2026-08-24T17:34:48+01:00","subject":"Refresh changelog seed"},
   {"sha":"63758cab8e53fca79492f96ba89956b810252032","author":"Jack Collings","date":"2026-08-24T17:34:48+01:00","subject":"AI Presenter: free 3D auctioneer - no more paying D-ID by the minute"},
   {"sha":"45b6fa2ea77ee533314ead742b496d427536ad82","author":"Jordan Orange","date":"2026-08-24T16:58:19+01:00","subject":"Trainers: ten more practice lots, and simulated starting bids on the Vectis clerk"},
   {"sha":"8e41fc98430fd6fdf137e27eb914cf71a21e9f8d","author":"Jordan Orange","date":"2026-08-24T16:52:10+01:00","subject":"Stress Tester: a results table of what each lot closed at, and an automatic mode"},
