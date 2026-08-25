@@ -507,6 +507,44 @@ if A_Args.Length >= 1 && A_Args[1] = "--startbidtest" {
     SayB((!RS.paused ? "PASS " : "FAIL ") "the run is not held")
     ExitApp
 }
+; ── --verifytest: the after-press verdict on its own. A landing above target on OUR
+;    label is undone; a genuine bid that outran the press is kept. ───────────────
+if A_Args.Length >= 1 && A_Args[1] = "--verifytest" {
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 45, v: 55, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayV(t) => FileAppend(t "`n", "*")
+    VerifyCatchUp("vectis", 45)
+    seq := ""
+    for pr in SIM.presses
+        seq .= pr " "
+    SayV((InStr(seq, "vectis.btn_undo") ? "PASS " : "FAIL ") "£55 on OUR label (Saleroom) after a £45 catch-up → undone")
+    SIM.presses := [], SIM.v := 55, SIM.vtype := "Vectis Live"
+    VerifyCatchUp("vectis", 45)
+    seq := ""
+    for pr in SIM.presses
+        seq .= pr " "
+    SayV((!InStr(seq, "vectis.btn_undo") ? "PASS " : "FAIL ") "£55 on a GENUINE label (Vectis Live) → kept, no undo")
+    ExitApp
+}
 ; ── --feedtest: provenance. A price with a real bidder behind it sells normally; a price
 ;    that exists ONLY as our own mirror rows on both feeds is unwound to the best real
 ;    figure instead of being Fair-Warned and hammered. ─────────────────────────
@@ -663,8 +701,9 @@ if A_Args.Length >= 1 && A_Args[1] = "--phantomtest" {
     seq := ""
     for pr in SIM.presses
         seq .= pr " "
-    SayP((InStr(seq, "vectis.btn_saleroom") ? "PASS " : "FAIL ") "the catch-up press did fire (the race was real)")
-    SayP((InStr(seq, "vectis.btn_undo") ? "PASS " : "FAIL ") "our phantom £55 was undone on the spot")
+    SayP((InStr(seq, "vectis.btn_askset") ? "PASS " : "FAIL ") "the catch-up began (the race was real)")
+    SayP((!InStr(seq, "vectis.btn_saleroom") ? "PASS " : "FAIL ") "the committing press was ABANDONED — the genuine bid was seen in the last instant")
+    SayP((!InStr(seq, "vectis.btn_undo") ? "PASS " : "FAIL ") "no phantom was ever made, so nothing needed undoing")
     SayP((SIM.v = 45 && SIM.s = 45 ? "PASS " : "FAIL ") "both screens ended level at the REAL bid — £45 (S=" SIM.s " V=" SIM.v ")")
     SayP((RS.price = 45 ? "PASS " : "FAIL ") "the agreed price is £45, not the phantom (price=£" RS.price ")")
     SayP((!fwWhileBehind ? "PASS " : "FAIL ") "Fair Warning never fired while a side was still behind")
@@ -2506,10 +2545,21 @@ ReverseSale(names, price, peak) {
 /** Drive one platform to the exact amount — the rule-card way for each screen. */
 CatchUp(nm, target) {
     x := RS.side[nm]
+    label := nm = "saleroom" ? "Saleroom" : "Vectis"
+    ; ⚠⚠ NEVER press onto a platform that is already there (Jordan, 2026-08-25:
+    ; "what if it tries to set the bid at 10 right as someone had just bid 15?" —
+    ; seen live at 14:21: three catch-ups to a stale £50 pressed into live bidding
+    ; at 55–70, each one making a phantom and an undo). Raw-check the instant
+    ; before EVERY press; the moment the platform has reached or passed the
+    ; target by itself, there is nothing to catch up — walk away, press nothing.
+    if CaughtItself(nm, target, label, "before starting")
+        return
     if nm = "saleroom" {
         ; Type the exact figure in the box next to A, then Bid — lands on that amount.
         PressOn("saleroom", "box_amount", "amount box → " target)
         TypeAmount(target)
+        if CaughtItself(nm, target, label, "before the Bid press")
+            return
         if CFG.srExact = "bid" {
             PressOn("saleroom", "btn_bid", "BID at £" target " (catching Saleroom up)")
         } else if IsObject(SIM) {
@@ -2526,10 +2576,31 @@ CatchUp(nm, target) {
         TypeAmount(target)
         PressOn("vectis", "btn_askset", "SET asking £" target)
         Sleep 160
+        ; ⚠ the race lives HERE: a genuine bid between SET and the Saleroom press
+        ; re-opens the ladder, and the press would fire at the NEW asking.
+        if CaughtItself(nm, target, label, "after SET, before the Saleroom press")
+            return
         PressOn("vectis", "btn_saleroom", "SALEROOM button at £" target " (catching Vectis up)")
     }
     x.expect := target, x.syncAt := A_TickCount, x.tries++
     VerifyCatchUp(nm, target)
+}
+
+/** True when the platform has already reached or passed the target on its own — the
+ *  catch-up is abandoned mid-sequence and the normal loop takes the new figure in. */
+CaughtItself(nm, target, label, where) {
+    global RS
+    if !IsObject(RS)
+        return true
+    raw := ReadBid(nm).amt
+    if !IsObject(RS)
+        return true
+    if raw < target
+        return false
+    x := RS.side[nm]
+    WriteLog("  · " label " reads £" raw " " where " — it got there by itself, catch-up to £" target " abandoned, nothing pressed")
+    x.expect := 0, x.behindSince := 0
+    return true
 }
 
 /** ⚠⚠ THE PHANTOM KILLER (Jordan's lot 510, 2026-08-25). Between our SET and our press
@@ -2569,6 +2640,8 @@ VerifyCatchUp(nm, target) {
     WriteLog("⚠ OUR catch-up landed at £" landed " instead of £" target " — the asking moved under the press. Undoing our own phantom before it spreads.")
     PressOn(nm, "btn_undo", "UNDO — remove our phantom £" landed " on " label)
     x.expect := 0, x.syncAt := A_TickCount
+    x.behindSince := 0                  ; a fresh grace + settle before any retry — an
+    x.tries := 0                        ; instant retry at a stale target was the undo storm
 }
 
 /** Sell (or Pass) on BOTH screens and move both on — reconciling first so nothing
