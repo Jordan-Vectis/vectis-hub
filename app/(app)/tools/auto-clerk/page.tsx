@@ -213,6 +213,17 @@ export default function AutoClerkPage() {
               <p className="text-xs text-sky-400 mt-2 group-hover:underline">Download ↓</p>
             </a>
           </div>
+          <div className="bg-emerald-950/30 border border-emerald-800/50 rounded-lg p-3 flex items-center gap-3 flex-wrap">
+            <span className="text-emerald-300 text-sm font-bold">🔖 Version 1.0</span>
+            <span className="text-xs text-emerald-200/80 flex-1">
+              The build proven in live testing (25 Aug 2026) is frozen forever — 2.0 work continues in the
+              downloads above, but 1.0 can always be fetched exactly as it was:
+            </span>
+            <span className="flex gap-3 text-xs whitespace-nowrap">
+              <a href="/auto-clerk/v1.0/Auto%20Clerk.ahk" download="Auto Clerk.ahk" className="text-emerald-300 underline hover:text-emerald-200">Auto Clerk.ahk (v1.0)</a>
+              <a href="/auto-clerk/v1.0/Auto%20Clerk%20OCR.ps1" download="Auto Clerk OCR.ps1" className="text-emerald-300 underline hover:text-emerald-200">Auto Clerk OCR.ps1 (v1.0)</a>
+            </span>
+          </div>
           <ul className="text-xs text-gray-400 space-y-1 pt-1">
             <li>• Needs <strong className="text-gray-300">AutoHotkey v2</strong> on the PC (already installed on Jordan&apos;s). Nothing else — the screen reading uses Windows&apos; own text recognition, with no internet and nothing to install.</li>
             <li>• Keep the filenames exactly as they are: the clerk looks for its reader by name, in its own folder.</li>
