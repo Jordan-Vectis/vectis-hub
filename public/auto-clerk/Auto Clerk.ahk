@@ -585,6 +585,65 @@ if A_Args.Length >= 1 && A_Args[1] = "--stucktest" {
     SayK((fwGiven ? "PASS " : "FAIL ") "the closing clock RAN — Fair Warning went out; no stale flag held it (Jordan's stall)")
     ExitApp
 }
+; ── --fkeytest: the F8 manual follow trigger. The human taps it after hammering — the
+;    active side sells at the agreed price; an immediate second tap must be IGNORED
+;    (the fresh lot has no price, an unguarded tap would PASS it unbid). ──────────
+if A_Args.Length >= 1 && A_Args[1] = "--fkeytest" {
+    CFG.mode := "both", CFG.handsOff := "vectis", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 0, v: 30, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Vectis Live", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayFk(t) => FileAppend(t "`n", "*")
+    loop 30 {
+        TickBoth()
+        if SIM.s >= 30
+            break
+        Sleep 100
+    }
+    SayFk("settled: the human's £30 mirrored to the Saleroom (S=£" SIM.s ")")
+    FollowKey()
+    TickBoth()
+    sells := 0, passes := 0
+    for pr in SIM.presses {
+        if pr = "saleroom.btn_sell"
+            sells++
+        if pr = "saleroom.btn_pass"
+            passes++
+    }
+    SayFk((sells = 1 ? "PASS " : "FAIL ") "F8 sold the Saleroom on the human's word (sells=" sells ")")
+    SayFk((RS.lots = 1 ? "PASS " : "FAIL ") "the lot closed (lots=" RS.lots ")")
+    FollowKey()
+    TickBoth()
+    passes2 := 0
+    for pr in SIM.presses
+        if pr = "saleroom.btn_pass"
+            passes2++
+    SayFk((passes2 = 0 && RS.lots = 1 ? "PASS " : "FAIL ") "an immediate second F8 was IGNORED — the fresh lot was not passed (passes=" passes2 ")")
+    vp := 0
+    for pr in SIM.presses
+        if InStr(pr, "vectis.")
+            vp++
+    SayFk((vp = 0 ? "PASS " : "FAIL ") "still not a single press on the human's Vectis")
+    ExitApp
+}
 ; ── --followtest: ONE-WAY mode. A human (the model) drives Vectis; the clerk may press
 ;    ONLY on the Saleroom: mirror the human's bids, undo-down after their undo, and when
 ;    their lot closes, sell the Saleroom at the agreed price and move on. Not one press
@@ -2054,6 +2113,11 @@ StartRun() {
     RS := NewRunState(both)
     READ_CACHE.Clear()
     Hotkey "Esc", (*) => StopRun("Esc"), "On"
+    ; ⌨ FOLLOW mode's manual trigger (Jordan, 2026-08-25): the human taps F8 the moment
+    ; they hammer their own screen — a deterministic "lot done" that does not depend on
+    ; the clerk seeing the leader's close. The automatic detection stays as the backup.
+    if both && CFG.handsOff != ""
+        Hotkey "F8", (*) => FollowKey(), "On"
     WriteLog("── START v" VERSION " · " (both ? (CFG.handsOff != "" ? "FOLLOW mode — " (CFG.handsOff = "vectis" ? "Vectis" : "the Saleroom") " is hands-off (the leader), clerking only " (CFG.handsOff = "vectis" ? "the Saleroom" : "Vectis") : "BOTH screens in step") : PROFILES[RS.name].title) " · FW after " CFG.fwSecs "s · sell after " CFG.sellSecs "s more · pass no-bid lots: " (CFG.passNoBids ? "yes" : "no"))
     MAIN.Hide()
     BuildStatus()
@@ -2064,7 +2128,7 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false, provN: 0, feedNote: false, winner: "", handsOff: both ? CFG.handsOff : "", followClose: "",
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false, provN: 0, feedNote: false, winner: "", handsOff: both ? CFG.handsOff : "", followClose: "", lastCloseAt: 0,
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
@@ -2077,6 +2141,7 @@ StopRun(why) {
     global RS
     SetTimer RunTick, 0
     try Hotkey "Esc", "Off"
+    try Hotkey "F8", "Off"
     if IsObject(RS)
         WriteLog("── STOP (" why ") · " RS.lots " lots closed · " RS.presses " presses")
     RS := 0
@@ -2085,6 +2150,27 @@ StopRun(why) {
     StopOcr()
     MAIN.Show()
 }
+/** F8 in follow mode: the human says their lot is done — close ours to match NOW.
+ *  Guarded against a double-tap: within 3 s of a close the fresh lot has no price yet,
+ *  and an unguarded second press would PASS it before anyone had bid. */
+FollowKey() {
+    global RS
+    if !IsObject(RS) || RS.paused
+        return
+    if RS.handsOff = "" {
+        WriteLog("  · F8 ignored — only does something in follow mode")
+        return
+    }
+    if A_TickCount - RS.lastCloseAt < 3000 {
+        WriteLog("  · F8 ignored — a lot closed moments ago (double-tap guard)")
+        return
+    }
+    if RS.followClose != ""
+        return
+    WriteLog("⌨ F8 — the human says the lot is done; following")
+    RS.followClose := RS.price > 0 ? "sold" : "passed"
+}
+
 PauseRun() {
     if !IsObject(RS)
         return
@@ -2325,14 +2411,14 @@ TickBoth() {
             active := RS.handsOff = "vectis" ? "saleroom" : "vectis"
             activeLabel := active = "saleroom" ? "the Saleroom" : "Vectis"
             if RS.phase = "open" {
-                SetStatus(head " · quiet " Round(quiet) "s · FOLLOW", "Fair Warning on " activeLabel " in " Max(0, Round(fwS - quiet)) "s · the human decides the hammer" reading)
+                SetStatus(head " · quiet " Round(quiet) "s · FOLLOW", "Fair Warning on " activeLabel " in " Max(0, Round(fwS - quiet)) "s · F8 = lot done" reading)
                 if quiet >= fwS {
                     PressOn(active, "btn_fw", "Fair Warning on " activeLabel " — " Round(quiet) "s without a new bid (follow mode)")
                     RS.fwPressed := true
                     RS.phase := "fw", RS.fwAt := now
                 }
             } else {
-                SetStatus(head " · FAIR WARNING on " activeLabel " · FOLLOW", "Waiting for the human to hammer their side" reading)
+                SetStatus(head " · FAIR WARNING on " activeLabel " · FOLLOW", "Waiting for the human's hammer · F8 = lot done" reading)
             }
             return
         }
@@ -2365,7 +2451,7 @@ TickBoth() {
         }
     } else {
         if RS.handsOff != "" {
-            SetStatus("No bids on either screen · FOLLOW", "The human decides when to pass" reading)
+            SetStatus("No bids on either screen · FOLLOW", "The human decides when to pass · F8 = lot done" reading)
         } else if CFG.passNoBids {
             SetStatus("No bids on either screen · quiet " Round(quiet) "s", "Pass on both in " Max(0, Round(fwS + sellS - quiet)) "s unless a bid comes" reading)
             if quiet >= fwS + sellS
@@ -2957,6 +3043,7 @@ FollowClose(how) {
     if !IsObject(RS)
         return
     RS.lots++
+    RS.lastCloseAt := A_TickCount
     WriteLog((how = "sold" ? "🔨 followed the human's hammer — sold £" price : "passed, following the human") " on " activeLabel " · lot " RS.lots " done")
     ResetLotState()
 }

@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7b811a4adb4208515503bae146b3a54fa68c3d34","author":"Jordan Orange","date":"2026-08-25T16:48:40+01:00","subject":"Auto Clerk 2.0: follow mode — watch both screens, clerk only one"},
   {"sha":"e0e16335528f96a671a272a125fdacb56c45eaad","author":"Jordan Orange","date":"2026-08-25T16:28:58+01:00","subject":"Memory: bid-level audit of the v1.0 test — every bid handled correctly"},
   {"sha":"539cac20816bf3766699a7dab1570a208ec423fe","author":"Jordan Orange","date":"2026-08-25T16:21:18+01:00","subject":"Memory: v1.0 validated against ground truth; end-of-sale churn accepted"},
   {"sha":"3b4d1af90972d0c70e5fbaabc6ef89870fd47ad0","author":"Jordan Orange","date":"2026-08-25T15:48:59+01:00","subject":"Stress Tester: a saveable ground-truth bid log, and open-in-tab buttons"},

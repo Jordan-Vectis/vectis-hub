@@ -270,7 +270,7 @@ export default function AutoClerkPage() {
                 Choose <strong>One screen</strong> (it clerks that screen on the timers) or <strong>BOTH screens</strong>
                 (it also keeps the two platforms level with each other). Set the timers — 15 and 20 seconds is the real
                 sale rule, 6 and 8 makes a practice run quick — then press Start and keep your hands off the mouse.
-               There are also two <strong>one-way</strong> choices — watch both screens but press on only one, with the other hands-off: a person (or the real sale) drives that screen as the leader, and the clerk mirrors its bids and sells its own side the moment the leader’s lot closes. That&apos;s how it can clerk the Saleroom while the real Vectis screen runs live, without ever touching it.</p>
+               There are also two <strong>one-way</strong> choices — watch both screens but press on only one, with the other hands-off: a person (or the real sale) drives that screen as the leader, and the clerk mirrors its bids and sells its own side the moment the leader’s lot closes. That&apos;s how it can clerk the Saleroom while the real Vectis screen runs live, without ever touching it. The follow has three triggers, any one of which closes the clerk&apos;s side: <strong>tap F8</strong> the moment you hammer (the deterministic one), the leader&apos;s lot number changing, or its figure resetting after holding a price. Nothing in follow mode runs on a timer except Fair Warning.</p>
             </div>
           </div>
 
