@@ -108,7 +108,7 @@ global SOLD_CHECK_MS := 1500
 ; while bids are landing, the clerk WAITS rather than clicking into the middle of a
 ; flurry (Jordan, 2026-08-25: "wait for a moment to let it happen before trying to
 ; catch up"). The grace handles a bid mirroring itself; this handles live bidding.
-global CATCHUP_SETTLE_MS := 1300
+global CATCHUP_SETTLE_MS := 2000    ; raised from 1300 (Jordan, 2026-08-25: "a slight delay on the catch up, maybe 2 seconds")
 ; Rule 3 — same-amount tie. Both figures equal, yet EACH platform holds its OWN bidder
 ; (Vectis's top bid is not from the Saleroom source; Saleroom's top bid is not ROOM).
 ; Needs the two label boxes (reg_vtype, reg_sname). Checked once per price, a moment
