@@ -1,8 +1,32 @@
 "use client"
 
 import { useRef, useState, useCallback, useEffect } from "react"
+import dynamic from "next/dynamic"
+import type { Head3DHandle } from "./head3d"
+
+// three.js must never run during SSR
+const Head3D = dynamic(() => import("./head3d"), { ssr: false })
 
 type Status = "idle" | "connecting" | "connected" | "speaking" | "error"
+
+type Engine = "3d" | "did"
+
+// Gemini TTS prebuilt voices — descriptors from Google's docs. Auditioned
+// picks that suit an auction rostrum, not the full list of 30.
+const TTS_VOICES = [
+  { id: "Charon",     label: "Charon — informative" },
+  { id: "Fenrir",     label: "Fenrir — excitable" },
+  { id: "Puck",       label: "Puck — upbeat" },
+  { id: "Rasalgethi", label: "Rasalgethi — informative" },
+  { id: "Orus",       label: "Orus — firm" },
+  { id: "Algenib",    label: "Algenib — gravelly" },
+  { id: "Kore",       label: "Kore — firm" },
+  { id: "Aoede",      label: "Aoede — breezy" },
+  { id: "Laomedeia",  label: "Laomedeia — upbeat" },
+  { id: "Sulafat",    label: "Sulafat — warm" },
+] as const
+
+const DEFAULT_TTS_STYLE = "Say in a lively British auctioneer's voice:"
 
 type Presenter = {
   presenter_id:  string
@@ -81,10 +105,20 @@ export default function AvatarPage() {
   // Avatar state
   const [status,            setStatus]           = useState<Status>("idle")
   const [error,             setError]            = useState<string | null>(null)
+  const [speakWarn,         setSpeakWarn]        = useState<string | null>(null)
   const [script,            setScript]           = useState("")
   const [presenters,        setPresenters]        = useState<Presenter[]>([])
   const [selectedId,        setSelectedId]        = useState<string | null>(null)
   const [loadingPresenters, setLoadingPresenters] = useState(true)
+
+  // Engine: 3D = bundled TalkingHead avatar + Gemini TTS (free, fast);
+  // D-ID = the original paid photoreal streaming mode, kept as an option
+  const [engine,  setEngine]  = useState<Engine>("3d")
+  const [voice3d, setVoice3d] = useState<string>("Charon")
+  const [style3d, setStyle3d] = useState<string>(DEFAULT_TTS_STYLE)
+  const engineRef = useRef<Engine>("3d")
+  const head3dRef = useRef<Head3DHandle | null>(null)
+  useEffect(() => { engineRef.current = engine }, [engine])
 
   // Auto-read state
   const [isWatching,    setIsWatching]    = useState(false)
@@ -104,6 +138,10 @@ export default function AvatarPage() {
   // Load persisted feed settings after mount — reading localStorage in the initializers
   // makes the server HTML disagree with the client render and trips hydration
   useEffect(() => {
+    const eng = localStorage.getItem("avatar_engine")
+    if (eng === "did" || eng === "3d") setEngine(eng)
+    setVoice3d(localStorage.getItem("avatar_voice") || "Charon")
+    setStyle3d(localStorage.getItem("avatar_style") ?? DEFAULT_TTS_STYLE)
     setFeedAuctionId(localStorage.getItem("auction_monitor_id") ?? "")
     try {
       const raw    = localStorage.getItem("avatar_feed_config")
@@ -346,7 +384,49 @@ export default function AvatarPage() {
     }
   }, [status, cleanup])
 
-  const disconnect = useCallback(async () => { await cleanup(); setStatus("idle") }, [cleanup])
+  const disconnect = useCallback(async () => {
+    await cleanup()
+    head3dRef.current?.dispose()
+    setSpeakWarn(null)
+    setStatus("idle")
+  }, [cleanup])
+
+  // ── 3D engine: load the bundled avatar (click-driven so audio starts unlocked) ──
+
+  const connect3d = useCallback(async () => {
+    // Same generation guard as the D-ID connect — Cancel/engine-switch bumps the
+    // generation via cleanup(), and this in-flight load must then stand down
+    // silently instead of painting an error over a state the user chose
+    const gen = ++connGenRef.current
+    setStatus("connecting")
+    setError(null)
+    try {
+      // The Head3D chunk (three.js) loads dynamically — a fast click can beat it
+      for (let i = 0; i < 40 && !head3dRef.current; i++) await new Promise(r => setTimeout(r, 100))
+      if (connGenRef.current !== gen) return
+      if (!head3dRef.current) throw new Error("3D presenter is still downloading — try again in a moment")
+      await head3dRef.current.load()
+      if (connGenRef.current !== gen) { head3dRef.current?.dispose(); return }
+      if (!head3dRef.current.isLoaded()) throw new Error("3D presenter failed to initialise")
+      statusRef.current = "connected"
+      setStatus("connected")
+    } catch (err) {
+      if (connGenRef.current !== gen) return
+      setStatus("error")
+      setError(err instanceof Error ? err.message : "Failed to load the 3D presenter")
+    }
+  }, [])
+
+  const switchEngine = useCallback((next: Engine) => {
+    if (next === engineRef.current) return
+    try { localStorage.setItem("avatar_engine", next) } catch {}
+    cleanup()
+    head3dRef.current?.dispose()
+    setStatus("idle")
+    setError(null)
+    setSpeakWarn(null)
+    setEngine(next)
+  }, [cleanup])
 
   // ── Speaking ─────────────────────────────────────────────────────────────────
 
@@ -364,9 +444,37 @@ export default function AvatarPage() {
   useEffect(() => { finishSpeakingRef.current = finishSpeaking }, [finishSpeaking])
 
   const speakTextDirect = useCallback(async (text: string) => {
-    const sd = streamDataRef.current
-    if (!sd || speakBusyRef.current) return
+    if (speakBusyRef.current) return
     if (statusRef.current !== "connected" && statusRef.current !== "speaking") return
+
+    // ── 3D engine: Gemini TTS + TalkingHead. speak() resolves at playback end,
+    //    so completion is exact — no estimate timer needed ─────────────────────
+    if (engineRef.current === "3d") {
+      if (!head3dRef.current?.isLoaded()) return
+      speakBusyRef.current      = true
+      speakStartedAtRef.current = Date.now()
+      statusRef.current         = "speaking"
+      setStatus("speaking")
+      const seq3d = ++speakSeqRef.current
+      try {
+        await head3dRef.current.speak(text)
+        if (speakSeqRef.current !== seq3d) return
+        setLastSpoke(new Date().toLocaleTimeString())
+        setSpeakWarn(null)
+        finishSpeakingRef.current()
+      } catch (err) {
+        if (speakSeqRef.current !== seq3d) return
+        // A TTS hiccup (rate limit, timeout) must not kill the presenter
+        // mid-sale — warn, skip this phrase, and keep the queue moving
+        setSpeakWarn(err instanceof Error ? err.message : "Failed to speak")
+        finishSpeakingRef.current()
+      }
+      return
+    }
+
+    // ── D-ID engine ──────────────────────────────────────────────────────────
+    const sd = streamDataRef.current
+    if (!sd) return
     speakBusyRef.current      = true
     speakStartedAtRef.current = Date.now()
     statusRef.current         = "speaking"
@@ -496,8 +604,9 @@ export default function AvatarPage() {
         if (data.currentBid) parts.push(`Current bid ${data.currentBid}.`)
 
         // Queue rather than speak directly — a lot spotted while the avatar is
-        // mid-sentence must not be silently lost
-        if (streamDataRef.current) enqueueFeedSpeak("autoread", parts.join(" "))
+        // mid-sentence must not be silently lost. No engine check here: the
+        // queue itself drops phrases when no presenter is live.
+        enqueueFeedSpeak("autoread", parts.join(" "))
       }
     } catch (err) {
       setReadError(err instanceof Error ? err.message : "Capture failed")
@@ -843,14 +952,18 @@ export default function AvatarPage() {
             }`}
             style={{ aspectRatio: "16/9" }}
           >
-            <video ref={videoRef} autoPlay playsInline
-              onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${isLive ? "opacity-100" : "opacity-0"}`}
-            />
+            {engine === "3d" ? (
+              <Head3D ref={head3dRef} voice={voice3d} style={style3d} />
+            ) : (
+              <video ref={videoRef} autoPlay playsInline
+                onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${isLive ? "opacity-100" : "opacity-0"}`}
+              />
+            )}
 
             {!isLive && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-gray-50 dark:bg-[#0D0D0F]">
-                {selectedPresenter && status === "idle" ? (
+                {engine === "did" && selectedPresenter && status === "idle" ? (
                   <img src={selectedPresenter.thumbnail_url} alt={selectedPresenter.name}
                     className="w-32 h-32 rounded-full object-cover border-2 border-gray-700 opacity-40" />
                 ) : (
@@ -866,10 +979,14 @@ export default function AvatarPage() {
                     <><p className="text-red-400 text-sm font-medium">Connection error</p>
                     <p className="text-gray-500 text-xs mt-1">{error}</p></>
                   ) : status === "connecting" ? (
-                    <p className="text-yellow-400/80 text-sm">Establishing stream…</p>
+                    <p className="text-yellow-400/80 text-sm">
+                      {engine === "3d" ? "Loading the 3D presenter…" : "Establishing stream…"}
+                    </p>
                   ) : (
                     <p className="text-gray-600 text-sm">
-                      {selectedPresenter ? `${selectedPresenter.name} — click Connect to start` : "Select a presenter and connect"}
+                      {engine === "3d"
+                        ? "3D presenter — click Connect to load"
+                        : selectedPresenter ? `${selectedPresenter.name} — click Connect to start` : "Select a presenter and connect"}
                     </p>
                   )}
                 </div>
@@ -898,7 +1015,70 @@ export default function AvatarPage() {
         {/* Controls */}
         <div className="w-80 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] flex flex-col p-5 gap-4 overflow-y-auto">
 
+          {/* Engine */}
+          <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+            <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Engine</h2>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => switchEngine("3d")}
+                className={`py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  engine === "3d"
+                    ? "bg-[#2AB4A6] text-black"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                }`}>3D · Free</button>
+              <button onClick={() => switchEngine("did")}
+                className={`py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  engine === "did"
+                    ? "bg-[#2AB4A6] text-black"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                }`}>D-ID · Paid</button>
+            </div>
+            <p className="text-gray-500 dark:text-gray-400 text-xs mt-2 leading-relaxed">
+              {engine === "3d"
+                ? "Built-in avatar with a Gemini voice — no streaming costs, much faster."
+                : "Photoreal streamed avatar — paid per minute, a few seconds behind."}
+            </p>
+          </div>
+
+          {/* 3D Presenter settings */}
+          {engine === "3d" && (
+            <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+              <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">3D Presenter</h2>
+              <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Voice</label>
+              <select
+                value={voice3d}
+                onChange={e => { setVoice3d(e.target.value); try { localStorage.setItem("avatar_voice", e.target.value) } catch {} }}
+                className="w-full mb-2 text-xs bg-gray-100 dark:bg-[#111113] text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 focus:border-[#2AB4A6] focus:outline-none"
+              >
+                {TTS_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+              </select>
+              <label className="text-gray-500 dark:text-gray-400 text-xs block mb-1">Delivery style (spoken instruction, not read aloud)</label>
+              <input
+                type="text"
+                value={style3d}
+                onChange={e => { setStyle3d(e.target.value); try { localStorage.setItem("avatar_style", e.target.value) } catch {} }}
+                className="w-full mb-3 text-xs bg-gray-100 dark:bg-[#111113] text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 focus:border-[#2AB4A6] focus:outline-none"
+              />
+              {status === "idle" || status === "error" ? (
+                <button onClick={connect3d}
+                  className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-black font-semibold rounded-lg transition-colors text-sm"
+                >Connect Presenter</button>
+              ) : (
+                <button onClick={disconnect}
+                  className="w-full py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg transition-colors text-sm">
+                  {status === "connecting" ? "Cancel" : "Disconnect"}
+                </button>
+              )}
+              {status === "connecting" && <p className="text-yellow-400/70 text-xs text-center mt-2">Loading the avatar (~22 MB, cached after the first time)…</p>}
+              {speakWarn && (
+                <p className="text-amber-500 dark:text-amber-400 text-xs mt-2 break-words">
+                  ⚠ Voice hiccup: {speakWarn} — carrying on with the next phrase
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Presenter */}
+          {engine === "did" && (
           <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
             <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Presenter</h2>
             {loadingPresenters ? <p className="text-gray-500 dark:text-gray-600 text-xs text-center py-2">Loading…</p>
@@ -925,8 +1105,10 @@ export default function AvatarPage() {
               <p className="text-[#2AB4A6] text-xs text-center mt-2 font-medium">{selectedPresenter.name}</p>
             )}
           </div>
+          )}
 
           {/* Connection */}
+          {engine === "did" && (
           <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
             <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Connection</h2>
             {status === "idle" || status === "error" ? (
@@ -943,6 +1125,7 @@ export default function AvatarPage() {
             )}
             {status === "connecting" && <p className="text-yellow-400/70 text-xs text-center mt-2">Takes a few seconds…</p>}
           </div>
+          )}
 
           {/* Auto-Read */}
           <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">

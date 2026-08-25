@@ -61,6 +61,9 @@ export const AI_TOOLS: AiTool[] = [
   // Image IN, image OUT ("nano banana"). Not claudeOk — Claude writes text, not pictures.
   { slot: "photo_prep_edit",        group: "Other",        label: "Photo Prep AI edit (image editing)",   default: "gemini-3.1-flash-image" },
   { slot: "condition_extract",      group: "Other",        label: "Condition report extract",             default: "gemini-3-flash-preview" },
+  // Speaks the AI Presenter's 3D-mode phrases. ⚠ Must be a TTS-capable model
+  // (responseModalities AUDIO) — a text model here breaks the 3D presenter's voice.
+  { slot: "avatar_tts",             group: "Other",        label: "AI Presenter — 3D voice (text-to-speech)", default: "gemini-2.5-flash-preview-tts" },
   // Grades a lot from its photographs. ⚠ SUGGESTS only — a person accepts it. See the route.
   { slot: "condition_suggest",      group: "Cataloguing",  label: "Suggest a condition from photos",      default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "patch_notes_draft",      group: "Other",        label: "Patch notes draft (summarise a deploy)", default: "gemini-3-flash-preview", claudeOk: true },
