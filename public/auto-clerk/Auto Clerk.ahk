@@ -102,6 +102,11 @@ global FINAL_WATCH_MS := 450
 ; window. Both platforms keep a sale reversible until Next (Saleroom: the sale Undo next to
 ; Sell/Pass; Vectis: Re-Open Lot), which is what makes this worth doing.
 global SOLD_CHECK_MS := 1500
+; A catch-up (or undo-down) only starts once the price has sat still for this long —
+; while bids are landing, the clerk WAITS rather than clicking into the middle of a
+; flurry (Jordan, 2026-08-25: "wait for a moment to let it happen before trying to
+; catch up"). The grace handles a bid mirroring itself; this handles live bidding.
+global CATCHUP_SETTLE_MS := 1300
 ; Rule 3 — same-amount tie. Both figures equal, yet EACH platform holds its OWN bidder
 ; (Vectis's top bid is not from the Saleroom source; Saleroom's top bid is not ROOM).
 ; Needs the two label boxes (reg_vtype, reg_sname). Checked once per price, a moment
@@ -190,10 +195,10 @@ if A_Args.Length >= 1 && A_Args[1] = "--simboth" {
         { at: 3800, do: () => (SIM.v := 20),  say: "… and Vectis follows by itself — NO catch-up press expected" },
         { at: 5200, do: () => (SIM.s := 10),  say: "Undo on Saleroom £20 → £10 — Vectis should be brought down with Undo" },
         ; second lot: a same-amount TIE — two different bidders at £45 at nearly the same moment
-        { at: 12500, do: () => (SIM.v := 45, SIM.vtype := "Vectis Live"), say: "Lot 2: Vectis Live bidder £45 …" },   ; after lot 1's sold check — 1.5s longer since it exists
-        { at: 12700, do: () => (SIM.s := 45, SIM.sname := "INTERNET"),    say: "… and a saleroom.com bidder £45 — a TIE: Vectis was first → ROOM on Saleroom expected" },
+        { at: 14200, do: () => (SIM.v := 45, SIM.vtype := "Vectis Live"), say: "Lot 2: Vectis Live bidder £45 …" },   ; after lot 1's sold check — 1.5s longer since it exists
+        { at: 14900, do: () => (SIM.s := 45, SIM.sname := "INTERNET"),    say: "… and a saleroom.com bidder £45 — a TIE: Vectis was first → ROOM on Saleroom expected" },
     ]
-    while A_TickCount - t0 < 29000 {   ; two sold checks longer than it used to need
+    while A_TickCount - t0 < 32000 {   ; two sold checks longer than it used to need
         el := A_TickCount - t0
         for st in steps {
             if !st.HasProp("done") && el >= st.at {
@@ -390,6 +395,77 @@ if A_Args.Length >= 1 && A_Args[1] = "--hashtest" {
         out .= "  " (h1 != h3 ? "PASS" : "FAIL") " CHANGED when 45 became 50 (this is what catches a snipe)`n"
     }
     FileAppend out, "*"
+    ExitApp
+}
+; ── --phantomtest: Jordan's lot 510. A genuine Vectis bid lands BETWEEN our SET and our
+;    Saleroom press, re-opening the ladder — so our press mints a bid nobody made. The
+;    verification must spot the top-row label is OURS, undo the phantom on the spot, and
+;    never mirror it to the other side. And while a side is behind, NO Fair Warning. ──
+if A_Args.Length >= 1 && A_Args[1] = "--phantomtest" {
+    CFG.mode := "both", CFG.fwSecs := 3, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 40, v: 40, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayP(t) => FileAppend(t "`n", "*")
+    loop 6 {
+        TickBoth()
+        Sleep 60
+    }
+    SayP("settled at £" RS.price " on both")
+    ; A Saleroom internet bid at 45 — Vectis will need catching up.
+    SIM.s := 45, SIM.sname := "INTERNET"
+    SayP("── Saleroom internet bid £45 — Vectis behind at £40")
+    ; THE RACE: the moment our SET lands, a genuine Vectis bid arrives at 45 and the
+    ; ladder re-opens — the asking becomes 55, and our queued press will fire at it.
+    SetTimer WatchForSet, 20
+    WatchForSet() {
+        global SIM
+        for pr in SIM.presses
+            if InStr(pr, "vectis.btn_askset") {
+                SetTimer WatchForSet, 0
+                SIM.v := 45
+                SIM.vtype := "Vectis Live"
+                SIM.askV := 55
+                FileAppend "── genuine Vectis Live £45 lands after our SET — ladder re-opens, asking now £55`n", "*"
+                return
+            }
+    }
+    t0 := A_TickCount, fwWhileBehind := false
+    while A_TickCount - t0 < 9000 {
+        TickBoth()
+        if !IsObject(RS)
+            break
+        for pr in SIM.presses
+            if InStr(pr, "btn_fw") && SIM.v != SIM.s
+                fwWhileBehind := true
+        Sleep 80
+    }
+    SetTimer WatchForSet, 0
+    seq := ""
+    for pr in SIM.presses
+        seq .= pr " "
+    SayP((InStr(seq, "vectis.btn_saleroom") ? "PASS " : "FAIL ") "the catch-up press did fire (the race was real)")
+    SayP((InStr(seq, "vectis.btn_undo") ? "PASS " : "FAIL ") "our phantom £55 was undone on the spot")
+    SayP((SIM.v = 45 && SIM.s = 45 ? "PASS " : "FAIL ") "both screens ended level at the REAL bid — £45 (S=" SIM.s " V=" SIM.v ")")
+    SayP((RS.price = 45 ? "PASS " : "FAIL ") "the agreed price is £45, not the phantom (price=£" RS.price ")")
+    SayP((!fwWhileBehind ? "PASS " : "FAIL ") "Fair Warning never fired while a side was still behind")
+    SayP((InStr(seq, "btn_fw") ? "PASS " : "FAIL ") "Fair Warning DID come once level and quiet (presses: " seq ")")
     ExitApp
 }
 ; ── --reopentest: the UNCATCHABLE snipe — the bid lands only after the hammer is pressed.
@@ -1478,7 +1554,7 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(),
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false,
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
@@ -1649,6 +1725,8 @@ TickBoth() {
                 x.behindSince := now                        ; give an online bid its grace
             if now - x.behindSince < SYNC_GRACE_MS
                 continue
+            if now - RS.lastChangeAt < CATCHUP_SETTLE_MS
+                continue                                    ; bids are still landing — let them
             if x.tries >= MAX_SYNC_TRIES {
                 if !x.warned {
                     x.warned := true
@@ -1663,6 +1741,8 @@ TickBoth() {
                 continue
             if x.tries >= MAX_SYNC_TRIES && now - x.syncAt < 4000
                 continue
+            if now - RS.lastChangeAt < CATCHUP_SETTLE_MS
+                continue                                    ; never undo into live bidding either
             PressOn(nm, "btn_undo", "UNDO — bring " label " down from £" x.bid " to £" RS.price)
             x.expect := RS.price, x.syncAt := now, x.tries++
         } else {
@@ -1679,12 +1759,27 @@ TickBoth() {
     }
 
     ; ── the clock ──────────────────────────────────────────────────────────
+    ; ⚠ The Fair Warning clock only runs while the screens are LEVEL (Jordan,
+    ; 2026-08-25: "the timer should only start after we are all caught up") — a lot
+    ; must never tick towards closing while one platform is still being caught up,
+    ; and the quiet time starts afresh from the moment they come back into step.
+    level := (s = v && s = RS.price && !sS.expect && !sV.expect)
+    if !level {
+        RS.wasUnlevel := true
+    } else if RS.wasUnlevel {
+        RS.wasUnlevel := false
+        RS.lastChangeAt := now
+    }
     quiet := (now - RS.lastChangeAt) / 1000
     fwS := CFG.fwSecs, sellS := CFG.sellSecs
     inStep := (s = v)
     reading := " · S[" Short(sS.lastRead, 16) "] V[" Short(sV.lastRead, 16) "]"
     head := "Saleroom £" s " · Vectis £" v (inStep ? "" : " — catching up")
     if RS.price > 0 {
+        if !level {
+            SetStatus(head " · catching up", "The closing clock is held until both screens agree" reading)
+            return
+        }
         if RS.phase = "open" {
             SetStatus(head " · quiet " Round(quiet) "s", "Fair Warning on both in " Max(0, Round(fwS - quiet)) "s" reading)
             if quiet >= fwS {
@@ -2093,6 +2188,46 @@ CatchUp(nm, target) {
         PressOn("vectis", "btn_saleroom", "SALEROOM button at £" target " (catching Vectis up)")
     }
     x.expect := target, x.syncAt := A_TickCount, x.tries++
+    VerifyCatchUp(nm, target)
+}
+
+/** ⚠⚠ THE PHANTOM KILLER (Jordan's lot 510, 2026-08-25). Between our SET and our press
+ *  a genuine bid can land and re-open the platform's automatic ladder — so our press
+ *  fires at the NEW asking, minting a bid nobody made, which the other side then
+ *  faithfully mirrors: both screens agreed at £80 when the last real bid was £70, and
+ *  every guard passed because they agreed. So every catch-up is verified: if it landed
+ *  ABOVE its target, the top-row label says whose bid that is — our own press reads
+ *  "Saleroom" on Vectis / "ROOM" on the Saleroom — and our own phantom is undone on the
+ *  spot, before the other side can mirror it. A genuine bid that outran us is kept. */
+VerifyCatchUp(nm, target) {
+    global RS
+    if !IsObject(RS)
+        return
+    Sleep 300                                   ; let the press paint
+    landed := ReadBid(nm).amt
+    if !IsObject(RS) || landed <= target
+        return
+    label := nm = "saleroom" ? "Saleroom" : "Vectis"
+    key := nm = "vectis" ? "reg_vtype" : "reg_sname"
+    mineWord := nm = "vectis" ? "Saleroom" : "ROOM"
+    ours := true                                ; unreadable → assume ours: a phantom hammer
+    lbl := ""                                   ; cannot be undone, a re-bid can
+    if CAL[nm].Has(key) {
+        r := BidRegion(nm, key)
+        lbl := OcrRead(r.x, r.y, r.w, r.h, "txt")
+        if !IsObject(RS)
+            return
+        if Trim(lbl) != ""
+            ours := InStr(lbl, mineWord) > 0
+    }
+    if !ours {
+        WriteLog("  · catch-up on " label " was outrun by a real bid — it shows £" landed " [" Short(lbl, 16) "], keeping it")
+        return
+    }
+    x := RS.side[nm]
+    WriteLog("⚠ OUR catch-up landed at £" landed " instead of £" target " — the asking moved under the press. Undoing our own phantom before it spreads.")
+    PressOn(nm, "btn_undo", "UNDO — remove our phantom £" landed " on " label)
+    x.expect := 0, x.syncAt := A_TickCount
 }
 
 /** Sell (or Pass) on BOTH screens and move both on — reconciling first so nothing
