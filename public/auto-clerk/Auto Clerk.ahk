@@ -40,6 +40,11 @@ global OCR_DIR := A_Temp "\AutoClerkOCR"
 ; live testing ("this version is really good") — archived at public/auto-clerk/v1.0/
 ; and in Downloads\Auto Clerk v1.0\. 2.0 work continues in THIS file.
 global VERSION := "2.0"
+; ⚠ Follow mode is reached ONLY through the named launcher scripts (Saleroom Clerk.ahk /
+; Vectis Clerk.ahk — Jordan, 2026-08-25: separate apps, "save bloating the current one").
+; They pass "--clerk <side>"; FORCED names the side this instance CLERKS. The main tool's
+; own mode list stays the simple two options.
+global FORCED := ""
 global PROFILES := Map(
     "saleroom", {
         title: "Saleroom (GAP) screen",
@@ -1210,6 +1215,11 @@ if A_Args.Length >= 5 && A_Args[1] = "--ocrtest" {
     ExitApp
 }
 
+if A_Args.Length >= 2 && A_Args[1] = "--clerk" {
+    FORCED := A_Args[2] = "vectis" ? "vectis" : "saleroom"
+    CFG.mode := "both"
+    CFG.handsOff := FORCED = "saleroom" ? "vectis" : "saleroom"
+}
 LoadIni()
 BuildMainGui()
 
@@ -1225,7 +1235,6 @@ LoadIni() {
     CFG.sellSecs   := Integer(IniRead(INI, "settings", "sellSecs", 20))
     CFG.passNoBids := IniRead(INI, "settings", "passNoBids", "1") = "1"
     CFG.lotWatch   := IniRead(INI, "settings", "lotWatch", "1") = "1"
-    CFG.handsOff := IniRead(INI, "settings", "handsOff", "")
     CFG.genuineV := IniRead(INI, "settings", "genuineV", CFG.genuineV)
     CFG.mirrorV := IniRead(INI, "settings", "mirrorV", CFG.mirrorV)
     CFG.mirrorS := IniRead(INI, "settings", "mirrorS", CFG.mirrorS)
@@ -1233,6 +1242,12 @@ LoadIni() {
     CFG.pollMs     := Integer(IniRead(INI, "settings", "pollMs", 250))
     if !PROFILES.Has(CFG.profile)
         CFG.profile := "saleroom"
+    if FORCED != "" {
+        CFG.mode := "both"
+        CFG.handsOff := FORCED = "saleroom" ? "vectis" : "saleroom"
+    } else {
+        CFG.handsOff := ""
+    }
     for name, prof in PROFILES {
         m := Map()
         for it in prof.items {
@@ -1256,7 +1271,6 @@ SaveIni() {
     IniWrite CFG.sellSecs, INI, "settings", "sellSecs"
     IniWrite (CFG.passNoBids ? "1" : "0"), INI, "settings", "passNoBids"
     IniWrite (CFG.lotWatch ? "1" : "0"), INI, "settings", "lotWatch"
-    IniWrite CFG.handsOff, INI, "settings", "handsOff"
     IniWrite CFG.genuineV, INI, "settings", "genuineV"
     IniWrite CFG.mirrorV, INI, "settings", "mirrorV"
     IniWrite CFG.mirrorS, INI, "settings", "mirrorS"
@@ -1315,7 +1329,7 @@ BuildMainGui() {
     ; quietly makes a LOCAL copy and the real global stays 0 (M_MODE/M_ONE were missed
     ; → "won't open", Integer has no property Value, 2026-08-21 16:22).
     global MAIN, M_STATUS, M_PROF, M_FW, M_SELL, M_PASS, M_CAL, M_MODE, M_ONE, M_EXACT, M_LOT, M_MIRV, M_MIRS, M_GENS, M_GENV
-    MAIN := Gui("+AlwaysOnTop", "Auto Clerk v" VERSION)
+    MAIN := Gui("+AlwaysOnTop", (FORCED = "saleroom" ? "Saleroom Clerk v" : FORCED = "vectis" ? "Vectis Clerk v" : "Auto Clerk v") VERSION)
     MAIN.SetFont("s10", "Segoe UI")
     MAIN.Add("Text", "w560", "Works whatever clerking screen is on the monitor — the trainers now, the real pages later. "
         . "Calibrate once per screen, get the screen fully visible, press Start and keep your hands off the mouse.")
@@ -1332,14 +1346,18 @@ BuildMainGui() {
     MAIN.Add("Button", "x+10 w160", "🎯 Set just this one").OnEvent("Click", (*) => SetOne())
 
     MAIN.Add("Text", "xm y+12 w120", "Run:")
-    M_MODE := MAIN.Add("DropDownList", "x+4 w430", ["One screen — the one selected above, on the timers"
-        , "BOTH screens — clerk Saleroom and Vectis together and keep them in step"
-        , "Watch both, clerk SALEROOM only — Vectis is hands-off (a person or the real sale drives it)"
-        , "Watch both, clerk VECTIS only — the Saleroom is hands-off (a person or the real sale drives it)"])
-    M_MODE.Value := CFG.mode != "both" ? 1 : CFG.handsOff = "vectis" ? 3 : CFG.handsOff = "saleroom" ? 4 : 2
-    M_MODE.OnEvent("Change", (*) => (CFG.mode := M_MODE.Value = 1 ? "single" : "both",
-        CFG.handsOff := M_MODE.Value = 3 ? "vectis" : M_MODE.Value = 4 ? "saleroom" : "",
-        SaveIni(), RefreshMain()))
+    if FORCED != "" {
+        MAIN.SetFont("Bold")
+        M_MODE := MAIN.Add("DropDownList", "x+4 w430 Disabled", [(FORCED = "saleroom"
+            ? "FOLLOW — clerking the SALEROOM; Vectis is hands-off (a person or the real sale drives it)"
+            : "FOLLOW — clerking VECTIS; the Saleroom is hands-off (a person or the real sale drives it)")])
+        M_MODE.Value := 1
+        MAIN.SetFont("Norm")
+    } else {
+        M_MODE := MAIN.Add("DropDownList", "x+4 w430", ["One screen — the one selected above, on the timers", "BOTH screens — clerk Saleroom and Vectis together and keep them in step"])
+        M_MODE.Value := CFG.mode = "both" ? 2 : 1
+        M_MODE.OnEvent("Change", (*) => (CFG.mode := M_MODE.Value = 2 ? "both" : "single", SaveIni(), RefreshMain()))
+    }
     MAIN.Add("Text", "xm y+6 w120", "Saleroom amount:")
     M_EXACT := MAIN.Add("DropDownList", "x+4 w430", ["type in the box next to A, then press ENTER  (the Saleroom Trainer)", "type in the box next to A, then press the BID button  (the real Saleroom page)"])
     M_EXACT.Value := CFG.srExact = "bid" ? 2 : 1
@@ -1433,6 +1451,13 @@ Join(arr, sep) {
     return s
 }
 ReadSettingsFromGui() {
+    if FORCED != "" {
+        CFG.mode := "both"
+        CFG.handsOff := FORCED = "saleroom" ? "vectis" : "saleroom"
+    } else {
+        CFG.mode := M_MODE.Value = 2 ? "both" : "single"
+        CFG.handsOff := ""
+    }
     CFG.fwSecs := Max(2, Integer(M_FW.Value || 15))
     CFG.sellSecs := Max(2, Integer(M_SELL.Value || 20))
     CFG.passNoBids := M_PASS.Value = 1

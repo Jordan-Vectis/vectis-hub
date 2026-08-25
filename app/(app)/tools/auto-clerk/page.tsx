@@ -213,6 +213,17 @@ export default function AutoClerkPage() {
               <p className="text-xs text-sky-400 mt-2 group-hover:underline">Download ↓</p>
             </a>
           </div>
+          <div className="bg-indigo-950/40 border border-indigo-800/50 rounded-lg p-3 flex items-center gap-3 flex-wrap">
+            <span className="text-indigo-300 text-sm font-bold">🎯 One-way clerks</span>
+            <span className="text-xs text-indigo-200/80 flex-1">
+              Tiny launchers for follow mode — each starts the same engine clerking ONE side only, while a person
+              (or the real sale) drives the other. Keep them in the same folder as the two files above.
+            </span>
+            <span className="flex gap-3 text-xs whitespace-nowrap">
+              <a href="/auto-clerk/Saleroom%20Clerk.ahk" download="Saleroom Clerk.ahk" className="text-indigo-300 underline hover:text-indigo-200">Saleroom Clerk.ahk</a>
+              <a href="/auto-clerk/Vectis%20Clerk.ahk" download="Vectis Clerk.ahk" className="text-indigo-300 underline hover:text-indigo-200">Vectis Clerk.ahk</a>
+            </span>
+          </div>
           <div className="bg-emerald-950/30 border border-emerald-800/50 rounded-lg p-3 flex items-center gap-3 flex-wrap">
             <span className="text-emerald-300 text-sm font-bold">🔖 Version 1.0</span>
             <span className="text-xs text-emerald-200/80 flex-1">
@@ -270,7 +281,7 @@ export default function AutoClerkPage() {
                 Choose <strong>One screen</strong> (it clerks that screen on the timers) or <strong>BOTH screens</strong>
                 (it also keeps the two platforms level with each other). Set the timers — 15 and 20 seconds is the real
                 sale rule, 6 and 8 makes a practice run quick — then press Start and keep your hands off the mouse.
-               There are also two <strong>one-way</strong> choices — watch both screens but press on only one, with the other hands-off: a person (or the real sale) drives that screen as the leader, and the clerk mirrors its bids and sells its own side the moment the leader’s lot closes. That&apos;s how it can clerk the Saleroom while the real Vectis screen runs live, without ever touching it. The follow has three triggers, any one of which closes the clerk&apos;s side: <strong>tap F8</strong> the moment you hammer (the deterministic one), the leader&apos;s lot number changing, or its figure resetting after holding a price. Nothing in follow mode runs on a timer except Fair Warning.</p>
+               One-way clerking lives in its own small apps — <strong>Saleroom Clerk</strong> and <strong>Vectis Clerk</strong> (downloads above): each launches the same engine pressing on only one screen, with the other hands-off: a person (or the real sale) drives that screen as the leader, and the clerk mirrors its bids and sells its own side the moment the leader’s lot closes. That&apos;s how it can clerk the Saleroom while the real Vectis screen runs live, without ever touching it. The follow has three triggers, any one of which closes the clerk&apos;s side: <strong>tap F8</strong> the moment you hammer (the deterministic one), the leader&apos;s lot number changing, or its figure resetting after holding a price. Nothing in follow mode runs on a timer except Fair Warning.</p>
             </div>
           </div>
 
