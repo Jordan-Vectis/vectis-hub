@@ -169,6 +169,15 @@ The Saleroom trainer got the lots but NO starting bids, deliberately — the poi
 start uneven so an auto clerk must catch the other platform up. Nothing else in the trainers is
 covered by this.
 
+**Third sanctioned exception (Jordan, 2026-08-25, confirmed via the conflict question):** the
+sale-reversal controls, so the Auto Clerk's sold-check recovery is testable on the trainers.
+The Vectis Clerk Trainer grows a **Re-Open Lot** button after a hammer/pass (as the real Bidpath
+page does) — it clears the lot's outcome and the standing bid simply stands again. The Saleroom
+trainer's **top-row Undo next to Sell/Pass** was corrected: it existed but wrongly shared the
+bid-undo's handler (after a sale it ate real bids press by press); it now undoes the PRESS of
+Sell/Pass itself — re-opening the lot, touching no bid — while the left-column Undo remains the
+bid-undo, and guided scenarios still see the plain undo they script for. Nothing else is covered.
+
 **If the Auto Clerk needs a replica screen, COPY the trainer file into a new `public/auto-clerk-*.html`
 and change the copy** — exactly how the Scenario 1 rig (`auto-clerk-fake-saleroom.html`) was made from
 the Saleroom replica. A copy may drift from the trainer afterwards; that is accepted, and it is why the

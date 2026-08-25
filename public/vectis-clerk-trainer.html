@@ -176,6 +176,9 @@ button:disabled{ opacity:.45; cursor:default; }
 #btn-hammer:hover{ background:var(--green-hi); }
 #btn-hammer.nextlot{ background:var(--indigo); }
 #btn-hammer.nextlot:hover{ background:var(--indigo-hi); }
+#btn-reopen{ background:var(--indigo); color:#fff; font-weight:700; font-size:15px; padding:11px 6px; border-radius:3px; width:100%; margin-top:8px; }
+#btn-reopen:hover{ background:var(--indigo-hi); }
+#btn-reopen:active{ filter:brightness(0.8); }
 #btn-quicker{
   background:var(--indigo); color:#fff; font-weight:700; font-size:17px;
   padding:14px 6px; border-radius:3px; margin-top:2px;
@@ -443,6 +446,7 @@ button:disabled{ opacity:.45; cursor:default; }
             <button id="btn-fw" onclick="fairWarning()">Fair Warning</button>
             <button id="btn-hammer" onclick="hammerOrNext()">Hammer: (£0)</button>
           </div>
+          <button id="btn-reopen" onclick="reopenLot()" hidden>Re-Open Lot</button>
           <button id="btn-quicker" onclick="bidQuicker()">Bid Quicker!</button>
           <div id="feedback">&nbsp;</div>
         </div>
@@ -1054,6 +1058,23 @@ function hammerOrNext(){
   renderMoney(); patchStrip(); pushState();
   feedback(`🔨 SOLD — Lot ${l.id} at £${fmt(S.current)} to ${S.leader.user}. Click Next Lot.`, 'good');
 }
+/* Re-Open Lot — the real Bidpath page grows this button after a hammer, and it is
+   what makes a sale reversible until Next: the outcome is undone and the standing
+   bid simply stands again. The bid book was never cleared, so nothing to restore.
+   (Jordan, 2026-08-25 — sanctioned trainer edit, for testing the Auto Clerk's
+   sold-check recovery end to end.) */
+function reopenLot(){
+  if(!S || S.ended) return;
+  const l = lot();
+  if(!l || !l.outcome) return;
+  const was = l.outcome;
+  l.outcome = null;
+  delete l.hammer;
+  delete l.buyer;
+  S.justClosed = false;
+  renderMoney(); renderTop(); patchStrip(); pushState();
+  feedback(`↩ Lot ${l.id} re-opened — the ${was === 'sold' ? 'sale' : was} is undone and bidding continues at £${fmt(S.current)}`, 'warn');
+}
 function passLot(){
   if(!guardOpen()) return;
   const l = lot();
@@ -1348,6 +1369,9 @@ function renderSources(){
     hb.classList.remove('nextlot');
   }
   $('btn-fw').classList.toggle('armed', S.fw);
+  // Re-Open Lot appears once the lot has been hammered or passed and vanishes on
+  // Next — exactly the window the real Bidpath page keeps a sale reversible for.
+  $('btn-reopen').hidden = !(l && l.outcome && !S.ended);
 }
 function renderBidLog(){
   const chipCls = { live:'chip-live', room:'chip-room', telephone:'chip-telephone',

@@ -792,7 +792,7 @@ body {
   <div class="action-row" style="grid-column:1 / span 6">
     <button class="btn" onclick="act('sell')">Sell</button>
     <button class="btn" onclick="act('pass')">Pass</button>
-    <button class="btn gap-l" id="bUndoTop" onclick="act('undo')">Undo</button>
+    <button class="btn gap-l" id="bUndoTop" onclick="act('undosale')">Undo</button>
     <button class="btn gap-l" onclick="act('offer')">Offer</button>
     <button class="btn" onclick="act('next')">Next</button>
   </div>
@@ -1650,10 +1650,13 @@ function triggerOnline(b,n,a){
 ───────────────────────────────────────── */
 function act(a){
   if(!S.sc && !S.free) return;
+  // The top-row Undo is its own action in free/test mode; in a guided scenario it
+  // behaves as the plain undo the scenario scripts expect.
+  if(a === 'undosale' && !S.free) a = 'undo';
 
   /* ── FREE MODE ── */
   if(S.free){
-    if(S.freeLotSold && a !== 'next' && a !== 'undo'){
+    if(S.freeLotSold && a !== 'next' && a !== 'undo' && a !== 'undosale'){
       fb('Lot is closed — click NEXT to continue', 'info'); return;
     }
     if(a === 'bid'){
@@ -1735,6 +1738,22 @@ function act(a){
           if(lot){ delete S.sold[lot.id]; delete lot.hammer; delete lot.buyer; renderLL(); }
         }
       }
+    } else if(a === 'undosale'){
+      // The top-row Undo undoes the PRESS OF SELL OR PASS itself — it re-opens the
+      // lot exactly as it stood, touching no bid (the left-column Undo is the
+      // bid-undo). It existed but wrongly shared the bid-undo's handler (Jordan,
+      // 2026-08-25): after a sale it ate real bids press by press.
+      if(!S.freeLotSold){ fb('Nothing to undo — the lot is still open', 'info'); return; }
+      const lot = S.lots[S.li];
+      const was = S.lotOutcome;
+      const top = S.log.length ? S.log[S.log.length-1] : null;
+      if(top && (top.cls === 'sold' || top.n === 'NO SALE')){ S.log.pop(); renderLogFull(); }
+      delete S.sold[lot.id]; delete lot.hammer; delete lot.buyer;
+      S.freeLotSold = false; S.lotOutcome = null; S.testFinished = false;
+      renderLL(); resetOnce();
+      fb(`↩ ${was === 'sold' ? 'Sale' : 'Pass'} undone — Lot ${lot.id} re-opened at £${S.hi}`, 'warn');
+      setG(`Lot ${lot.id} re-opened — bidding continues${S.hi > 0 ? ` at £${S.hi}` : ''}`);
+      if(S.live) pushState();
     } else if(a==='offer'){ fb('Offer: re-opens a passed lot','info');
     } else if(a==='pause' && S.test){
       // In Test Mode there is no robot to pause — this holds the human bidders,
