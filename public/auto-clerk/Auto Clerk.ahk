@@ -39,7 +39,7 @@ global OCR_DIR := A_Temp "\AutoClerkOCR"
 ; ⚠ Bump on every meaningful change. v1.0 = the build Jordan froze on 2026-08-25 after
 ; live testing ("this version is really good") — archived at public/auto-clerk/v1.0/
 ; and in Downloads\Auto Clerk v1.0\. 2.0 work continues in THIS file.
-global VERSION := "1.0"
+global VERSION := "2.0"
 global PROFILES := Map(
     "saleroom", {
         title: "Saleroom (GAP) screen",
@@ -92,7 +92,12 @@ global CFG := { profile: "saleroom", mode: "single", fwSecs: 15, sellSecs: 20, p
     ; per platform (Jordan, 2026-08-25): a REAL bidder on that platform, and a bid
     ; PASSED OVER from the other platform. Commas separate alternatives.
     genuineV: "Vectis Live, Vectis Auto, Room, Telephone, Invaluable", mirrorV: "Saleroom, Sale room",
-    genuineS: "INTERNET", mirrorS: "ROOM" }
+    genuineS: "INTERNET", mirrorS: "ROOM",
+    ; ONE-WAY (follow) mode, Jordan 2026-08-25: read BOTH screens but press on only one —
+    ; the hands-off side is the LEADER (a human, or the real sale) and the clerk follows:
+    ; mirrors its bids to the active side and sells the active side when the leader's lot
+    ; closes. "" = press on both as normal.
+    handsOff: "" }
 ; A reading must hold this many polls before it counts: rises quickly, DROPS slowly — one
 ; misread frame ("E60" read as "EGO" → nothing) once undid a whole lot.
 global RISE_CONFIRM := 2, DROP_CONFIRM := 4
@@ -578,6 +583,77 @@ if A_Args.Length >= 1 && A_Args[1] = "--stucktest" {
     SayK((pressed ? "PASS " : "FAIL ") "the catch-up press landed (the outrun race was real)")
     SayK((RS.price = 45 ? "PASS " : "FAIL ") "the genuine £45 was kept as the price (price=£" RS.price ")")
     SayK((fwGiven ? "PASS " : "FAIL ") "the closing clock RAN — Fair Warning went out; no stale flag held it (Jordan's stall)")
+    ExitApp
+}
+; ── --followtest: ONE-WAY mode. A human (the model) drives Vectis; the clerk may press
+;    ONLY on the Saleroom: mirror the human's bids, undo-down after their undo, and when
+;    their lot closes, sell the Saleroom at the agreed price and move on. Not one press
+;    may land on Vectis, whatever happens. ─────────────────────────────────
+if A_Args.Length >= 1 && A_Args[1] = "--followtest" {
+    CFG.mode := "both", CFG.handsOff := "vectis", CFG.fwSecs := 2, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 0, v: 0, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Vectis Live", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayFo(t) => FileAppend(t "`n", "*")
+    steps := [
+        { at: 400,   do: () => (SIM.v := 40),  say: "human's Vectis bidder £40 — the clerk must mirror it to the Saleroom" },
+        { at: 5200,  do: () => (SIM.v := 60),  say: "human's Vectis bidder £60" },
+        { at: 10400, do: () => (SIM.v := 50),  say: "the human UNDOES on Vectis — £60 back to £50; the Saleroom must be brought down" },
+        { at: 17400, do: () => (SIM.vlot := "514", SIM.v := 0), say: "the human hammers and moves to lot 514 — the clerk must sell the Saleroom at £50 and follow" },
+    ]
+    t0 := A_TickCount
+    maxS := 0, soldAt := -1
+    while A_TickCount - t0 < 24000 {
+        el := A_TickCount - t0
+        for st in steps {
+            if !st.HasProp("done") && el >= st.at {
+                st.done := true
+                st.do.Call()
+                SayFo("── t=" el " " st.say)
+            }
+        }
+        TickBoth()
+        if !IsObject(RS)
+            break
+        if SIM.s > maxS
+            maxS := SIM.s
+        if RS.price > 0
+            soldAt := RS.price          ; the last standing price is what a close sells at
+        Sleep 100
+    }
+    seq := ""
+    vp := 0
+    for pr in SIM.presses {
+        seq .= pr " "
+        if InStr(pr, "vectis.")
+            vp++
+    }
+    SayFo((vp = 0 ? "PASS " : "FAIL ") "not a single press landed on the human's Vectis (vectis presses: " vp ")")
+    SayFo((InStr(seq, "saleroom.box_amount") && maxS >= 60 ? "PASS " : "FAIL ") "the human's bids were mirrored to the Saleroom (highest mirrored £" maxS ")")
+    SayFo((InStr(seq, "saleroom.btn_undo") ? "PASS " : "FAIL ") "the human's undo pulled the Saleroom back down")
+    SayFo((InStr(seq, "saleroom.btn_fw") ? "PASS " : "FAIL ") "Fair Warning went out on the Saleroom only")
+    SayFo((InStr(seq, "saleroom.btn_sell") ? "PASS " : "FAIL ") "the Saleroom was SOLD when the human hammered")
+    SayFo((InStr(seq, "saleroom.btn_next") ? "PASS " : "FAIL ") "and moved to the next lot")
+    SayFo((RS.lots = 1 ? "PASS " : "FAIL ") "the lot counted as closed (lots=" RS.lots ")")
+    SayFo((soldAt = 50 ? "PASS " : "FAIL ") "the sale followed at the human's £50, not the undone £60 (sold at £" soldAt ")")
     ExitApp
 }
 ; ── --verifytest: the after-press verdict on its own. A landing above target on OUR
@@ -1090,6 +1166,7 @@ LoadIni() {
     CFG.sellSecs   := Integer(IniRead(INI, "settings", "sellSecs", 20))
     CFG.passNoBids := IniRead(INI, "settings", "passNoBids", "1") = "1"
     CFG.lotWatch   := IniRead(INI, "settings", "lotWatch", "1") = "1"
+    CFG.handsOff := IniRead(INI, "settings", "handsOff", "")
     CFG.genuineV := IniRead(INI, "settings", "genuineV", CFG.genuineV)
     CFG.mirrorV := IniRead(INI, "settings", "mirrorV", CFG.mirrorV)
     CFG.mirrorS := IniRead(INI, "settings", "mirrorS", CFG.mirrorS)
@@ -1120,6 +1197,7 @@ SaveIni() {
     IniWrite CFG.sellSecs, INI, "settings", "sellSecs"
     IniWrite (CFG.passNoBids ? "1" : "0"), INI, "settings", "passNoBids"
     IniWrite (CFG.lotWatch ? "1" : "0"), INI, "settings", "lotWatch"
+    IniWrite CFG.handsOff, INI, "settings", "handsOff"
     IniWrite CFG.genuineV, INI, "settings", "genuineV"
     IniWrite CFG.mirrorV, INI, "settings", "mirrorV"
     IniWrite CFG.mirrorS, INI, "settings", "mirrorS"
@@ -1195,9 +1273,14 @@ BuildMainGui() {
     MAIN.Add("Button", "x+10 w160", "🎯 Set just this one").OnEvent("Click", (*) => SetOne())
 
     MAIN.Add("Text", "xm y+12 w120", "Run:")
-    M_MODE := MAIN.Add("DropDownList", "x+4 w430", ["One screen — the one selected above, on the timers", "BOTH screens — clerk Saleroom and Vectis together and keep them in step"])
-    M_MODE.Value := CFG.mode = "both" ? 2 : 1
-    M_MODE.OnEvent("Change", (*) => (CFG.mode := M_MODE.Value = 2 ? "both" : "single", SaveIni(), RefreshMain()))
+    M_MODE := MAIN.Add("DropDownList", "x+4 w430", ["One screen — the one selected above, on the timers"
+        , "BOTH screens — clerk Saleroom and Vectis together and keep them in step"
+        , "Watch both, clerk SALEROOM only — Vectis is hands-off (a person or the real sale drives it)"
+        , "Watch both, clerk VECTIS only — the Saleroom is hands-off (a person or the real sale drives it)"])
+    M_MODE.Value := CFG.mode != "both" ? 1 : CFG.handsOff = "vectis" ? 3 : CFG.handsOff = "saleroom" ? 4 : 2
+    M_MODE.OnEvent("Change", (*) => (CFG.mode := M_MODE.Value = 1 ? "single" : "both",
+        CFG.handsOff := M_MODE.Value = 3 ? "vectis" : M_MODE.Value = 4 ? "saleroom" : "",
+        SaveIni(), RefreshMain()))
     MAIN.Add("Text", "xm y+6 w120", "Saleroom amount:")
     M_EXACT := MAIN.Add("DropDownList", "x+4 w430", ["type in the box next to A, then press ENTER  (the Saleroom Trainer)", "type in the box next to A, then press the BID button  (the real Saleroom page)"])
     M_EXACT.Value := CFG.srExact = "bid" ? 2 : 1
@@ -1950,6 +2033,15 @@ StartRun() {
     ReadSettingsFromGui()
     both := CFG.mode = "both"
     miss := MissingForRun(both ? "both" : CFG.profile)
+    ; follow mode: the leader's screen is never pressed, so only its READ boxes matter
+    if both && CFG.handsOff != "" {
+        keep := []
+        leaderWord := CFG.handsOff = "vectis" ? "Vectis" : "Saleroom"
+        for m in miss
+            if !(InStr(m, leaderWord) = 1 && (InStr(m, "btn_") || InStr(m, "box_")))
+                keep.Push(m)
+        miss := keep
+    }
     if miss.Length {
         MsgBox "Calibrate first — still needed: " Join(miss, ", "), "Auto Clerk", "Iconi"
         return
@@ -1962,7 +2054,7 @@ StartRun() {
     RS := NewRunState(both)
     READ_CACHE.Clear()
     Hotkey "Esc", (*) => StopRun("Esc"), "On"
-    WriteLog("── START v" VERSION " · " (both ? "BOTH screens in step" : PROFILES[RS.name].title) " · FW after " CFG.fwSecs "s · sell after " CFG.sellSecs "s more · pass no-bid lots: " (CFG.passNoBids ? "yes" : "no"))
+    WriteLog("── START v" VERSION " · " (both ? (CFG.handsOff != "" ? "FOLLOW mode — " (CFG.handsOff = "vectis" ? "Vectis" : "the Saleroom") " is hands-off (the leader), clerking only " (CFG.handsOff = "vectis" ? "the Saleroom" : "Vectis") : "BOTH screens in step") : PROFILES[RS.name].title) " · FW after " CFG.fwSecs "s · sell after " CFG.sellSecs "s more · pass no-bid lots: " (CFG.passNoBids ? "yes" : "no"))
     MAIN.Hide()
     BuildStatus()
     SetTimer RunTick, CFG.pollMs
@@ -1972,7 +2064,7 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false, provN: 0, feedNote: false, winner: "",
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false, provN: 0, feedNote: false, winner: "", handsOff: both ? CFG.handsOff : "", followClose: "",
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
@@ -2130,17 +2222,41 @@ TickBoth() {
                 x.expect := 0, x.tries := 0, x.behindSince := 0
             }
         } else if x.bid < x.high {
-            WriteLog("↩ " label " dropped £" x.high " → £" x.bid " (undo there)")
-            x.high := x.bid
-            x.expect := 0, x.tries := 0, x.behindSince := 0
-            if x.bid < RS.price
-                RS.price := x.bid
+            if RS.handsOff = nm && x.bid <= 0 && RS.price > 0 {
+                ; the human's side went back to nothing after holding the price —
+                ; that is their hammer, not an undo; follow it rather than "correct" it
+                WriteLog("🔨 the " label " (human's side) reset — the lot was closed there")
+                x.high := x.bid
+                RS.followClose := "sold"
+            } else {
+                WriteLog("↩ " label " dropped £" x.high " → £" x.bid " (undo there)")
+                x.high := x.bid
+                x.expect := 0, x.tries := 0, x.behindSince := 0
+                if x.bid < RS.price
+                    RS.price := x.bid
+            }
         }
+    }
+
+    ; ── FOLLOW mode: the human closed their lot — close ours to match ───────
+    if RS.followClose != "" {
+        FollowClose(RS.followClose)
+        return
     }
 
     ; ── bring a side into step ─────────────────────────────────────────────
     for nm, x in RS.side {
         label := nm = "saleroom" ? "Saleroom" : "Vectis"
+        if RS.handsOff = nm {
+            ; the leader's side: never pressed — the human levels it themselves
+            if x.bid < RS.price && !x.warned {
+                x.warned := true
+                WriteLog("  · " label " is behind at £" x.bid " — hands-off; waiting for the human to bring it to £" RS.price)
+            } else if x.bid >= RS.price {
+                x.warned := false
+            }
+            continue
+        }
         if x.bid < RS.price {
             if x.expect = RS.price && now - x.syncAt < SYNC_RETRY_MS
                 continue                                    ; a press is in flight
@@ -2205,6 +2321,21 @@ TickBoth() {
             SetStatus(head " · catching up", "The closing clock is held until both screens agree" reading)
             return
         }
+        if RS.handsOff != "" {
+            active := RS.handsOff = "vectis" ? "saleroom" : "vectis"
+            activeLabel := active = "saleroom" ? "the Saleroom" : "Vectis"
+            if RS.phase = "open" {
+                SetStatus(head " · quiet " Round(quiet) "s · FOLLOW", "Fair Warning on " activeLabel " in " Max(0, Round(fwS - quiet)) "s · the human decides the hammer" reading)
+                if quiet >= fwS {
+                    PressOn(active, "btn_fw", "Fair Warning on " activeLabel " — " Round(quiet) "s without a new bid (follow mode)")
+                    RS.fwPressed := true
+                    RS.phase := "fw", RS.fwAt := now
+                }
+            } else {
+                SetStatus(head " · FAIR WARNING on " activeLabel " · FOLLOW", "Waiting for the human to hammer their side" reading)
+            }
+            return
+        }
         if RS.phase = "open" {
             SetStatus(head " · quiet " Round(quiet) "s", "Fair Warning on both in " Max(0, Round(fwS - quiet)) "s" reading)
             if quiet >= fwS {
@@ -2233,7 +2364,9 @@ TickBoth() {
                 CloseLotBoth("sold")
         }
     } else {
-        if CFG.passNoBids {
+        if RS.handsOff != "" {
+            SetStatus("No bids on either screen · FOLLOW", "The human decides when to pass" reading)
+        } else if CFG.passNoBids {
             SetStatus("No bids on either screen · quiet " Round(quiet) "s", "Pass on both in " Max(0, Round(fwS + sellS - quiet)) "s unless a bid comes" reading)
             if quiet >= fwS + sellS
                 CloseLotBoth("passed")
@@ -2358,6 +2491,12 @@ WatchLots(both) {
             x.lot := tok
         }
         if moved != "" {
+            if RS.handsOff != "" && InStr(moved, RS.handsOff = "vectis" ? "Vectis" : "Saleroom") {
+                ; follow mode: the human's lot moved on — that IS the close signal
+                WriteLog("🔨 the human's lot moved on (" moved ") — following")
+                RS.followClose := RS.price > 0 ? "sold" : "passed"
+                return
+            }
             WriteLog("↪ the lot moved on without us (" moved ") — starting this lot afresh, nothing corrected")
             keepS := RS.side["saleroom"].lot, keepV := RS.side["vectis"].lot
             ResetLotState()
@@ -2433,9 +2572,17 @@ CheckTie(price) {
     if vectisHoldsSaleroom || saleroomHoldsRoom || !anyGenuine
         return
     if RS.priceSide = "saleroom" {
+        if RS.handsOff = "vectis" {
+            WriteLog("tie at £" price " — the ! belongs to the human's Vectis screen; leaving it to them")
+            return
+        }
         PressOn("vectis", "btn_bang", "TIE at £" price " — Saleroom bid first → ! beside Saleroom on Vectis (Vectis bidder dropped, price kept)")
         RS.winner := "Saleroom"
     } else {
+        if RS.handsOff = "saleroom" {
+            WriteLog("tie at £" price " — the ROOM press belongs to the human's Saleroom screen; leaving it to them")
+            return
+        }
         PressOn("saleroom", "btn_room", "TIE at £" price " — " (RS.priceSide = "vectis" ? "Vectis bid first" : "dead heat, favour Vectis") " → ROOM on Saleroom (Saleroom bidder dropped, price kept)")
         RS.winner := "Vectis"
     }
@@ -2780,6 +2927,40 @@ VerifyCatchUp(nm, target) {
     x.tries := 0                        ; instant retry at a stale target was the undo storm
 }
 
+/** FOLLOW mode: the human closed their lot — close the active side to match.
+ *  The clerk never hammers on its own clock here: the human owns the decision, and
+ *  this fires only on their close signal (their figure resetting, or their lot number
+ *  moving on). A late bid on the active side cannot be auto-reversed — the human's
+ *  lot is already closed — so it HOLDS with a plain message instead. */
+FollowClose(how) {
+    global RS
+    RS.followClose := ""
+    active := RS.handsOff = "vectis" ? "saleroom" : "vectis"
+    activeLabel := active = "saleroom" ? "the Saleroom" : "Vectis"
+    price := RS.price
+    if how = "sold" && price > 0 {
+        peak := LastLook([active])
+        if !IsObject(RS)
+            return
+        if peak > price {
+            HoldRun("⚠ " activeLabel " shows £" peak " but the human closed at £" price,
+                    "Sort the difference by hand, then F10.",
+                    "⚠ FOLLOW: " activeLabel " shows £" peak " but the human's side closed at £" price ". HELD — sort it by hand, then F10.")
+            return
+        }
+        PressOn(active, active = "saleroom" ? "btn_sell" : "btn_hammer", (active = "saleroom" ? "SELL" : "HAMMER") " at £" price " — following the human's hammer")
+    } else {
+        PressOn(active, "btn_pass", "PASS — following the human (no bids)")
+    }
+    Sleep 700
+    PressOn(active, active = "saleroom" ? "btn_next" : "btn_hammer", "NEXT on " activeLabel " — following the human")
+    if !IsObject(RS)
+        return
+    RS.lots++
+    WriteLog((how = "sold" ? "🔨 followed the human's hammer — sold £" price : "passed, following the human") " on " activeLabel " · lot " RS.lots " done")
+    ResetLotState()
+}
+
 /** Sell (or Pass) on BOTH screens and move both on — reconciling first so nothing
  *  sells at the wrong price, then checking both figures really went back to 0. */
 CloseLotBoth(how) {
@@ -3118,6 +3299,11 @@ PressOn(nm, key, why) {
     global RS
     if !IsObject(RS)              ; Esc landed mid-sequence — never press into a dead run
         return
+    ; ⚠ the hard wall of follow mode: the leader's screen belongs to the human.
+    if RS.HasProp("handsOff") && RS.handsOff = nm {
+        WriteLog("  · NOT pressed (hands-off side): " nm "." key " — " why)
+        return
+    }
     p := CAL[nm][key]
     WriteLog("PRESS " nm "." key " @" p.x "," p.y " — " why)
     RS.presses++
