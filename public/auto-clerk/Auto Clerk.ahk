@@ -83,7 +83,13 @@ global PROFILES := Map(
 ; srExact: how an EXACT amount is entered on the Saleroom screen — "enter" = type in the box
 ; next to A and press Enter (the Saleroom Trainer), "bid" = type then press the Bid button
 ; (the real Saleroom page, per the rule card).
-global CFG := { profile: "saleroom", mode: "single", fwSecs: 15, sellSecs: 20, passNoBids: true, pollMs: 250, srExact: "enter", lotWatch: true }
+global CFG := { profile: "saleroom", mode: "single", fwSecs: 15, sellSecs: 20, passNoBids: true, pollMs: 250, srExact: "enter", lotWatch: true,
+    ; What the bid lists call things — EDITABLE on the setup screen (Jordan, 2026-08-25:
+    ; "it would be good if I could customise all those words in case they change").
+    ; Commas separate alternatives. mirrorV/mirrorS = what OUR OWN press shows on each
+    ; list; genuineS = a real online bidder on the Saleroom list (its rows also say ROOM
+    ; for our presses, so the tie check needs both words there).
+    mirrorV: "Saleroom, Sale room", mirrorS: "ROOM", genuineS: "INTERNET" }
 ; A reading must hold this many polls before it counts: rises quickly, DROPS slowly — one
 ; misread frame ("E60" read as "EGO" → nothing) once undid a whole lot.
 global RISE_CONFIRM := 2, DROP_CONFIRM := 4
@@ -137,7 +143,7 @@ global PAD_X := 4, PAD_Y := 4
 ; AutoHotkey runs all top-level lines in file order at start-up, so a declaration
 ; placed further down the file executes AFTER the window is built and wipes the
 ; references it just made (that was "Calibrate does nothing", 2026-08-21).
-global MAIN := 0, M_STATUS := 0, M_PROF := 0, M_FW := 0, M_SELL := 0, M_PASS := 0, M_CAL := 0, M_MODE := 0, M_ONE := 0, M_EXACT := 0, M_LOT := 0
+global MAIN := 0, M_STATUS := 0, M_PROF := 0, M_FW := 0, M_SELL := 0, M_PASS := 0, M_CAL := 0, M_MODE := 0, M_ONE := 0, M_EXACT := 0, M_LOT := 0, M_MIRV := 0, M_MIRS := 0, M_GENS := 0
 global CALST := 0
 global STATUS := 0, S_L1 := 0, S_L2 := 0, S_L3 := 0
 
@@ -1081,6 +1087,9 @@ LoadIni() {
     CFG.sellSecs   := Integer(IniRead(INI, "settings", "sellSecs", 20))
     CFG.passNoBids := IniRead(INI, "settings", "passNoBids", "1") = "1"
     CFG.lotWatch   := IniRead(INI, "settings", "lotWatch", "1") = "1"
+    CFG.mirrorV := IniRead(INI, "settings", "mirrorV", CFG.mirrorV)
+    CFG.mirrorS := IniRead(INI, "settings", "mirrorS", CFG.mirrorS)
+    CFG.genuineS := IniRead(INI, "settings", "genuineS", CFG.genuineS)
     CFG.pollMs     := Integer(IniRead(INI, "settings", "pollMs", 250))
     if !PROFILES.Has(CFG.profile)
         CFG.profile := "saleroom"
@@ -1107,6 +1116,9 @@ SaveIni() {
     IniWrite CFG.sellSecs, INI, "settings", "sellSecs"
     IniWrite (CFG.passNoBids ? "1" : "0"), INI, "settings", "passNoBids"
     IniWrite (CFG.lotWatch ? "1" : "0"), INI, "settings", "lotWatch"
+    IniWrite CFG.mirrorV, INI, "settings", "mirrorV"
+    IniWrite CFG.mirrorS, INI, "settings", "mirrorS"
+    IniWrite CFG.genuineS, INI, "settings", "genuineS"
     IniWrite CFG.pollMs, INI, "settings", "pollMs"
     for name, m in CAL {
         for key, v in m {
@@ -1160,7 +1172,7 @@ BuildMainGui() {
     ; ⚠ EVERY control variable assigned in here must be in this list, or the assignment
     ; quietly makes a LOCAL copy and the real global stays 0 (M_MODE/M_ONE were missed
     ; → "won't open", Integer has no property Value, 2026-08-21 16:22).
-    global MAIN, M_STATUS, M_PROF, M_FW, M_SELL, M_PASS, M_CAL, M_MODE, M_ONE, M_EXACT, M_LOT
+    global MAIN, M_STATUS, M_PROF, M_FW, M_SELL, M_PASS, M_CAL, M_MODE, M_ONE, M_EXACT, M_LOT, M_MIRV, M_MIRS, M_GENS
     MAIN := Gui("+AlwaysOnTop", "Auto Clerk")
     MAIN.SetFont("s10", "Segoe UI")
     MAIN.Add("Text", "w560", "Works whatever clerking screen is on the monitor — the trainers now, the real pages later. "
@@ -1197,6 +1209,13 @@ BuildMainGui() {
     ; cannot be boxed at all (Jordan, 2026-08-24 — the Vectis lot number has no fixed spot).
     M_LOT := MAIN.Add("CheckBox", "xm y+4 w560 Checked" (CFG.lotWatch ? 1 : 0), "Watch the lot number on each screen (needs a LOT NUMBER box on both — untick it if the lot number moves about)")
     MAIN.Add("Text", "xm y+4 w560 c808080", "Real sale = 15 / 20. For a quick practice run try 6 / 8.")
+    MAIN.Add("Text", "xm y+10 w560", "Bid-list wording — what the platforms call things (edit if the real pages use different words; commas separate alternatives):")
+    MAIN.Add("Text", "xm y+4 w280 Right", "OUR press shows on the VECTIS list as")
+    M_MIRV := MAIN.Add("Edit", "x+6 yp-3 w200", CFG.mirrorV)
+    MAIN.Add("Text", "xm y+8 w280 Right", "OUR press shows on the SALEROOM list as")
+    M_MIRS := MAIN.Add("Edit", "x+6 yp-3 w200", CFG.mirrorS)
+    MAIN.Add("Text", "xm y+8 w280 Right", "a REAL online bidder on the SALEROOM list says")
+    M_GENS := MAIN.Add("Edit", "x+6 yp-3 w200", CFG.genuineS)
 
     M_STATUS := MAIN.Add("Text", "xm y+12 w560 h40", "")
     b := MAIN.Add("Button", "xm y+6 w200 Default", "▶  Start  (F9)")
@@ -1263,6 +1282,11 @@ ReadSettingsFromGui() {
     CFG.sellSecs := Max(2, Integer(M_SELL.Value || 20))
     CFG.passNoBids := M_PASS.Value = 1
     CFG.lotWatch := M_LOT.Value = 1
+    ; blank fields fall back to the defaults — an empty mirror word would make
+    ; EVERYTHING look genuine and blind the tie check
+    CFG.mirrorV := Trim(M_MIRV.Text) != "" ? Trim(M_MIRV.Text) : "Saleroom, Sale room"
+    CFG.mirrorS := Trim(M_MIRS.Text) != "" ? Trim(M_MIRS.Text) : "ROOM"
+    CFG.genuineS := Trim(M_GENS.Text) != "" ? Trim(M_GENS.Text) : "INTERNET"
     SaveIni()
 }
 
@@ -1859,6 +1883,20 @@ ParseAmount(txt) {
     return MoneyFromToken(m[1])
 }
 
+/** Any of the comma-separated words present in the text? (Case-insensitive, trimmed.) */
+HasWord(txt, csv) {
+    for w in StrSplit(csv, ",") {
+        w := Trim(w)
+        if w != "" && InStr(txt, w)
+            return true
+    }
+    return false
+}
+/** Does this label/line show OUR OWN press — the mirror — on the named screen? */
+IsMirror(txt, nm) {
+    return HasWord(txt, nm = "vectis" ? CFG.mirrorV : CFG.mirrorS)
+}
+
 /** Whole POUNDS from an OCR money token, or -1.
  *  ⚠⚠ PENCE (2026-08-24). Every separator used to be stripped, so a screen showing
  *  "15.00" read as £1,500 and "1,250.00" as £125,000 — a hundredfold error that would
@@ -1914,7 +1952,7 @@ NewRunState(both) {
         name: CFG.profile, both: both, paused: false, busy: false, blind: false,
         bid: -1, stable: -1, stableN: 0, lastChangeAt: A_TickCount, lotStartAt: A_TickCount,
         fwAt: 0, phase: "open", presses: 0, lots: 0, lastRead: "", startedAt: A_TickCount,
-        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false, provN: 0, feedNote: false,
+        blindSince: 0, lot: "", lotTick: 0, mismatchN: 0, lotHolds: 0, lotWatchOff: false, watchFp: Map(), wasUnlevel: false, provN: 0, feedNote: false, winner: "",
         ; two-screen state
         price: 0, fwPressed: false, side: Map(),
         priceSide: "", priceAt: 0, tieCheckedPrice: 0,
@@ -2061,6 +2099,7 @@ TickBoth() {
                 ; expect from an outrun catch-up held the closing clock forever with
                 ; both screens agreeing at £45 (Jordan's stall, 2026-08-25)
                 x.expect := 0, x.tries := 0, x.behindSince := 0
+                RS.winner := label          ; a genuine bid on this platform holds the lot
                 WriteLog("bid £" x.bid " on " label (RS.phase = "fw" ? " — after Fair Warning; clock reset" : ""))
                 if RS.phase = "fw" && RS.fwPressed && PROFILES["saleroom"].fwIsToggle
                     PressOn("saleroom", "btn_fw", "Fair warn — cancelled by a new bid")
@@ -2140,7 +2179,7 @@ TickBoth() {
     fwS := CFG.fwSecs, sellS := CFG.sellSecs
     inStep := (s = v)
     reading := " · S[" Short(sS.lastRead, 16) "] V[" Short(sV.lastRead, 16) "]"
-    head := "Saleroom £" s " · Vectis £" v (inStep ? "" : " — catching up")
+    head := "Saleroom £" s " · Vectis £" v (RS.winner != "" && RS.price > 0 ? " · " RS.winner " bidder winning" : "") (inStep ? "" : " — catching up")
     if RS.price > 0 {
         if !level {
             SetStatus(head " · catching up", "The closing clock is held until both screens agree" reading)
@@ -2215,7 +2254,7 @@ FeedText(nm) {
  *  "Saleroom" on the Vectis feed and "ROOM" on the Saleroom feed. Name tokens like
  *  SR2418804 cannot leak an amount — a number is only taken standing alone. */
 GenuineLineAmount(line, nm) {
-    if InStr(line, nm = "vectis" ? "Saleroom" : "ROOM")
+    if IsMirror(line, nm)
         return 0
     best := 0, pos := 1
     while pos := RegExMatch(line, "(?<![\dA-Za-z.,])(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?![\dA-Za-z])", &m, pos) {
@@ -2361,16 +2400,18 @@ CheckTie(price) {
     regS := BidRegion("saleroom", "reg_sname")
     vt := OcrRead(regV.x, regV.y, regV.w, regV.h, "txt")
     sn := OcrRead(regS.x, regS.y, regS.w, regS.h, "txt")
-    vectisHoldsSaleroom := InStr(vt, "saleroom") || InStr(vt, "sale room")
-    saleroomHoldsRoom   := InStr(sn, "room") && !InStr(sn, "internet")
+    vectisHoldsSaleroom := IsMirror(vt, "vectis")
+    saleroomHoldsRoom   := IsMirror(sn, "saleroom") && !HasWord(sn, CFG.genuineS)
     WriteLog("tie check at £" price ": Vectis top bid [" Short(vt, 24) "] · Saleroom top bid [" Short(sn, 24) "]"
         . (vectisHoldsSaleroom || saleroomHoldsRoom ? " → same bid on both, in step" : " → TWO bidders at one price"))
     if vectisHoldsSaleroom || saleroomHoldsRoom
         return
     if RS.priceSide = "saleroom" {
         PressOn("vectis", "btn_bang", "TIE at £" price " — Saleroom bid first → ! beside Saleroom on Vectis (Vectis bidder dropped, price kept)")
+        RS.winner := "Saleroom"
     } else {
         PressOn("saleroom", "btn_room", "TIE at £" price " — " (RS.priceSide = "vectis" ? "Vectis bid first" : "dead heat, favour Vectis") " → ROOM on Saleroom (Saleroom bidder dropped, price kept)")
+        RS.winner := "Vectis"
     }
 }
 
@@ -2691,7 +2732,6 @@ VerifyCatchUp(nm, target) {
         return
     label := nm = "saleroom" ? "Saleroom" : "Vectis"
     key := nm = "vectis" ? "reg_vtype" : "reg_sname"
-    mineWord := nm = "vectis" ? "Saleroom" : "ROOM"
     ours := true                                ; unreadable → assume ours: a phantom hammer
     lbl := ""                                   ; cannot be undone, a re-bid can
     if CAL[nm].Has(key) {
@@ -2700,7 +2740,7 @@ VerifyCatchUp(nm, target) {
         if !IsObject(RS)
             return
         if Trim(lbl) != ""
-            ours := InStr(lbl, mineWord) > 0
+            ours := IsMirror(lbl, nm)
     }
     if !ours {
         WriteLog("  · catch-up on " label " was outrun by a real bid — it shows £" landed " [" Short(lbl, 16) "], keeping it")
@@ -2869,6 +2909,7 @@ ResetLotState() {
     }
     RS.bid := -1, RS.stable := -1, RS.stableN := 0, RS.blindSince := 0
     RS.lot := "", RS.mismatchN := 0
+    RS.winner := ""
     RS.price := 0, RS.phase := "open", RS.fwPressed := false
     RS.priceSide := "", RS.priceAt := 0, RS.tieCheckedPrice := 0
     RS.lastChangeAt := A_TickCount, RS.fwAt := 0
