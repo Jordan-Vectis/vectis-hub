@@ -507,6 +507,70 @@ if A_Args.Length >= 1 && A_Args[1] = "--startbidtest" {
     SayB((!RS.paused ? "PASS " : "FAIL ") "the run is not held")
     ExitApp
 }
+; ── --stucktest: Jordan's stall. A catch-up to £40 is OUTRUN by a genuine £45 in the
+;    instant after the press — the £45 is rightly kept, but the catch-up's leftover
+;    "expected £40" flag must not hold the closing clock forever once both screens
+;    agree at £45. The lot must still reach Fair Warning. ──────────────────────
+if A_Args.Length >= 1 && A_Args[1] = "--stucktest" {
+    CFG.mode := "both", CFG.fwSecs := 2, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 40, v: 35, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayK(t) => FileAppend(t "`n", "*")
+    ; The instant the catch-up's committing press lands, a genuine £45 outruns it —
+    ; and the Saleroom mirrors it by itself, so both screens agree at £45.
+    SetTimer WatchPress, 25
+    WatchPress() {
+        global SIM
+        for pr in SIM.presses
+            if pr = "vectis.btn_saleroom" {
+                SetTimer WatchPress, 0
+                SIM.v := 45
+                SIM.vtype := "Vectis Live"
+                SIM.s := 45
+                FileAppend "── genuine £45 outran the £40 catch-up; both screens now agree at £45`n", "*"
+                return
+            }
+    }
+    t0 := A_TickCount, fwGiven := false, pressed := false
+    while A_TickCount - t0 < 14000 {
+        TickBoth()
+        if !IsObject(RS)
+            break
+        for pr in SIM.presses {
+            if pr = "vectis.btn_saleroom"
+                pressed := true
+            if pr = "vectis.btn_fw"
+                fwGiven := true
+        }
+        if fwGiven
+            break
+        Sleep 80
+    }
+    SetTimer WatchPress, 0
+    SayK((pressed ? "PASS " : "FAIL ") "the catch-up press landed (the outrun race was real)")
+    SayK((RS.price = 45 ? "PASS " : "FAIL ") "the genuine £45 was kept as the price (price=£" RS.price ")")
+    SayK((fwGiven ? "PASS " : "FAIL ") "the closing clock RAN — Fair Warning went out; no stale flag held it (Jordan's stall)")
+    ExitApp
+}
 ; ── --verifytest: the after-press verdict on its own. A landing above target on OUR
 ;    label is undone; a genuine bid that outran the press is kept. ───────────────
 if A_Args.Length >= 1 && A_Args[1] = "--verifytest" {
@@ -1993,6 +2057,10 @@ TickBoth() {
                 RS.price := x.bid
                 RS.priceSide := nm, RS.priceAt := now
                 RS.lastChangeAt := now
+                ; ⚠ a genuine rise supersedes any catch-up still in flight — a stale
+                ; expect from an outrun catch-up held the closing clock forever with
+                ; both screens agreeing at £45 (Jordan's stall, 2026-08-25)
+                x.expect := 0, x.tries := 0, x.behindSince := 0
                 WriteLog("bid £" x.bid " on " label (RS.phase = "fw" ? " — after Fair Warning; clock reset" : ""))
                 if RS.phase = "fw" && RS.fwPressed && PROFILES["saleroom"].fwIsToggle
                     PressOn("saleroom", "btn_fw", "Fair warn — cancelled by a new bid")
@@ -2042,7 +2110,9 @@ TickBoth() {
             PressOn(nm, "btn_undo", "UNDO — bring " label " down from £" x.bid " to £" RS.price)
             x.expect := RS.price, x.syncAt := now, x.tries++
         } else {
-            x.behindSince := 0
+            ; a side sitting AT the agreed price has nothing in flight — clear the
+            ; bookkeeping, or a stale expect blocks `level` and the clock never runs
+            x.behindSince := 0, x.expect := 0, x.tries := 0
         }
     }
 
