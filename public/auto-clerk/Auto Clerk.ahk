@@ -145,7 +145,14 @@ global STATUS := 0, S_L1 := 0, S_L2 := 0, S_L3 := 0
 OnError ErrLog
 ErrLog(err, mode) {
     ; Written directly (not via WriteLog) so a fault inside the simulation is recorded too.
-    try FileAppend FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "  ERROR " (IsObject(err) ? err.Message " (" err.What ") " err.File ":" err.Line : String(err)) "`r`n", LOGF
+    detail := IsObject(err) ? err.Message " (" err.What ") " err.File ":" err.Line : String(err)
+    if A_Args.Length >= 1 && SubStr(A_Args[1], 1, 2) = "--" {
+        ; a CLI test: print the fault and die — a dialog would hang a headless run,
+        ; and the error belongs to the test's output, not Jordan's real log
+        try FileAppend "FAIL crashed: " detail "`n", "*"
+        ExitApp 1
+    }
+    try FileAppend FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "  ERROR " detail "`r`n", LOGF
     MsgBox "Something went wrong inside the Auto Clerk.`n`nDetails are in:`n" LOGF "`n`nTell Claude and send that file.", "Auto Clerk", "Iconx"
     return 1
 }
@@ -403,6 +410,101 @@ if A_Args.Length >= 1 && A_Args[1] = "--hashtest" {
         out .= "  " (h1 != h3 ? "PASS" : "FAIL") " CHANGED when 45 became 50 (this is what catches a snipe)`n"
     }
     FileAppend out, "*"
+    ExitApp
+}
+; ── --layouttest: the Test read window must FIT THE SCREEN with every box present —
+;    it outgrew 1080p as boxes were added, and an AHK window cannot scroll. ────────
+if A_Args.Length >= 1 && A_Args[1] = "--layouttest" {
+    Say9(t) => FileAppend(t "`n", "*")
+    CAL["saleroom"] := Map(), CAL["vectis"] := Map()
+    pic := A_Temp . Chr(92) . "ac-layout-fake.png"
+    g0 := Gui("-Caption +ToolWindow")
+    g0.BackColor := "FFFFFF"
+    g0.SetFont("s48 Bold c000000", "Segoe UI")
+    g0.Add("Text", "w560 h170 Center", "Bid 45")
+    g0.Show("NoActivate x200 y200 w560 h170")
+    Sleep 350
+    q := Chr(39)
+    RunWait 'powershell -NoProfile -Command "Add-Type -AssemblyName System.Drawing; $b = New-Object System.Drawing.Bitmap 560,170; $g = [System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(200,200,0,0,(New-Object System.Drawing.Size 560,170)); $b.Save(' q pic q ')"', , "Hide"
+    g0.Destroy()
+    if !FileExist(pic) {
+        Say9("FAIL could not make the fake preview picture")
+        ExitApp
+    }
+    rows := []
+    for key in ["reg_bid", "reg_ask", "reg_sname", "reg_vtype", "reg_lot", "reg_feed"]
+        rows.Push({ key: key, r: { x: 100, y: 100, w: 90, h: 30 }, pic: pic, txt: "Bid 45", meaning: "£45" })
+    ShowTestRead(rows, { amt: 45 }, "Lot watch: both screens read lot 513 — they agree, so the run won't be held.")
+    Sleep 600
+    if !WinExist("Auto Clerk — test read") {
+        Say9("FAIL the test read window did not open")
+        ExitApp
+    }
+    WinGetPos , , &w, &h, "Auto Clerk — test read"
+    Say9("window " w " × " h " on a " A_ScreenWidth " × " A_ScreenHeight " screen")
+    Say9((h <= A_ScreenHeight - 40 ? "PASS " : "FAIL ") "it fits on the screen with all six boxes shown")
+    Say9((w >= 900 ? "PASS " : "FAIL ") "both columns are in use")
+    ExitApp
+}
+; ── --startbidtest: after Next, the FRESH lot opens with a starting bid — at the very
+;    same figure the last lot sold for. The old £0 test would blind-retry Next, and on
+;    Vectis that is the Hammer: it would sell the new lot on the spot. ────────────
+if A_Args.Length >= 1 && A_Args[1] = "--startbidtest" {
+    CFG.mode := "both", CFG.fwSecs := 30, CFG.sellSecs := 30, CFG.passNoBids := true
+    for nm, prof in PROFILES {
+        m := Map()
+        for it in prof.items {
+            if it.kind != "reg"
+                m[it.key] := { x: 0, y: 0 }
+            else if it.key = "reg_vtype"
+                m[it.key] := { x: 4000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_sname"
+                m[it.key] := { x: 3000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_lot"
+                m[it.key] := { x: nm = "vectis" ? 6000 : 5000, y: 100, w: 50, h: 20 }
+            else if it.key = "reg_feed"
+                continue
+            else
+                m[it.key] := { x: nm = "vectis" ? 2000 : 1000, y: 100, w: 50, h: 20 }
+        }
+        CAL[nm] := m
+    }
+    SIM := { s: 20, v: 20, typed: 0, askV: 0, soldV: false, soldS: false, presses: [], out: "", vtype: "Saleroom", sname: "ROOM", slot: "513", vlot: "513" }
+    RS := NewRunState(true)
+    SIM.t0 := A_TickCount
+    SayB(t) => FileAppend(t "`n", "*")
+    loop 6 {
+        TickBoth()
+        Sleep 60
+    }
+    SayB("settled at £" RS.price " on both — closing the lot")
+    ; The moment the NEXT press lands (the SECOND vectis hammer), the new lot opens
+    ; with a £20 starting bid — the same figure the old lot just sold for.
+    SetTimer WatchNext, 20
+    WatchNext() {
+        global SIM
+        n := 0
+        for pr in SIM.presses
+            if pr = "vectis.btn_hammer"
+                n++
+        if n >= 2 {
+            SetTimer WatchNext, 0
+            SIM.slot := "514", SIM.vlot := "514"
+            SIM.s := 0
+            SIM.v := 20
+            FileAppend "── lot 514 opens with a £20 starting bid — same figure as the hammer`n", "*"
+        }
+    }
+    CloseLotBoth("sold")
+    SetTimer WatchNext, 0
+    hammers := 0
+    for pr in SIM.presses
+        if pr = "vectis.btn_hammer"
+            hammers++
+    SayB((hammers = 2 ? "PASS " : "FAIL ") "the Vectis hammer was pressed exactly twice — sale + Next, NO blind retry (got " hammers ")")
+    SayB((RS.lots = 1 ? "PASS " : "FAIL ") "the lot counted as closed and the clerk moved on (lots=" RS.lots ")")
+    SayB((SIM.v = 20 && SIM.vlot = "514" ? "PASS " : "FAIL ") "lot 514's £20 starting bid is untouched (V=£" SIM.v " lot " SIM.vlot ")")
+    SayB((!RS.paused ? "PASS " : "FAIL ") "the run is not held")
     ExitApp
 }
 ; ── --feedtest: provenance. A price with a real bidder behind it sells normally; a price
@@ -1242,38 +1344,65 @@ TestRead() {
 ShowTestRead(rows, verdict, lotLine := "") {
     NAMES := Map("reg_bid", "CURRENT BID box", "reg_ask", "A — next asking box",
                  "reg_vtype", "Vectis top-row Bid Type (tie check)", "reg_sname", "Saleroom top-row Name (tie check)",
-                 "reg_lot", "LOT NUMBER box (lot watch)")
-    g := Gui("+AlwaysOnTop +Owner" MAIN.Hwnd, "Auto Clerk — test read")
+                 "reg_lot", "LOT NUMBER box (lot watch)", "reg_feed", "BID FEED — the whole list (real-bidder check)")
+    ; ⚠ TWO COLUMNS, pictures scaled to FIT (2026-08-25, Jordan: "the test read seems
+    ; to scroll off the page"). One column of 620px-wide pictures outgrew a 1080p screen
+    ; once the box count reached six, and an AHK window cannot scroll — so items fill
+    ; whichever column is currently shorter, and every picture is measured and shrunk to
+    ; its slot instead of being stretched to the full width.
+    g := Gui("+AlwaysOnTop" (IsObject(MAIN) ? " +Owner" MAIN.Hwnd : ""), "Auto Clerk — test read")
     g.SetFont("s10", "Segoe UI")
+    colX := Map(1, 12, 2, 524)
+    colY := Map(1, 10, 2, 10)
+    colW := 490
     for row in rows {
+        ci := colY[1] <= colY[2] ? 1 : 2
+        x := colX[ci], y := colY[ci]
         g.SetFont("s10 Bold")
-        g.Add("Text", "w620 " (A_Index > 1 ? "y+12" : ""), NAMES.Has(row.key) ? NAMES[row.key] : row.key)
+        g.Add("Text", Format("x{} y{} w{}", x, y, colW), NAMES.Has(row.key) ? NAMES[row.key] : row.key)
         g.SetFont("s9 Norm c606060")
-        g.Add("Text", "w620", row.r.x ", " row.r.y "  ·  " row.r.w " × " row.r.h " px — the box you drew (plus a " PAD_X " px hair, so nothing clips)")
+        g.Add("Text", Format("x{} y+2 w{}", x, colW), row.r.x ", " row.r.y "  ·  " row.r.w " × " row.r.h " px — the box you drew")
         g.SetFont("s10 Norm")
-        if FileExist(row.pic)
-            g.Add("Picture", "w620 h-1 Border", row.pic)
-        g.Add("Text", "w620", "Windows read:  [" Short(row.txt, 70) "]   →   " row.meaning)
+        if FileExist(row.pic) {
+            pw := 0, ph := 0
+            try {
+                hbm := LoadPicture(row.pic)
+                bi := Buffer(32, 0)
+                DllCall("GetObject", "ptr", hbm, "int", 32, "ptr", bi)
+                pw := NumGet(bi, 4, "int"), ph := Abs(NumGet(bi, 8, "int"))
+                DllCall("DeleteObject", "ptr", hbm)
+            }
+            if pw > 0 && ph > 0 {
+                scale := Min(colW / pw, 150 / ph, 1.5)      ; fit the slot; never blow tiny ones up much
+                g.Add("Picture", Format("x{} y+4 w{} h{} Border", x, Round(pw * scale), Round(ph * scale)), row.pic)
+            } else {
+                g.Add("Picture", Format("x{} y+4 w{} h-1 Border", x, colW), row.pic)
+            }
+        }
+        last := g.Add("Text", Format("x{} y+4 w{} r2", x, colW), "Windows read:  [" Short(row.txt, 60) "]   →   " row.meaning)
+        last.GetPos(, &ly, , &lh)
+        colY[ci] := ly + lh + 16
     }
+    y := Max(colY[1], colY[2]) + 4
     g.SetFont("s11 Bold")
-    g.Add("Text", "w620 y+14", "Verdict — the current bid the clerk would act on:   "
+    g.Add("Text", Format("x12 y{} w1002", y), "Verdict — the current bid the clerk would act on:   "
         . (verdict.amt >= 0 ? "£" verdict.amt : "nothing — no bid showing"))
     g.SetFont("s10 Norm")
     if lotLine != "" {
         agree := InStr(lotLine, "they agree")
         g.SetFont(agree ? "s10 Norm" : "s10 Bold cRed")
-        g.Add("Text", "w620 y+6", (agree ? "✓ " : "⚠ ") lotLine)
+        g.Add("Text", "x12 y+6 w1002", (agree ? "✓ " : "⚠ ") lotLine)
         g.SetFont("s10 Norm")
     }
-    if CFG.profile = "saleroom" && !CAL["saleroom"].Has("reg_ask") {
+    if CFG.profile = "saleroom" && CAL.Has("saleroom") && !CAL["saleroom"].Has("reg_ask") {
         g.SetFont("s10 Bold cRed")
-        g.Add("Text", "w620 y+6", "⚠ The A (next asking) box is NOT set — a lone single-digit bid (£5–£9) reads as nothing until it is. Use 'Set just one'.")
+        g.Add("Text", "x12 y+6 w1002", "⚠ The A (next asking) box is NOT set — a lone single-digit bid (£5–£9) reads as nothing until it is. Use 'Set just one'.")
         g.SetFont("s10 Norm")
     }
-    if !(CAL["vectis"].Has("reg_vtype") && CAL["saleroom"].Has("reg_sname"))
-        g.Add("Text", "w620 y+4", "ℹ The same-amount tie check stays off until the two top-row label boxes are set on both screens.")
-    g.Add("Text", "w620 y+6", "The bid verdict tries the CURRENT BID box first; when that shows nothing (a lone digit), the A box is read and stepped back one increment. The label boxes are only consulted when both screens sit at the same figure.")
-    g.Add("Button", "w100 y+10 Default", "OK").OnEvent("Click", (*) => g.Destroy())
+    if CAL.Has("vectis") && CAL.Has("saleroom") && !(CAL["vectis"].Has("reg_vtype") && CAL["saleroom"].Has("reg_sname"))
+        g.Add("Text", "x12 y+4 w1002", "ℹ The same-amount tie check stays off until the two top-row label boxes are set on both screens.")
+    g.Add("Text", "x12 y+6 w1002", "The bid verdict tries the CURRENT BID box first; when that shows nothing (a lone digit), the A box is read and stepped back one increment. The label boxes are only consulted when both screens sit at the same figure.")
+    g.Add("Button", "x12 w100 y+10 Default", "OK").OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Close", (*) => g.Destroy())
     g.Show()
 }
@@ -2528,29 +2657,54 @@ CloseLotBoth(how) {
         PressOn("saleroom", "btn_pass", "PASS — no bids")
     }
     Sleep 700
+    prevLot := Map()
+    for nm in ["saleroom", "vectis"]
+        prevLot[nm] := CFG.lotWatch ? LotToken(nm) : ""
+    if !IsObject(RS)
+        return
     PressOn("vectis", "btn_hammer", "NEXT LOT")
     PressOn("saleroom", "btn_next", "NEXT lot")
 
-    ; Verify both moved on (figure back to 0); one retry per side, then pause.
+    ; ⚠⚠ Verify both moved on — but a fresh lot NO LONGER always reads £0: a lot can
+    ; OPEN with a starting bid already on the book. So moved = the figure left the sold
+    ; price (or reads 0), or the lot number changed. And a retry press must NEVER be
+    ; blind: on Vectis the Next button IS the Hammer, and pressing it onto a new lot
+    ; that opened with a bid sells that lot on the spot (Jordan, 2026-08-25: "not
+    ; moving on to the next lot properly on vectis"). Retry only when the lot box
+    ; CONFIRMS the old lot is still up.
     for nm, x in RS.side {
         Loop 2 {
-            moved := false
+            moved := false, stale := false
             t0 := A_TickCount
             while A_TickCount - t0 < 3000 {
                 Sleep 150
-                if ReadBid(nm).amt <= 0 {
+                a := ReadBid(nm).amt
+                if !IsObject(RS)
+                    return
+                if a <= 0 || (how = "sold" && a != price) {
                     moved := true
                     break
+                }
+                if prevLot[nm] != "" {
+                    tok := LotToken(nm)
+                    if !IsObject(RS)
+                        return
+                    if tok != "" && tok != prevLot[nm] {
+                        moved := true
+                        break
+                    }
+                    stale := tok != "" && tok = prevLot[nm]
                 }
             }
             if moved
                 break
-            if A_Index = 1 {
-                WriteLog("⚠ " nm " did not go back to 0 after Next — pressing Next once more")
+            if A_Index = 1 && stale {
+                WriteLog("⚠ " nm " still shows lot " prevLot[nm] " after Next — pressing Next once more")
                 PressOn(nm, nm = "saleroom" ? "btn_next" : "btn_hammer", "NEXT (retry)")
+            } else if A_Index = 1 {
+                WriteLog("⚠ cannot confirm " nm " moved on (the new lot may have opened with a bid at the same figure) — NOT pressing Next again blind; carrying on from what the screen shows")
+                break
             } else {
-                ; Don't freeze: say so, start the lot state afresh from what the screen shows,
-                ; and carry on. (Pausing here replayed the stale price on resume and stuck again.)
                 WriteLog("⚠ could not confirm " nm " moved to a new lot — carrying on from what the screen shows now")
             }
         }
@@ -2697,23 +2851,43 @@ CloseLot(how) {
         }
     }
     Sleep 700
+    prevLot := CFG.lotWatch ? LotToken(RS.name) : ""
+    if !IsObject(RS)
+        return
     Press(RS.name = "saleroom" ? "btn_next" : "btn_hammer", RS.name = "saleroom" ? "NEXT lot" : "NEXT LOT")
-    ; Verify: the bid figure should now read 0 (a fresh lot). If not, one more Next, then warn.
+    ; Verify it moved on — a fresh lot can OPEN with a starting bid, so £0 alone is not
+    ; the test, and a blind Next-retry on Vectis is the Hammer (see CloseLotBoth).
     Loop 2 {
         t0 := A_TickCount
-        moved := false
+        moved := false, stale := false
         while A_TickCount - t0 < 3000 {
             Sleep 150
-            if ReadBid(RS.name).amt <= 0 {
+            a := ReadBid(RS.name).amt
+            if !IsObject(RS)
+                return
+            if a <= 0 || (how = "sold" && a != before) {
                 moved := true
                 break
+            }
+            if prevLot != "" {
+                tok := LotToken(RS.name)
+                if !IsObject(RS)
+                    return
+                if tok != "" && tok != prevLot {
+                    moved := true
+                    break
+                }
+                stale := tok != "" && tok = prevLot
             }
         }
         if moved
             break
-        if A_Index = 1 {
-            WriteLog("⚠ the bid figure did not go back to 0 after Next — pressing Next once more")
+        if A_Index = 1 && stale {
+            WriteLog("⚠ the screen still shows lot " prevLot " after Next — pressing Next once more")
             Press(RS.name = "saleroom" ? "btn_next" : "btn_hammer", "NEXT lot (retry)")
+        } else if A_Index = 1 {
+            WriteLog("⚠ cannot confirm the lot moved on (the new lot may have opened with a bid) — NOT pressing Next again blind")
+            break
         } else {
             WriteLog("⚠ could not confirm the new lot — carrying on from what the screen shows now")
         }

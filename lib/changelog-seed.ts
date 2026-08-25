@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f820408150ad8f28ca2411ebac90584d235d7d33","author":"Jordan Orange","date":"2026-08-25T13:54:25+01:00","subject":"Auto Clerk: provenance — prove the standing price traces to a real bidder"},
   {"sha":"02d2594bdf4855707befebeb2cc5a44624eaf345","author":"Jordan Orange","date":"2026-08-25T13:41:56+01:00","subject":"Auto Clerk: kill the phantom bid, wait out flurries, and hold the clock until level"},
   {"sha":"bc43e04ac9687a08f1d8841b51ad387f883c774c","author":"Jordan Orange","date":"2026-08-25T11:34:13+01:00","subject":"Trainers: Re-Open Lot on the Vectis clerk, and the Saleroom sale-Undo fixed"},
   {"sha":"1dca41505ec6f5fdf0bc0c7a992858e236faace8","author":"Jordan Orange","date":"2026-08-25T11:22:42+01:00","subject":"Auto Clerk: the sold check — a hammered sale is reversible until Next"},
