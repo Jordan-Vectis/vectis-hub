@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { TERMS_TITLE, TERMS_VERSION } from "@/lib/terms"
 import MarkSignedButton from "@/components/mark-signed-button"
+import RequireResignButton from "@/components/require-resign-button"
 import TermsPreviewButton from "@/components/terms-preview-button"
 
 export const dynamic = "force-dynamic"
@@ -23,6 +24,13 @@ export default async function TermsSignaturesPage() {
       orderBy: { acceptedAt: "desc" },
     })
   } catch { migrated = false }
+
+  // Signatures an admin has withdrawn. Try/caught for the same reason as the list above — the
+  // table only exists once Run Migrations has been pressed on this environment.
+  let revoked: { id: string; userName: string; userEmail: string; version: string; signature: string; acceptedAt: Date; revokedAt: Date; revokedBy: string; reason: string }[] = []
+  try {
+    revoked = await prisma.termsRevocation.findMany({ orderBy: { revokedAt: "desc" }, take: 200 })
+  } catch { /* not migrated yet — the banner on /admin already says so */ }
 
   const users = await prisma.user.findMany({ select: { id: true, name: true, email: true }, orderBy: { name: "asc" } })
   const userIds = new Set(users.map((u) => u.id))
@@ -67,6 +75,7 @@ export default async function TermsSignaturesPage() {
                   <p className="font-semibold text-gray-900 dark:text-white">{s.userName || "(no name)"}</p>
                   {s.userEmail && <p className="text-xs text-gray-500">{s.userEmail}</p>}
                   <p className="text-xs text-gray-500 mt-0.5">{fmt(s.acceptedAt)}</p>
+                  <RequireResignButton userId={s.userId} userName={s.userName} />
                 </div>
                 <div className="ml-auto">
                   {s.signature.startsWith("data:") ? (
@@ -106,6 +115,50 @@ export default async function TermsSignaturesPage() {
           </>
         )}
       </div>
+
+      {/* Withdrawn — what "require re-sign" took away, kept so the audit trail survives it.
+          ⚠ Shown only once there is something in it: an empty card every time would suggest the
+          feature is broken, and the button that fills it is already visible on each signed row. */}
+      {revoked.length > 0 && (
+        <div className={`${card} overflow-hidden mt-6`}>
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white">↩ Withdrawn ({revoked.length})</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              Acceptances an admin has withdrawn to make somebody sign again. The signature is kept exactly as it was — nothing here is deleted.
+            </p>
+          </div>
+          <div className="divide-y divide-gray-200 dark:divide-gray-800">
+            {revoked.map((r) => (
+              <div key={r.id} className="flex items-center gap-4 p-4 flex-wrap">
+                <div className="min-w-[180px]">
+                  <p className="font-semibold text-gray-900 dark:text-white">{r.userName || "(no name)"}</p>
+                  {r.userEmail && <p className="text-xs text-gray-500">{r.userEmail}</p>}
+                  <p className="text-xs text-gray-500 mt-0.5">Signed {fmt(r.acceptedAt)}</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    Withdrawn {fmt(r.revokedAt)}{r.revokedBy ? ` by ${r.revokedBy}` : ""}
+                  </p>
+                  {r.reason && <p className="text-xs text-gray-500 mt-0.5 italic">“{r.reason}”</p>}
+                  {r.version !== TERMS_VERSION && (
+                    <p className="text-[11px] text-gray-400 mt-0.5">Policy version {r.version}</p>
+                  )}
+                </div>
+                <div className="ml-auto">
+                  {r.signature.startsWith("data:") ? (
+                    <div className="bg-white rounded-lg border border-gray-200 p-1 opacity-70">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={r.signature} alt={`Withdrawn signature of ${r.userName}`} className="h-16 w-auto max-w-[260px] object-contain" />
+                    </div>
+                  ) : (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500">
+                      Had been accepted on their behalf by {r.signature.replace(/^admin:/, "")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1768,6 +1768,25 @@ const MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "UpgradeLot_queueId_lotId_key" ON "UpgradeLot"("queueId", "lotId")`,
   `CREATE INDEX IF NOT EXISTS "UpgradeLot_queueId_idx" ON "UpgradeLot"("queueId")`,
+
+  // 2026-08-26 — Terms & Signatures: an admin can withdraw somebody's acceptance so they have
+  // to sign the policy again. The live TermsAcceptance row is deleted (that is what makes the
+  // gate re-prompt) and copied here first, so the withdrawn signature is not destroyed.
+  `CREATE TABLE IF NOT EXISTS "TermsRevocation" (
+    "id"          TEXT NOT NULL PRIMARY KEY,
+    "userId"      TEXT NOT NULL,
+    "userName"    TEXT NOT NULL DEFAULT '',
+    "userEmail"   TEXT NOT NULL DEFAULT '',
+    "version"     TEXT NOT NULL,
+    "signature"   TEXT NOT NULL,
+    "acceptedAt"  TIMESTAMP(3) NOT NULL,
+    "revokedAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "revokedById" TEXT NOT NULL,
+    "revokedBy"   TEXT NOT NULL DEFAULT '',
+    "reason"      TEXT NOT NULL DEFAULT ''
+  )`,
+  `CREATE INDEX IF NOT EXISTS "TermsRevocation_userId_idx" ON "TermsRevocation"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "TermsRevocation_revokedAt_idx" ON "TermsRevocation"("revokedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
