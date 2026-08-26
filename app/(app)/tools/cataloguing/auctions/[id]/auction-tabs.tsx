@@ -1692,14 +1692,18 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       return
     }
 
-    // ⚠ The zip is built in this tab's memory. A whole sale of photos can exhaust it before the
+    // ⚠ Nothing ticked ALWAYS asks, whatever the size — a whole-filter export has to be something
+    // you deliberately said yes to, never something that happens because you ticked nothing
+    // (Jack, 2026-08-26: "select th lots and thats the photos it exports").
+    //
+    // ⚠ And the zip is built in this tab's own memory, so a big one can exhaust it before the
     // download ever starts — which is what "I pressed it and nothing happened" actually was. Say
     // how big the job is and let them back out, rather than freezing the tab for ten minutes.
-    const scope = selected.size > 0
-      ? `${withPics.length} ticked lot${withPics.length === 1 ? "" : "s"}`
-      : `${withPics.length} lot${withPics.length === 1 ? "" : "s"} in the current filter — nothing is ticked`
-    if (total > 120 && !confirm(
-      `Download ${total} photos from ${scope}?\n\nAn export this size is built in the browser and can take several minutes. If that is more than you meant, tick the lots you want first.`
+    const lotCount = `${withPics.length} lot${withPics.length === 1 ? "" : "s"}`
+    if ((selected.size === 0 || total > 120) && !confirm(
+      selected.size === 0
+        ? `No lots are ticked, so this exports ALL ${total} photos from ${lotCount} in the current filter.\n\nTick the lots you want and press it again to export only those.`
+        : `Download ${total} photos from ${lotCount} you have ticked?\n\nAn export this size is built in the browser and can take a few minutes.`
     )) return
 
     // Filesystem-safe and never empty — a blank folder name silently merges lots together.
