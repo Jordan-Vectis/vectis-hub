@@ -14,6 +14,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7f1f31d5e45ae2e7f3a7238c51028b1e929dc305","author":"Jordan Orange","date":"2026-08-28T11:49:53+01:00","subject":"Memory: relaxed Gemini safety thresholds, and why they do not touch recitation"},
+  {"sha":"0a859b42f832d28e08f1b748711587dafdd4f8b9","author":"Jordan Orange","date":"2026-08-28T11:49:16+01:00","subject":"Relax Gemini's safety thresholds on the cataloguing calls"},
+  {"sha":"76ade3f1067bec6235434689d25e2edf3e5fa289","author":"Jordan Orange","date":"2026-08-28T11:26:51+01:00","subject":"Refresh changelog seed"},
   {"sha":"c05abab4475067d1294aefe0e0783da1a70fcfca","author":"Jordan Orange","date":"2026-08-28T11:26:49+01:00","subject":"When nothing comes back, say what did"},
   {"sha":"445dead4e60668a7a19686c8be6514c1bfdb36af","author":"Jordan Orange","date":"2026-08-28T11:21:06+01:00","subject":"Refresh changelog seed"},
   {"sha":"089d2a32186779532f4e06760b78f885a5211e9e","author":"Jordan Orange","date":"2026-08-28T11:21:05+01:00","subject":"An empty answer is not a successful generation"},
