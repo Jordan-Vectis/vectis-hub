@@ -67,6 +67,39 @@ export class AiNotConfiguredError extends Error {
   constructor(message: string) { super(message); this.name = "AiNotConfiguredError" }
 }
 
+/**
+ * Which filter actually objected, in words.
+ *
+ * ⚠ Gemini returns a coarse reason (SAFETY / RECITATION / OTHER) AND a
+ * `safetyRatings` array naming the CATEGORY and how strongly it fired. Every
+ * route used to report the first and throw away the second, so a blocked lot
+ * said "SAFETY" and nobody could tell whether it objected to the picture, a
+ * word, or nothing in particular (Jordan, 2026-08-28, on a comics sale).
+ *
+ * RECITATION carries no ratings — it means the reply was reproducing
+ * copyrighted material — so it is named in plain words instead.
+ */
+export function safetyDetail(response: any): string {
+  const tidy = (c: string) => c.replace(/^HARM_CATEGORY_/, "").replace(/_/g, " ").toLowerCase()
+  const ratings: any[] = [
+    ...(response?.promptFeedback?.safetyRatings ?? []),
+    ...(response?.candidates?.[0]?.safetyRatings ?? []),
+  ]
+  const fired = ratings
+    .filter(r => r?.blocked || (r?.probability && !["NEGLIGIBLE", "LOW"].includes(r.probability)))
+    .map(r => `${tidy(String(r.category ?? "unknown"))} ${String(r.probability ?? "").toLowerCase()}`.trim())
+  const unique = [...new Set(fired)]
+  return unique.length ? ` — ${unique.join(", ")}` : ""
+}
+
+/** Plain-English gloss for the reasons that carry no safety ratings. */
+export function blockMeaning(reason: string): string {
+  if (/RECITATION/i.test(reason)) return " — the answer was reproducing copyrighted material"
+  if (/PROHIBITED/i.test(reason))  return " — the content is on Google's prohibited list"
+  if (/BLOCKLIST/i.test(reason))   return " — a term on Google's blocklist"
+  return ""
+}
+
 // ── Gemini ───────────────────────────────────────────────────────────────────
 
 async function generateGemini(req: AiRequest): Promise<string> {
@@ -99,10 +132,10 @@ async function generateGemini(req: AiRequest): Promise<string> {
   // ⚠ RULES: check BOTH of these before calling .text() — calling it on a
   // blocked response throws and loses the reason.
   const blocked = response.promptFeedback?.blockReason
-  if (blocked) throw new AiBlockedError(`Gemini blocked the request: ${blocked}`)
+  if (blocked) throw new AiBlockedError(`Gemini blocked the request: ${blocked}${blockMeaning(blocked)}${safetyDetail(response)}`)
   const finish = response.candidates?.[0]?.finishReason
   if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
-    throw new AiBlockedError(`Gemini stopped: ${finish}`)
+    throw new AiBlockedError(`Gemini stopped: ${finish}${blockMeaning(finish)}${safetyDetail(response)}`)
   }
 
   return response.text().trim()

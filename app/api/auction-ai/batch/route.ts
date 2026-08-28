@@ -7,6 +7,7 @@ import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
 import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
 import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
+import { safetyDetail, blockMeaning } from "@/lib/ai-provider"
 
 export const maxDuration = 300
 
@@ -84,13 +85,17 @@ export async function POST(req: NextRequest) {
 
     const response = result.response
 
+    // ⚠ Carry WHICH filter objected, not just that one did. Gemini names the
+    // category and strength in safetyRatings, and RECITATION means the reply was
+    // reproducing copyrighted material — reporting the bare word left nobody able
+    // to tell a violent cover from a famous comic (Jordan, 2026-08-28).
     const promptBlock = response.promptFeedback?.blockReason
-    if (promptBlock) throw new Error(`Blocked (prompt): ${promptBlock}`)
+    if (promptBlock) throw new Error(`Blocked (prompt): ${promptBlock}${blockMeaning(promptBlock)}${safetyDetail(response)}`)
 
     const candidate    = response.candidates?.[0]
     const finishReason = candidate?.finishReason
     if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
-      throw new Error(`Blocked (${finishReason})`)
+      throw new Error(`Blocked (${finishReason}${blockMeaning(finishReason)}${safetyDetail(response)})`)
     }
 
     // Surface whether Google Search grounding actually fired

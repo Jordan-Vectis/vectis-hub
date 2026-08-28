@@ -38,6 +38,33 @@ const MAX_RECITATION_RETRIES = 4
 
 const LOG_MAX = 40_000 // keep the morning report readable and the row small
 
+// ── Problem lines are PINNED, never trimmed ─────────────────────────────────
+// ⚠⚠ THE LOG IS A TAIL: `.slice(-LOG_MAX)`. On F113 (1,547 lots) two comics
+// were blocked and skipped, and by the morning the two lines saying WHY had
+// been pushed out by ordinary progress — the row sat at exactly 40,000
+// characters with no trace of either (Jordan, 2026-08-28: "nothing returns
+// saying why it's blocked"). The lot record only ever said "skipped", so the
+// reason existed nowhere at all.
+//
+// So the handful of lines that explain a lost lot are held in their own block
+// at the TOP of logText, outside the trim. Stored in the text rather than a
+// column on purpose: the runner works in ~9-minute slices with nothing in
+// memory between them, so this has to survive in the row it already writes.
+const PROBLEMS_HEAD = "⚠ PROBLEMS — kept in full, never trimmed"
+const PROBLEMS_TAIL = "── the run log follows ──"
+const PROBLEMS_MAX  = 8_000
+/** ✗ = a lot lost, ↻ = a retry that explains one. Both are what a morning
+ *  reader needs; ordinary ✓ progress is what gets trimmed. */
+const isProblemLine = (l: string) => /✗|↻/.test(l)
+
+function splitPinned(text: string): { pinned: string[]; body: string } {
+  if (!text.startsWith(PROBLEMS_HEAD)) return { pinned: [], body: text }
+  const end = text.indexOf(PROBLEMS_TAIL)
+  if (end === -1) return { pinned: [], body: text }
+  const pinned = text.slice(text.indexOf("\n") + 1, end).split("\n").filter(Boolean)
+  return { pinned, body: text.slice(end + PROBLEMS_TAIL.length).replace(/^\n+/, "") }
+}
+
 type Ctx = { changedBy: string; source: string }
 
 // ── Talking to our own routes ───────────────────────────────────────────────
@@ -212,8 +239,17 @@ export async function runQueueSlice(): Promise<SliceResult> {
   //   · Remove pressed mid-slice deletes the row — update() would then throw
   //     inside the error handler. updateMany simply matches nothing.
   const flush = async (fields: Record<string, any>) => {
-    const existing = (item.logText ?? "")
-    const merged = (existing + (existing ? "\n" : "") + log.join("\n")).slice(-LOG_MAX)
+    // Pull the pinned problems back out, add any new ones, and trim only the
+    // BODY — see PROBLEMS_HEAD above for why this exists.
+    const { pinned, body } = splitPinned(item.logText ?? "")
+    const allPinned = [...pinned, ...log.filter(isProblemLine)]
+    let cropped = false
+    while (allPinned.join("\n").length > PROBLEMS_MAX && allPinned.length > 1) { allPinned.shift(); cropped = true }
+    const head = allPinned.length
+      ? `${PROBLEMS_HEAD}${cropped ? " (oldest dropped)" : ""}\n${allPinned.join("\n")}\n${PROBLEMS_TAIL}\n`
+      : ""
+    const newBody = (body + (body ? "\n" : "") + log.join("\n")).slice(-(LOG_MAX - head.length))
+    const merged = head + newBody
     const { status, ...rest } = fields
     // Progress and the log are always saved — losing them on a pause would throw
     // away the record of work that really happened.
