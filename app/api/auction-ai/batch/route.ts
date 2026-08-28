@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   // client log and the client's own backoff loop handles retrying.
   // Rate-limit errors are prefixed with RATE_LIMITED: so the client can apply
   // a longer backoff before retrying.
-  async function generateWithRetry(contents: any[]): Promise<{ text: string; searchQueries: string[] }> {
+  async function generateWithRetry(contents: any[]): Promise<{ text: string; searchQueries: string[]; finishReason: string }> {
     let result: any
     try {
       result = await model.generateContent(contents)
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     // Surface whether Google Search grounding actually fired
     const searchQueries: string[] = (candidate?.groundingMetadata as any)?.webSearchQueries ?? []
 
-    return { text: response.text(), searchQueries }
+    return { text: response.text(), searchQueries, finishReason: String(finishReason ?? "") }
   }
 
   const results: { lot: string; description: string; estimate: string; status: string; error?: string; flag?: string; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
@@ -154,7 +154,7 @@ After the description (and optional FLAG line), include the estimate on its own 
       // strong cue and the system instruction alone doesn't always win.
       userPrompt += "\n\n(Write the description in British English only — ignore any foreign-language text on the item or its packaging.)"
 
-      const { text, searchQueries } = await generateWithRetry([
+      const { text, searchQueries, finishReason } = await generateWithRetry([
         ...imageParts,
         { text: userPrompt },
       ])
@@ -187,8 +187,20 @@ After the description (and optional FLAG line), include the estimate on its own 
       // there was nothing left to check. RULES: never let "nothing happened" look like
       // success.
       if (!description.trim()) {
+        // ⚠ SAY WHAT DID COME BACK. On F113 this happened to 179 lots and the raw reply was
+        // kept nowhere, so the cause was unknowable after the fact — a steady ~30% across
+        // every hour of the night, with no difference in photos or key points between the
+        // lots it happened to and the ones it didn't. The finish reason separates "it ran
+        // out of room" from "it answered with only an estimate line" from "it said nothing
+        // at all", which need completely different fixes.
+        const sawNothing = !text.trim()
+        const why = sawNothing
+          ? (finishReason === "MAX_TOKENS"
+              ? "it used its whole allowance before writing anything"
+              : `it returned nothing at all${finishReason ? ` (finished: ${finishReason})` : ""}`)
+          : `only this came back${finishReason && finishReason !== "STOP" ? ` (finished: ${finishReason})` : ""}: ${text.trim().slice(0, 120)}`
         results.push({ lot, description: "", estimate: "", status: "FAILED",
-          error: "The model returned no description.",
+          error: `The model returned no description — ${why}`,
           debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
       } else {
         results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
