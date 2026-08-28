@@ -14,7 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
-  {"sha":"78e11f32ace48edbc5f327d0d28c158866e672b9","author":"Jordan Orange","date":"2026-08-28T14:22:19+01:00","subject":"Stop a large photo upload taking the whole app down"},
+  {"sha":"4690c582d443b8ea01bfeda7ba6905ddacc47327","author":"Jack Collings","date":"2026-08-28T12:29:21+01:00","subject":"Sale Statistics: a properly formatted Excel export"},
   {"sha":"94a2b00c904aa76b69aa20592e31ef8c47c04537","author":"Jordan Orange","date":"2026-08-28T11:49:55+01:00","subject":"Refresh changelog seed"},
   {"sha":"7f1f31d5e45ae2e7f3a7238c51028b1e929dc305","author":"Jordan Orange","date":"2026-08-28T11:49:53+01:00","subject":"Memory: relaxed Gemini safety thresholds, and why they do not touch recitation"},
   {"sha":"0a859b42f832d28e08f1b748711587dafdd4f8b9","author":"Jordan Orange","date":"2026-08-28T11:49:16+01:00","subject":"Relax Gemini's safety thresholds on the cataloguing calls"},

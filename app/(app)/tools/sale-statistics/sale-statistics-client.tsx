@@ -2,10 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
-import {
-  excelHeader, excelValue, cellFormat, sheetName, reportFilename,
-  type SaleStatsReport, type ReportTable,
-} from "@/lib/sale-stats-report"
+import { reportFilename, type SaleStatsReport, type ReportTable } from "@/lib/sale-stats-report"
 
 // ─── Types (mirror the /api/bc/sale-statistics result) ─────────────────────────
 
@@ -421,6 +418,13 @@ export default function SaleStatisticsClient({ userName = "" }: { userName?: str
   function buildReport(): SaleStatsReport | null {
     const base = { generatedAt: new Date().toISOString(), generatedBy: userName }
     const catBit = `${category !== "all" ? ` · ${category}` : ""}${subcategory !== "all" ? ` · ${subcategory}` : ""}`
+    // ⚠ Written INTO the file, on its own block on the summary sheet — not just implied by the
+    // filename. A sheet of figures with no record of what produced them gets forwarded, quoted
+    // and argued over.
+    const catFilters = [
+      { label: "Category",    value: category === "all" ? "All categories" : category },
+      { label: "Subcategory", value: subcategory === "all" ? "All subcategories" : subcategory },
+    ]
 
     if (mode === "single") {
       if (!data) return null
@@ -428,6 +432,11 @@ export default function SaleStatisticsClient({ userName = "" }: { userName?: str
         ...base,
         title:    "Sale Statistics — Single period",
         subtitle: `${from} to ${to} · ${sale === "all" ? "All sales" : `Sale ${sale}`}${catBit || " · All categories"}`,
+        filters: [
+          { label: "Date range", value: `${from} to ${to}` },
+          { label: "Sale",       value: sale === "all" ? `All sales (${sales.length})` : `${sale}${sales.find(s => s.code === sale)?.name ? ` — ${sales.find(s => s.code === sale)!.name}` : ""}` },
+          ...catFilters,
+        ],
         stats:    [...hero, ...cards],
         tables: [
           {
@@ -481,6 +490,11 @@ export default function SaleStatisticsClient({ userName = "" }: { userName?: str
         ...base,
         title:    "Sale Statistics — Compare periods",
         subtitle: `${aLabel} vs ${bLabel}${catBit}`,
+        filters: [
+          { label: "Period A", value: aLabel },
+          { label: "Period B", value: bLabel },
+          ...catFilters,
+        ],
         stats: [
           { label: aLabel,   value: gbp0(rollA.hammer), sub: `${int(rollA.sold)} lots sold` },
           { label: bLabel,   value: gbp0(rollB.hammer), sub: `${int(rollB.sold)} lots sold` },
@@ -539,6 +553,11 @@ export default function SaleStatisticsClient({ userName = "" }: { userName?: str
       ...base,
       title:    "Sale Statistics — Best months",
       subtitle: `${from} to ${to}${catBit || " · All categories"}`,
+      filters: [
+        { label: "Date range", value: `${from} to ${to}` },
+        ...catFilters,
+        { label: "Excluded",   value: "The current, incomplete month" },
+      ],
       stats: [
         ...(bestMonth  ? [{ label: "Best month to sell", value: MONTHS[bestMonth.month],  sub: `${gbp0(bestMonth.r.hammer)} · ${pct(sellThrough(bestMonth.r))} sell-through` }] : []),
         ...(worstMonth ? [{ label: "Quietest month",     value: MONTHS[worstMonth.month], sub: `${gbp0(worstMonth.r.hammer)} · ${pct(sellThrough(worstMonth.r))} sell-through` }] : []),
@@ -547,67 +566,36 @@ export default function SaleStatisticsClient({ userName = "" }: { userName?: str
     }
   }
 
-  async function exportExcel() {
+  /**
+   * Both formats are built on the SERVER from the same posted report.
+   *
+   * ⚠ Excel used to be assembled here in the browser with SheetJS, and it looked like a data dump
+   * — the community build cannot write a single cell style, so every export was bare numbers under
+   * bare headers whatever it was handed (Jack, 2026-08-28: "that export is horrendous"). ExcelJS
+   * writes real formatting but is far too heavy to ship to a browser that mostly never presses the
+   * button, so both exports now go the same way out.
+   */
+  async function runExport(kind: "excel" | "pdf") {
     const report = buildReport()
     if (!report) { setExportErr("Nothing loaded to export yet"); return }
-    setExportErr(null); setExporting("excel")
+    setExportErr(null); setExporting(kind)
     try {
-      // Loaded on demand — xlsx is a large library and most visits to this screen never export.
-      const XLSX = await import("xlsx")
-      const wb = XLSX.utils.book_new()
-      const taken: string[] = []
-
-      // A Summary sheet first, so the workbook opens on the headline figures and carries the
-      // filters that produced them. A table with no idea what it was filtered by is a trap.
-      const summary: (string | number)[][] = [
-        [report.title], [report.subtitle], [`Exported ${new Date(report.generatedAt).toLocaleString("en-GB")}${report.generatedBy ? ` by ${report.generatedBy}` : ""}`],
-        [], ["Figure", "Value", "Detail"],
-        ...report.stats.map(s => [s.label, s.value, s.sub ?? ""]),
-      ]
-      const sws = XLSX.utils.aoa_to_sheet(summary)
-      sws["!cols"] = [{ wch: 24 }, { wch: 18 }, { wch: 34 }]
-      const sname = sheetName("Summary", taken); taken.push(sname)
-      XLSX.utils.book_append_sheet(wb, sws, sname)
-
-      for (const t of report.tables) {
-        if (!t.rows.length) continue
-        const aoa = [
-          t.columns.map(excelHeader),
-          ...t.rows.map((r, ri) => r.map((v, ci) => excelValue(v, cellFormat(t, ri, ci)))),
-        ]
-        const ws = XLSX.utils.aoa_to_sheet(aoa)
-        ws["!cols"] = t.columns.map(c => ({ wch: Math.min(38, Math.max(11, excelHeader(c).length + 3)) }))
-        const n = sheetName(t.title, taken); taken.push(n)
-        XLSX.utils.book_append_sheet(wb, ws, n)
-      }
-      XLSX.writeFile(wb, reportFilename(report, "xlsx"))
-    } catch (e) {
-      setExportErr(e instanceof Error ? e.message : "Could not build the spreadsheet")
-    } finally {
-      setExporting(null)
-    }
-  }
-
-  async function exportPdf() {
-    const report = buildReport()
-    if (!report) { setExportErr("Nothing loaded to export yet"); return }
-    setExportErr(null); setExporting("pdf")
-    try {
-      const res = await fetch("/api/sale-statistics/pdf", {
+      const ext = kind === "excel" ? "xlsx" : "pdf"
+      const res = await fetch(`/api/sale-statistics/${ext}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(report),
       })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not build the PDF")
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "The export could not be built")
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement("a")
       a.href = url
-      a.download = reportFilename(report, "pdf")
+      a.download = reportFilename(report, ext)
       // ⚠ In the DOM before the click, and revoked on a timer after it — revoking on the next line
       // can cancel the download before the browser has finished reading the blob.
       document.body.appendChild(a); a.click(); a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e) {
-      setExportErr(e instanceof Error ? e.message : "Could not build the PDF")
+      setExportErr(e instanceof Error ? e.message : "The export could not be built")
     } finally {
       setExporting(null)
     }
@@ -639,14 +627,14 @@ export default function SaleStatisticsClient({ userName = "" }: { userName?: str
         <div className="ml-auto flex items-center gap-2">
           {exportErr && <span className="text-xs text-red-400 max-w-xs truncate" title={exportErr}>{exportErr}</span>}
           <button
-            onClick={exportExcel}
+            onClick={() => runExport("excel")}
             disabled={!canExport || exporting !== null}
             title={canExport ? "Every table in this view as a spreadsheet, one sheet each" : "Load some figures first"}
             className="px-3 py-1.5 text-xs font-semibold rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#2AB4A6] hover:text-[#2AB4A6] disabled:opacity-40 disabled:hover:border-gray-300 dark:disabled:hover:border-gray-700 disabled:hover:text-gray-600 dark:disabled:hover:text-gray-300 transition-colors">
             {exporting === "excel" ? "Building…" : "⬇ Excel"}
           </button>
           <button
-            onClick={exportPdf}
+            onClick={() => runExport("pdf")}
             disabled={!canExport || exporting !== null}
             title={canExport ? "This view as a printable PDF" : "Load some figures first"}
             className="px-3 py-1.5 text-xs font-semibold rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#2AB4A6] hover:text-[#2AB4A6] disabled:opacity-40 disabled:hover:border-gray-300 dark:disabled:hover:border-gray-700 disabled:hover:text-gray-600 dark:disabled:hover:text-gray-300 transition-colors">

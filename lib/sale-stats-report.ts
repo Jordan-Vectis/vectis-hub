@@ -6,15 +6,20 @@
 // of the same screen end up disagreeing, and the person reading them has no way to tell which is
 // wrong. Add a column here, or in the builder that fills this in, and both exports gain it.
 //
-// Deliberately dependency-free so the client (Excel, in the browser) and the server (pdf-lib, in
-// the PDF route) can both import it.
+// Deliberately dependency-free: the client builds the object, and both export routes parse and
+// render it.
 
-/** How a cell is written out. The value itself is always the RAW number. */
+/**
+ * How a cell is written out. ⚠ The value itself is ALWAYS the raw number — pounds as 78650,
+ * percentages as the ratio 0.523 — and the format decides how each destination shows it. That is
+ * what lets the spreadsheet hold a real number that Excel formats as £78,650 and can still add up,
+ * rather than the text "£78,650" which it cannot.
+ */
 export type CellFormat =
   | "text"
   | "money"        // £12,345
   | "money2"       // £12,345.67 — averages, where the pennies matter
-  | "moneySigned"  // +£1,234 / −£1,234
+  | "moneySigned"  // +£1,234 / -£1,234
   | "int"          // 12,345
   | "pct"          // 52.3%   (stored as 0.523)
   | "pctSigned"    // +8.1%   (stored as 0.081)
@@ -34,31 +39,15 @@ export type ReportTable = {
   /** Raw values — numbers stay numbers so the spreadsheet can add them up. */
   rows: (string | number)[][]
   /**
-   * Optional per-ROW format, parallel to `rows`, overriding the column format on every non-text
-   * column of that row.
+   * Optional per-ROW format, parallel to `rows`, overriding the column format on every "auto" /
+   * "autoSigned" column of that row.
    *
    * ⚠ This exists for the metric-comparison tables (Compare periods, and Best vs quietest), where
    * the table runs DOWN the metrics — Sale Value in pounds, Lots Sold as a count, Sell-through as
-   * a percentage — so a single format per column is simply wrong. Without it those tables would
-   * have to be written out as pre-formatted text, and the spreadsheet would lose every number.
+   * a percentage — so a single format per column is simply wrong. Its presence is also what marks
+   * a table as mixed-unit, which is why the spreadsheet skips the totals row on one.
    */
   rowFormat?: CellFormat[]
-}
-
-const SIGNED_OF: Partial<Record<CellFormat, CellFormat>> = {
-  money: "moneySigned", money2: "moneySigned", moneySigned: "moneySigned",
-  int: "int", pct: "pctSigned", pctSigned: "pctSigned",
-}
-
-/**
- * The format for one cell. Only "auto" / "autoSigned" columns defer to the row — every other
- * column keeps its own, so a percentage-change column stays a percentage on a row of pounds.
- */
-export function cellFormat(table: ReportTable, rowIndex: number, colIndex: number): CellFormat {
-  const col = table.columns[colIndex]?.format ?? "text"
-  if (col !== "auto" && col !== "autoSigned") return col
-  const row = table.rowFormat?.[rowIndex] ?? "text"
-  return col === "auto" ? row : (SIGNED_OF[row] ?? row)
 }
 
 /** The headline tiles, already formatted for display — they are prose, not arithmetic. */
@@ -68,7 +57,9 @@ export type SaleStatsReport = {
   title: string
   subtitle: string
   generatedAt: string   // ISO. ⚠ Stamped by the CLIENT — the server has no idea what "now" is
-  generatedBy: string   // for the footer, so a printed page says where it came from
+  generatedBy: string
+  /** Spelled out on the summary sheet: a table with no record of what filtered it is a trap. */
+  filters: { label: string; value: string }[]
   stats: ReportStat[]
   tables: ReportTable[]
 }
@@ -93,26 +84,44 @@ export function formatCell(v: string | number, f: CellFormat): string {
 }
 
 /**
- * For the spreadsheet, where a number must stay a number.
+ * The Excel number format for a cell.
  *
- * ⚠ Percentages are multiplied out to 52.3 rather than left at 0.523, and the column header says
- * "(%)". A bare 0.523 in a spreadsheet reads as fifty-two pence to most people, and typing =SUM
- * over a column of ratios gives an answer that means nothing either way.
+ * ⚠ These are what make the spreadsheet readable WITHOUT turning anything into text. The cell
+ * still holds 78650 and 0.523; Excel shows £78,650 and 52.3%, =SUM works, and a pivot table sees
+ * real numbers. The earlier export wrote 78650 with "(£)" bolted onto the header, which is what
+ * made it look like a data dump.
  */
-export function excelValue(v: string | number, f: CellFormat): string | number {
-  if (typeof v === "string") return v
-  if (!isFinite(v)) return ""
-  if (f === "pct" || f === "pctSigned") return Math.round(v * 1000) / 10
-  if (f === "money2") return Math.round(v * 100) / 100
-  if (f === "money" || f === "moneySigned") return Math.round(v)
-  return v
+export function numberFormat(f: CellFormat): string | undefined {
+  switch (f) {
+    case "money":       return '£#,##0;[Red]-£#,##0'
+    case "money2":      return '£#,##0.00;[Red]-£#,##0.00'
+    case "moneySigned": return '"+"£#,##0;[Red]"-"£#,##0;£0'
+    case "int":         return '#,##0'
+    case "pct":         return '0.0%'
+    case "pctSigned":   return '"+"0.0%;[Red]"-"0.0%;0.0%'
+    default:            return undefined
+  }
 }
 
-/** "Sale Value" → "Sale Value (£)", so a bare number in a cell is never ambiguous. */
-export function excelHeader(c: ReportColumn): string {
-  if (c.format === "money" || c.format === "money2" || c.format === "moneySigned") return `${c.label} (£)`
-  if (c.format === "pct" || c.format === "pctSigned") return `${c.label} (%)`
-  return c.label
+const SIGNED_OF: Partial<Record<CellFormat, CellFormat>> = {
+  money: "moneySigned", money2: "moneySigned", moneySigned: "moneySigned",
+  int: "int", pct: "pctSigned", pctSigned: "pctSigned",
+}
+
+/**
+ * The format for one cell. Only "auto" / "autoSigned" columns defer to the row — every other
+ * column keeps its own, so a percentage-change column stays a percentage on a row of pounds.
+ */
+export function cellFormat(table: ReportTable, rowIndex: number, colIndex: number): CellFormat {
+  const col = table.columns[colIndex]?.format ?? "text"
+  if (col !== "auto" && col !== "autoSigned") return col
+  const row = table.rowFormat?.[rowIndex] ?? "text"
+  return col === "auto" ? row : (SIGNED_OF[row] ?? row)
+}
+
+/** Money and counts add up; averages and percentages do not. Drives the totals row. */
+export function isSummable(f: CellFormat): boolean {
+  return f === "money" || f === "moneySigned" || f === "int"
 }
 
 /**
@@ -137,4 +146,64 @@ export function reportFilename(report: SaleStatsReport, ext: "xlsx" | "pdf"): st
     .replace(/^_+|_+$/g, "")
     .slice(0, 90)
   return `${base || "Sale_Statistics"}_${stamp}.${ext}`
+}
+
+// ─── Payload parsing ─────────────────────────────────────────────────────────
+// Shared by both export routes. They TRUST the numbers — the screen did the aggregation, and
+// re-running the streamed Business Central query per button press would double the load and let
+// an export disagree with the screen it came from — but neither trusts the SHAPE. A malformed or
+// enormous payload is rejected here, before pdf-lib or ExcelJS ever sees it.
+
+const MAX_TABLES = 12
+const MAX_ROWS   = 20000
+const MAX_COLS   = 30
+const MAX_STATS  = 24
+const FORMATS: CellFormat[] = ["text", "money", "money2", "moneySigned", "int", "pct", "pctSigned", "auto", "autoSigned"]
+
+const str = (v: unknown, max = 300) => (typeof v === "string" ? v.slice(0, max) : "")
+
+function parseColumn(v: unknown): ReportColumn {
+  const o = (v ?? {}) as Record<string, unknown>
+  return { label: str(o.label, 60), format: FORMATS.includes(o.format as CellFormat) ? (o.format as CellFormat) : "text" }
+}
+
+function parseTable(v: unknown): ReportTable | null {
+  const o = (v ?? {}) as Record<string, unknown>
+  if (!Array.isArray(o.columns) || !Array.isArray(o.rows)) return null
+  const columns = o.columns.slice(0, MAX_COLS).map(parseColumn)
+  if (!columns.length) return null
+  const rows = o.rows.slice(0, MAX_ROWS).map(r => {
+    const arr = Array.isArray(r) ? r : []
+    // Padded to the column count, so a short row can never shift cells left under the wrong header.
+    return columns.map((_, i) => {
+      const cell = arr[i]
+      return typeof cell === "number" && isFinite(cell) ? cell : str(cell, 200)
+    })
+  })
+  const rowFormat = Array.isArray(o.rowFormat)
+    ? o.rowFormat.slice(0, MAX_ROWS).map(f => (FORMATS.includes(f as CellFormat) ? (f as CellFormat) : "text"))
+    : undefined
+  return { title: str(o.title, 120), note: str(o.note, 300) || undefined, columns, rows, rowFormat }
+}
+
+export function parseReportPayload(body: unknown): SaleStatsReport {
+  const o = (body ?? {}) as Record<string, unknown>
+  const pairs = (v: unknown, max: number) =>
+    Array.isArray(v)
+      ? v.slice(0, max).map(x => {
+          const t = (x ?? {}) as Record<string, unknown>
+          return { label: str(t.label, 40), value: str(t.value, 60), sub: str(t.sub, 60) || undefined }
+        })
+      : []
+  return {
+    title:       str(o.title, 120) || "Sale Statistics",
+    subtitle:    str(o.subtitle, 300),
+    generatedAt: str(o.generatedAt, 40) || new Date().toISOString(),
+    generatedBy: str(o.generatedBy, 80),
+    filters:     pairs(o.filters, 12).map(({ label, value }) => ({ label, value })),
+    stats:       pairs(o.stats, MAX_STATS),
+    tables:      Array.isArray(o.tables)
+      ? o.tables.slice(0, MAX_TABLES).map(parseTable).filter((t): t is ReportTable => t !== null)
+      : [],
+  }
 }
