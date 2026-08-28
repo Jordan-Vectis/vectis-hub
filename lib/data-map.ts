@@ -49,6 +49,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "RoleDefault", what: "The apps, permissions and dashboard a new account gets for each role." },
       { model: "DashboardLayout", personal: "staff", what: "The widgets each person has chosen for their own home page." },
       { model: "TermsAcceptance", personal: "staff", what: "Who accepted the tablet terms, which version they signed, and their drawn signature." },
+      { model: "TermsRevocation", personal: "staff", what: "A terms acceptance an admin has cancelled so the person signs again: what they had signed and when, who revoked it and why. Kept rather than deleted, so the old signature is still on record." },
       { model: "AccessDenialLog", personal: "staff", what: "Every time someone was refused an app: what their session claimed and what the database actually said. The diagnostic behind the cataloguer bounce." },
       { model: "Device", personal: "staff", what: "The tablets and scanners: serial number, type, MAC address and who has it." },
       { model: "Packer", personal: "staff", what: "The packing staff list — full time, agency or ex-staff — with the name aliases their labels come through under." },

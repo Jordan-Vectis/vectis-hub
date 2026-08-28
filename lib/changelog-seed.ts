@@ -14,7 +14,10 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
-  {"sha":"32bc76382a90cef7361dac6d9c92f2fc0043dd03","author":"Jack Collings","date":"2026-08-28T09:15:06+01:00","subject":"Sale Statistics: export any of the three views to Excel or PDF"},
+  {"sha":"4581968fd2d9329b94b251b656cf561320798613","author":"Jordan Orange","date":"2026-08-28T09:22:16+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"9fb5176b894027064945dea14b5c8dfdca6f8b43","author":"Jordan Orange","date":"2026-08-28T09:21:52+01:00","subject":"Refresh changelog seed"},
+  {"sha":"8c60707c252e96cba6f5e966132f1c126e93e8a5","author":"Jordan Orange","date":"2026-08-28T09:21:51+01:00","subject":"Data map: every table in the database, in one plain sentence"},
+  {"sha":"9734da9aa000a29fcf55e0edecc6ba8104c4d991","author":"Jack Collings","date":"2026-08-28T09:15:06+01:00","subject":"Sale Statistics: export any of the three views to Excel or PDF"},
   {"sha":"5955a99d3a8c05afe4a835ce32c32d56aff3e544","author":"Jack Collings","date":"2026-08-26T16:18:29+01:00","subject":"Terms: an admin can make one person sign the policy again"},
   {"sha":"c6d6253740dee3237266f7b3bebc334a6989a7d9","author":"Jack Collings","date":"2026-08-26T11:14:28+01:00","subject":"Manage Lots: exporting the whole filter is now a yes, not a default"},
   {"sha":"3bdc697be928bdd25fbfb3313171675a67e81df2","author":"Jack Collings","date":"2026-08-26T11:04:41+01:00","subject":"Manage Lots: the photo export takes the lots you ticked, not the whole sale"},
