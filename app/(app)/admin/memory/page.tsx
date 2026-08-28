@@ -1741,7 +1741,7 @@ Jordan: "the UI for this activity timer needs some improving… we also need bet
     content: `---
 name: iPad AUP terms popup — /admin/terms
 purpose: The Acceptable Use Policy sign-gate + its admin viewer/preview. Read before touching terms/signing.
-last_updated: 2026-07-23
+last_updated: 2026-08-26
 ---
 
 # iPad Acceptable Use Policy — terms & signatures
@@ -1752,7 +1752,9 @@ One small system: **lib/terms.ts** is the single source of the policy — \`TERM
 
 **Admin → Terms & Signatures** (app/(app)/admin/terms/page.tsx, admin-only) shows who signed the current version (name, email, signature image, date) + who's outstanding; "mark signed" records an admin accepting on someone's behalf (\`admin:\` prefix).
 
-**2026-07-23 — Preview the popup:** TermsGate gained a guarded \`preview\` mode (+ \`onClose\`) — shows the identical popup but never saves (submit just closes; ✕ + amber "Preview" badge; subtext says nothing is saved). Opened via components/terms-preview-button.tsx ("👁 Preview the popup"). ⚠ Every preview-only branch is guarded on \`preview\` (default false) so the real sign-gate is unchanged — keep it that way.`,
+**2026-07-23 — Preview the popup:** TermsGate gained a guarded \`preview\` mode (+ \`onClose\`) — shows the identical popup but never saves (submit just closes; ✕ + amber "Preview" badge; subtext says nothing is saved). Opened via components/terms-preview-button.tsx ("👁 Preview the popup"). ⚠ Every preview-only branch is guarded on \`preview\` (default false) so the real sign-gate is unchanged — keep it that way.
+
+**2026-08-26 — Require re-sign (per person):** every signed row on /admin/terms now has a "require re-sign" button → POST /api/admin/terms/revoke (admin only). ⚠ It DELETES the live TermsAcceptance row, and that is the mechanism, not a shortcut: the gate re-prompts on the ABSENCE of a row for the current version, and the table is unique on (userId, version) so anything flagged in place would simply be overwritten by their next signature. The row is COPIED into the new TermsRevocation table first — signature exactly as signed, original acceptedAt, who revoked it, when, and an optional reason — both halves in ONE transaction, and shown under "↩ Withdrawn" on the same page. So a withdrawn acceptance is never destroyed, and is distinguishable from somebody who never signed. ⚠ NEEDS Run Migrations: TermsRevocation is created by the MIGRATIONS array in app/api/admin/run-migrations/route.ts, not by a Prisma migration file; until that is pressed the button returns a message saying exactly that and the Withdrawn section stays hidden. Deliberately per-person — making EVERYONE re-sign is still a TERMS_VERSION bump in lib/terms.ts, which was considered and not built (Jack, 2026-08-26, asked for per-person only).`,
   },
   {
     filename: "reports_pdf.md",

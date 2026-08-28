@@ -2061,6 +2061,37 @@ model TermsAcceptance {
   @@index([userId])
 }
 
+// A signed acceptance an admin has withdrawn, so that person has to sign the policy again.
+//
+// ⚠ WHY THE LIVE ROW IS DELETED AND COPIED HERE, rather than flagged in place. The gate in
+// app/(app)/layout.tsx re-prompts on the ABSENCE of a TermsAcceptance row for the current
+// version, and TermsAcceptance is unique on (userId, version) — so re-signing overwrites the
+// row. Left in place, the old signature would be destroyed by the new one, and a withdrawn
+// acceptance would be indistinguishable from never having signed at all.
+//
+// ⚠ DELIBERATELY NO FOREIGN KEY and every value copied rather than joined. Once the live row is
+// gone this is the ONLY evidence that somebody ever signed that version of the policy, which is
+// the same reasoning as InductionSignature, TrainingSignature and SavedAiFlag: a record of what
+// somebody put their name to must not move or vanish when the thing they signed changes.
+model TermsRevocation {
+  id         String @id @default(cuid())
+  userId     String
+  userName   String @default("")
+  userEmail  String @default("")
+
+  version    String   // the policy version they had accepted
+  signature  String   @db.Text // exactly what they had signed — drawn PNG, or the admin: marker
+  acceptedAt DateTime // when they originally signed it
+
+  revokedAt   DateTime @default(now())
+  revokedById String
+  revokedBy   String   @default("") // name at the time, so a renamed/deleted admin stays readable
+  reason      String   @default("") @db.Text
+
+  @@index([userId])
+  @@index([revokedAt])
+}
+
 // Tracks which version of the MIGRATIONS array was last run, so admins get an
 // in-app "migrations pending" banner instead of being told to run them.
 // Single row, id = "current". See app/api/admin/run-migrations/route.ts.

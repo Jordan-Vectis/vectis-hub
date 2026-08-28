@@ -1664,49 +1664,156 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     URL.revokeObjectURL(url)
   }
 
+  /**
+   * Every photo of the ticked lots, as a zip.
+   *
+   * ⚠ TICKED LOTS FIRST, the filter only as a fallback. This used to export `filtered` — every lot
+   * the filter had left on screen — so ticking seven lots and pressing it went after all 478 in the
+   * sale (Jack, 2026-08-26: "it trys to export everything in the sale where it should only export
+   * the photos for the lots i have selected"). Nothing ticked still falls back to the filtered set,
+   * which is how ⬇ Excel and the BC macros beside it already behave.
+   *
+   * ⚠ THE FILENAME CARRIES THE LOT, not just the folder. `photo_1.jpg` is anonymous the moment
+   * somebody drags it out of its folder, and a sale's worth of files all called photo_1 cannot be
+   * put back. Every file is `<barcode>_<uniqueId>_01.jpg`, and `manifest.csv` at the root of the zip
+   * says what should be in it — including photos that FAILED to fetch, which used to vanish with no
+   * mention at all, leaving a lot quietly short of pictures.
+   */
   async function exportPhotos() {
-    const lotsWithPhotos = filtered.filter(l => l.imageUrls.length > 0)
-    if (lotsWithPhotos.length === 0) { setPhotoMsg("No photos to export"); setTimeout(() => setPhotoMsg(null), 3000); return }
+    // Ticked lots are read off `lots`, not `filtered`: a lot ticked before the filter was changed
+    // is still ticked, and dropping it here would be the same class of bug in the other direction.
+    const target   = selected.size > 0 ? lots.filter(l => selected.has(l.id)) : filtered
+    const withPics = target.filter(l => l.imageUrls.length > 0)
+    const total    = withPics.reduce((s, l) => s + l.imageUrls.length, 0)
+
+    if (withPics.length === 0) {
+      setPhotoMsg(selected.size > 0 ? "None of the ticked lots have photos" : "No photos to export")
+      setTimeout(() => setPhotoMsg(null), 3000)
+      return
+    }
+
+    // ⚠ Nothing ticked ALWAYS asks, whatever the size — a whole-filter export has to be something
+    // you deliberately said yes to, never something that happens because you ticked nothing
+    // (Jack, 2026-08-26: "select th lots and thats the photos it exports").
+    //
+    // ⚠ And the zip is built in this tab's own memory, so a big one can exhaust it before the
+    // download ever starts — which is what "I pressed it and nothing happened" actually was. Say
+    // how big the job is and let them back out, rather than freezing the tab for ten minutes.
+    const lotCount = `${withPics.length} lot${withPics.length === 1 ? "" : "s"}`
+    if ((selected.size === 0 || total > 120) && !confirm(
+      selected.size === 0
+        ? `No lots are ticked, so this exports ALL ${total} photos from ${lotCount} in the current filter.\n\nTick the lots you want and press it again to export only those.`
+        : `Download ${total} photos from ${lotCount} you have ticked?\n\nAn export this size is built in the browser and can take a few minutes.`
+    )) return
+
+    // Filesystem-safe and never empty — a blank folder name silently merges lots together.
+    const safe = (v: string) => v.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "")
+    // ⚠ An R2 key is not guaranteed to end in an extension, and `key.split(".").pop()` hands back
+    // the WHOLE key when there is no dot — that is how a file named after the entire storage path
+    // ended up in the zip. The served Content-Type is the reliable answer; the key is the fallback.
+    const extOf = (key: string, type: string | null) => {
+      const fromType = type?.split(";")[0].trim().split("/")[1]?.toLowerCase()
+      if (fromType && /^[a-z0-9]{2,4}$/.test(fromType)) return fromType === "jpeg" ? "jpg" : fromType
+      const tail = key.split("/").pop() ?? ""
+      const ext  = tail.includes(".") ? tail.split(".").pop()!.toLowerCase() : ""
+      return /^[a-z0-9]{2,4}$/.test(ext) ? ext : "jpg"
+    }
 
     setPhotoExporting(true)
-    setPhotoMsg(`Fetching photos for ${lotsWithPhotos.length} lots…`)
+    setPhotoMsg(`Fetching ${total} photo${total === 1 ? "" : "s"} from ${withPics.length} lot${withPics.length === 1 ? "" : "s"}…`)
+    let hold = 5000
 
     try {
       const zip = new JSZip()
-      let fetched = 0
 
-      for (const lot of lotsWithPhotos) {
-        const folder = zip.folder(lot.barcode || lot.id)!
+      // Folder names are settled UP FRONT so that two lots can never share one. Lots with no
+      // barcode would otherwise all land in the same folder and their photos would merge — the
+      // exact jumbling this export has to make impossible.
+      const seen = new Map<string, number>()
+      const named = withPics.map(lot => {
+        const base = safe(lot.barcode || lot.receiptUniqueId || lot.id) || "no-barcode"
+        const n    = (seen.get(base) ?? 0) + 1
+        seen.set(base, n)
+        return { lot, folder: n === 1 ? base : `${base}__${n}` }
+      })
 
-        for (let i = 0; i < lot.imageUrls.length; i++) {
-          const key = lot.imageUrls[i]
+      const jobs    = named.flatMap(({ lot, folder }) => lot.imageUrls.map((key, i) => ({ lot, folder, key, i })))
+      const missing = new Map<string, string[]>()
+      let done = 0
+      let next = 0
+
+      // Six at a time. One at a time is what made a few hundred lots look like a hang; all at once
+      // would open a thousand connections at R2 and it would start refusing them.
+      const worker = async () => {
+        while (next < jobs.length) {
+          const j = jobs[next++]
           try {
-            const res = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(key)}`)
-            if (!res.ok) continue
+            const res = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(j.key)}`)
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
             const blob = await res.blob()
-            const ext  = key.split(".").pop() ?? "jpg"
-            folder.file(`photo_${i + 1}.${ext}`, blob)
-          } catch { /* skip failed images */ }
+            // The unique ID as well as the barcode, unless the folder is already the unique ID
+            // (a lot with no barcode) — no point stamping the same string on twice.
+            const id   = safe(j.lot.receiptUniqueId ?? "")
+            const stem = id && id !== j.folder ? `${j.folder}_${id}` : j.folder
+            const name = `${stem}_${String(j.i + 1).padStart(2, "0")}.${extOf(j.key, res.headers.get("content-type"))}`
+            zip.folder(j.folder)!.file(name, blob)
+          } catch {
+            missing.set(j.folder, [...(missing.get(j.folder) ?? []), j.key])
+          }
+          done++
+          if (done % 5 === 0 || done === jobs.length) setPhotoMsg(`Fetching photos… ${done} / ${jobs.length}`)
         }
-
-        fetched++
-        setPhotoMsg(`Downloading… ${fetched} / ${lotsWithPhotos.length} lots`)
       }
+      await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, () => worker()))
 
-      setPhotoMsg("Building zip…")
-      const content = await zip.generateAsync({ type: "blob" })
+      // The receipt for the zip: what each lot should have, and what is actually in it.
+      //
+      // ⚠ Every lot that was asked for is listed, INCLUDING the ones with no photos at all. A lot
+      // that simply has no folder in the zip is otherwise indistinguishable from one whose photos
+      // failed to download, and those two need very different responses.
+      const folderOf = new Map(named.map(({ lot, folder }) => [lot.id, folder]))
+      const q = (v: string | number | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`
+      zip.file("manifest.csv", [
+        "Folder,Barcode,Unique ID,Receipt,Tote,Vendor,Title,Photos Expected,Photos In Zip,Missing",
+        ...target.map(lot => {
+          const folder = folderOf.get(lot.id) ?? ""
+          const miss   = folder ? (missing.get(folder)?.length ?? 0) : 0
+          return [q(folder), q(lot.barcode), q(lot.receiptUniqueId), q(lot.receipt), q(lot.tote),
+                  q(lot.vendor), q(lot.title), q(lot.imageUrls.length),
+                  q(lot.imageUrls.length - miss), q(miss)].join(",")
+        }),
+      ].join("\r\n"))
+
+      setPhotoMsg("Building the zip…")
+      // STORE rather than the default DEFLATE: a JPEG does not compress, so deflating hundreds of
+      // them spends minutes and a great deal of memory to save nothing at all.
+      const content = await zip.generateAsync({ type: "blob", compression: "STORE" })
+
       const url = URL.createObjectURL(content)
       const a   = document.createElement("a")
       a.href     = url
-      a.download = `${auction.code}_photos.zip`.replace(/\s+/g, "_")
+      a.download = `${auction.code}_photos_${named.length}lots.zip`.replace(/\s+/g, "_")
+      // ⚠ In the DOM before the click, and the URL revoked on a TIMER afterwards. Revoking it on
+      // the very next line — which is what this did — can cancel the download before the browser
+      // has finished reading the blob, and the bigger the zip the more reliably it does.
+      document.body.appendChild(a)
       a.click()
-      URL.revokeObjectURL(url)
-      setPhotoMsg(`✓ Downloaded photos for ${fetched} lots`)
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+
+      const failed = [...missing.values()].reduce((s, v) => s + v.length, 0)
+      if (failed) hold = 15000
+      setPhotoMsg(failed
+        ? `✓ ${jobs.length - failed} photos from ${named.length} lots — ⚠ ${failed} could not be fetched, named in manifest.csv`
+        : `✓ ${jobs.length} photo${jobs.length === 1 ? "" : "s"} from ${named.length} lot${named.length === 1 ? "" : "s"}`)
     } catch (e) {
-      setPhotoMsg("Export failed")
+      hold = 15000
+      // The real message, not "Export failed" — running the tab out of memory and R2 refusing a
+      // key look identical from the outside, and only one of them is fixed by ticking fewer lots.
+      setPhotoMsg(`Export failed — ${e instanceof Error ? e.message : "unknown error"}`)
     } finally {
       setPhotoExporting(false)
-      setTimeout(() => setPhotoMsg(null), 4000)
+      setTimeout(() => setPhotoMsg(null), hold)
     }
   }
 
@@ -1985,9 +2092,14 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               <button onClick={exportForAHKReceipt} className={`${TB_NEUTRAL} hover:border-purple-400 hover:text-purple-400`}>
                 ⬇ BC Macro (Receipt)
               </button>
+              {/* The label says WHOSE photos, because the button used to take the whole sale when
+                  you had seven lots ticked and there was nothing on screen to say so. */}
               <button onClick={exportPhotos} disabled={photoExporting}
+                title={selected.size > 0
+                  ? `Photos for the ${selected.size} ticked lot${selected.size === 1 ? "" : "s"}`
+                  : "Photos for every lot in the current filter — tick lots to narrow it"}
                 className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
-                {photoExporting ? "⏳ Exporting…" : "📷 Photos (.zip)"}
+                {photoExporting ? "⏳ Exporting…" : selected.size > 0 ? `📷 Photos (${selected.size} ticked)` : "📷 Photos (.zip)"}
               </button>
               <button onClick={exportExcel}
                 className={`${TB_BTN} border-[#2AB4A6] text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-black`}>

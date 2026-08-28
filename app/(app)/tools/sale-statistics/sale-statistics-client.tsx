@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import {
+  excelHeader, excelValue, cellFormat, sheetName, reportFilename,
+  type SaleStatsReport, type ReportTable,
+} from "@/lib/sale-stats-report"
 
 // ─── Types (mirror the /api/bc/sale-statistics result) ─────────────────────────
 
@@ -128,7 +132,7 @@ function monthYearRange(m: number, y: number): [string, string] {
 
 const selCls = "bg-white dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
 
-export default function SaleStatisticsClient() {
+export default function SaleStatisticsClient({ userName = "" }: { userName?: string }) {
   const [preset, setPreset] = useState("This month")
   const [[from, to], setRange] = useState<[string, string]>(() => PRESETS[0].range())
   const [data, setData]       = useState<Result | null>(null)
@@ -379,6 +383,236 @@ export default function SaleStatisticsClient() {
     { label: "Items Collected",   get: r => r.collected,     kind: "int" },
   ]
 
+  // ─── Exports ─────────────────────────────────────────────────────────────────
+  //
+  // ⚠ ONE report object per mode, and BOTH buttons render it (lib/sale-stats-report.ts). Defining
+  // the tables once per format is how a PDF and a spreadsheet of the same screen end up
+  // disagreeing, and the manager reading them cannot tell which is wrong.
+  //
+  // ⚠ Rows carry RAW NUMBERS, never the formatted strings on screen — otherwise the spreadsheet
+  // gets "£12,345" as text and cannot add up its own column. The formats below decide how each
+  // one is written out in each destination.
+
+  const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null)
+  const [exportErr, setExportErr] = useState<string | null>(null)
+
+  const canExport = mode === "compare" ? !!(dataA && dataB) && !cmpLoading : !!data && !loading
+
+  /** The metric-comparison table — used by Compare periods AND by Best vs quietest. */
+  function metricTable(title: string, aLabel: string, bLabel: string, ra: Roll, rb: Roll): ReportTable {
+    return {
+      title,
+      note: "Percentage rows: Difference is in percentage points, and Change is left blank — a ratio of two percentages means nothing.",
+      columns: [
+        { label: "Metric",     format: "text" },
+        { label: aLabel,       format: "auto" },
+        { label: bLabel,       format: "auto" },
+        { label: "Difference", format: "autoSigned" },
+        { label: "Change",     format: "pctSigned" },
+      ],
+      rows: cmpMetrics.map(m => {
+        const a = m.get(ra), b = m.get(rb)
+        return [m.label, a, b, a - b, m.kind === "pct" || b === 0 ? "" : a / b - 1]
+      }),
+      rowFormat: cmpMetrics.map(m => (m.kind === "money" ? "money" : m.kind === "int" ? "int" : "pct")),
+    }
+  }
+
+  function buildReport(): SaleStatsReport | null {
+    const base = { generatedAt: new Date().toISOString(), generatedBy: userName }
+    const catBit = `${category !== "all" ? ` · ${category}` : ""}${subcategory !== "all" ? ` · ${subcategory}` : ""}`
+
+    if (mode === "single") {
+      if (!data) return null
+      return {
+        ...base,
+        title:    "Sale Statistics — Single period",
+        subtitle: `${from} to ${to} · ${sale === "all" ? "All sales" : `Sale ${sale}`}${catBit || " · All categories"}`,
+        stats:    [...hero, ...cards],
+        tables: [
+          {
+            title: "By sale",
+            columns: [
+              { label: "Sale", format: "text" }, { label: "Name", format: "text" }, { label: "Date", format: "text" },
+              { label: "Lots Sold", format: "int" }, { label: "Lots Passed", format: "int" }, { label: "Lots Withdrawn", format: "int" },
+              { label: "Sell-through", format: "pct" }, { label: "Low Estimate", format: "money" }, { label: "High Estimate", format: "money" },
+              { label: "Sale Value", format: "money" }, { label: "Avg Lot", format: "money2" },
+              { label: "Vs High Est", format: "pctSigned" }, { label: "£ vs High", format: "moneySigned" },
+              { label: "BP Earned", format: "money" }, { label: "Vendor Commission", format: "money" },
+              { label: "Ave Vendor %", format: "pct" }, { label: "Collected", format: "int" },
+              { label: "Vendors", format: "int" }, { label: "Buyers", format: "int" },
+            ],
+            rows: bySale.map(s => [
+              s.code, s.name, s.date,
+              s.r.sold, passed(s.r), s.r.withdrawn,
+              sellThrough(s.r), s.r.low, s.r.high,
+              s.r.hammer, avgLot(s.r),
+              vsHigh(s.r), s.r.hammer - s.r.high,
+              s.r.hammer * rate, s.r.sellerPremium,
+              aveVendorPct(s.r), s.r.collected,
+              saleDistinct.get(s.code)?.vendors ?? 0,
+              // ⚠ Blank, not 0, when BC has no buyer field — the screen shows an em dash here and
+              // a zero in a spreadsheet would be read as "nobody bought anything".
+              data.buyerField ? (saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "",
+            ]),
+          },
+          {
+            title: "By category & subcategory",
+            columns: [
+              { label: "Category", format: "text" }, { label: "Subcategory", format: "text" },
+              { label: "Lots", format: "int" }, { label: "Sold", format: "int" },
+              { label: "Sale value", format: "money" }, { label: "Share", format: "pct" },
+              { label: "Avg hammer (sold)", format: "money2" },
+            ],
+            rows: byCat.map(c => [
+              c.category, c.subcategory, c.r.lots, c.r.sold, c.r.hammer,
+              totals.hammer > 0 ? c.r.hammer / totals.hammer : 0, avgLot(c.r),
+            ]),
+          },
+        ],
+      }
+    }
+
+    if (mode === "compare") {
+      if (!dataA || !dataB) return null
+      const aLabel = `${MONTHS[pa.m]} ${pa.y}`
+      const bLabel = `${MONTHS[pb.m]} ${pb.y}`
+      return {
+        ...base,
+        title:    "Sale Statistics — Compare periods",
+        subtitle: `${aLabel} vs ${bLabel}${catBit}`,
+        stats: [
+          { label: aLabel,   value: gbp0(rollA.hammer), sub: `${int(rollA.sold)} lots sold` },
+          { label: bLabel,   value: gbp0(rollB.hammer), sub: `${int(rollB.sold)} lots sold` },
+          { label: "Change", value: gbpSigned(rollA.hammer - rollB.hammer), sub: rollB.hammer ? pctS(rollA.hammer / rollB.hammer - 1) : "no baseline" },
+        ],
+        tables: [metricTable(`${aLabel} vs ${bLabel}`, aLabel, bLabel, rollA, rollB)],
+      }
+    }
+
+    // Best months
+    if (!data) return null
+    const tables: ReportTable[] = []
+    if (categorySeasonality.length) {
+      tables.push({
+        title: "Best month to sell — by category",
+        note:  "Every category, across the whole range. The current, incomplete month is excluded.",
+        columns: [
+          { label: "Category", format: "text" }, { label: "Best month", format: "text" },
+          { label: "Best value", format: "money" }, { label: "Best sell-through", format: "pct" }, { label: "Best vs high", format: "pctSigned" },
+          { label: "Quietest month", format: "text" },
+          { label: "Quietest value", format: "money" }, { label: "Quietest sell-through", format: "pct" }, { label: "Quietest vs high", format: "pctSigned" },
+          { label: "Total (range)", format: "money" }, { label: "Unsold (total)", format: "int" },
+        ],
+        rows: categorySeasonality.map(c => [
+          c.category, MONTHS[c.best.m],
+          c.best.r.hammer, sellThrough(c.best.r), vsHigh(c.best.r),
+          MONTHS[c.worst.m],
+          c.worst.r.hammer, sellThrough(c.worst.r), vsHigh(c.worst.r),
+          c.total, c.passedTotal,
+        ]),
+      })
+    }
+    if (bestMonth && worstMonth) {
+      tables.push(metricTable(
+        `Best vs quietest — ${MONTHS[bestMonth.month]} vs ${MONTHS[worstMonth.month]}`,
+        `${MONTHS[bestMonth.month]} — best`, `${MONTHS[worstMonth.month]} — quietest`,
+        bestMonth.r, worstMonth.r,
+      ))
+    }
+    if (monthsWithData.length) {
+      tables.push({
+        title: "By month",
+        columns: [
+          { label: "Month", format: "text" }, { label: "Sale Value", format: "money" },
+          { label: "Lots Sold", format: "int" }, { label: "Lots Passed", format: "int" },
+          { label: "Sell-through", format: "pct" }, { label: "Avg Lot", format: "money2" },
+          { label: "Vs High Est", format: "pctSigned" }, { label: "Vendor Comm", format: "money" },
+        ],
+        rows: monthsWithData.map(m => [
+          MONTHS[m.month], m.r.hammer, m.r.sold, passed(m.r),
+          sellThrough(m.r), avgLot(m.r), vsHigh(m.r), m.r.sellerPremium,
+        ]),
+      })
+    }
+    return {
+      ...base,
+      title:    "Sale Statistics — Best months",
+      subtitle: `${from} to ${to}${catBit || " · All categories"}`,
+      stats: [
+        ...(bestMonth  ? [{ label: "Best month to sell", value: MONTHS[bestMonth.month],  sub: `${gbp0(bestMonth.r.hammer)} · ${pct(sellThrough(bestMonth.r))} sell-through` }] : []),
+        ...(worstMonth ? [{ label: "Quietest month",     value: MONTHS[worstMonth.month], sub: `${gbp0(worstMonth.r.hammer)} · ${pct(sellThrough(worstMonth.r))} sell-through` }] : []),
+      ],
+      tables,
+    }
+  }
+
+  async function exportExcel() {
+    const report = buildReport()
+    if (!report) { setExportErr("Nothing loaded to export yet"); return }
+    setExportErr(null); setExporting("excel")
+    try {
+      // Loaded on demand — xlsx is a large library and most visits to this screen never export.
+      const XLSX = await import("xlsx")
+      const wb = XLSX.utils.book_new()
+      const taken: string[] = []
+
+      // A Summary sheet first, so the workbook opens on the headline figures and carries the
+      // filters that produced them. A table with no idea what it was filtered by is a trap.
+      const summary: (string | number)[][] = [
+        [report.title], [report.subtitle], [`Exported ${new Date(report.generatedAt).toLocaleString("en-GB")}${report.generatedBy ? ` by ${report.generatedBy}` : ""}`],
+        [], ["Figure", "Value", "Detail"],
+        ...report.stats.map(s => [s.label, s.value, s.sub ?? ""]),
+      ]
+      const sws = XLSX.utils.aoa_to_sheet(summary)
+      sws["!cols"] = [{ wch: 24 }, { wch: 18 }, { wch: 34 }]
+      const sname = sheetName("Summary", taken); taken.push(sname)
+      XLSX.utils.book_append_sheet(wb, sws, sname)
+
+      for (const t of report.tables) {
+        if (!t.rows.length) continue
+        const aoa = [
+          t.columns.map(excelHeader),
+          ...t.rows.map((r, ri) => r.map((v, ci) => excelValue(v, cellFormat(t, ri, ci)))),
+        ]
+        const ws = XLSX.utils.aoa_to_sheet(aoa)
+        ws["!cols"] = t.columns.map(c => ({ wch: Math.min(38, Math.max(11, excelHeader(c).length + 3)) }))
+        const n = sheetName(t.title, taken); taken.push(n)
+        XLSX.utils.book_append_sheet(wb, ws, n)
+      }
+      XLSX.writeFile(wb, reportFilename(report, "xlsx"))
+    } catch (e) {
+      setExportErr(e instanceof Error ? e.message : "Could not build the spreadsheet")
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  async function exportPdf() {
+    const report = buildReport()
+    if (!report) { setExportErr("Nothing loaded to export yet"); return }
+    setExportErr(null); setExporting("pdf")
+    try {
+      const res = await fetch("/api/sale-statistics/pdf", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(report),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not build the PDF")
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement("a")
+      a.href = url
+      a.download = reportFilename(report, "pdf")
+      // ⚠ In the DOM before the click, and revoked on a timer after it — revoking on the next line
+      // can cancel the download before the browser has finished reading the blob.
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e) {
+      setExportErr(e instanceof Error ? e.message : "Could not build the PDF")
+    } finally {
+      setExporting(null)
+    }
+  }
+
   return (
     <div className="p-6 max-w-screen-2xl">
       <div className="mb-5">
@@ -388,8 +622,8 @@ export default function SaleStatisticsClient() {
         </p>
       </div>
 
-      {/* Mode toggle */}
-      <div className="flex gap-1 mb-4">
+      {/* Mode toggle, with the exports of whichever mode is showing sitting beside it */}
+      <div className="flex flex-wrap items-center gap-1 mb-4">
         {(["single", "compare", "best"] as const).map(mo => (
           <button key={mo} onClick={() => switchMode(mo)}
             className={`px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
@@ -398,6 +632,27 @@ export default function SaleStatisticsClient() {
             {mo === "single" ? "Single period" : mo === "compare" ? "Compare periods" : "Best months"}
           </button>
         ))}
+
+        {/* ⚠ Both buttons export THIS mode with THESE filters — the tables on screen, not the
+            whole dataset behind them. Disabled until there are figures, so a press can never
+            produce an empty file that looks like a broken export. */}
+        <div className="ml-auto flex items-center gap-2">
+          {exportErr && <span className="text-xs text-red-400 max-w-xs truncate" title={exportErr}>{exportErr}</span>}
+          <button
+            onClick={exportExcel}
+            disabled={!canExport || exporting !== null}
+            title={canExport ? "Every table in this view as a spreadsheet, one sheet each" : "Load some figures first"}
+            className="px-3 py-1.5 text-xs font-semibold rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#2AB4A6] hover:text-[#2AB4A6] disabled:opacity-40 disabled:hover:border-gray-300 dark:disabled:hover:border-gray-700 disabled:hover:text-gray-600 dark:disabled:hover:text-gray-300 transition-colors">
+            {exporting === "excel" ? "Building…" : "⬇ Excel"}
+          </button>
+          <button
+            onClick={exportPdf}
+            disabled={!canExport || exporting !== null}
+            title={canExport ? "This view as a printable PDF" : "Load some figures first"}
+            className="px-3 py-1.5 text-xs font-semibold rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#2AB4A6] hover:text-[#2AB4A6] disabled:opacity-40 disabled:hover:border-gray-300 dark:disabled:hover:border-gray-700 disabled:hover:text-gray-600 dark:disabled:hover:text-gray-300 transition-colors">
+            {exporting === "pdf" ? "Building…" : "⬇ PDF"}
+          </button>
+        </div>
       </div>
 
       {mode !== "compare" && (<>

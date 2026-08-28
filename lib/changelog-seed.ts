@@ -14,7 +14,10 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
-  {"sha":"8c60707c252e96cba6f5e966132f1c126e93e8a5","author":"Jordan Orange","date":"2026-08-28T09:21:51+01:00","subject":"Data map: every table in the database, in one plain sentence"},
+  {"sha":"32bc76382a90cef7361dac6d9c92f2fc0043dd03","author":"Jack Collings","date":"2026-08-28T09:15:06+01:00","subject":"Sale Statistics: export any of the three views to Excel or PDF"},
+  {"sha":"5955a99d3a8c05afe4a835ce32c32d56aff3e544","author":"Jack Collings","date":"2026-08-26T16:18:29+01:00","subject":"Terms: an admin can make one person sign the policy again"},
+  {"sha":"c6d6253740dee3237266f7b3bebc334a6989a7d9","author":"Jack Collings","date":"2026-08-26T11:14:28+01:00","subject":"Manage Lots: exporting the whole filter is now a yes, not a default"},
+  {"sha":"3bdc697be928bdd25fbfb3313171675a67e81df2","author":"Jack Collings","date":"2026-08-26T11:04:41+01:00","subject":"Manage Lots: the photo export takes the lots you ticked, not the whole sale"},
   {"sha":"9d42c6c195aa028a923de03efb59bebc2bbae05d","author":"Jordan Orange","date":"2026-08-25T17:06:32+01:00","subject":"Auto Clerk 2.0: Saleroom Clerk and Vectis Clerk — named launchers for follow mode"},
   {"sha":"955c7c90db252396e3da58d708649c4edb92bf59","author":"Jordan Orange","date":"2026-08-25T17:00:58+01:00","subject":"Auto Clerk 2.0: F8 is the human's 'lot done' key in follow mode"},
   {"sha":"7b811a4adb4208515503bae146b3a54fa68c3d34","author":"Jordan Orange","date":"2026-08-25T16:48:40+01:00","subject":"Auto Clerk 2.0: follow mode — watch both screens, clerk only one"},
