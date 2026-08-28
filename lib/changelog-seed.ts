@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c05abab4475067d1294aefe0e0783da1a70fcfca","author":"Jordan Orange","date":"2026-08-28T11:26:49+01:00","subject":"When nothing comes back, say what did"},
+  {"sha":"445dead4e60668a7a19686c8be6514c1bfdb36af","author":"Jordan Orange","date":"2026-08-28T11:21:06+01:00","subject":"Refresh changelog seed"},
   {"sha":"089d2a32186779532f4e06760b78f885a5211e9e","author":"Jordan Orange","date":"2026-08-28T11:21:05+01:00","subject":"An empty answer is not a successful generation"},
   {"sha":"30f05887a785b5c9c70f8aceb72afa840163ebf3","author":"Jordan Orange","date":"2026-08-28T11:05:10+01:00","subject":"Refresh changelog seed"},
   {"sha":"7683e8a04db1197830afecc9ff27f5786a207f90","author":"Jordan Orange","date":"2026-08-28T11:05:09+01:00","subject":"Comics recitation: solved - it is the enumerated issue list"},
