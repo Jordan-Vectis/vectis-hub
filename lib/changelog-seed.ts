@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"18e500fc7d7695075190a2742cb09356693cda93","author":"Jordan Orange","date":"2026-08-28T15:16:35+01:00","subject":"Quick mode: let the overnight run find its own pace"},
+  {"sha":"e6c8d63ef2765099709a0f731eb6e8c5d04913c1","author":"Jordan Orange","date":"2026-08-28T14:22:39+01:00","subject":"Refresh changelog seed"},
   {"sha":"9526fb89e82919f3ec5041fbce3313def6adc9dc","author":"Jordan Orange","date":"2026-08-28T14:22:37+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"e53762ef6a8c49a67fc9ccd0fec23b5dbbf3505f","author":"Jordan Orange","date":"2026-08-28T14:22:20+01:00","subject":"Refresh changelog seed"},
   {"sha":"78e11f32ace48edbc5f327d0d28c158866e672b9","author":"Jordan Orange","date":"2026-08-28T14:22:19+01:00","subject":"Stop a large photo upload taking the whole app down"},
