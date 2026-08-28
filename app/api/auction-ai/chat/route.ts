@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
+import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 120
 
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
 
   const genai = new GoogleGenerativeAI(apiKey)
   const model = genai.getGenerativeModel({
+    safetySettings: GEMINI_SAFETY_SETTINGS,
     model: modelId,
     systemInstruction: systemInstruction || undefined,
   })

@@ -7,6 +7,7 @@ import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { auditCodes } from "@/lib/product-codes"
 import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
+import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 60
 
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
     const ai = genAI.getGenerativeModel({
+    safetySettings: GEMINI_SAFETY_SETTINGS,
       model: await getToolModel("catalogue_kpcheck", model),
       systemInstruction: mode === "relaxed" ? KEY_POINTS_INSTRUCTION_RELAXED : KEY_POINTS_INSTRUCTION,
     })

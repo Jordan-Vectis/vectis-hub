@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
+import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 60
 
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
+    safetySettings: GEMINI_SAFETY_SETTINGS,
       model: await getToolModel("catalogue_flags", modelId),
       systemInstruction: PROMPT,
       tools: [{ googleSearch: {} } as any],

@@ -6,6 +6,7 @@ import { getToolModel } from "@/lib/ai-models"
 // Valuations tool. Don't fork it back into this file — the scoring was measured,
 // and a second copy will drift.
 import { findComparables, type Comparable } from "@/lib/comparables"
+import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 120
 
@@ -127,6 +128,7 @@ export async function POST(req: NextRequest) {
     const modelId = await getToolModel("catalogue_lens", formData.get("model") as string | null)
     const genai   = new GoogleGenerativeAI(apiKey)
     const model   = genai.getGenerativeModel({
+    safetySettings: GEMINI_SAFETY_SETTINGS,
       model: modelId,
       tools: [{ googleSearch: {} } as any],
     })

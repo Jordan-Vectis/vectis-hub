@@ -13,6 +13,7 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import Anthropic from "@anthropic-ai/sdk"
+import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export type AiProvider = "gemini" | "anthropic"
 
@@ -109,6 +110,9 @@ async function generateGemini(req: AiRequest): Promise<string> {
   const genai = new GoogleGenerativeAI(apiKey)
   const model = genai.getGenerativeModel({
     model: req.model,
+    // Same relaxed thresholds as the cataloguing routes — see lib/ai-safety.ts.
+    // ⚠ Does nothing for RECITATION; that one has no threshold to relax.
+    safetySettings: GEMINI_SAFETY_SETTINGS,
     ...(req.system ? { systemInstruction: req.system } : {}),
     generationConfig: {
       ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),

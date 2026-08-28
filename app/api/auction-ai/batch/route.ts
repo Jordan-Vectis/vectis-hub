@@ -8,6 +8,7 @@ import { resolveInstruction } from "@/lib/ai-instructions"
 import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
 import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
 import { safetyDetail, blockMeaning } from "@/lib/ai-provider"
+import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 300
 
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
 
   const genai = new GoogleGenerativeAI(apiKey)
   const model = genai.getGenerativeModel({
+    safetySettings: GEMINI_SAFETY_SETTINGS,
     model: modelId,
     // Always include the English-language rule, even when the preset is empty/custom.
     systemInstruction: [systemInstruction, LANGUAGE_RULE].filter(Boolean).join("\n\n"),

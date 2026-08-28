@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
+import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 120
 
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
   // Note: not all models support grounding. If the selected model doesn't, this
   // route returns a clear error so the user can switch to a supported model.
   const model = genai.getGenerativeModel({
+    safetySettings: GEMINI_SAFETY_SETTINGS,
     model: modelId,
     systemInstruction: systemInstruction || undefined,
     tools: [{ googleSearch: {} } as any],
