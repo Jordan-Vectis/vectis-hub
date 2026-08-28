@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"089d2a32186779532f4e06760b78f885a5211e9e","author":"Jordan Orange","date":"2026-08-28T11:21:05+01:00","subject":"An empty answer is not a successful generation"},
+  {"sha":"30f05887a785b5c9c70f8aceb72afa840163ebf3","author":"Jordan Orange","date":"2026-08-28T11:05:10+01:00","subject":"Refresh changelog seed"},
   {"sha":"7683e8a04db1197830afecc9ff27f5786a207f90","author":"Jordan Orange","date":"2026-08-28T11:05:09+01:00","subject":"Comics recitation: solved - it is the enumerated issue list"},
   {"sha":"8f5ee6c3e87a558cb3a389a54ec24e9cada40e4e","author":"Jordan Orange","date":"2026-08-28T10:58:18+01:00","subject":"Refresh changelog seed"},
   {"sha":"c30ab2b959089bb0f1096a1def1572e2f4b76ac8","author":"Jordan Orange","date":"2026-08-28T10:58:16+01:00","subject":"Correct the record: grounding was not the cause of the comic blocks"},
