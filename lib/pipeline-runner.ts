@@ -35,6 +35,10 @@ const rateLimitWait = (attempt: number) => Math.min(60_000 * Math.pow(2, attempt
 /** Everything else: 12s → 24s → 30s. */
 const otherWait = (attempt: number) => Math.min(attempt * 12_000, 30_000)
 const MAX_RECITATION_RETRIES = 4
+/** How many times to re-ask when a call succeeds but produces no text at all. */
+const MAX_EMPTY_RETRIES = 4
+/** The route's wording for that case — kept in one place so the two cannot drift apart. */
+const EMPTY_ANSWER = /returned no description|empty description/i
 
 const LOG_MAX = 40_000 // keep the morning report readable and the row small
 
@@ -397,15 +401,20 @@ async function withRetry<T>(
   deadline: Deadline,
   addLog: (m: string) => void,
   fn: (attempt: number) => Promise<T>,
+  /** Filled in when this returns null, so the caller can record WHICH failure it was —
+   *  a refusal and an empty answer are different things and must not share a status. */
+  outcome?: { reason?: "blocked" | "empty" },
 ): Promise<T | null> {
   let attempt = 0
   let lastError = ""
   let recitations = 0
+  let empties = 0
   for (;;) {
     if (attempt > 0) {
       const isRL    = lastError.startsWith("RATE_LIMITED:")
       const isRecit = /RECITATION/i.test(lastError)
-      const wait    = isRL ? rateLimitWait(attempt) : isRecit ? 1500 : otherWait(attempt)
+      const isEmpty = EMPTY_ANSWER.test(lastError)
+      const wait    = isRL ? rateLimitWait(attempt) : (isRecit || isEmpty) ? 1500 : otherWait(attempt)
       // ⚠⚠ NEVER sleep in-process for as long as the heartbeat takes to go stale.
       // flush() is the only thing that writes heartbeatAt and it runs once per LOT, so a
       // long sleep here leaves the queue row looking dead: the 30-second tick sees a
@@ -428,6 +437,22 @@ async function withRetry<T>(
       return await fn(attempt)
     } catch (e: any) {
       lastError = e?.message ?? String(e)
+      // ⚠⚠ AN EMPTY ANSWER IS A FAILURE, NOT A RESULT. The route can return a perfectly
+      // successful call that produced no description; this used to sail through as "ok",
+      // write the empty string onto the lot and log a tick (179 lots of 601 on F113).
+      // Bounded like RECITATION rather than retried for ever: the model alternates on each
+      // attempt, so a few tries is a real second chance, while an endlessly empty lot must
+      // not hold up the 600 behind it. Reported loudly when it gives up — never silent.
+      if (EMPTY_ANSWER.test(lastError)) {
+        if (empties < MAX_EMPTY_RETRIES) {
+          empties++
+          addLog(`  ↻ ${label} — nothing came back, trying the other model (${empties}/${MAX_EMPTY_RETRIES})`)
+          continue
+        }
+        addLog(`  ✗ ${label} — nothing came back after ${MAX_EMPTY_RETRIES} tries, skipping`)
+        if (outcome) outcome.reason = "empty"
+        return null
+      }
       if (isBlock(lastError)) {
         // RECITATION is stochastic and model-specific — it often clears on the
         // other model, which the next attempt selects. Everything else (SAFETY
@@ -438,6 +463,7 @@ async function withRetry<T>(
           continue
         }
         addLog(`  ✗ ${label} — ${blockReasonLabel(lastError)}, skipping`)
+        if (outcome) outcome.reason = "blocked"
         return null
       }
       if (deadline.expired) throw new SliceOver(0)
@@ -488,12 +514,13 @@ async function runStages(
       if (deadline.expired) throw new SliceOver(0)
 
       if (lot.imageUrls.length === 0) {
-        lot.batchStatus = "skipped"
-        await saveLot(code, lot.id, lot.label, { batchStatus: "skipped" })
+        lot.batchStatus = "nothing"
+        await saveLot(code, lot.id, lot.label, { batchStatus: "nothing" })
         await tick("batch")
         continue
       }
 
+      const outcome: { reason?: "blocked" | "empty" } = {}
       const result = await withRetry(lot.label, deadline, addLog, async (attempt) => {
         const fd = new FormData()
         fd.append("presetKey", item.preset)
@@ -516,8 +543,11 @@ async function runStages(
         if (!res.ok) throw new Error(json.error ?? res.statusText)
         const r = json.results?.[0]
         if (!r || r.status !== "OK") throw new Error(r?.error ?? "No result from Gemini")
+        // ⚠ Belt and braces with the route's own check: the status alone used to be the
+        // whole test, and an answer with no description passed it.
+        if (!String(r.description ?? "").trim()) throw new Error("The model returned no description.")
         return r
-      })
+      }, outcome)
 
       if (result) {
         const desc = result.description ?? ""
@@ -547,9 +577,12 @@ async function runStages(
         })
         addLog(`  ✓ ${lot.label}`)
       } else {
-        lot.batchStatus = "skipped"
+        // "skipped" = the AI refused it. "empty" = it answered with nothing. Same
+        // outcome for the lot, completely different thing to go and look at.
+        const status = outcome.reason === "empty" ? "empty" : "skipped"
+        lot.batchStatus = status
         skipped++
-        await saveLot(code, lot.id, lot.label, { batchStatus: "skipped" })
+        await saveLot(code, lot.id, lot.label, { batchStatus: status })
       }
       await tick("batch")
       if (!deadline.fits(LOT_GAP_MS)) throw new SliceOver(0)
@@ -626,9 +659,12 @@ async function runStages(
     for (const lot of toRun) {
       if (deadline.expired) throw new SliceOver(0)
 
+      // ⚠ NOT a content block — there is simply nothing to double check. Recording this
+      // as "skipped" is what put "content blocked by AI" against 179 lots on F113 whose
+      // only fault was that the batch stage had produced no description.
       if (lot.imageUrls.length === 0 || !lot.currentDesc) {
-        lot.dcStatus = "skipped"
-        await saveLot(code, lot.id, lot.label, { dcStatus: "skipped" })
+        lot.dcStatus = "nothing"
+        await saveLot(code, lot.id, lot.label, { dcStatus: "nothing" })
         await tick("doublecheck")
         continue
       }

@@ -51,7 +51,8 @@ function isApplied(l: Lot): boolean {
 }
 
 function needsAttention(l: Lot): boolean {
-  return l.batchStatus === "failed" || l.dcStatus === "issues" || l.dcStatus === "error" || l.kpStatus === "error"
+  return l.batchStatus === "failed" || l.batchStatus === "empty"
+    || l.dcStatus === "issues" || l.dcStatus === "error" || l.kpStatus === "error"
 }
 
 function notStarted(l: Lot): boolean {
@@ -107,7 +108,7 @@ export default function RunClient({ code }: { code: string }) {
     attention: lots.filter(needsAttention).length,
     applied:   lots.filter(isApplied).length,
     waiting:   lots.filter(notStarted).length,
-    skipped:   lots.filter(l => l.batchStatus === "skipped").length,
+    skipped:   lots.filter(l => l.batchStatus === "skipped" || l.batchStatus === "empty").length,
   }), [lots])
 
   const shown = useMemo(() => {
@@ -118,7 +119,7 @@ export default function RunClient({ code }: { code: string }) {
         case "attention": return needsAttention(l)
         case "applied":   return isApplied(l)
         case "waiting":   return notStarted(l)
-        case "skipped":   return l.batchStatus === "skipped"
+        case "skipped":   return l.batchStatus === "skipped" || l.batchStatus === "empty"
         default:          return true
       }
     })
@@ -243,7 +244,7 @@ export default function RunClient({ code }: { code: string }) {
             <Stat label="Lots described so far" value={String(described)} />
             <Stat label="Applied to the catalogue" value={String(counts.applied)} />
             <Stat label="Need a look" value={String(counts.attention)} tone={counts.attention > 0 ? "amber" : undefined} />
-            <Stat label="Refused by the AI" value={String(item.skipped)} tone={item.skipped > 0 ? "amber" : undefined} />
+            <Stat label="Couldn't be done" value={String(item.skipped)} tone={item.skipped > 0 ? "amber" : undefined} />
           </div>
           {item.total > 0 && !fresh && (
             <div className="mt-4">
@@ -365,7 +366,7 @@ export default function RunClient({ code }: { code: string }) {
           ["attention", "Need a look", counts.attention],
           ["applied", "Applied", counts.applied],
           ["waiting", "Not started", counts.waiting],
-          ["skipped", "Refused", counts.skipped],
+          ["skipped", "Couldn't be done", counts.skipped],
         ] as [Filter, string, number][]).map(([k, lbl, n]) => (
           <button key={k} onClick={() => setFilter(k)}
             className={`px-3 py-2 min-h-[36px] rounded-lg text-xs font-semibold ${
@@ -463,7 +464,13 @@ function StageChip({ stage, status }: { stage: "batch" | "kp" | "dc"; status: st
     ok:      { label: `✓ ${stage === "dc" ? "no issues found" : stage === "kp" ? "all key points present" : "generated OK"}`, cls: "text-green-600 dark:text-green-400" },
     fixed:   { label: "⚑ missing key points added", cls: "text-amber-600 dark:text-amber-400" },
     issues:  { label: "⚑ description corrected", cls: "text-yellow-600 dark:text-yellow-400" },
-    skipped: { label: "✗ content blocked by AI", cls: "text-red-600 dark:text-red-400" },
+    // ⚠ These three were ALL shown as "content blocked by AI" until 2026-08-28, which put
+    // that label against 179 lots on F113 whose real fault was that the batch stage had
+    // returned nothing. A refusal, an empty answer and having nothing to check are three
+    // different problems with three different answers — never collapse them again.
+    skipped: { label: "✗ refused by the AI", cls: "text-red-600 dark:text-red-400" },
+    empty:   { label: "✗ nothing came back", cls: "text-red-600 dark:text-red-400" },
+    nothing: { label: stage === "dc" ? "— nothing to check" : "— no photos", cls: "text-gray-500 dark:text-gray-400" },
     failed:  { label: "✗ failed", cls: "text-red-600 dark:text-red-400" },
     error:   { label: "✗ errored", cls: "text-red-600 dark:text-red-400" },
   }

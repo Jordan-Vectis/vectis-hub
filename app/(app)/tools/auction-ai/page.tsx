@@ -4255,6 +4255,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     let wasRateLimit = false
     let recitationRetries = 0
     const MAX_RECITATION_RETRIES = 4
+    // ⚠ An answer with no description is now a FAILURE rather than a silent success (the
+    // batch route stopped calling it "OK" on 2026-08-28). Bounded like RECITATION: the
+    // browser loop is deliberately infinite for transient errors, but a lot that comes
+    // back empty every time would hold up the whole sale behind it.
+    let emptyRetries = 0
+    const MAX_EMPTY_RETRIES = 4
+    const isEmptyAnswer = (m: string) => /returned no description|empty description/i.test(m)
     while (!cancelRef.current) {
       if (attempt > 0) {
         const isRL    = lastError.startsWith("RATE_LIMITED:")
@@ -4272,6 +4279,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       } catch (e: any) {
         lastError = e.message ?? String(e)
         wasRateLimit = false
+        if (isEmptyAnswer(lastError)) {
+          if (emptyRetries < MAX_EMPTY_RETRIES) {
+            emptyRetries++
+            addLog(`↻ ${label} — nothing came back, retrying with the other model (${emptyRetries}/${MAX_EMPTY_RETRIES})…`)
+            continue
+          }
+          addLog(`✗ ${label} — nothing came back after ${MAX_EMPTY_RETRIES} tries, skipping`)
+          return null
+        }
         if (isBlock(lastError)) {
           lastBlockRef.current = lastError
           // RECITATION is stochastic and model-specific — unlike SAFETY it often clears on a

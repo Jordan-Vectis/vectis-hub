@@ -178,9 +178,23 @@ After the description (and optional FLAG line), include the estimate on its own 
       const description = isBearsPreset(presetKey) ? cleanBearsDescription(rawDescription) : rawDescription
       const flag = flagLine.replace(/^flag:\s*/i, "").trim()
 
-      results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
-        ...(flag ? { flag } : {}),
-        debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
+      // ⚠⚠ AN EMPTY ANSWER IS NOT AN "OK". This used to push status "OK" whatever came
+      // back, so a reply with no description at all was reported as a clean generation —
+      // and the overnight runner, which only checks the status, wrote the empty string
+      // onto the lot and logged a tick. Measured on F113: 179 lots of 601 (30% of the
+      // sale) had "generated OK", an empty batchDesc, and no description anywhere, which
+      // then surfaced on screen as "content blocked by AI" at the double check because
+      // there was nothing left to check. RULES: never let "nothing happened" look like
+      // success.
+      if (!description.trim()) {
+        results.push({ lot, description: "", estimate: "", status: "FAILED",
+          error: "The model returned no description.",
+          debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
+      } else {
+        results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
+          ...(flag ? { flag } : {}),
+          debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
+      }
 
       // 12-second delay between lots to stay well under Gemini rate limits
       if (idx < lotEntries.length - 1) {
