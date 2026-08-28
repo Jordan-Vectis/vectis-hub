@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"cd1b817186804617d4a2b71d1a7101c7e9413f55","author":"Jordan Orange","date":"2026-08-28T15:27:40+01:00","subject":"Stop the overnight bar reading 100% with a stage still to run"},
+  {"sha":"5c69368a87b4885a38985e1ea6ad5f13434746a9","author":"Jordan Orange","date":"2026-08-28T15:16:37+01:00","subject":"Refresh changelog seed"},
   {"sha":"18e500fc7d7695075190a2742cb09356693cda93","author":"Jordan Orange","date":"2026-08-28T15:16:35+01:00","subject":"Quick mode: let the overnight run find its own pace"},
   {"sha":"e6c8d63ef2765099709a0f731eb6e8c5d04913c1","author":"Jordan Orange","date":"2026-08-28T14:22:39+01:00","subject":"Refresh changelog seed"},
   {"sha":"9526fb89e82919f3ec5041fbce3313def6adc9dc","author":"Jordan Orange","date":"2026-08-28T14:22:37+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
