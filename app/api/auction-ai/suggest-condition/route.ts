@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { isCronRequest } from "@/lib/cron-auth"
-import { prisma } from "@/lib/prisma"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError, AiNotConfiguredError } from "@/lib/ai-provider"
-import { parseModelJson } from "@/lib/model-json"
+import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { CONDITION_GRADES } from "@/lib/condition"
 
 export const maxDuration = 120
@@ -75,13 +74,21 @@ export async function POST(req: NextRequest) {
       prompt: `Lot: ${label ?? "(no reference)"}\n\nDescription (context only — grade from the photographs):\n${description || "(none)"}`,
       images: pics,
       json: true,
-      maxOutputTokens: 400,
+      // ⚠⚠ THIS WAS 400, and it is the likeliest reason every lot came back "the AI's
+      // answer could not be read" (Jordan, 17 of 17 on 2026-08-28 — a 100% failure, so the
+      // cause is structural, not something about particular lots). 400 is the smallest cap
+      // in the codebase apart from two routes that ask only for numbers; this one asks for
+      // a judgement from photographs, and a Gemini 3 model spends output budget REASONING
+      // before it writes a character, so the allowance can be gone before any JSON exists.
+      // lib/ai-provider.ts treats a MAX_TOKENS finish as acceptable (correctly, per
+      // RULES.md) and returns what there is, so an empty or half-written reply arrives here
+      // looking normal and only fails at the parse.
+      // ⚠ NOT PROVEN by a live call — GEMINI_API_KEY exists only on Railway, so this could
+      // not be reproduced locally. That is exactly why the failure below now names the
+      // cause and the model: if it recurs, the message says which of the two it was.
+      // A cap is not a spend — only tokens actually generated are billed.
+      maxOutputTokens: 4096,
     })
-
-    const parsed = parseModelJson(raw)
-    if (!parsed || typeof parsed !== "object") {
-      return NextResponse.json({ error: "The AI's answer could not be read — try again." }, { status: 502 })
-    }
 
     // ⚠ Only ever return words from OUR grading system. A model that invents "Very Good" or
     // "C8" would put a grade on a lot that no other part of the app can parse.
@@ -92,12 +99,33 @@ export async function POST(req: NextRequest) {
       return parts.slice(0, 2).join(" to ")
     }
 
+    // Salvage before giving up — the same pattern as the Key Points, Double Check and
+    // Fix-all-AI-flagged routes. "grade" is the FIRST field in the shape we ask for, so it
+    // usually survives a tail cut off mid-object.
+    const parsed = parseModelJson(raw)
+    const obj    = parsed && typeof parsed === "object" ? parsed : null
+    const grade  = clean(obj ? obj.grade : extractJsonField(raw, "grade"))
+
+    if (!obj && !grade) {
+      // ⚠ SAY WHICH FAILURE IT WAS. The old message was one line for two completely
+      // different faults and named neither the cause nor the model, so a run of 17
+      // failures told nobody anything. An empty reply and unreadable prose need
+      // different answers, and the model id matters because this slot is switchable in
+      // Admin → AI Models (a model that cannot return JSON fails every single lot).
+      console.error("auction-ai/suggest-condition unreadable reply:", model, JSON.stringify(raw ?? "").slice(0, 300))
+      return NextResponse.json({
+        error: raw.trim()
+          ? `${model} answered, but not in a form that could be read.`
+          : `${model} returned nothing at all — it used its whole allowance before writing an answer.`,
+      }, { status: 502 })
+    }
+
     return NextResponse.json({
       model,
-      grade:      clean(parsed.grade),
-      box:        clean(parsed.box),
-      reason:     String(parsed.reason ?? "").trim().slice(0, 300),
-      confidence: ["high", "medium", "low"].includes(parsed.confidence) ? parsed.confidence : "low",
+      grade,
+      box:        clean(obj ? obj.box : extractJsonField(raw, "box")),
+      reason:     String((obj ? obj.reason : extractJsonField(raw, "reason")) ?? "").trim().slice(0, 300),
+      confidence: obj && ["high", "medium", "low"].includes(obj.confidence) ? obj.confidence : "low",
     })
   } catch (e: any) {
     if (e instanceof AiNotConfiguredError) return NextResponse.json({ error: e.message }, { status: 500 })

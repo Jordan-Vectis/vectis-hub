@@ -275,7 +275,10 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot, onRefresh 
             })
             const j = await res.json().catch(() => ({}))
             if (!res.ok) throw new Error(j?.error ?? `Request failed (${res.status})`)
-            if (!j?.grade) throw new Error(j?.error ?? "no grade came back")
+            // ⚠ An empty grade is an ALLOWED answer, not a fault — the prompt tells the model
+            // to return one rather than guess when the photographs don't show enough. Pass its
+            // own reason through so "could not be done" says why instead of "no grade came back".
+            if (!j?.grade) throw new Error(j?.error ?? (j?.reason ? `the AI wouldn't grade it — ${j.reason}` : "no grade came back"))
 
             setSuggestions(prev => ({ ...prev, [lot.id]: { grade: j.grade, reason: j.reason ?? "", confidence: j.confidence ?? "low" } }))
             if (++clean >= 3) { gap = Math.max(8_000, Math.round(gap * 0.8)); clean = 0 }
