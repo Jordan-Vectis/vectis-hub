@@ -322,6 +322,7 @@ function RunCard({
                 {" · "}{item.autoApply ? "auto-apply" : "review before applying"}
                 {item.onlyWithPhotos ? " · photos only" : ""}
                 {item.skipHasDesc ? " · skip described" : ""}
+                {item.fastMode ? " · ⚡ quick" : ""}
                 {item.kpRelaxed ? " · relaxed key points" : ""}
                 {item.grounded ? " · web search" : ""}
                 {item.addedBy ? ` · queued by ${item.addedBy}` : ""}
@@ -419,6 +420,7 @@ function QueueForm({
   const [autoApply, setAutoApply] = useState(true)
   const [onlyWithPhotos, setOnlyWithPhotos] = useState(false)
   const [skipHasDesc, setSkipHasDesc] = useState(false)
+  const [fastMode, setFastMode] = useState(false)
   const [kpRelaxed, setKpRelaxed] = useState(false)
   const [grounded, setGrounded] = useState(false)
   // Same starting point as the AI Upgrade tab.
@@ -510,6 +512,8 @@ function QueueForm({
             label="Relaxed key points" hint="Accepts the meaning rather than the exact wording." />
           <Toggle checked={grounded} onChange={setGrounded}
             label="Web search" hint="Lets the AI look things up while describing." />
+          <Toggle checked={fastMode} onChange={setFastMode}
+            label="⚡ Quick mode" hint="Works through the lots as fast as the AI will allow instead of a fixed wait, backing off on its own if it starts being refused. Nothing is skipped." />
         </div>
       ) : (
         <div>
@@ -555,6 +559,7 @@ function QueueForm({
             onlyWithPhotos: kind === "pipeline" && onlyWithPhotos,
             skipHasDesc: kind === "pipeline" && skipHasDesc,
             kpRelaxed: kind === "pipeline" && kpRelaxed,
+            fastMode: kind === "pipeline" && fastMode,
           })}
           className="px-5 py-2.5 rounded-xl bg-[#C8A96E] hover:bg-[#b9995c] text-black font-bold text-sm disabled:opacity-40">
           Add to the queue

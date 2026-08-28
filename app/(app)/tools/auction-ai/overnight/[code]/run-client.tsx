@@ -271,6 +271,7 @@ export default function RunClient({ code }: { code: string }) {
             {" · "}{item.autoApply ? "auto-apply" : "review before applying"}
             {item.onlyWithPhotos ? " · photos only" : ""}
             {item.skipHasDesc ? " · skip described" : ""}
+            {item.fastMode ? " · ⚡ quick mode" : ""}
             {item.kpRelaxed ? " · relaxed key points" : ""}
             {item.grounded ? " · web search" : ""}
           </p>

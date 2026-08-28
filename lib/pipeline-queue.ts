@@ -55,6 +55,8 @@ export type QueueSettings = {
   onlyWithPhotos: boolean
   skipHasDesc:    boolean
   kpRelaxed:      boolean
+  /** Quick mode — the runner paces itself instead of waiting a flat 12s per lot. */
+  fastMode:       boolean
 }
 
 export type QueueItem = QueueSettings & {

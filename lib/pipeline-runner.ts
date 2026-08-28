@@ -34,6 +34,21 @@ const LOT_GAP_MS = 12_000
 const rateLimitWait = (attempt: number) => Math.min(60_000 * Math.pow(2, attempt - 1), 1_800_000)
 /** Everything else: 12s → 24s → 30s. */
 const otherWait = (attempt: number) => Math.min(attempt * 12_000, 30_000)
+/** ⚡ QUICK MODE — the gap finds its own level instead of assuming the worst.
+ *  The flat LOT_GAP_MS above exists because Gemini was measured at about four
+ *  requests a minute during a rate-limit storm, and that figure has been the
+ *  pace of every overnight run since. On a 601-lot sale the waiting alone is
+ *  nearly five hours across the three stages, so if the real quota is higher
+ *  the sale is being slowed for nothing (Jordan, 2026-08-28: "the overnight
+ *  runs take so long"). Quick mode starts short, doubles the moment a request
+ *  is refused, and eases back after a clean run — the same adaptive scheme the
+ *  Locking Check's Suggest conditions already uses. Worst case it widens back
+ *  out within a couple of minutes and the sale is no slower than before. */
+const FAST_START_MS = 4_000
+const FAST_MIN_MS   = 2_000
+const FAST_MAX_MS   = 60_000
+/** Clean lots in a row before the gap narrows again. */
+const FAST_EASE_AFTER = 10
 const MAX_RECITATION_RETRIES = 4
 /** How many times to re-ask when a call succeeds but produces no text at all. */
 const MAX_EMPTY_RETRIES = 4
@@ -403,7 +418,7 @@ async function withRetry<T>(
   fn: (attempt: number) => Promise<T>,
   /** Filled in when this returns null, so the caller can record WHICH failure it was —
    *  a refusal and an empty answer are different things and must not share a status. */
-  outcome?: { reason?: "blocked" | "empty" },
+  outcome?: { reason?: "blocked" | "empty"; rateLimited?: boolean },
 ): Promise<T | null> {
   let attempt = 0
   let lastError = ""
@@ -412,6 +427,7 @@ async function withRetry<T>(
   for (;;) {
     if (attempt > 0) {
       const isRL    = lastError.startsWith("RATE_LIMITED:")
+      if (isRL && outcome) outcome.rateLimited = true   // feeds quick mode's pacing
       const isRecit = /RECITATION/i.test(lastError)
       const isEmpty = EMPTY_ANSWER.test(lastError)
       const wait    = isRL ? rateLimitWait(attempt) : (isRecit || isEmpty) ? 1500 : otherWait(attempt)
@@ -493,6 +509,32 @@ async function runStages(
     lots.filter(l => !l.kpStatus && l.currentDesc && l.keyPoints).length +
     lots.filter(l => !l.dcStatus && (l.batchStatus === "ok" || l.currentDesc)).length
 
+  // ⚡ The gap between lots. Fixed at LOT_GAP_MS unless the sale was queued with
+  // quick mode, in which case it widens on a refusal and narrows on a clean run.
+  // ⚠ ONE pacer for all three stages: the quota is per project, not per stage, so
+  // what the batch stage learns about the real limit must carry into the others.
+  const fast = (item as any).fastMode === true
+  let gap = fast ? FAST_START_MS : LOT_GAP_MS
+  let cleanRun = 0
+  let widened = false
+  /** Called by the stages after each lot — `refused` when Gemini rate limited us. */
+  const pace = (refused: boolean) => {
+    if (!fast) return
+    if (refused) {
+      const was = gap
+      gap = Math.min(FAST_MAX_MS, Math.max(gap * 2, FAST_START_MS))
+      cleanRun = 0
+      if (gap !== was) { widened = true; addLog(`  ⏱ rate limited — slowing to ${Math.round(gap / 1000)}s between lots`) }
+      return
+    }
+    if (++cleanRun >= FAST_EASE_AFTER && gap > FAST_MIN_MS) {
+      cleanRun = 0
+      gap = Math.max(FAST_MIN_MS, Math.round(gap * 0.8))
+      addLog(`  ⏱ running clean — ${Math.round(gap / 1000)}s between lots`)
+    }
+  }
+  if (fast) addLog(`⚡ Quick mode — starting at ${FAST_START_MS / 1000}s between lots and finding its own pace`)
+
   let total = item.total || outstanding() + item.done
   let done = item.done
   let skipped = item.skipped
@@ -520,7 +562,7 @@ async function runStages(
         continue
       }
 
-      const outcome: { reason?: "blocked" | "empty" } = {}
+      const outcome: { reason?: "blocked" | "empty"; rateLimited?: boolean } = {}
       const result = await withRetry(lot.label, deadline, addLog, async (attempt) => {
         const fd = new FormData()
         fd.append("presetKey", item.preset)
@@ -585,8 +627,9 @@ async function runStages(
         await saveLot(code, lot.id, lot.label, { batchStatus: status })
       }
       await tick("batch")
-      if (!deadline.fits(LOT_GAP_MS)) throw new SliceOver(0)
-      await sleep(LOT_GAP_MS)
+      pace(outcome.rateLimited === true)
+      if (!deadline.fits(gap)) throw new SliceOver(0)
+      await sleep(gap)
     }
     item.stage = "kpcheck"
     await flush({ stage: "kpcheck" })
@@ -600,6 +643,7 @@ async function runStages(
     for (const lot of toRun) {
       if (deadline.expired) throw new SliceOver(0)
 
+      const kpOutcome: { reason?: "blocked" | "empty"; rateLimited?: boolean } = {}
       const result = await withRetry(lot.label, deadline, addLog, async (attempt) => {
         const res  = await fetch(`${base()}/api/auction-ai/key-points-check`, {
           method: "POST", headers: cronHeaders({ "Content-Type": "application/json" }),
@@ -608,7 +652,7 @@ async function runStages(
         const json = await res.json()
         if (json.error) throw new Error(json.error)
         return json
-      })
+      }, kpOutcome)
 
       if (result) {
         const { revised, changed, missing, added, flag } = result
@@ -644,8 +688,9 @@ async function runStages(
         await saveLot(code, lot.id, lot.label, { kpStatus: "skipped" })
       }
       await tick("kpcheck")
-      if (!deadline.fits(LOT_GAP_MS)) throw new SliceOver(0)
-      await sleep(LOT_GAP_MS)
+      pace(kpOutcome.rateLimited === true)
+      if (!deadline.fits(gap)) throw new SliceOver(0)
+      await sleep(gap)
     }
     item.stage = "doublecheck"
     await flush({ stage: "doublecheck" })
@@ -669,6 +714,7 @@ async function runStages(
         continue
       }
 
+      const dcOutcome: { reason?: "blocked" | "empty"; rateLimited?: boolean } = {}
       const result = await withRetry(lot.label, deadline, addLog, async (attempt) => {
         const images: { data: string; mimeType: string }[] = []
         for (const url of lot.imageUrls.slice(0, 6)) {
@@ -683,7 +729,7 @@ async function runStages(
         const json = await res.json()
         if (json.error) throw new Error(json.error)
         return json
-      })
+      }, dcOutcome)
 
       if (result) {
         const { verdict, contradictions, unsupported, revised, flag } = result
@@ -716,8 +762,9 @@ async function runStages(
         await saveLot(code, lot.id, lot.label, { dcStatus: "skipped" })
       }
       await tick("doublecheck")
-      if (!deadline.fits(LOT_GAP_MS)) throw new SliceOver(0)
-      await sleep(LOT_GAP_MS)
+      pace(dcOutcome.rateLimited === true)
+      if (!deadline.fits(gap)) throw new SliceOver(0)
+      await sleep(gap)
     }
     item.stage = "complete"
     await advanceStage(code, "complete", item)

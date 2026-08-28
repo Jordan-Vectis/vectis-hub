@@ -69,6 +69,7 @@ export async function addToPipelineQueue(code: string, settings: QueueSettings):
         autoApply:      !!settings.autoApply,
         onlyWithPhotos: !!settings.onlyWithPhotos,
         skipHasDesc:    !!settings.skipHasDesc,
+        fastMode:       !!settings.fastMode,
         kpRelaxed:      !!settings.kpRelaxed,
         addedBy: session.user.name ?? session.user.email ?? null,
       },

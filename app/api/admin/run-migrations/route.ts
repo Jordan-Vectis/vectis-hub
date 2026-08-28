@@ -1787,6 +1787,10 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "TermsRevocation_userId_idx" ON "TermsRevocation"("userId")`,
   `CREATE INDEX IF NOT EXISTS "TermsRevocation_revokedAt_idx" ON "TermsRevocation"("revokedAt")`,
+
+  // Quick mode on a queued sale — the runner paces itself instead of waiting a
+  // flat 12s between lots. Default false, so every existing row is unchanged.
+  `ALTER TABLE "PipelineQueueItem" ADD COLUMN IF NOT EXISTS "fastMode" BOOLEAN NOT NULL DEFAULT false`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -56,7 +56,7 @@ export async function GET(_req: NextRequest) {
         kind: (i as any).kind ?? "pipeline", upgradeModes: (i as any).upgradeModes ?? "",
         preset: i.preset, model: i.model, fallbackModel: i.fallbackModel,
         grounded: i.grounded, autoApply: i.autoApply, onlyWithPhotos: i.onlyWithPhotos,
-        skipHasDesc: i.skipHasDesc, kpRelaxed: i.kpRelaxed,
+        skipHasDesc: i.skipHasDesc, kpRelaxed: i.kpRelaxed, fastMode: i.fastMode,
         retryAfter:  i.retryAfter?.toISOString()  ?? null,
         startedAt:   i.startedAt?.toISOString()   ?? null,
         finishedAt:  i.finishedAt?.toISOString()  ?? null,

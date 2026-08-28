@@ -345,6 +345,10 @@ model PipelineQueueItem {
   onlyWithPhotos Boolean @default(false)
   skipHasDesc    Boolean @default(false)
   kpRelaxed      Boolean @default(false)
+  // Quick mode: instead of a flat 12s between lots, find the pace Gemini will
+  // actually take — start short, widen on a refusal, ease back after a clean
+  // run. Off by default, so a sale queued without it behaves exactly as before.
+  fastMode       Boolean @default(false)
 
   // Progress + the morning report.
   stage       String    @default("batch") // batch | kpcheck | doublecheck | complete
