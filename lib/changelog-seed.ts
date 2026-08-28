@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"fd879cad55642db220c4a6cf42c73d73eb984563","author":"Jordan Orange","date":"2026-08-28T09:49:26+01:00","subject":"Suggest conditions: give the AI room to answer, and say what failed"},
+  {"sha":"d71c2435fd52a2cd7e5762a4c2e5175c19d8fe26","author":"Jordan Orange","date":"2026-08-28T09:29:35+01:00","subject":"Data map: describe TermsRevocation, the table the merge brought in"},
   {"sha":"4581968fd2d9329b94b251b656cf561320798613","author":"Jordan Orange","date":"2026-08-28T09:22:16+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"9fb5176b894027064945dea14b5c8dfdca6f8b43","author":"Jordan Orange","date":"2026-08-28T09:21:52+01:00","subject":"Refresh changelog seed"},
   {"sha":"8c60707c252e96cba6f5e966132f1c126e93e8a5","author":"Jordan Orange","date":"2026-08-28T09:21:51+01:00","subject":"Data map: every table in the database, in one plain sentence"},
