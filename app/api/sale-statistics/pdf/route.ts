@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { buildSaleStatsPdf } from "@/lib/stats-pdf"
-import {
-  reportFilename,
-  type SaleStatsReport, type ReportTable, type ReportColumn, type ReportStat, type CellFormat,
-} from "@/lib/sale-stats-report"
+import { parseReportPayload, reportFilename } from "@/lib/sale-stats-report"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -20,71 +17,14 @@ export const maxDuration = 60
 // route trusts an authenticated user's arithmetic — acceptable, because they are exporting their
 // own screen and could type any number into a spreadsheet anyway.
 //
-// It does NOT trust the shape. A malformed or enormous payload is rejected before pdf-lib sees it.
-
-const MAX_TABLES = 12
-const MAX_ROWS   = 5000
-const MAX_COLS   = 30
-const MAX_STATS  = 24
-const FORMATS: CellFormat[] = ["text", "money", "money2", "moneySigned", "int", "pct", "pctSigned", "auto", "autoSigned"]
-
-const str = (v: unknown, max = 300) => (typeof v === "string" ? v.slice(0, max) : "")
-
-function parseColumn(v: unknown): ReportColumn {
-  const o = (v ?? {}) as Record<string, unknown>
-  const format = FORMATS.includes(o.format as CellFormat) ? (o.format as CellFormat) : "text"
-  return { label: str(o.label, 60), format }
-}
-
-function parseTable(v: unknown): ReportTable | null {
-  const o = (v ?? {}) as Record<string, unknown>
-  if (!Array.isArray(o.columns) || !Array.isArray(o.rows)) return null
-  const columns = o.columns.slice(0, MAX_COLS).map(parseColumn)
-  if (!columns.length) return null
-  const rows = o.rows.slice(0, MAX_ROWS).map(r => {
-    const arr = Array.isArray(r) ? r : []
-    // Padded to the column count so a short row can never shift cells left under the wrong header.
-    return columns.map((_, i) => {
-      const cell = arr[i]
-      if (typeof cell === "number" && isFinite(cell)) return cell
-      return str(cell, 200)
-    })
-  })
-  // Parallel to rows — a short or absent array simply means "use the column format".
-  const rowFormat = Array.isArray(o.rowFormat)
-    ? o.rowFormat.slice(0, MAX_ROWS).map(f => (FORMATS.includes(f as CellFormat) ? (f as CellFormat) : "text"))
-    : undefined
-
-  return { title: str(o.title, 120), note: str(o.note, 300) || undefined, columns, rows, rowFormat }
-}
-
-function parseReport(body: unknown): SaleStatsReport {
-  const o = (body ?? {}) as Record<string, unknown>
-  const stats: ReportStat[] = Array.isArray(o.stats)
-    ? o.stats.slice(0, MAX_STATS).map(s => {
-        const t = (s ?? {}) as Record<string, unknown>
-        return { label: str(t.label, 40), value: str(t.value, 40), sub: str(t.sub, 60) || undefined }
-      })
-    : []
-  const tables = Array.isArray(o.tables)
-    ? o.tables.slice(0, MAX_TABLES).map(parseTable).filter((t): t is ReportTable => t !== null)
-    : []
-  return {
-    title:       str(o.title, 120) || "Sale Statistics",
-    subtitle:    str(o.subtitle, 300),
-    generatedAt: str(o.generatedAt, 40) || new Date().toISOString(),
-    generatedBy: str(o.generatedBy, 80),
-    stats,
-    tables,
-  }
-}
-
+// It does NOT trust the shape — parseReportPayload rejects a malformed or enormous payload before
+// pdf-lib sees it, and the xlsx route beside this one shares exactly the same parsing.
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-    const report = parseReport(await req.json())
+    const report = parseReportPayload(await req.json())
     if (!report.tables.length && !report.stats.length) {
       return NextResponse.json({ error: "Nothing to export — load some figures first" }, { status: 400 })
     }
