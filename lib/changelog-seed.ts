@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-08-26, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-08-28, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,7 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
-  {"sha":"f27975c1db97d70f03808dced86d46c8a22d1982","author":"Jack Collings","date":"2026-08-26T16:18:29+01:00","subject":"Terms: an admin can make one person sign the policy again"},
+  {"sha":"32bc76382a90cef7361dac6d9c92f2fc0043dd03","author":"Jack Collings","date":"2026-08-28T09:15:06+01:00","subject":"Sale Statistics: export any of the three views to Excel or PDF"},
+  {"sha":"5955a99d3a8c05afe4a835ce32c32d56aff3e544","author":"Jack Collings","date":"2026-08-26T16:18:29+01:00","subject":"Terms: an admin can make one person sign the policy again"},
   {"sha":"c6d6253740dee3237266f7b3bebc334a6989a7d9","author":"Jack Collings","date":"2026-08-26T11:14:28+01:00","subject":"Manage Lots: exporting the whole filter is now a yes, not a default"},
   {"sha":"3bdc697be928bdd25fbfb3313171675a67e81df2","author":"Jack Collings","date":"2026-08-26T11:04:41+01:00","subject":"Manage Lots: the photo export takes the lots you ticked, not the whole sale"},
   {"sha":"9d42c6c195aa028a923de03efb59bebc2bbae05d","author":"Jordan Orange","date":"2026-08-25T17:06:32+01:00","subject":"Auto Clerk 2.0: Saleroom Clerk and Vectis Clerk — named launchers for follow mode"},

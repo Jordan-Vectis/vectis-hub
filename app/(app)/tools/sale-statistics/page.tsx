@@ -18,5 +18,6 @@ export default async function SaleStatisticsPage() {
   })
   if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "SALE_STATISTICS")) redirect("/hub")
 
-  return <SaleStatisticsClient />
+  // Only for the footer of an exported PDF — a printout on a desk should say who ran it.
+  return <SaleStatisticsClient userName={session.user.name ?? ""} />
 }
