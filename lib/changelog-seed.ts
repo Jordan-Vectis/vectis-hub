@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-08-25, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-08-28, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8c60707c252e96cba6f5e966132f1c126e93e8a5","author":"Jordan Orange","date":"2026-08-28T09:21:51+01:00","subject":"Data map: every table in the database, in one plain sentence"},
+  {"sha":"9d42c6c195aa028a923de03efb59bebc2bbae05d","author":"Jordan Orange","date":"2026-08-25T17:06:32+01:00","subject":"Auto Clerk 2.0: Saleroom Clerk and Vectis Clerk — named launchers for follow mode"},
   {"sha":"955c7c90db252396e3da58d708649c4edb92bf59","author":"Jordan Orange","date":"2026-08-25T17:00:58+01:00","subject":"Auto Clerk 2.0: F8 is the human's 'lot done' key in follow mode"},
   {"sha":"7b811a4adb4208515503bae146b3a54fa68c3d34","author":"Jordan Orange","date":"2026-08-25T16:48:40+01:00","subject":"Auto Clerk 2.0: follow mode — watch both screens, clerk only one"},
   {"sha":"e0e16335528f96a671a272a125fdacb56c45eaad","author":"Jordan Orange","date":"2026-08-25T16:28:58+01:00","subject":"Memory: bid-level audit of the v1.0 test — every bid handled correctly"},
