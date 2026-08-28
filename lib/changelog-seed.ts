@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7683e8a04db1197830afecc9ff27f5786a207f90","author":"Jordan Orange","date":"2026-08-28T11:05:09+01:00","subject":"Comics recitation: solved - it is the enumerated issue list"},
+  {"sha":"8f5ee6c3e87a558cb3a389a54ec24e9cada40e4e","author":"Jordan Orange","date":"2026-08-28T10:58:18+01:00","subject":"Refresh changelog seed"},
   {"sha":"c30ab2b959089bb0f1096a1def1572e2f4b76ac8","author":"Jordan Orange","date":"2026-08-28T10:58:16+01:00","subject":"Correct the record: grounding was not the cause of the comic blocks"},
   {"sha":"05fa3a4a33f7b741c028a66c7eddb26924db64d6","author":"Jordan Orange","date":"2026-08-28T10:22:43+01:00","subject":"Refresh changelog seed"},
   {"sha":"f6bdf10cc040a2c3bde8a6681f7e8d746b3984c2","author":"Jordan Orange","date":"2026-08-28T10:22:42+01:00","subject":"Keep the reason a lot was lost, and say which filter objected"},
