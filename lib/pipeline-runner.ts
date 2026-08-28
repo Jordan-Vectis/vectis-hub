@@ -504,10 +504,19 @@ async function runStages(
 
   // Progress is counted over everything the sale still has to do, so the figure
   // on screen means the same thing across ticks.
+  //
+  // ⚠⚠ A LOT NOT YET DESCRIBED STILL OWES ITS KEY-POINTS AND DOUBLE-CHECK STEPS.
+  // This used to require `currentDesc` for the last two lines, which is empty for
+  // every lot before the batch stage runs — so at the start of a sale the total
+  // was just the lot count, and once batch finished and key points began, `done`
+  // overtook it. `tick` pins the total at `Math.max(total, done)`, so the bar sat
+  // at 100% with a whole stage still to run: F114 read "712 of 712 done" while
+  // Key Points was on 205 of 507 and Double Check had not started (Jordan,
+  // 2026-08-28). A lot that batch has not reached yet is counted for all three.
   const outstanding = () =>
     lots.filter(l => !l.batchStatus).length +
-    lots.filter(l => !l.kpStatus && l.currentDesc && l.keyPoints).length +
-    lots.filter(l => !l.dcStatus && (l.batchStatus === "ok" || l.currentDesc)).length
+    lots.filter(l => !l.kpStatus && l.keyPoints && (l.currentDesc || !l.batchStatus)).length +
+    lots.filter(l => !l.dcStatus && (l.currentDesc || !l.batchStatus)).length
 
   // ⚡ The gap between lots. Fixed at LOT_GAP_MS unless the sale was queued with
   // quick mode, in which case it widens on a refusal and narrows on a clean run.
@@ -535,14 +544,21 @@ async function runStages(
   }
   if (fast) addLog(`⚡ Quick mode — starting at ${FAST_START_MS / 1000}s between lots and finding its own pace`)
 
-  let total = item.total || outstanding() + item.done
   let done = item.done
   let skipped = item.skipped
+
+  // ⚠ RECOMPUTED, not frozen. The old code took `item.total` from the row and kept
+  // it for the life of the run, so a total that was wrong at the start stayed
+  // wrong all night. Work genuinely appears and disappears as the run goes on — a
+  // lot the AI refuses owes no further stages — so the honest figure is what is
+  // done plus what is actually left. It can move by a few either way; a bar stuck
+  // on 100% with an hour to run cannot.
+  const totalNow = () => Math.max(done + outstanding(), done)
 
   const tick = async (stage: string) => {
     done++
     item.done = done
-    item.total = Math.max(total, done)
+    item.total = totalNow()
     item.skipped = skipped
     await flush({ stage, done, total: item.total, skipped })
     if (await stopRequested()) throw new SliceOver(0)
