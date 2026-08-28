@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c30ab2b959089bb0f1096a1def1572e2f4b76ac8","author":"Jordan Orange","date":"2026-08-28T10:58:16+01:00","subject":"Correct the record: grounding was not the cause of the comic blocks"},
+  {"sha":"05fa3a4a33f7b741c028a66c7eddb26924db64d6","author":"Jordan Orange","date":"2026-08-28T10:22:43+01:00","subject":"Refresh changelog seed"},
   {"sha":"f6bdf10cc040a2c3bde8a6681f7e8d746b3984c2","author":"Jordan Orange","date":"2026-08-28T10:22:42+01:00","subject":"Keep the reason a lot was lost, and say which filter objected"},
   {"sha":"5daed74affc83c8e9372bb3ce0ea6d1ae9229391","author":"Jordan Orange","date":"2026-08-28T09:49:28+01:00","subject":"Refresh changelog seed"},
   {"sha":"fd879cad55642db220c4a6cf42c73d73eb984563","author":"Jordan Orange","date":"2026-08-28T09:49:26+01:00","subject":"Suggest conditions: give the AI room to answer, and say what failed"},
