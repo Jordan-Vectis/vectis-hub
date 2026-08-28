@@ -1794,7 +1794,19 @@ It lists: what personal data the Hub holds (customers, bidders, staff accounts +
 
 **Admin → DPIA** (app/(app)/admin/dpia/page.tsx, admin-only, 🛡️ icon, linked from the admin grid AND cross-linked from the compliance page). A **Data Protection Impact Assessment** following the **ICO DPIA template** (UK GDPR Art. 35), built when Jordan asked for "a DPIA for the system". Same house style + "NOT legal advice, working DRAFT" framing. Steps: 0 document control, 1 need (staff monitoring = trigger), 2 describe processing, 3 consultation, 4 necessity & proportionality (lawful-basis table), 5 risk register (R1–R8, likelihood×severity→Low/Med/High badges), 6 measures (existing vs recommended per risk), 7 sign-off. Identity/DPO/sign-off fields are deliberately "to complete"; company identity pre-filled (Vectis Auctions Ltd, Thornaby TS17 9JZ). R1 (staff monitoring) rated High.
 
-⚠ It DUPLICATES the compliance page's data inventory in its own STORES/PROCESSORS/MONITORING arrays (plus DATA_CATEGORIES/LAWFUL_BASIS/RISKS/MEASURES) — update BOTH pages when integrations/stores/monitoring change.`,
+⚠ It DUPLICATES the compliance page's data inventory in its own STORES/PROCESSORS/MONITORING arrays (plus DATA_CATEGORIES/LAWFUL_BASIS/RISKS/MEASURES) — update BOTH pages when integrations/stores/monitoring change.
+
+## 🗺 Data map — every table in plain English (added 2026-08-21)
+
+Jordan: "Can we also have a datamap section done in the admin section?" Asked which of three things he meant and where; he chose **every database table in plain English**, **inside Data & Compliance** — not a data-flow diagram, not another GDPR list, not a new page. Don't rebuild it as one of the others without asking.
+
+**lib/data-map.ts** holds the content — 17 areas, **136 tables**, one sentence each — and a Section on /admin/compliance renders it between "Where the data lives" and the third-party list. It still prints to PDF.
+
+⚠⚠ **HAND-WRITTEN ON PURPOSE.** The value is the plain sentence ("the ticks on the BC Corrections list; the list itself is worked out live"), which no generator can produce from a field list. Never replace it with a schema dump.
+
+⚠⚠ **It CHECKS ITSELF.** undescribedModels() reads the live model list off the Prisma client (Object.keys(prisma), first letter upper-cased — verified in the runtime that model delegates are enumerable own keys) and shows an amber "N tables are not described yet" box naming them, so a new model appears as a visible GAP rather than quietly missing. It fails QUIET: under 50 keys, or no CatalogueLot among them, and it says nothing rather than warning wrongly. **So add a line to lib/data-map.ts whenever you add a Prisma model.**
+
+Each table can carry personal: "customer" | "staff" | "public" (a coloured badge) — "public" means people with NO Hub account, currently only AccidentReport and InductionSignature. 62 of 136 are marked. dormant: true marks a table nothing writes to any more, with the reason — CatalogueLotDraft (Lot Wizard Resume, removed 2026-08-07) and ClaudeMemory (the viewer is static; it survives only in the backups); both confirmed by grepping for writers, not assumed.`,
   },
   {
     filename: "dolls_bears_descriptions.md",

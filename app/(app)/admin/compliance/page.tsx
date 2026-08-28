@@ -1,6 +1,8 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
+import { prisma } from "@/lib/prisma"
+import { DATA_MAP, MAPPED_MODELS, type PersonalKind } from "@/lib/data-map"
 
 export const metadata = { title: "Data & Compliance" }
 
@@ -67,6 +69,40 @@ const FLAGS: { title: string; body: string; level: "high" | "med" }[] = [
   },
 ]
 
+// ── The data map's completeness check ────────────────────────────────────────
+// The map is hand-written (a field list is not an explanation), so the risk is
+// a new table quietly never appearing. The Prisma client exposes one property
+// per model, named the same but starting lower-case, so the live list can be
+// read straight off it and compared.
+//
+// ⚠ Deliberately fails QUIET, not loud: if a Prisma upgrade changes that shape
+// we would rather show no warning than a wrong one, so the result is ignored
+// unless it clearly looks like the real model list.
+function undescribedModels(): string[] {
+  try {
+    const keys = Object.keys(prisma as unknown as Record<string, unknown>)
+      .filter(k => !k.startsWith("$") && !k.startsWith("_"))
+      .map(k => k.charAt(0).toUpperCase() + k.slice(1))
+    if (keys.length < 50 || !keys.includes("CatalogueLot")) return []   // not the model list — say nothing
+    const mapped = new Set(MAPPED_MODELS)
+    return keys.filter(k => !mapped.has(k)).sort()
+  } catch {
+    return []
+  }
+}
+
+const PERSONAL_LABEL: Record<PersonalKind, string> = {
+  customer: "customer data",
+  staff:    "staff data",
+  public:   "people with no account",
+}
+
+const PERSONAL_TONE: Record<PersonalKind, string> = {
+  customer: "bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900",
+  staff:    "bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900",
+  public:   "bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900",
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mb-8">
@@ -79,6 +115,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default async function CompliancePage() {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") redirect("/hub")
+
+  const missing   = undescribedModels()
+  const allTables = DATA_MAP.flatMap(a => a.tables)
+  const personalCount = allTables.filter(t => t.personal).length
 
   return (
     <div className="p-6 md:p-8 max-w-4xl">
@@ -131,6 +171,62 @@ export default async function CompliancePage() {
             <div key={s.name} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3">
               <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{s.name}</p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{s.what}</p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Data map — every table in the database">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          {allTables.length} tables, grouped by what they are for, each in one plain sentence — so you can answer
+          &ldquo;where does that live?&rdquo; without opening the database. {personalCount} of them hold personal data
+          and are marked below.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2 mb-4 text-[11px]">
+          <span className="text-gray-500 dark:text-gray-400">Marked when a table holds personal data:</span>
+          {(Object.keys(PERSONAL_LABEL) as PersonalKind[]).map(k => (
+            <span key={k} className={`px-1.5 py-0.5 rounded border font-medium ${PERSONAL_TONE[k]}`}>{PERSONAL_LABEL[k]}</span>
+          ))}
+        </div>
+
+        {missing.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              <strong>{missing.length} table{missing.length === 1 ? " is" : "s are"} not described yet.</strong> Added
+              since this map was last written, so nothing below explains {missing.length === 1 ? "it" : "them"}:{" "}
+              <span className="font-mono text-xs">{missing.join(", ")}</span>. Add a line to <span className="font-mono text-xs">lib/data-map.ts</span>.
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-5">
+          {DATA_MAP.map(area => (
+            <div key={area.area}>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                {area.area} <span className="font-normal text-gray-400 dark:text-gray-500">· {area.tables.length}</span>
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-2">{area.blurb}</p>
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-800 overflow-hidden">
+                {area.tables.map(t => (
+                  <div key={t.model} className="bg-white dark:bg-gray-900 px-4 py-2.5">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="font-mono text-xs font-semibold text-gray-800 dark:text-gray-200">{t.model}</span>
+                      {t.personal && (
+                        <span className={`px-1.5 py-0.5 rounded border text-[11px] font-medium ${PERSONAL_TONE[t.personal]}`}>
+                          {PERSONAL_LABEL[t.personal]}
+                        </span>
+                      )}
+                      {t.dormant && (
+                        <span className="px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                          nothing writes to it
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">{t.what}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
