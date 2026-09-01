@@ -14,7 +14,7 @@ import { buildToteMap, checkLot, toteLookupVariants, duplicateToteNumbers, norm 
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 import { getDepartmentAccessForSession, canSeeAuction } from "@/lib/departments"
 import { shouldKeepFlag } from "@/lib/measurement-check"
-import { withConditionSentence, stripConditionSentences, hasConditionSentence } from "@/lib/condition"
+import { withConditionSentence, stripConditionSentences, hasConditionSentence, keepConditionLine } from "@/lib/condition"
 
 // titleFromDescription lives in lib/lot-title.ts so the Locking Check can VERIFY against the
 // exact rule this generates with — see the note there.
@@ -259,22 +259,44 @@ export async function setStartingBids(auctionId: string, updates: { id: string; 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
+// ⚠⚠ EVERY path that writes an AI description over a lot goes through this. The AI is
+// told never to write a condition, so its text carries none — and writing it straight
+// over the description field took the "Condition appears …" line off any lot that had
+// one (151 of 246 applies on F114, 2026-09-01). See keepConditionLine in lib/condition.ts
+// for the measurement and Jordan's rule. Never write an AI description without it.
+async function withKeptConditionLines(
+  updates: { id: string; description: string }[],
+): Promise<Map<string, string>> {
+  if (!updates.length) return new Map()
+  const before = await prisma.catalogueLot.findMany({
+    where:  { id: { in: updates.map(u => u.id) } },
+    select: { id: true, description: true, condition: true },
+  })
+  const prior = new Map(before.map(l => [l.id, l]))
+  return new Map(updates.map(u => {
+    const p = prior.get(u.id)
+    return [u.id, keepConditionLine(p?.description, p?.condition, u.description)]
+  }))
+}
+
 export async function applyAiDescriptions(
   auctionId: string,
   updates: { id: string; description: string; aiEstimateLow: number | null; aiEstimateHigh: number | null }[]
 ) {
   const session = await requireCataloguer()
   const batchId = newBatchId()
+  const kept = await withKeptConditionLines(updates)
   await Promise.all(
-    updates.map(u =>
-      updateLotLogged(u.id, {
-        description:    u.description,
-        title:          titleFromDescription(u.description),
+    updates.map(u => {
+      const description = kept.get(u.id) ?? u.description
+      return updateLotLogged(u.id, {
+        description,
+        title:          titleFromDescription(description),
         aiEstimateLow:  u.aiEstimateLow,
         aiEstimateHigh: u.aiEstimateHigh,
         aiUpgraded:     true,
       }, { changedBy: changedByOf(session), source: "ai_apply", batchId })
-    )
+    })
   )
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
@@ -284,9 +306,10 @@ export async function applyAiDescriptionOne(
   update: { id: string; description: string; aiEstimateLow?: number | null; aiEstimateHigh?: number | null }
 ) {
   const session = await requireCataloguer()
+  const description = (await withKeptConditionLines([update])).get(update.id) ?? update.description
   await updateLotLogged(update.id, {
-    description:    update.description,
-    title:          titleFromDescription(update.description),
+    description,
+    title:          titleFromDescription(description),
     // Only update estimate fields if explicitly provided — omitting preserves existing values
     ...(update.aiEstimateLow  !== undefined ? { aiEstimateLow:  update.aiEstimateLow  } : {}),
     ...(update.aiEstimateHigh !== undefined ? { aiEstimateHigh: update.aiEstimateHigh } : {}),

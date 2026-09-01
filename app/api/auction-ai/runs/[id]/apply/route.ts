@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logLotCreated, logLotFieldChanges } from "@/lib/lot-log"
+import { keepConditionLine } from "@/lib/condition"
 
 function parseEstimate(est: string): { low: number | null; high: number | null } {
   const m = est.match(/£([\d,]+)\s*[–\-]\s*£?([\d,]+)/)
@@ -83,9 +84,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           // Update existing lot — description + AI estimate only, never touch human estimate
           const before = await prisma.catalogueLot.findUnique({
             where: { id: existingId },
-            select: { barcode: true, title: true, description: true, aiEstimateLow: true, aiEstimateHigh: true, aiUpgraded: true },
+            select: { barcode: true, title: true, description: true, condition: true, aiEstimateLow: true, aiEstimateHigh: true, aiUpgraded: true },
           })
-          const data = { title: titleFromDescription(l.description), description: l.description, aiEstimateLow: low, aiEstimateHigh: high, aiUpgraded: true }
+          // ⚠⚠ Keep the lot's condition line — the AI never writes one, so applying its text
+          // over the whole field used to take "Condition appears …" off the lot. See
+          // keepConditionLine in lib/condition.ts. (2026-09-01)
+          const description = keepConditionLine(before?.description, before?.condition, l.description)
+          const data = { title: titleFromDescription(description), description, aiEstimateLow: low, aiEstimateHigh: high, aiUpgraded: true }
           await prisma.catalogueLot.update({ where: { id: existingId }, data })
           if (before) await logLotFieldChanges(before, data, { id: existingId, auctionId: auction.id, barcode: before.barcode, title: data.title }, run.code, logCtx)
           updated++

@@ -140,12 +140,61 @@ export function stripConditionSentences(description: string | null | undefined):
   return (description ?? "").replace(CONDITION_SENTENCE_RE, "").trim()
 }
 
+/** The condition sentence currently in a description — OUR wording only — or null. */
+export function conditionSentenceIn(description: string | null | undefined): string | null {
+  const m = (description ?? "").match(new RegExp(CONDITION_SENTENCE_RE.source))
+  return m ? m[0].trim() : null
+}
+
+/** The description carrying exactly this sentence, on its own line at the end.
+ *  Any sentence already there is replaced, never doubled. */
+export function withConditionLine(description: string | null | undefined, sentence: string): string {
+  const body = stripConditionSentences(description)
+  return body ? `${body}\n${sentence}` : sentence
+}
+
 /** The description carrying exactly one condition sentence — the current one —
  *  on its own line at the end. Any earlier sentence is replaced, never doubled. */
 export function withConditionSentence(description: string | null | undefined, condition: string): string {
-  const body = stripConditionSentences(description)
-  const sentence = conditionSentence(condition)
-  return body ? `${body}\n${sentence}` : sentence
+  return withConditionLine(description, conditionSentence(condition))
+}
+
+// ─── Replacing a description must not take the condition line off the lot ────
+//
+// ⚠⚠ Measured on F114, 2026-09-01: **151 of 246 AI applies wiped the condition
+// sentence** that Add Conditions had just put on. The AI is told never to write a
+// condition (it is a human's judgement, recorded in its own field), so its text
+// carries none — and every apply wrote it straight over the whole description
+// field. Jordan saw that as "Add Conditions is glitchy, it randomly doesn't do all
+// of them and I have to press it over and over": the button worked perfectly every
+// time; the lots he had already done kept losing the line again as he applied more
+// AI descriptions. The change log proved it — every lot in his four follow-up
+// presses had been done by the first press and rewritten by `ai_apply` in between.
+//
+// Jordan's rule for this: "the condition always goes at the end and is phrased how
+// the lot wizard does it; any wording relating to condition not from our wizard
+// should never be affected." So only OUR sentence is carried over —
+// CONDITION_SENTENCE_RE matches nothing else — and any other condition wording in
+// either description is left exactly as the writer left it.
+/**
+ * `next` carrying the condition line the lot already had.
+ *
+ * ⚠ Never ADDS a line to a lot that did not have one: whether a lot's description
+ * carries the sentence at all stays Add Conditions' decision.
+ */
+export function keepConditionLine(
+  previous: string | null | undefined,
+  condition: string | null | undefined,
+  next: string,
+): string {
+  const had = conditionSentenceIn(previous)
+  if (!had) return next
+  // The condition FIELD is the record of truth, so a lot regraded since the line
+  // went in comes back with its current grade. Falls back to the exact line that
+  // was there when the field is blank — carrying it over unchanged can never
+  // invent a grade.
+  const cond = (condition ?? "").trim()
+  return withConditionLine(next, cond ? conditionSentence(cond) : had)
 }
 
 export function buildCondition(p: ConditionParts): string {

@@ -16,6 +16,95 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "condition_line_on_ai_apply.md",
+    content: `---
+name: applying-an-ai-description-must-keep-the-condition-line
+description: "\\"Add Conditions is glitchy\\" was never the button — applying an AI description wrote over the whole field and took the \\"Condition appears …\\" line off (151 of 246 applies on F114). keepConditionLine in lib/condition.ts, wired into all four AI-apply paths. Read before touching any path that writes an AI description onto a lot."
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: 39e4fc37-397c-4b8d-a570-4b59503c1913
+  modified: 2026-09-01T10:28:09.082Z
+---
+
+# ⚠⚠ Applying an AI description must keep the condition line (2026-09-01)
+
+Jordan: *"The add conditions button is really glitchy it just randomly doesnt always do all of
+them and I have to press it over and over."*
+
+**The button was working perfectly every time.** Proved from the change log, not guessed.
+
+## What the data showed
+
+\`CatalogueBulkUndo\` records every press. On **F114** that morning:
+
+| time | lots |
+|---|---|
+| 09:05:52 | **507** |
+| 09:09:09 | 7 |
+| 09:18:03 | 21 |
+| 09:18:33 | 1 |
+| 09:23:02 | 11 |
+
+Every lot in the four follow-up presses **had already been done by the first press**, and every
+one had its description **rewritten in between** — by \`ai_apply\`. Not one of them had been
+regraded, so "it only just got a condition" was ruled out.
+
+\`\`\`
+F114283  09:06:06  ai_apply
+  before: "…Charmander Promo 044 Trading Card\\nCondition appears Good Plus to Excellent."
+  after : "…a Charmander Promo 044 Trading Card."
+\`\`\`
+
+**151 of 246 AI applies on F114 that day wiped a condition sentence.** Across all sales, 620.
+The same shape sits in the history of every big sale — F121 633 then 17, F110 405 then 6,
+F109 460 then 2, F119 422 then 10.
+
+The AI is (correctly) told never to write a condition — it is a human's judgement in its own
+field — so its text carries none, and the apply wrote it over the whole \`description\` field.
+
+## Jordan's rule
+
+> "The condition always goes at the end and is phrased how the lot wizard does it; any wording
+> relating to condition **not from our wizard** should never be affected."
+
+So only **our** sentence is ever touched. \`CONDITION_SENTENCE_RE\` in \`lib/condition.ts\` matches
+\`Condition appears …\` to the end of its line and nothing else, which already satisfies that — a
+cataloguer's own prose ("in good condition throughout", "some wear to the box") is never matched,
+carried, or stripped.
+
+## The fix — \`keepConditionLine(previous, condition, next)\` in \`lib/condition.ts\`
+
+- **Never ADDS a line to a lot that did not have one.** Whether the sentence is on a description
+  at all stays Add Conditions' decision. ⚠ This was the deliberate choice over "always append
+  when a condition is set" — don't quietly upgrade it.
+- The **condition FIELD** is the record of truth, so a lot regraded since the line went in comes
+  back with its current grade; it falls back to the exact line that was there when the field is
+  blank, which can never invent a grade.
+- Never doubles a line, and \`withConditionSentence\` now goes through the same
+  \`withConditionLine\` so there is one joining rule.
+
+Wired into **all four** paths that write an AI description onto a lot — add it to any new one:
+
+| path | |
+|---|---|
+| \`applyAiDescriptions\` (batch) | \`lib/actions/catalogue.ts\` — via \`withKeptConditionLines\` |
+| \`applyAiDescriptionOne\` | the one every browser path uses (Auto Pipeline, AI Upgrade accept, Review & Apply, per-lot ↻) |
+| \`applyDescription\` | \`lib/pipeline-runner.ts\` — the overnight run |
+| saved-run apply | \`app/api/auction-ai/runs/[id]/apply/route.ts\` |
+
+⚠ **Human edits are left alone** — \`review_tab\` and \`lot_editor\` writes are someone deliberately
+typing, and the log shows them dropping a condition sentence 20 and 4 times ever, against 620 for
+\`ai_apply\`.
+
+⚠ The 151 F114 lots were **not** repaired in the database — one more press of Add Conditions
+after the last apply puts them back, and from now on nothing takes them off again.
+
+Related: [[reference_manage_lots_bulk_undo]], [[reference_auto_pipeline_apply]],
+[[reference_locking_check]], [[reference_lot_change_log]].
+`,
+  },
+  {
     filename: "ai_tool_call_leak.md",
     content: `---
 name: ai-leaked-tool-call-is-not-a-description

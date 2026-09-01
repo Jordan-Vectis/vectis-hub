@@ -22,6 +22,7 @@
 import { prisma } from "@/lib/prisma"
 import { shouldKeepFlag } from "@/lib/measurement-check"
 import { logLotFieldChanges } from "@/lib/lot-log"
+import { keepConditionLine } from "@/lib/condition"
 import { HEARTBEAT_STALE_MS } from "@/lib/pipeline-queue"
 
 // ── Tunables ────────────────────────────────────────────────────────────────
@@ -162,9 +163,16 @@ async function updateLotLogged(lotId: string, data: Record<string, any>, ctx: Ct
 const flagCtx = (ctx: Ctx): Ctx => ({ ...ctx, source: "ai_flag" })
 
 async function applyDescription(lotId: string, description: string, ctx: Ctx): Promise<void> {
+  // ⚠⚠ Keep the lot's condition line. The AI never writes one, so an apply used to take
+  // "Condition appears …" straight back off any lot that had it — the overnight run does
+  // this hundreds of times a night. See keepConditionLine in lib/condition.ts. (2026-09-01)
+  const before = await prisma.catalogueLot.findUnique({
+    where: { id: lotId }, select: { description: true, condition: true },
+  })
+  const text = keepConditionLine(before?.description, before?.condition, description)
   await updateLotLogged(lotId, {
-    description,
-    title: titleFromDescription(description),
+    description: text,
+    title: titleFromDescription(text),
     aiUpgraded: true,
   }, ctx)
 }

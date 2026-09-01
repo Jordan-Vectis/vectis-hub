@@ -556,6 +556,8 @@ a useful message, then `.text()`.
 
 `503 Service Unavailable` from Gemini is transient — retry, do not surface as permanent failure.
 
+---
+
 ### ⚠⚠ A leaked tool call is NOT a description (2026-09-01)
 
 Gemini sometimes answers by **writing out the search it wanted to run** instead of running it:
@@ -583,6 +585,39 @@ the lot surfaced in Review as a **cataloguer** mistake, which it never was. Meas
   alternating primary/fallback model, then skipped **loudly**, never silently.
 - ⚠ The strip must use `[ \t]`, never `\s`, around the bare marker: `\s` eats the newline after it
   and takes the last real sentence away with the `print(` line.
+
+---
+
+## ⚠⚠ Applying an AI description must KEEP the condition line (2026-09-01)
+
+The AI is told never to write a condition — it is a human's judgement, recorded in its own field —
+so its text carries none. Every apply path therefore used to write over the whole `description`
+field and take the `Condition appears …` line straight off any lot that had one.
+
+**Measured, not guessed:** on F114, `CatalogueBulkUndo` showed Add Conditions pressed five times
+(507, then 7, 21, 1, 11). Every lot in the four follow-up presses had already been done by the
+first, and every one had been rewritten by `ai_apply` in between; none had been regraded.
+**151 of 246 applies that day wiped a condition sentence; 620 across all sales.** Jordan reported
+it as *"the add conditions button is really glitchy, I have to press it over and over"* — the
+button was correct every single time.
+
+**Jordan's rule:** *"the condition always goes at the end and is phrased how the lot wizard does
+it; any wording relating to condition not from our wizard should never be affected."*
+
+- `keepConditionLine(previous, condition, next)` in **`lib/condition.ts`** is the one
+  implementation. `CONDITION_SENTENCE_RE` matches only OUR `Condition appears …` sentence, so a
+  cataloguer's own prose ("in good condition throughout", "some wear to the box") is never
+  matched, carried or stripped.
+- ⚠ It **never ADDS a line to a lot that did not have one** — whether the sentence is on a
+  description at all stays Add Conditions' decision. This was chosen over "always append when a
+  condition is set"; don't quietly upgrade it.
+- The condition FIELD wins when set (a lot regraded since comes back with its current grade),
+  falling back to the exact line that was there when the field is blank.
+- Wired into **all four** paths that write an AI description onto a lot — `applyAiDescriptions`,
+  `applyAiDescriptionOne` (which every browser path goes through), `applyDescription` in
+  `lib/pipeline-runner.ts`, and `app/api/auction-ai/runs/[id]/apply/route.ts`. **Add it to any
+  new one.**
+- Human edits (`review_tab`, `lot_editor`) are deliberately left alone.
 
 ---
 
