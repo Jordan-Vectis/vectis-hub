@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"e87b3f2aa2473c9cd80f109d82015b6aab363379","author":"Jordan Orange","date":"2026-09-01T10:42:57+01:00","subject":"Review tab: a leaked search counts as \"needs attention\""},
+  {"sha":"5122c762fc762d16e9e723a0aca7a00b63b0a78f","author":"Jordan Orange","date":"2026-09-01T09:40:22+01:00","subject":"Refresh changelog seed"},
   {"sha":"a755f75b7d918626294736e3dbcc5c7b04b98c87","author":"Jordan Orange","date":"2026-09-01T09:40:10+01:00","subject":"Stop Gemini's leaked search calls reaching the catalogue"},
   {"sha":"755849a26c3205e9da07fc4b3d53a35a2093bbe5","author":"Jordan Orange","date":"2026-08-28T15:27:42+01:00","subject":"Refresh changelog seed"},
   {"sha":"cd1b817186804617d4a2b71d1a7101c7e9413f55","author":"Jordan Orange","date":"2026-08-28T15:27:40+01:00","subject":"Stop the overnight bar reading 100% with a stage still to run"},
