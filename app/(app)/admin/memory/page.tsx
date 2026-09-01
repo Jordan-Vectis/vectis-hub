@@ -3073,7 +3073,8 @@ type: user
 - Prefers concise responses — one paragraph max, lead with the answer
 - Uses Windows 11, PowerShell, VS Code
 - GitHub username: Jordan-Vectis
-- Always accesses the app via the Railway staging/production URL — never runs it locally with npm run dev
+- Always accesses the app via a Railway URL — never runs it locally with npm run dev
+- ⚠⚠ **He does his real cataloguing work on PRODUCTION.** Measured 2026-09-01: his browser was on \`vectis-production.up.railway.app\` running F114 all morning while I was assuming staging, and I twice told him a fix was "live for you" when it was only on \`staging\`. **A push to staging does NOT reach him.** Never say a fix is live for him without checking which environment he is in, and remember RULES: only merge to \`main\` when he explicitly says so.
 - Staff use iPads around the warehouse and cataloguing areas — device tracking feature being planned
 - Another developer, Jack, also works on the same staging branch with his own Claude and pushes independently. RULES.md was made team-neutral 2026-06-25 (the "How to work with Jordan" section became "How to work on this project"; personal framing removed) so it doesn't confuse other devs' Claude — personal preferences live in Jordan's own Claude memory.`,
   },

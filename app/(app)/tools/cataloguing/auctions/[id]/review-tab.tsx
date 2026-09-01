@@ -123,6 +123,13 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [bulkApplying, setBulkApplying] = useState(false)
   const [bulkResult, setBulkResult]     = useState<string | null>(null)
   const [expandedFix, setExpandedFix]   = useState<string | null>(null)
+  // Re-run the cataloguer-mistake check over the lots on screen (Jordan, 2026-09-01 — he
+  // wanted it here rather than only on Auction AI → Auto Pipeline, which is where the
+  // identical "⚠️ Re-check Cataloguer Flags" button already lives).
+  const [recheckRunning, setRecheckRunning]   = useState(false)
+  const [recheckProgress, setRecheckProgress] = useState<{ done: number; total: number } | null>(null)
+  const [recheckMsg, setRecheckMsg]           = useState<string | null>(null)
+  const recheckStopRef = useRef(false)
   const stopRef = useRef(false)
   const [pending, start] = useTransition()
 
@@ -164,6 +171,89 @@ Read them back any time at Admin → Saved Flagged Lots.`)
     } catch (e: any) {
       setError(e?.message ?? "Could not save the flags")
     } finally { setSavingFlags(false) }
+  }
+
+  // ── Re-check the AI's cataloguer-mistake flags ──────────────────────────────
+  // The same text-only pass the Auto Pipeline tab runs (/api/auction-ai/recheck-flags) —
+  // one call per lot, no photos — but scoped to the lots CURRENTLY ON SCREEN, so the
+  // filters above decide what it costs. With no filter set that is the whole sale.
+  //
+  // ⚠ It only ADDS flags; a lot that now comes back clean keeps the flag it already had.
+  // That is the existing behaviour of this check and it is not changed here — use
+  // "Ignore (AI is wrong)" on a lot to clear one.
+  //
+  // ⚠⚠ It SNAPSHOTS the current flags first, without being asked. Re-running the AI
+  // overwrites every aiFlagNote with a bare update that never reaches the lot change log,
+  // so a previous run's flags are otherwise gone with no trace — which is exactly why the
+  // "💾 Save these flags" button next to it exists.
+  async function handleRecheckFlags() {
+    if (recheckRunning) return
+    const toCheck = filtered.filter(l => l.description?.trim() && l.keyPoints?.trim())
+    if (!toCheck.length) {
+      setRecheckMsg("Nothing to check — these lots need both a description and key points.")
+      return
+    }
+    const scope = filtered.length === lots.length ? "the whole sale" : "the lots matching the current filters"
+    if (!confirm(
+      `Re-check ${toCheck.length} lot${toCheck.length === 1 ? "" : "s"} (${scope}) for possible cataloguer mistakes?\n\n`
+      + `That is one AI call each, so it takes a while and it costs. The flags on this sale are saved to `
+      + `Admin → Saved Flagged Lots first. Anything already flagged stays flagged.`
+    )) return
+
+    setRecheckRunning(true); setRecheckMsg(null)
+    recheckStopRef.current = false
+    setRecheckProgress({ done: 0, total: toCheck.length })
+
+    // Freeze what is there now — the run is about to overwrite it.
+    if (aiFlagCount > 0) {
+      try { await saveAiFlagSnapshot(auctionId, `Before re-check — ${new Date().toLocaleDateString("en-GB")}`) }
+      catch { /* advisory — never block the run for it */ }
+    }
+
+    let flagCount = 0
+    for (let i = 0; i < toCheck.length; i++) {
+      if (recheckStopRef.current) break
+      const lot = toCheck[i]
+      setRecheckProgress({ done: i, total: toCheck.length })
+      let attempt = 0
+      while (!recheckStopRef.current) {
+        attempt++
+        try {
+          const res = await fetch("/api/auction-ai/recheck-flags", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keyPoints: lot.keyPoints, description: lot.description }),
+          })
+          if (res.status === 429) {
+            // Same backoff the Auto Pipeline tab uses for this check.
+            await new Promise(r => setTimeout(r, Math.min(60000 * Math.pow(2, attempt - 1), 300000)))
+            continue
+          }
+          const data = await res.json()
+          if (data.flag) {
+            flagCount++
+            await saveAiFlagNote(lot.id, data.flag)
+            // Show it straight away rather than making him reload to see the run's work.
+            setLots(prev => prev.map(l => l.id === lot.id ? { ...l, aiFlagNote: data.flag } : l))
+          }
+          break
+        } catch {
+          if (attempt >= 3) break
+          await new Promise(r => setTimeout(r, attempt * 5000))
+        }
+      }
+      if (i < toCheck.length - 1 && !recheckStopRef.current) await new Promise(r => setTimeout(r, 2000))
+    }
+
+    const done = recheckStopRef.current
+    setRecheckProgress(null)
+    setRecheckRunning(false)
+    setRecheckMsg(
+      (done ? "Stopped — " : "Done — ")
+      + (flagCount > 0
+          ? `${flagCount} possible cataloguer mistake${flagCount === 1 ? "" : "s"} flagged.`
+          : `nothing new found across ${toCheck.length} lot${toCheck.length === 1 ? "" : "s"}.`)
+    )
   }
 
   const cataloguers = useMemo(() =>
@@ -624,8 +714,33 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                 {savingFlags ? "Saving…" : "💾 Save these flags"}
               </button>
             )}
+            {/* Re-run the cataloguer-mistake check over what is on screen. Scoped to the
+                filters above on purpose — it is one AI call per lot, so "all 507" should be
+                a choice rather than the only option. */}
+            {recheckRunning ? (
+              <button
+                onClick={() => { recheckStopRef.current = true }}
+                className="px-3 py-2 text-sm font-semibold rounded-lg border border-red-500 bg-red-600/10 text-red-600 dark:text-red-400 hover:bg-red-600/20 transition-colors whitespace-nowrap"
+              >
+                ✕ Stop{recheckProgress ? ` (${recheckProgress.done}/${recheckProgress.total})` : ""}
+              </button>
+            ) : (
+              <button
+                onClick={handleRecheckFlags}
+                title="Ask the AI again whether any key point looks wrong, on the lots currently shown. One call per lot. Existing flags are saved to Admin → Saved Flagged Lots first, and anything already flagged stays flagged."
+                className="px-3 py-2 text-sm font-semibold rounded-lg border border-orange-500 bg-orange-600/10 text-orange-600 dark:text-orange-400 hover:bg-orange-600/20 transition-colors whitespace-nowrap"
+              >
+                ⚠️ Re-check AI flags ({filtered.filter(l => l.description?.trim() && l.keyPoints?.trim()).length})
+              </button>
+            )}
           </div>
         </div>
+        {recheckMsg && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {recheckMsg}
+            <button onClick={() => setRecheckMsg(null)} className="ml-2 underline hover:text-gray-700 dark:hover:text-gray-200">dismiss</button>
+          </p>
+        )}
       </div>
 
       {error && (
