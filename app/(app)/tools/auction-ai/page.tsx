@@ -4261,7 +4261,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     // back empty every time would hold up the whole sale behind it.
     let emptyRetries = 0
     const MAX_EMPTY_RETRIES = 4
-    const isEmptyAnswer = (m: string) => /returned no description|empty description/i.test(m)
+    // Also covers a LEAKED TOOL CALL — the model writing out print(google_search.search(…))
+    // instead of a description (2026-09-01). Unusable either way, so it takes the same
+    // bounded retry on the other model rather than being written to the catalogue.
+    const isEmptyAnswer = (m: string) => /returned no description|empty description|leaked tool call/i.test(m)
     while (!cancelRef.current) {
       if (attempt > 0) {
         const isRL    = lastError.startsWith("RATE_LIMITED:")
@@ -4280,12 +4283,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         lastError = e.message ?? String(e)
         wasRateLimit = false
         if (isEmptyAnswer(lastError)) {
+          // Name the actual failure — a quiet model and a leaked search call need
+          // different things looked at.
+          const what = /leaked tool call/i.test(lastError) ? "it wrote out a search, not a description" : "nothing came back"
           if (emptyRetries < MAX_EMPTY_RETRIES) {
             emptyRetries++
-            addLog(`↻ ${label} — nothing came back, retrying with the other model (${emptyRetries}/${MAX_EMPTY_RETRIES})…`)
+            addLog(`↻ ${label} — ${what}, retrying with the other model (${emptyRetries}/${MAX_EMPTY_RETRIES})…`)
             continue
           }
-          addLog(`✗ ${label} — nothing came back after ${MAX_EMPTY_RETRIES} tries, skipping`)
+          addLog(`✗ ${label} — ${what} after ${MAX_EMPTY_RETRIES} tries, skipping`)
           return null
         }
         if (isBlock(lastError)) {
@@ -5941,6 +5947,12 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
       let lastError = ""
       let attempt   = 0
       let succeeded = false
+      // ⚠ Bounded, unlike the transient errors this loop retries for ever: a leaked tool call
+      // (the model writing out print(google_search.search(…)) instead of the rewrite) usually
+      // clears on the other model, which the next attempt selects — but a lot that leaks every
+      // time must not hold up the rest of the sale behind it. (2026-09-01)
+      let leaks = 0
+      const MAX_LEAK_RETRIES = 4
 
       while (!cancelRef.current) {
         if (attempt > 0) {
@@ -5987,6 +5999,18 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
             done++; setProgress({ done, total: toRun.length })
             succeeded = true
             break
+          }
+          if (/leaked tool call/i.test(lastError)) {
+            leaks++
+            if (leaks > MAX_LEAK_RETRIES) {
+              working[idx] = { ...working[idx], status: "skipped" }
+              setLots([...working])
+              addLog(`✗ ${lot.label} — it wrote out a search, not a description, after ${MAX_LEAK_RETRIES} tries, skipping`)
+              done++; setProgress({ done, total: toRun.length })
+              succeeded = true
+              break
+            }
+            addLog(`↻ ${lot.label} — it wrote out a search, not a description, trying the other model (${leaks}/${MAX_LEAK_RETRIES})`)
           }
         }
       }

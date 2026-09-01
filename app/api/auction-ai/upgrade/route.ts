@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { isCronRequest } from "@/lib/cron-auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
-import { cleanBearsDescription } from "@/lib/description-cleanup"
+import { cleanBearsDescription, hasToolCallLeak } from "@/lib/description-cleanup"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 const MODE_INSTRUCTIONS: Record<string, string> = {
@@ -78,6 +78,12 @@ Rules:
     // Belt-and-braces: when the Dolls & Bears check ran, also apply the
     // deterministic clean-up so the mechanical fixes are guaranteed.
     const cleaned = modes.includes("dolls_bears_fix") ? cleanBearsDescription(revised) : revised
+    // ⚠ The model sometimes writes out its search — "tool_code print(google_search.search(…))"
+    // — instead of the rewrite, breaking off mid-sentence to do it. Fail the call rather than
+    // hand back a half-written description; the caller's retry loop re-asks. (2026-09-01)
+    if (hasToolCallLeak(cleaned)) {
+      return NextResponse.json({ error: "The model wrote out a search instead of a description (leaked tool call)" }, { status: 502 })
+    }
     return NextResponse.json({ revised: cleaned })
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error"

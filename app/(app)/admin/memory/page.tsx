@@ -16,6 +16,96 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "ai_tool_call_leak.md",
+    content: `---
+name: ai-leaked-tool-call-is-not-a-description
+description: "Gemini sometimes writes out the search it wanted to run (\\"tool_code print(google_search.search(…))\\") instead of a description, and it reached a live catalogue because it is not empty. stripToolCallLeak/hasToolCallLeak in lib/description-cleanup.ts; every route that turns a reply into description text must check it. Read before touching any AI description route."
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: 39e4fc37-397c-4b8d-a570-4b59503c1913
+  modified: 2026-09-01T08:38:31.424Z
+---
+
+# ⚠⚠ A leaked tool call is NOT a description (2026-09-01)
+
+Jordan, on a pipeline run, showing a catalogued lot:
+
+\`\`\`
+Unboxed Sony PlayStation 1 with Games Includes. tool_code
+print(google_search.search(queries=["Sony PlayStation 1 with Games Includes"]))
+\`\`\`
+
+That is Gemini's **internal agent format** — it answered by *writing out* the search it wanted to
+run instead of running it. It is not English, not a description, and there is nothing to salvage:
+the text always **stops dead at the point the model went to search**, so whatever came before it
+is half written.
+
+## Why it reached the catalogue
+
+\`/api/auction-ai/batch\` only ever removed the \`Estimate:\` and \`FLAG:\` lines and passed everything
+else straight through. The F113 empty-answer guard (never let "nothing happened" look like
+success) did not catch it **because the reply is not empty** — it is full of \`print(...)\`.
+
+The knock-on is what Jordan actually saw. Double Check read the mess, tried to rewrite it,
+invented a game code (\`Dune 2000\`) doing so, and its own invented-code audit refused the rewrite —
+which surfaced in Review as an amber **"POSSIBLE CATALOGUER MISTAKE"**. The cataloguer had done
+nothing wrong. See [[reference_review_tab_issues]].
+
+## Measured, read-only, on the live DB (2026-09-01)
+
+**10 lots**, every one on **F113 (Comics & Publications)** — the same sale as the F113 empty-answer
+investigation. Three of the ten are **nothing but the leak** (F113077, F113296, F113394): no
+description at all, yet they never counted as empty. The PS1 lot in Jordan's screenshot was not in
+that database, so it is on the other environment.
+
+## The fix
+
+\`stripToolCallLeak()\` / \`hasToolCallLeak()\` in **\`lib/description-cleanup.ts\`** — the single
+source. Catches the fenced \` \`\`\`tool_code \` block, \`<tool_code>…</tool_code>\`, the bare marker
+mid-sentence, and any \`print(google_search…)\` / \`default_api\` / \`concise_search\` line.
+⚠ **Universal, not preset-scoped** — unlike \`cleanBearsDescription\`, which is Dolls/Bears only.
+
+Wired into **all four** routes that turn a Gemini reply into description text:
+
+| route | on a leak |
+|---|---|
+| \`batch\` | **FAILED** — not saved; the retry loop re-asks on the other model |
+| \`upgrade\` | **502 with the reason** — the caller's retry loop re-asks |
+| \`key-points-check\` | keeps the description it was given (\`changed\` falls to false) |
+| \`double-check\` | \`revised = ""\`, which already means "no rewrite" there |
+
+⚠ **Add the check to any new route that does this.**
+
+Bounded like an empty answer, never infinite: 4 retries alternating primary/fallback model, then
+skipped **loudly**. The classifier phrase is \`leaked tool call\`, matched in three places kept in
+step — \`EMPTY_ANSWER\` in \`lib/pipeline-runner.ts\`, \`isEmptyAnswer\` in the Auto Pipeline tab, and
+the standalone AI Upgrade tab's own loop. The logs say *"it wrote out a search, not a
+description"* rather than "nothing came back" — a quiet model and a leaked search call are
+different things to go and look at. The overnight AI Upgrade stage now records \`empty\` rather
+than \`blocked\` for these, so the morning review is not sent looking at Gemini's safety filters.
+
+## Traps
+
+- ⚠ The bare-marker strip must use \`[ \\t]\`, **never \`\\s\`** — \`\\s\` eats the newline after
+  \`tool_code\` and takes the last real sentence away with the \`print(\` line. Measured while
+  writing it: the PS1 example stripped to an empty string instead of
+  \`"Unboxed Sony PlayStation 1 with Games Includes."\`.
+- Do **not** strip-and-keep in Batch. What is left is a description the model abandoned
+  mid-sentence, and saving it would be exactly the F113 mistake in a new coat.
+- It is **not** a grounding fault and not a safety block — do not reach for
+  \`lib/ai-safety.ts\` or the \`grounded\` toggle for it.
+
+## Still open — not built, awaiting Jordan's word
+
+The **10 existing F113 lots are not repaired**, and nothing on screen finds them. Asked him where
+a finder belongs (Locking Check / Review "needs attention" / a one-off).
+
+Related: [[reference_auto_pipeline_apply]], [[reference_pipeline_queue]],
+[[reference_dolls_bears_descriptions]], [[reference_locking_check]].
+`,
+  },
+  {
     filename: "auto_clerk_ahk.md",
     content: `---
 name: Auto Clerk.ahk - the screen-reading clerk (v1)

@@ -5,7 +5,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { parseModelJson } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
-import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
+import { cleanBearsDescription, isBearsPreset, stripToolCallLeak } from "@/lib/description-cleanup"
 import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
 import { safetyDetail, blockMeaning } from "@/lib/ai-provider"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
@@ -174,10 +174,19 @@ After the description (and optional FLAG line), include the estimate on its own 
       const rawDescription = lines
         .filter((l) => !l.toLowerCase().startsWith("estimate:") && !l.toLowerCase().startsWith("flag:"))
         .join("\n").trim()
+      // ⚠⚠ THE MODEL SOMETIMES WRITES OUT ITS SEARCH INSTEAD OF RUNNING IT — a bare
+      // "tool_code" followed by print(google_search.search(…)). This is not a
+      // description in any language and it reached a live catalogue on 2026-09-01,
+      // because only the "Estimate:" and "FLAG:" lines were ever removed. It is
+      // stripped here and the lot is then FAILED below rather than saved: the text
+      // always stops dead where the model went to search, so what is left is a
+      // half-written description, and a failure sends it back through the retry loop
+      // on the other model. See lib/description-cleanup.ts.
+      const { text: strippedDescription, leaked } = stripToolCallLeak(rawDescription)
       // Deterministic clean-up of the mechanical mistakes the model keeps making
       // on Dolls/Bears lots (strip **, LE→limited edition, drop "plumo means…"
       // notes, de-dupe the repeated name, close "CB 114790" → "CB114790").
-      const description = isBearsPreset(presetKey) ? cleanBearsDescription(rawDescription) : rawDescription
+      const description = isBearsPreset(presetKey) ? cleanBearsDescription(strippedDescription) : strippedDescription
       const flag = flagLine.replace(/^flag:\s*/i, "").trim()
 
       // ⚠⚠ AN EMPTY ANSWER IS NOT AN "OK". This used to push status "OK" whatever came
@@ -188,7 +197,16 @@ After the description (and optional FLAG line), include the estimate on its own 
       // then surfaced on screen as "content blocked by AI" at the double check because
       // there was nothing left to check. RULES: never let "nothing happened" look like
       // success.
-      if (!description.trim()) {
+      if (leaked) {
+        // Its own message, not "returned no description" — the difference matters when
+        // reading the morning log. Both classifiers (the runner and the Batch tab) treat
+        // it as the same KIND of failure: retry on the other model, bounded, never silent.
+        results.push({ lot, description: "", estimate: "", status: "FAILED",
+          error: `The model wrote out a search instead of a description (leaked tool call)`
+               + `${finishReason && finishReason !== "STOP" ? ` (finished: ${finishReason})` : ""}: `
+               + `${text.trim().slice(0, 120)}`,
+          debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
+      } else if (!description.trim()) {
         // ⚠ SAY WHAT DID COME BACK. On F113 this happened to 179 lots and the raw reply was
         // kept nowhere, so the cause was unknowable after the fact — a steady ~30% across
         // every hour of the night, with no difference in photos or key points between the

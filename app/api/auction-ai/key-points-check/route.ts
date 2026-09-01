@@ -6,7 +6,7 @@ import { KEY_POINTS_INSTRUCTION, KEY_POINTS_INSTRUCTION_RELAXED } from "@/lib/ke
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { auditCodes } from "@/lib/product-codes"
-import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
+import { cleanBearsDescription, isBearsPreset, hasToolCallLeak } from "@/lib/description-cleanup"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 60
@@ -134,6 +134,12 @@ export async function POST(req: NextRequest) {
     // the spaced code it had just closed. cleanBearsDescription is idempotent, so running it
     // again after Batch already did is harmless.
     if (isBearsPreset(presetKey)) revised = cleanBearsDescription(revised)
+
+    // ⚠ A rewrite that leaked a tool call — "tool_code print(google_search.search(…))" —
+    // is not an edit, it is the model abandoning the answer mid-sentence to go and search.
+    // Keep the description exactly as it came in rather than applying a half-written one;
+    // `changed` then falls to false on its own and nothing is written. (2026-09-01)
+    if (hasToolCallLeak(revised)) revised = description.trim()
 
     const changed = revised !== description.trim()
     return NextResponse.json({ revised, changed, missing, added, found, flag,

@@ -52,8 +52,11 @@ const FAST_EASE_AFTER = 10
 const MAX_RECITATION_RETRIES = 4
 /** How many times to re-ask when a call succeeds but produces no text at all. */
 const MAX_EMPTY_RETRIES = 4
-/** The route's wording for that case — kept in one place so the two cannot drift apart. */
-const EMPTY_ANSWER = /returned no description|empty description/i
+/** The route's wording for that case — kept in one place so the two cannot drift apart.
+ *  Also covers a LEAKED TOOL CALL: the model writing out print(google_search.search(…))
+ *  instead of a description (2026-09-01). Different cause, identical handling — the answer
+ *  is unusable, so re-ask on the other model a few times rather than saving it. */
+const EMPTY_ANSWER = /returned no description|empty description|leaked tool call/i
 
 const LOG_MAX = 40_000 // keep the morning report readable and the row small
 
@@ -460,12 +463,15 @@ async function withRetry<T>(
       // attempt, so a few tries is a real second chance, while an endlessly empty lot must
       // not hold up the 600 behind it. Reported loudly when it gives up — never silent.
       if (EMPTY_ANSWER.test(lastError)) {
+        // Say WHICH of the two it was — "nothing came back" reads as a quiet model, and
+        // a leaked search call is a completely different thing to go and look at.
+        const what = /leaked tool call/i.test(lastError) ? "it wrote out a search, not a description" : "nothing came back"
         if (empties < MAX_EMPTY_RETRIES) {
           empties++
-          addLog(`  ↻ ${label} — nothing came back, trying the other model (${empties}/${MAX_EMPTY_RETRIES})`)
+          addLog(`  ↻ ${label} — ${what}, trying the other model (${empties}/${MAX_EMPTY_RETRIES})`)
           continue
         }
-        addLog(`  ✗ ${label} — nothing came back after ${MAX_EMPTY_RETRIES} tries, skipping`)
+        addLog(`  ✗ ${label} — ${what} after ${MAX_EMPTY_RETRIES} tries, skipping`)
         if (outcome) outcome.reason = "empty"
         return null
       }
@@ -831,6 +837,7 @@ async function runUpgradeKind(
   for (const lot of toRun) {
     if (deadline.expired) throw new SliceOver(0)
 
+    const upOutcome: { reason?: "blocked" | "empty"; rateLimited?: boolean } = {}
     const result = await withRetry(lot.label, deadline, addLog, async (attempt) => {
       const res = await fetch(`${base()}/api/auction-ai/upgrade`, {
         method: "POST", headers: cronHeaders({ "Content-Type": "application/json" }),
@@ -839,7 +846,7 @@ async function runUpgradeKind(
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       return json
-    })
+    }, upOutcome)
 
     if (result) {
       const revised = String(result.revised ?? "").trim()
@@ -853,8 +860,11 @@ async function runUpgradeKind(
         addLog(`  ✗ ${lot.label} — model returned an empty result, skipping`)
       }
     } else {
-      // withRetry returned null → content block, the one permitted skip.
-      await saveRow(lot, { revised: "", status: "blocked" })
+      // withRetry returned null → a content block, or an answer that could never be used
+      // (nothing came back, or it wrote out a search instead of a rewrite). ⚠ Record WHICH:
+      // labelling an unusable answer "blocked" sends the morning review looking at Gemini's
+      // safety filters for something that was never a refusal.
+      await saveRow(lot, { revised: "", status: upOutcome.reason === "empty" ? "empty" : "blocked" })
       skipped++
     }
 

@@ -6,7 +6,7 @@ import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { auditCodes } from "@/lib/product-codes"
-import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
+import { cleanBearsDescription, isBearsPreset, hasToolCallLeak } from "@/lib/description-cleanup"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 60
@@ -127,6 +127,12 @@ export async function POST(req: NextRequest) {
     // back with a literal string replace, so cleaning first would reintroduce the spaced code
     // it had just closed. cleanBearsDescription is idempotent — re-running it is harmless.
     if (revised && isBearsPreset(presetKey)) revised = cleanBearsDescription(revised)
+
+    // ⚠ A rewrite that leaked a tool call — "tool_code print(google_search.search(…))" — is
+    // the model breaking off mid-answer to search, not an edit. This is the LAST stage before
+    // the catalogue, so an empty `revised` (already the "no rewrite" signal here) is the safe
+    // outcome: the description in hand is kept. (2026-09-01)
+    if (revised && hasToolCallLeak(revised)) revised = ""
 
     return NextResponse.json({ verdict, contradictions, unsupported, revised, flag,
       debug: { prompt: textPart.text, response: rawResponse, imageCount: imageParts.length } })

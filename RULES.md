@@ -556,6 +556,34 @@ a useful message, then `.text()`.
 
 `503 Service Unavailable` from Gemini is transient — retry, do not surface as permanent failure.
 
+### ⚠⚠ A leaked tool call is NOT a description (2026-09-01)
+
+Gemini sometimes answers by **writing out the search it wanted to run** instead of running it:
+
+```
+Unboxed Sony PlayStation 1 with Games Includes. tool_code
+print(google_search.search(queries=["Sony PlayStation 1 with Games Includes"]))
+```
+
+That exact text reached a live catalogue — the batch route only ever removed the `Estimate:` and
+`FLAG:` lines and passed everything else through, and it is not empty, so the empty-answer guard
+never saw it. Double Check then tried to rewrite the mess, invented a product code doing it, and
+the lot surfaced in Review as a **cataloguer** mistake, which it never was. Measured on F113:
+10 lots, three of them nothing but the leak.
+
+- `stripToolCallLeak()` / `hasToolCallLeak()` in **`lib/description-cleanup.ts`** are the single
+  source — fenced ` ```tool_code `, `<tool_code>`, the bare marker mid-sentence, and any
+  `print(google_search…)` / `default_api` line. Universal, **not** preset-scoped (unlike
+  `cleanBearsDescription`).
+- **Every route that turns a Gemini reply into description text must check it**: batch,
+  key-points-check, double-check, upgrade. Add the check to any new one.
+- The text always **stops dead** where the model went to search, so what is left is half written.
+  Batch and Upgrade therefore **fail the lot** rather than saving it; Key Points and Double Check
+  keep the description they were given. A failure is bounded like an empty answer — 4 retries
+  alternating primary/fallback model, then skipped **loudly**, never silently.
+- ⚠ The strip must use `[ \t]`, never `\s`, around the bare marker: `\s` eats the newline after it
+  and takes the last real sentence away with the `print(` line.
+
 ---
 
 ## Chat Route (`/api/auction-ai/chat`)
