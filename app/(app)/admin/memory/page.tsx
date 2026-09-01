@@ -1130,46 +1130,32 @@ WARNING: both new columns arrived after the table existed, so loadInductionSlide
   {
     filename: "auto_pipeline_apply.md",
     content: `---
-name: Auto Pipeline — what "applied" means (appliedDesc)
-purpose: Why lots reappear in Review & Apply after an auto-apply run. PipelineLot.appliedDesc is the ONLY record that a lot was applied — persist it on every auto-apply path. Includes the 2026-08-13 root-cause fix for "auto-apply isn't applying". Read before touching the pipeline stages, the apply path or needsReview.
-last_updated: 2026-08-13
+name: auto-pipeline-what-applied-means-applieddesc
+description: Why lots reappear in Review & Apply after an auto-apply run. PipelineLot.appliedDesc is the ONLY record that a lot was applied — persist it on every auto-apply path. Read before touching the pipeline stages or needsReview.
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: ac2bf66c-5e00-4db2-b87d-3200c362859c
+  modified: 2026-08-14T08:58:04.820Z
 ---
 
-# WHY "AUTO-APPLY ISN'T APPLYING" KEPT COMING BACK (root cause, fixed 2026-08-13)
+# Auto Pipeline — the apply model (\`/tools/auction-ai\`, Auto Pipeline tab)
 
-Jordan, on a 512-lot Trains sale with Auto-apply selected: all three stages finished, then "512 lots need reviewing & applying" and an Apply All button. His run log held the answer — every catalogue write had failed with Server Action "60b949e1..." was not found on the server, i.e. DEPLOY SKEW (deploys had landed while his tab was open).
-
-A 30-agent review found one root cause and one nearly-as-bad partner. Both are fixed in app/(app)/tools/auction-ai/page.tsx.
-
-1. EVERY APPLY HAD ITS OWN catch THAT ONLY WROTE A LOG LINE — no skew detection, no retry, no counting, no stopping. One deploy turned the rest of the sale into silent no-ops while the run still ended "Pipeline complete!". The apply also sat OUTSIDE withRetry, so the Gemini call retried forever while the catalogue write got zero retries. There is now ONE applyDescription() helper that every stage AND both Review & Apply buttons go through: three retries for transients, and on a stale deploy it sets cancelRef, raises a full amber banner with a Reload button, and STOPS the run instead of repeating a guaranteed failure hundreds of times. It deliberately does NOT call maybeReloadForSkew — reloading mid-run would abandon the run; the stage state is in the database, so Reload then Load Auction then Resume carries on from where it stopped.
-
-2. acceptKP's CATCH WAS COMPLETELY EMPTY. Pressing Apply All (512) on a stale page churned through all 512 lots, wrote nothing, put them all back and left the button reading the same number — the literal "I pressed apply and nothing happened". acceptKP now returns success/failure, and acceptAllKP tallies and states the outcome.
-
-Also fixed in the same pass: autoApply is read through autoApplyRef, because the stage functions held the value from the render that STARTED the run, so toggling the mode mid-run changed the screen and localStorage but not what the run did; saveLot now checks the HTTP status and retries, where before it ignored it entirely, so a dropped appliedDesc silently put an applied lot back into review; the run log states the mode at the start; and a run with failed writes gets its own red banner instead of the same amber "N lots need reviewing" box that a deliberate review-mode run gets.
-
-THREE RELATED THINGS JORDAN HAS ALREADY DECIDED (2026-08-13) — do not re-raise them:
-
-1. THE APPLY MODE IS NO LONGER REMEMBERED. It used to persist to the pipeline_auto_apply localStorage key, which is per BROWSER and not per person, so whoever last chose "Review all before applying" on a shared PC or iPad silently set the mode for the next person's run and their sale quietly applied nothing. Every run now starts on Auto-apply and "Review all" lasts for that session only. Do NOT reintroduce the localStorage read/write. The key may still exist in old browsers; nothing reads it.
-
-2. THE CATALOGUING vs AUCTION_AI PERMISSION MISMATCH IS LEFT AS IS. requireCataloguer demands the CATALOGUING grant while the Auction AI page is gated on AUCTION_AI, so in theory somebody holding only AUCTION_AI would have every apply fail. Jordan: "Its only ever used by admins who should have all permissions." Admins bypass the check entirely, so this is not worth the change. Leave requireCataloguer alone.
-
-3. APPLY ALL DELIBERATELY OVERWRITES NEWER HUMAN EDITS. Because appliedDesc falls back to the live catalogue description when it is null, Apply All can write the AI's older text over a lot a cataloguer has since corrected by hand. Jordan chose "Overwrite anyway" — Apply All always wins, because it is simple and predictable. Do NOT add a skip-if-edited guard or a side-by-side compare without asking again.
-
-# Auto Pipeline — the apply model (/tools/auction-ai, Auto Pipeline tab)
-
-Stage order is **Batch → Key Points → Double Check** (\`page.tsx\`: \`runBatchStage\` → \`runKPStage\` → \`runDoubleCheckStage\`).
+Stage order is **Batch → Key Points → Double Check** (\`page.tsx\`, \`runBatchStage\` → \`runKPStage\` → \`runDoubleCheckStage\`).
 
 ⚠⚠ **"Auto-apply" means ALL THREE stages write to the catalogue — including Double Check (Jordan, 2026-08-10: "I just want auto apply to mean auto apply").** This **REVERSES** the earlier "DC is the final MANUAL Review & Apply gate" decision — do not restore it. On **⚡ Auto-apply** a finished run leaves nothing to press; on **👁 Review all before applying** every stage holds its text for the manual gate. \`kpRevised\` drives the review UI in both modes, so the review path still exists and still catches anything whose apply failed.
 
 ## The one invariant
 
-**\`PipelineLot.appliedDesc\` is the only record that a lot's text reached the catalogue.** The entire Review & Apply list is one comparison:
+**\`PipelineLot.appliedDesc\` is the only record that a lot's text reached the catalogue.** The whole Review & Apply list is one comparison:
 
-\`needsReview(l) = !!l.kpRevised && l.kpRevised.trim() !== l.appliedDesc.trim()\`
+\`\`\`ts
+needsReview(l) = !!l.kpRevised && l.kpRevised.trim() !== l.appliedDesc.trim()
+\`\`\`
 
 and on load \`appliedDesc = saved.appliedDesc || catalogueLot.description\`.
 
-⚠ **Every path that applies MUST persist \`appliedDesc\` via \`saveLot\`, and only after the write succeeded.** Otherwise the fallback silently re-derives "was this applied?" from the **live catalogue text** — so any *later* edit to that description (a cataloguer fixing wording, the Review tab, anything) makes them differ and the lot **reappears in Review & Apply as if it had never been applied**. That is the "auto-apply is ticked but I still have to press Apply all" bug (Jordan, 2026-08-10).
+⚠ **Every path that applies MUST persist \`appliedDesc\` via \`saveLot\`, and only after the write succeeded.** If it doesn't, the fallback silently re-derives "was this applied?" from the **live catalogue text** — so any *later* edit to that description (a cataloguer fixing wording, the Review tab, anything) makes them differ and the lot **reappears in Review & Apply as if it was never applied**. That is the "auto-apply is ticked but I still have to press Apply all" bug (Jordan, 2026-08-10).
 
 ⚠⚠ **Worse than noise:** pressing **Apply all** on those resurrected lots writes the older pipeline text back over the newer catalogue text — silent loss of human edits.
 
@@ -1182,19 +1168,19 @@ and on load \`appliedDesc = saved.appliedDesc || catalogueLot.description\`.
 | F103 | 601 | 239 (= exactly its DC-issue count) | 239 | **362 — none of them DC** |
 | F106 | 377 | 7 | 112 | **365 (260 non-DC)** |
 | F104 | 448 | 335 | 323 | 113 |
-| F096 | 542 | 540 (Apply all pressed 10 Aug) | 105 | 0 |
+| F096 | 542 | 540 (he pressed Apply all on 10 Aug) | 105 | 0 |
 
-The non-DC lots demanding a manual apply all had \`dcStatus='ok'\`, \`kpStatus='ok'\`, \`appliedDesc IS NULL\`, and a catalogue description **systematically longer** than the pipeline's stored text (145 vs 187, 66 vs 108, 116 vs 148…) — the catalogue had moved on after the pipeline wrote it, exactly the fallback failure above.
+The non-DC lots demanding a manual apply all had \`dcStatus='ok'\`, \`kpStatus='ok'\`, \`appliedDesc IS NULL\`, and a catalogue description **systematically longer** than the pipeline's stored text (145 vs 187, 66 vs 108, 116 vs 148…) — i.e. the catalogue had moved on after the pipeline wrote it, exactly the fallback failure above.
 
 ## Fixed 2026-08-10
 
-- **Batch stage**: applies *first*, records \`appliedDesc\` only when the write succeeded, and persists it in \`saveLot\`. It previously set \`appliedDesc\` optimistically in the same state update as the result — **before** the \`applyAiDescriptionOne\` call and regardless of whether it threw — so a failed apply looked applied for the rest of the session.
+- **Batch stage**: applies *first*, then records \`appliedDesc\` only when the write succeeded, and persists it in \`saveLot\`. It previously set \`appliedDesc\` optimistically in the same state update as the result, **before** the \`applyAiDescriptionOne\` call and regardless of whether it threw — so a failed apply looked applied for the rest of the session.
 - **Key Points stage**: \`applied\` hoisted so \`saveLot\` persists \`appliedDesc\` (its own write, or the value Batch already put on the lot).
-- Stage log numbering corrected — Double Check and Key Points **both** announced "Stage 2", which makes the run log useless for diagnosing exactly this.
+- Stage log numbering corrected — Double Check and Key Points **both** announced "Stage 2", which makes the log useless for diagnosing exactly this.
 
 ## Double Check now auto-applies too (2026-08-10, same session)
 
-Told that DC held every \`issues\` lot by design — a large share (F104 323/448, F103 239/601) — Jordan reversed it: **"It may sound stupid but I just want auto apply to mean auto apply."** So \`runDoubleCheckStage\`'s \`issues\` branch now applies \`revised\` when \`autoApply\` is on, sets \`currentDesc\`/\`appliedDesc\`, and persists \`description\` + \`appliedDesc\`; the log reads "DC cleaned up & applied" vs "held for review". The on-page help text and the ⚡ Auto-apply tooltip were rewritten to match — **keep all three in step if this ever changes again.**
+Told that DC held every \`issues\` lot by design — a big share (F104 323/448, F103 239/601) — Jordan reversed it: **"It may sound stupid but I just want auto apply to mean auto apply."** So \`runDoubleCheckStage\`'s \`issues\` branch now applies \`revised\` when \`autoApply\` is on, sets \`currentDesc\`/\`appliedDesc\`, and persists \`description\` + \`appliedDesc\`; the log says "DC cleaned up & applied" vs "held for review". The on-page help text and the ⚡ Auto-apply tooltip were rewritten to match — **keep all three in step if this ever changes again.**
 
 ## 🖼 Resuming the lots that missed the run (2026-08-10)
 
@@ -1207,18 +1193,64 @@ Fix (he asked for exactly this: "detects those 10 didnt get ran last time and le
 
 ## Still open — not changed without asking
 
-- **Existing runs are not repaired.** The fix only covers runs from here; F103/F106 etc. still have null \`appliedDesc\` and will still show a large Review & Apply list. A one-off backfill (mark applied where the pipeline text already matches the catalogue) was offered and **not built — awaiting Jordan's word.**
+- **Existing runs are not repaired.** The fix only covers runs from here; F103/F106 etc. still have null \`appliedDesc\` and will still show a large Review & Apply list. Offered Jordan a one-off backfill (mark applied where the pipeline text already matches the catalogue) — **not built, awaiting his word.**
 - \`POST /api/auction-ai/pipeline/lot\` spreads arbitrary client-supplied fields straight into \`prisma.pipelineLot.upsert\` (mass assignment). Session-gated and the model is innocuous, so a smell rather than a live hole.
 
-## ⚠⚠ 2026-08-19 — A FINISHED SALE COULD NOT BE RE-RUN: THE RESET BUTTON HID ITSELF
+Related: [[reference_ai_instructions_single_source]], [[reference_ai_providers]], [[reference_ai_cost]].
 
-Jordan, on F109: "I cant mark runs as uncomplete anyway so I can reset the progress so like the run pictured I cant start it again if I want to run it again". The screen showed "Pipeline complete — all descriptions applied for F109" and the log line "Loaded saved pipeline — stage: complete · 0 lots (1 without photos, 463 already described hidden)".
+## ⚠ Why "auto-apply isn't applying" kept coming back (fixed 2026-08-13)
 
-A ↺ Reset Progress button ALREADY EXISTED, with DELETE /api/auction-ai/pipeline behind it — but it was rendered under \`lots.length > 0 && !running\`. A finished sale loads ZERO lots, because "Skip lots that already have a description" hides every described lot. So THE ONE CONTROL THAT LETS YOU START OVER DISAPPEARED EXACTLY WHEN IT WAS NEEDED. A catch-22, not a missing feature.
+Jordan, on a 512-lot Trains sale with ⚡ Auto-apply selected: all three stages finished, then "512 lots need reviewing & applying" and an Apply All button. His run log held the answer — every write had failed with \`Server Action "60b949e1…" was not found on the server\`, i.e. **deploy skew** (I had deployed repeatedly while his tab was open).
 
-Two fixes: (1) a \`hasSavedRun\` state set from pipeData.run on load, with the button gated on \`(lots.length > 0 || hasSavedRun)\` — ⚠ never re-gate this on lots.length alone, that IS the bug; (2) a zero-lot load now EXPLAINS ITSELF (RULES.md design rule 7 — never let "nothing happened" look like success), because it previously just went blank and a finished sale looked identical to one that failed to load. The panel names the numbers (total / already described / no photos), says which toggle hid them, and spells out the ORDER.
+A 30-agent review found one root cause and one nearly-as-bad partner, both since fixed in \`app/(app)/tools/auction-ai/page.tsx\`:
 
-⚠ THAT ORDER IS THE NON-OBVIOUS HALF. Unticking the skip toggle alone is NOT enough: handleLoad maps the saved PipelineLot statuses back onto the lots and runBatchStage filters on \`!l.batchStatus\`, so every lot arrives already carrying batchStatus "ok" and the run does nothing. BOTH steps are needed — reset AND untick — which is why the panel says so rather than leaving it to be discovered. Reset also clears hasSavedRun and its log line now names the next step.
+1. **Every apply had its own \`catch { addLog(…) }\`** — no skew detection, no retry, no counting, no stopping. One deploy turned the rest of the sale into silent no-ops while the run still ended \`🎉 Pipeline complete!\`. The apply also sat OUTSIDE \`withRetry\`, so the Gemini call retried forever while the catalogue write got zero retries. There is now ONE **\`applyDescription()\`** helper that every stage and both Review & Apply buttons go through: 3 retries for transients, and on a stale deploy it sets \`cancelRef\`, raises a full amber banner with a Reload button, and stops the run instead of repeating a guaranteed failure hundreds of times. ⚠ It deliberately does NOT call \`maybeReloadForSkew\` — reloading mid-run would abandon it; stage state is in the DB, so Reload → Load Auction → Resume continues.
+2. **\`acceptKP\`'s catch was completely empty.** Pressing **Apply All (512)** on a stale page churned through all 512, wrote nothing, restored the list and left the button reading the same number — the literal "I pressed apply and nothing happened". It now returns success/failure, \`acceptAllKP\` tallies them and states the outcome.
+
+Also fixed: \`autoApply\` is read through **\`autoApplyRef\`** (the stage functions held the value from the render that started the run, so toggling mid-run changed the screen and localStorage but not the run); \`saveLot\` **checks the HTTP status and retries** (it ignored it, so a dropped \`appliedDesc\` silently put an applied lot back into review); the run log now **states the mode** at the start; and a run with failed writes gets its own red banner instead of the same amber "N need reviewing" box a deliberate review-mode run gets.
+
+⚠ **Three related things Jordan has DECIDED (2026-08-13) — don't re-raise them:**
+
+1. **The apply mode is no longer remembered.** It used to persist to the \`pipeline_auto_apply\` localStorage key, which is per *browser*, not per person — whoever last chose 👁 Review all on a shared PC/iPad silently set the mode for the next person's run, whose sale then applied nothing. Every run now starts on ⚡ Auto-apply; Review all lasts for that session only. **Do not reintroduce the localStorage read/write.**
+2. **The CATALOGUING vs AUCTION_AI grant mismatch stays.** Jordan: *"Its only ever used by admins who should have all permissions."* Admins bypass \`requireCataloguer\` entirely, so it can't bite in practice. Leave it alone.
+3. **Apply All deliberately overwrites newer human edits.** Jordan chose "Overwrite anyway" — simple and predictable beats safe-but-fiddly here. **Do not** add a skip-if-edited guard or a side-by-side compare without asking again.
+
+## ⚠⚠ 2026-08-19 — a FINISHED sale could not be re-run: the reset button hid itself
+
+Jordan, on F109: *"I cant mark runs as uncomplete anyway so I can reset the progress so like the run pictured I cant start it again if I want to run it again"*. The screen showed "Pipeline complete — all descriptions applied for F109" and the log line \`Loaded saved pipeline — stage: complete · 0 lots (1 without photos, 463 already described hidden)\`.
+
+**A ↺ Reset Progress button already existed** — and \`DELETE /api/auction-ai/pipeline\` behind it — but it was rendered under \`lots.length > 0 && !running\`. A finished sale loads **zero** lots, because "Skip lots that already have a description" hides every described lot. So **the one control that lets you start over disappeared exactly when it was needed**, and there was no way back. A pure catch-22, not a missing feature.
+
+Two fixes:
+1. **\`hasSavedRun\`** state, set from \`pipeData.run\` on load, and the button is now gated on \`(lots.length > 0 || hasSavedRun)\`. ⚠ Never re-gate this on \`lots.length\` alone — that is the bug.
+2. **A zero-lot load explains itself** (RULES.md design rule 7 — "never let nothing happened look like success"). It previously just went blank, so a sale that was finished looked identical to one that failed to load. The panel names the numbers (\`loadNote\`: total / already described / no photos), says which toggle hid them, and spells out the order: untick "Skip lots that already have a description" **and** press ↺ Reset Progress first, *"or the stages will treat every lot as already done"*.
+
+⚠ **That last point is the non-obvious half.** Unticking the skip toggle alone is not enough: \`handleLoad\` maps the saved \`PipelineLot\` statuses back onto the lots, and \`runBatchStage\` filters on \`!l.batchStatus\` — so every lot arrives already carrying \`batchStatus: "ok"\` and the run does nothing. Both steps are needed, which is why the panel says so rather than leaving it to be discovered.
+
+Reset now also clears \`hasSavedRun\` and its log line tells you the next step ("load the auction again to start it from the beginning") instead of just "↺ Pipeline reset".
+
+## 2026-09-01 — the MODEL is now read live too (same trap as autoApply)
+
+Jordan: *"does changing the model in the bottom left mid run change the ai model its using?"* It
+did **not**. \`PipelineTab\` does \`const localModel = globalModel\`, and \`runBatchStage\` /
+\`runKPStage\` / \`runDoubleCheckStage\` are plain declarations re-created on every render — so the
+loop actually running held the model from the render that started it. Changing the sidebar
+dropdown updated the screen and localStorage and nothing else; every remaining lot carried on
+with the old model, and the old one was what \`advanceStage\` wrote to the run record.
+
+Exactly the trap \`autoApplyRef\` already existed for — the model simply never got the same
+treatment.
+
+- **\`modelRef\` + \`fallbackModelRef\`**, kept in sync by effects, and one
+  **\`modelForAttempt(attempt)\`** helper that all four run loops call (batch, key points, double
+  check, and the optional AI Upgrade step). It keeps the alternate-retry rule — fallback on even
+  attempts — so a rate-limited or RECITATION-blocked lot still gets the other model.
+- The two \`/api/auction-ai/pipeline\` writes and the re-check-flags call send \`modelRef.current\`,
+  so the run record names the model that actually did the work.
+- ⚠ \`localModel\` / \`fallbackModel\` stay for **rendering only** (the cost estimate panel). Anything
+  a *running* stage reads must go through the refs.
+- A mid-run change now writes \`⚙ Model changed to … — in use from the next lot\` into the run log,
+  so the header naming one model and the lots using another leaves a record.
 `,
   },
   {

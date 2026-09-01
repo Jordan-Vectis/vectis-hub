@@ -4060,6 +4060,34 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const lastBlockRef = useRef("")   // the exact "BLOCKED: …" message from the last blocked lot
   const localModel = globalModel
 
+  // ⚠⚠ THE MODEL IS READ LIVE, NOT FROM THE RENDER THAT STARTED THE RUN. runBatchStage /
+  // runKPStage / runDoubleCheckStage are re-created on every render, but the loop actually
+  // running holds the instance it began with — so changing the sidebar dropdown mid-run used
+  // to update the screen and localStorage and nothing else, while every remaining lot carried
+  // on with the old model (Jordan, 2026-09-01: "does changing the model in the bottom left
+  // mid run change the ai model its using?" — it did not). Exactly the same trap autoApplyRef
+  // above exists for; the model simply never got the same treatment.
+  // ⚠ Anything a running stage reads must go through these refs, never `localModel` /
+  // `fallbackModel` directly. Those two stay for RENDERING, where the prop is already current.
+  const modelRef = useRef(globalModel)
+  useEffect(() => { modelRef.current = globalModel }, [globalModel])
+  const fallbackModelRef = useRef(fallbackModel)
+  useEffect(() => { fallbackModelRef.current = fallbackModel }, [fallbackModel])
+  /** The model for this attempt — primary, or the fallback on alternate retries so a
+   *  rate-limited or RECITATION-blocked lot gets a shot at the other one. Read at the moment
+   *  of the call, so a change takes effect from the next lot. */
+  const modelForAttempt = (attempt: number) =>
+    (attempt % 2 === 0 && fallbackModelRef.current) ? fallbackModelRef.current : modelRef.current
+
+  // A change mid-run is now REAL, so it has to appear in the log — the run header names the
+  // model it started with, and a silent swap would leave no record of which lots used which.
+  const loggedModelRef = useRef(globalModel)
+  useEffect(() => {
+    if (loggedModelRef.current === globalModel) return
+    if (running) addLog(`⚙ Model changed to ${globalModel} — in use from the next lot`)
+    loggedModelRef.current = globalModel
+  }, [globalModel, running])
+
   useEffect(() => {
     fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
       setInstructions(m)
@@ -4158,7 +4186,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     await fetch("/api/auction-ai/pipeline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: code.trim().toUpperCase(), stage: newStage, model: localModel, preset }),
+      // The model the run is ACTUALLY on, not the one it began with — this is the record of
+      // what produced the work, so a mid-run change has to reach it too.
+      body: JSON.stringify({ code: code.trim().toUpperCase(), stage: newStage, model: modelRef.current, preset }),
     }).catch(() => {})
   }
 
@@ -4340,7 +4370,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
         // Alternate primary/fallback on each retry, so a rate-limited OR RECITATION-blocked
         // lot gets a shot at the other model.
-        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+        const modelToUse = modelForAttempt(attempt)
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const fd = new FormData()
         fd.append("presetKey", preset)
@@ -4455,7 +4485,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — double checking…`)
 
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
-        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+        const modelToUse = modelForAttempt(attempt)
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         // Fetch images
         const urls = lot.imageUrls.slice(0, 6)
@@ -4556,7 +4586,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — checking key points…`)
 
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
-        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+        const modelToUse = modelForAttempt(attempt)
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res  = await fetch("/api/auction-ai/key-points-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -4647,7 +4677,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       addLog(`  · ${done + 1}/${targets.length} ${lot.label} — upgrading…`)
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
-        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+        const modelToUse = modelForAttempt(attempt)
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res = await fetch("/api/auction-ai/upgrade", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -4690,7 +4720,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     // Save initial pipeline record
     await fetch("/api/auction-ai/pipeline", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: code.trim().toUpperCase(), stage, model: localModel, preset }),
+      body: JSON.stringify({ code: code.trim().toUpperCase(), stage, model: modelRef.current, preset }),
     }).catch(() => {})
 
     // State the mode in the log. "Ran in review mode" and "ran in auto-apply and
@@ -4938,7 +4968,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           const res = await fetch("/api/auction-ai/recheck-flags", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ keyPoints: lot.keyPoints, description: lot.currentDesc, model: localModel }),
+            body: JSON.stringify({ keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelRef.current }),
           })
           if (res.status === 429) {
             const wait = Math.min(60000 * Math.pow(2, attempt - 1), 300000)
