@@ -24,7 +24,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 39e4fc37-397c-4b8d-a570-4b59503c1913
-  modified: 2026-09-01T08:38:31.424Z
+  modified: 2026-09-01T09:39:26.329Z
 ---
 
 # ⚠⚠ A leaked tool call is NOT a description (2026-09-01)
@@ -96,10 +96,23 @@ than \`blocked\` for these, so the morning review is not sent looking at Gemini'
 - It is **not** a grounding fault and not a safety block — do not reach for
   \`lib/ai-safety.ts\` or the \`grounded\` toggle for it.
 
-## Still open — not built, awaiting Jordan's word
+## Finding the ones already written — Review tab (Jordan's choice, 2026-09-01)
 
-The **10 existing F113 lots are not repaired**, and nothing on screen finds them. Asked him where
-a finder belongs (Locking Check / Review "needs attention" / a one-off).
+Asked where a finder belonged; he chose the **Review tab's "needs attention"** bucket, not
+Locking Check — caught during the sale rather than at the final gate.
+
+- \`leakedSearch(l)\` in \`review-tab.tsx\` calls the same \`hasToolCallLeak\` — **never a second copy
+  of the patterns.** It sits **above** the \`kpResolved\` short-circuit in \`needsAttention\`: it is
+  not a key-points verdict, so a lot whose key points someone has already settled must still come
+  back if its text is this.
+- A red **"⚠ Not a description"** badge, and its own red banner **above** the amber "possible
+  cataloguer mistake" one — because that amber banner is exactly what these lots wrongly produce.
+  It says in words that it is nothing to do with the cataloguer, that the lot needs generating
+  again, and quotes what the model managed before it broke off (or says it wrote none at all).
+- ⚠ **No repair button, and no auto-strip on the way in.** Stripping leaves a description the
+  model abandoned mid-sentence; the lot has to be re-run. Do not add a "fix" that keeps the
+  fragment.
+- The 10 F113 lots are **not** repaired in the database — they now simply show up.
 
 Related: [[reference_auto_pipeline_apply]], [[reference_pipeline_queue]],
 [[reference_dolls_bears_descriptions]], [[reference_locking_check]].

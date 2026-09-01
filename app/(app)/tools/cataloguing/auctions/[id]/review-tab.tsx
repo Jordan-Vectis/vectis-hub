@@ -7,6 +7,8 @@ import LotPhotoViewer from "@/components/lot-photo-viewer"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 // ⚠ The one title rule, shared with the Generate Titles action — never re-derive it here.
 import { titleFromDescription } from "@/lib/lot-title"
+// Same check the AI routes use — never a second copy of the patterns here.
+import { hasToolCallLeak, stripToolCallLeak } from "@/lib/description-cleanup"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -192,9 +194,19 @@ Read them back any time at Admin → Saved Flagged Lots.`)
     return !!l.kpFixedAt
   }
 
+  // ⚠⚠ The description is Gemini's SEARCH, written out instead of run — "tool_code
+  // print(google_search.search(…))". It is not a description in any language and the lot needs
+  // generating again. Kept ABOVE kpResolved: it is not a key-points verdict, so a lot someone
+  // has already settled the key points on must still come back if its text is this.
+  // (Jordan, 2026-09-01 — 10 lots on F113, three of them nothing but the leak.)
+  function leakedSearch(l: ReviewLot): boolean {
+    return hasToolCallLeak(l.description ?? "")
+  }
+
   function needsAttention(l: ReviewLot): boolean {
     if (l.reviewFlag) return true
     if (!l.description?.trim() || l.imageUrls.length === 0) return true
+    if (leakedSearch(l)) return true
     if (kpResolved(l)) return false
     const a = analysed.get(l.id)
     return !!a && a.matches.some(m => m.status === "missing")
@@ -660,6 +672,12 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                 {lot.title && <p className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[60vw]">{lot.title}</p>}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {leakedSearch(lot) && (
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium"
+                    title="The description is the AI's own search, written out instead of run. Nothing to do with the cataloguer — the lot needs generating again.">
+                    ⚠ Not a description
+                  </span>
+                )}
                 {missing > 0 && (
                   <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium">
                     ⚠ {missing} key point{missing === 1 ? "" : "s"} not found
@@ -700,6 +718,28 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                     Remove flag
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* ⚠⚠ The description is the AI's SEARCH, not a description. Its own banner, ABOVE the
+                amber "possible cataloguer mistake" one, because that banner is exactly what these
+                lots wrongly produce: Double Check reads the mess, invents a code trying to rewrite
+                it, and the lot gets read as the CATALOGUER's mistake. Say plainly that it is not. */}
+            {leakedSearch(lot) && (
+              <div className="rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 px-4 py-3">
+                <p className="text-xs uppercase tracking-wider text-red-500 dark:text-red-400 font-semibold mb-1">⚠ This is not a description</p>
+                <p className="text-sm text-red-700 dark:text-red-300 mb-2">
+                  The AI wrote out the web search it wanted to run instead of running it, and broke off
+                  mid-answer to do it. <strong>Nothing to do with the cataloguer.</strong> The lot needs its
+                  description generating again — re-run it in Auction AI, then check the key points are covered.
+                </p>
+                {stripToolCallLeak(lot.description ?? "").text.trim() ? (
+                  <p className="text-xs text-red-500 dark:text-red-400/90">
+                    All it managed before it broke off: “{stripToolCallLeak(lot.description ?? "").text.trim()}”
+                  </p>
+                ) : (
+                  <p className="text-xs text-red-500 dark:text-red-400/90">It wrote no description at all — the whole text is the search.</p>
+                )}
               </div>
             )}
 
