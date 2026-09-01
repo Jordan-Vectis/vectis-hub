@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"e97204894740f09185d80df71e85d4c21e840dba","author":"Jordan Orange","date":"2026-09-01T12:35:21+01:00","subject":"Review tab: re-check the AI flags from the Review page"},
+  {"sha":"cbc05d2cdf1c9689390f6eb64b58e3c8c7c14490","author":"Jordan Orange","date":"2026-09-01T11:31:58+01:00","subject":"Refresh changelog seed"},
   {"sha":"69623d4ad862173f504b0025eeb4e19410965fb2","author":"Jordan Orange","date":"2026-09-01T11:31:46+01:00","subject":"Applying an AI description keeps the lot's condition line"},
   {"sha":"9030400608f6065e16aa8cbb78a5def5d30be38d","author":"Jordan Orange","date":"2026-09-01T10:42:58+01:00","subject":"Refresh changelog seed"},
   {"sha":"e87b3f2aa2473c9cd80f109d82015b6aab363379","author":"Jordan Orange","date":"2026-09-01T10:42:57+01:00","subject":"Review tab: a leaked search counts as \"needs attention\""},
