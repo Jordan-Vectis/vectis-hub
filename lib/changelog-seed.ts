@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"9587903502376ec33187fd32ad9238e963e28de9","author":"Jordan Orange","date":"2026-09-01T13:49:04+01:00","subject":"Auto Pipeline: changing the model mid-run now takes effect"},
+  {"sha":"8185961630583d8fc1f250d3ed53fd92bf4f3e3d","author":"Jordan Orange","date":"2026-09-01T12:35:23+01:00","subject":"Refresh changelog seed"},
   {"sha":"e97204894740f09185d80df71e85d4c21e840dba","author":"Jordan Orange","date":"2026-09-01T12:35:21+01:00","subject":"Review tab: re-check the AI flags from the Review page"},
   {"sha":"cbc05d2cdf1c9689390f6eb64b58e3c8c7c14490","author":"Jordan Orange","date":"2026-09-01T11:31:58+01:00","subject":"Refresh changelog seed"},
   {"sha":"69623d4ad862173f504b0025eeb4e19410965fb2","author":"Jordan Orange","date":"2026-09-01T11:31:46+01:00","subject":"Applying an AI description keeps the lot's condition line"},
