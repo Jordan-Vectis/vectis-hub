@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"69623d4ad862173f504b0025eeb4e19410965fb2","author":"Jordan Orange","date":"2026-09-01T11:31:46+01:00","subject":"Applying an AI description keeps the lot's condition line"},
+  {"sha":"9030400608f6065e16aa8cbb78a5def5d30be38d","author":"Jordan Orange","date":"2026-09-01T10:42:58+01:00","subject":"Refresh changelog seed"},
   {"sha":"e87b3f2aa2473c9cd80f109d82015b6aab363379","author":"Jordan Orange","date":"2026-09-01T10:42:57+01:00","subject":"Review tab: a leaked search counts as \"needs attention\""},
   {"sha":"5122c762fc762d16e9e723a0aca7a00b63b0a78f","author":"Jordan Orange","date":"2026-09-01T09:40:22+01:00","subject":"Refresh changelog seed"},
   {"sha":"a755f75b7d918626294736e3dbcc5c7b04b98c87","author":"Jordan Orange","date":"2026-09-01T09:40:10+01:00","subject":"Stop Gemini's leaked search calls reaching the catalogue"},
