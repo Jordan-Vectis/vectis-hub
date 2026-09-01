@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-08-28, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-01, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a755f75b7d918626294736e3dbcc5c7b04b98c87","author":"Jordan Orange","date":"2026-09-01T09:40:10+01:00","subject":"Stop Gemini's leaked search calls reaching the catalogue"},
+  {"sha":"755849a26c3205e9da07fc4b3d53a35a2093bbe5","author":"Jordan Orange","date":"2026-08-28T15:27:42+01:00","subject":"Refresh changelog seed"},
   {"sha":"cd1b817186804617d4a2b71d1a7101c7e9413f55","author":"Jordan Orange","date":"2026-08-28T15:27:40+01:00","subject":"Stop the overnight bar reading 100% with a stage still to run"},
   {"sha":"5c69368a87b4885a38985e1ea6ad5f13434746a9","author":"Jordan Orange","date":"2026-08-28T15:16:37+01:00","subject":"Refresh changelog seed"},
   {"sha":"18e500fc7d7695075190a2742cb09356693cda93","author":"Jordan Orange","date":"2026-08-28T15:16:35+01:00","subject":"Quick mode: let the overnight run find its own pace"},
