@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8081655030584e02d6fc74cd32b260ff8d51720b","author":"Jordan Orange","date":"2026-09-02T13:49:47+01:00","subject":"Help box in the top bar"},
+  {"sha":"d0daea607041e9d14bebcab3df36d94d6f9c479f","author":"Jordan Orange","date":"2026-09-02T13:16:31+01:00","subject":"Refresh changelog seed"},
   {"sha":"14d571a014db715569c3e33e74f06b018166295b","author":"Jordan Orange","date":"2026-09-02T13:16:30+01:00","subject":"Auctions overview PDF: BC is measured too"},
   {"sha":"66f597054d669b5ed90c21c1874c5eb9493473e0","author":"Jordan Orange","date":"2026-09-02T13:02:53+01:00","subject":"Refresh changelog seed"},
   {"sha":"05cfc7d16f0f064382c476589ebceb4e3775ebc2","author":"Jordan Orange","date":"2026-09-02T13:02:52+01:00","subject":"Lock on Catalogued; \"In BC\" measured from the barcodes"},
