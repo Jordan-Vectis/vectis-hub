@@ -19,10 +19,12 @@ const ENTRIES: Entry[] = [
     filename: "reserves.md",
     content: `---
 name: reserves-recorded-here-reminded-at-locking-check
-description: "Reserves are typed into Manage Lots (column + bulk) and Locking Check lists the ones still to enter in BC. ⚠ The reminder CLEARS ITSELF from BC's own reserve on the sync — no done tick. Read before touching CatalogueLot.reserve, /api/catalogue/reserve-check, or the Locking Check criteria."
-metadata:
+description: Reserves are typed into Manage Lots (column + bulk) and Locking Check lists them as a worth-a-look reminder. ⚠⚠ DELIBERATELY SIMPLE — it does NOT check BC; a self-clearing version was built and rejected as over-complex. Read before touching CatalogueLot.reserve or the Locking Check criteria.
+metadata: 
   node_type: memory
   type: reference
+  originSessionId: 39e4fc37-397c-4b8d-a570-4b59503c1913
+  modified: 2026-09-02T15:26:49.780Z
 ---
 
 # 💷 Reserves — recorded here, reminded at Locking Check (2026-09-02)
@@ -37,18 +39,18 @@ check?"*
 and \`LOT_FIELD_LABELS\` — but **0 of 14,532 lots had one**, because nothing except the single-lot
 editor could write it. So this was mostly about entry and the reminder, not storage.
 
-## ⚠⚠ The reminder clears itself
+## ⚠ It is deliberately SIMPLE — do not make it clever again
 
-**BC's own reserve comes back on the sync** — \`WarehouseItem.reservePrice\`, 1,889 rows already
-carry one, and the join to our lots finds them (F111 had 8 on the day). So a lot drops off the
-list the moment the sync sees a reserve against its **barcode**. **There is no "done" tick for
-anyone to forget**, which is the same measured approach as the In BC column on Auction Manager.
+Jordan, after the first version: *"Its not that complex its more just somewhere I can add it in
+our system and it reminds me in the locking check."*
 
-\`GET /api/catalogue/reserve-check?auctionId=\` returns \`{ inBc, notInBc, lastSync }\`.
-- ⚠ **BARCODE ONLY**, never \`receiptUniqueId\` — the standing rule for anything BC.
-- ⚠ Reflects the **last Data Sync**, not BC live.
-- Only lots that already have a reserve **here** are considered; nothing can tell us a lot
-  *ought* to have one.
+**The reminder lists every lot that has a reserve recorded. It does not check BC at all.**
+
+The first version compared against BC's own reserve on the sync (\`WarehouseItem.reservePrice\`)
+so it could tick itself off. That was my idea, not the ask, and it had a real fault: a reserve
+just typed into BC still read as outstanding until the next Data Sync, so the screen would have
+been lying to him. A reminder you read and move past beats one that self-clears wrongly. The
+\`/api/catalogue/reserve-check\` route this needed was deleted.
 
 ## Entering them — Manage Lots (Jordan's choice over a paste box)
 
