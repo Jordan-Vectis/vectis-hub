@@ -6,6 +6,7 @@ import EnvSelector from "@/components/env-selector"
 import Logo from "@/components/logo"
 import ThemeToggle from "@/components/theme-toggle"
 import BcStatusButton from "@/components/bc-status-button"
+import HelpButton from "@/components/help-button"
 import { signOutAction } from "@/lib/actions/auth"
 
 interface TopBarProps {
@@ -66,6 +67,8 @@ export default function TopBar({ userName, isAdmin, hasDashboard }: TopBarProps)
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Ask where to find things. Knows only about the tools this person can open. */}
+        <HelpButton />
         <EnvSelector />
         <ThemeToggle />
         <BcStatusButton />

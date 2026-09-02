@@ -16,6 +16,80 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "help_box.md",
+    content: `---
+name: top-bar-help-box
+description: "The 💬 Help box in the top bar — a chat that answers \\"where do I go to do an overnight run?\\" from the app's own structure, filtered server-side to the tools the person asking can actually open. Read before touching lib/help-map.ts, /api/help/ask or the top bar."
+metadata:
+  node_type: memory
+  type: reference
+---
+
+# 💬 Help box — top bar (2026-09-02)
+
+Jordan: *"a Help box that when you click opens a chat box you can ask questions about the system
+in — so for example where do I go to do an overnight run. It does need to only let the user ask
+questions about parts of the system they have permission to access."*
+
+## ⚠⚠ How the permission rule is kept
+
+**The context is FILTERED before the model sees it — the model is never asked to keep a secret.**
+\`allowedHelpContext(role, allowedApps, appPermissions)\` in \`lib/help-map.ts\` drops every
+destination the person cannot open, so someone without Accounts is not sent one word about
+Accounts and no amount of clever asking can produce it. **Never "fix" a leak by adding a line to
+the prompt.**
+
+Two more guards on the same principle:
+- The route reads permissions **fresh from the database**, not from the session JWT — a token can
+  be hours old and access that has been removed must not still open the door.
+- The links returned are **checked back against the allowed set**, so a hallucinated path can
+  never become a clickable link.
+
+## Where the answers come from
+
+Jordan chose **the app's own structure** over hand-written help pages:
+1. \`APP_CARD_DEFS\` — the Hub cards (label, description, href, the app key that gates them).
+2. \`APP_SECTIONS\` — the per-app sidebar sections a role can be restricted to.
+3. \`DESTINATIONS\` in \`lib/help-map.ts\` — the 31 tabs and pages that appear in neither, because
+   the answer to most real questions is a TAB, not an app (Auto Pipeline, the overnight queue,
+   End of Day → BC, BC Match, Review, Locking Check, Data Sync…).
+
+⚠ (3) is the hand-written part and the only bit that goes stale. **Add an entry whenever a screen
+worth finding is built.** \`assertHelpMap()\` catches a typo'd app key; nothing can check a route
+still exists.
+
+⚠⚠ **A destination's gate must match its Hub card.** The first version gated Packing, Auction
+Monitor and IT Help behind app keys when their cards are \`allUsers: true\` — hiding them from
+people who can plainly see them on their own home page. Caught by running the filter over all
+real users before shipping; the test also asserts no destination is gated tighter than an
+\`allUsers\` card.
+
+## Measured across every real user before shipping
+
+0 leaks. Context is 2.6k–12.6k characters depending on access — a cataloguer with two sections is
+told about 5 places, an admin about 31 — so it is cheap, and it goes in \`cachePrefix\` (Claude
+caches it between questions; the question is the only varying part).
+
+## The pieces
+
+| | |
+|---|---|
+| \`lib/help-map.ts\` | DESTINATIONS + \`allowedHelpContext\` + \`helpContextText\` + \`assertHelpMap\` |
+| \`app/api/help/ask/route.ts\` | auth → fresh permissions → filtered context → \`generateAiText\` → links checked back |
+| \`components/help-button.tsx\` | the top-bar button and panel; click-outside and Escape close it |
+| \`AI_TOOLS\` slot | \`help_assistant\` (Admin → AI Models), \`claudeOk\` |
+
+The panel offers three example questions on open, keeps a short history (last 6 turns are sent),
+and renders "Go to … →" links under an answer. It says so plainly when it fails — a help box that
+goes quiet is the worst kind.
+
+⚠ Distinct from **IT Help** (\`/tools/it-help\`), which answers computer/equipment problems from
+KnowledgeArticle + resolved tickets. This one answers "where do I go".
+
+Related: [[reference_app_access_control]], [[reference_ai_providers]], [[project_vectis_hub]].
+`,
+  },
+  {
     filename: "bc_lock_and_in_bc_column.md",
     content: `---
 name: edit-lock-is-catalogued-and-in-bc-is-measured

@@ -892,6 +892,37 @@ the Admin Centre and End of Day → BC already answer this question.
   the last Data Sync. ⚠ Only the COMPLETED table carries status flags; the active one has none.
 
 
+
+---
+
+## ⚠⚠ The Help box filters the CONTEXT, never the prompt (2026-09-02)
+
+The 💬 Help box in the top bar answers "where do I go to do an overnight run?" and must only ever
+talk about tools the person asking can open.
+
+**That is enforced by what goes IN, not by what the model is told.**
+`allowedHelpContext(role, allowedApps, appPermissions)` in `lib/help-map.ts` drops every
+destination the person cannot reach before the question is sent, so someone without Accounts is
+never sent a word about Accounts. **Never relax this into "the system prompt says not to mention
+it"** — a prompt is a request, a filter is a guarantee.
+
+Two guards on the same principle, keep both:
+- `/api/help/ask` reads permissions **fresh from the database**, not from the session JWT. A token
+  can be hours old, and access that has been removed must not still open the door.
+- The links it returns are **checked back against the allowed set**, so a hallucinated path can
+  never become a clickable link to somewhere they cannot go.
+
+Knowledge comes from the app's own structure — `APP_CARD_DEFS`, `APP_SECTIONS`, and the
+hand-written `DESTINATIONS` list for the tabs that appear in neither.
+
+- **Add a `DESTINATIONS` entry when you build a screen worth finding.** It is the only part that
+  goes stale. `assertHelpMap()` catches a typo'd app key; nothing can check a route still exists.
+- ⚠ **A destination's gate must match its Hub card.** Gating one whose card is `allUsers: true`
+  hides it from people who can plainly see it on their home page — that was the bug the
+  before-shipping run over every real user caught (Packing, Auction Monitor, IT Help).
+- Model slot: `help_assistant` in `AI_TOOLS`. Distinct from **IT Help** (`/tools/it-help`), which
+  answers computer problems from knowledge articles and tickets.
+
 ## Hardcoded Constants
 
 | Constant | Value | Location |

@@ -43,6 +43,9 @@ export const AI_TOOLS: AiTool[] = [
   { slot: "marketing_plan",         group: "Marketing Reports", label: "Business plan suggestions",       default: "gemini-3-flash-preview", claudeOk: true },
   // ── IT ──
   { slot: "it_help",                group: "IT",           label: "IT Help assistant",                    default: "gemini-3-flash-preview", claudeOk: true },
+  // The top-bar Help box. claudeOk because it goes through generateAiText, and its context is a
+  // stable list that Claude can cache between questions.
+  { slot: "help_assistant",         group: "IT",           label: "Help box (top bar) — where do I go",   default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "it_draft_reply",         group: "IT",           label: "Draft reply (IT Tools)",               default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "bc_source_guide",        group: "IT",           label: "BC Source — extension guides",         default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "bc_source_chat",         group: "IT",           label: "BC Source — ask the code",             default: "gemini-3-flash-preview", claudeOk: true },
