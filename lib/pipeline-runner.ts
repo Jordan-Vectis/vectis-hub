@@ -54,10 +54,13 @@ const MAX_RECITATION_RETRIES = 4
 /** How many times to re-ask when a call succeeds but produces no text at all. */
 const MAX_EMPTY_RETRIES = 4
 /** The route's wording for that case — kept in one place so the two cannot drift apart.
- *  Also covers a LEAKED TOOL CALL: the model writing out print(google_search.search(…))
- *  instead of a description (2026-09-01). Different cause, identical handling — the answer
- *  is unusable, so re-ask on the other model a few times rather than saving it. */
-const EMPTY_ANSWER = /returned no description|empty description|leaked tool call/i
+ *  Also covers the two TOOL-CALL failures, which are the same thing wearing different hats:
+ *   · a LEAKED tool call — the model writing out print(google_search.search(…)) as its answer;
+ *   · MALFORMED_FUNCTION_CALL — the model fumbling a real one, which Gemini reports as a finish
+ *     reason (2026-09-02).
+ *  Different causes, identical handling: the answer is unusable, so re-ask on the other model a
+ *  few times rather than saving it or throwing the lot away. */
+const EMPTY_ANSWER = /returned no description|empty description|leaked tool call|malformed[_ ]function[_ ]call/i
 
 const LOG_MAX = 40_000 // keep the morning report readable and the row small
 
@@ -110,9 +113,18 @@ type Lot = {
   appliedDesc: string
 }
 
+/** ⚠⚠ MALFORMED_FUNCTION_CALL IS NOT A REFUSAL. Gemini returns it when it fumbles a tool call —
+ *  the same family as the leaked `tool_code` text, not a decision about the content. It arrives
+ *  worded as "Blocked (MALFORMED_FUNCTION_CALL)" because every non-STOP finish reason is thrown
+ *  that way, so `isBlock` matched it and the lot was skipped INSTANTLY and reported as "content
+ *  blocked" — one lot lost from F116 on an overnight run (Jordan, 2026-09-02). It is stochastic
+ *  and clears on the other model, so it belongs with the bounded retries below. */
+const MALFORMED_CALL = /malformed[_ ]function[_ ]call/i
+
 /** Gemini refused this one — it will never succeed on a retry, so the lot is
  *  skipped and reported rather than blocking the sale forever. */
 function isBlock(err: string): boolean {
+  if (MALFORMED_CALL.test(err)) return false
   return err.toLowerCase().includes("block")
 }
 function blockReasonLabel(err: string): string {
@@ -506,7 +518,10 @@ async function withRetry<T>(
       if (EMPTY_ANSWER.test(lastError)) {
         // Say WHICH of the two it was — "nothing came back" reads as a quiet model, and
         // a leaked search call is a completely different thing to go and look at.
-        const what = /leaked tool call/i.test(lastError) ? "it wrote out a search, not a description" : "nothing came back"
+        const what =
+          /leaked tool call/i.test(lastError) ? "it wrote out a search, not a description"
+          : MALFORMED_CALL.test(lastError)    ? "it fumbled a tool call"
+          : "nothing came back"
         if (empties < MAX_EMPTY_RETRIES) {
           empties++
           addLog(`  ↻ ${label} — ${what}, trying the other model (${empties}/${MAX_EMPTY_RETRIES})`)

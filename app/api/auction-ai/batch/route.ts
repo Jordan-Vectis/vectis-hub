@@ -96,6 +96,13 @@ export async function POST(req: NextRequest) {
 
     const candidate    = response.candidates?.[0]
     const finishReason = candidate?.finishReason
+    // ⚠⚠ MALFORMED_FUNCTION_CALL IS NOT A REFUSAL — the model fumbled a tool call, the same
+    // family as the leaked `tool_code` text. Calling it "Blocked" made the runner skip the lot
+    // instantly and report "content blocked", losing it (F116, 2026-09-02). Its own wording, so
+    // every retry loop can tell the two apart.
+    if (finishReason === "MALFORMED_FUNCTION_CALL") {
+      throw new Error("MALFORMED_FUNCTION_CALL — the model fumbled a tool call instead of answering")
+    }
     if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
       throw new Error(`Blocked (${finishReason}${blockMeaning(finishReason)}${safetyDetail(response)})`)
     }

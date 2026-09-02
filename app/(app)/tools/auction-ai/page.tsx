@@ -2984,7 +2984,7 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
             break
           } catch (e: any) {
             lastError = e.message ?? String(e)
-            if (lastError.startsWith("BLOCKED:")) {
+            if (lastError.startsWith("BLOCKED:") && !/malformed[_ ]function[_ ]call/i.test(lastError)) {
               addLog(`✗ ${lot.label} — blocked by Gemini, skipping: ${lastError}`)
               setLots(prev => prev.map(l => l.id === lot.id ? { ...l, status: "error" as const } : l))
               break
@@ -3683,7 +3683,7 @@ function DoubleCheckTab({ model: globalModel, fallbackModel, onModelChange }: { 
             break
           } catch (e: any) {
             lastError = e.message ?? String(e)
-            if (lastError.startsWith("BLOCKED:")) {
+            if (lastError.startsWith("BLOCKED:") && !/malformed[_ ]function[_ ]call/i.test(lastError)) {
               addLog(`— ${snap.label} — blocked by Gemini, skipping`)
               working[idx] = { ...working[idx], status: "error" }
               setLots([...working])
@@ -4294,7 +4294,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     // Also covers a LEAKED TOOL CALL — the model writing out print(google_search.search(…))
     // instead of a description (2026-09-01). Unusable either way, so it takes the same
     // bounded retry on the other model rather than being written to the catalogue.
-    const isEmptyAnswer = (m: string) => /returned no description|empty description|leaked tool call/i.test(m)
+    const isEmptyAnswer = (m: string) => /returned no description|empty description|leaked tool call|malformed[_ ]function[_ ]call/i.test(m)
     while (!cancelRef.current) {
       if (attempt > 0) {
         const isRL    = lastError.startsWith("RATE_LIMITED:")
@@ -4315,7 +4315,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         if (isEmptyAnswer(lastError)) {
           // Name the actual failure — a quiet model and a leaked search call need
           // different things looked at.
-          const what = /leaked tool call/i.test(lastError) ? "it wrote out a search, not a description" : "nothing came back"
+          const what =
+            /leaked tool call/i.test(lastError)                ? "it wrote out a search, not a description"
+            : /malformed[_ ]function[_ ]call/i.test(lastError) ? "it fumbled a tool call"
+            : "nothing came back"
           if (emptyRetries < MAX_EMPTY_RETRIES) {
             emptyRetries++
             addLog(`↻ ${label} — ${what}, retrying with the other model (${emptyRetries}/${MAX_EMPTY_RETRIES})…`)
@@ -4507,7 +4510,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         const json = await res.json()
         if (json.error) throw new Error(json.error)
         return json
-      }, err => err.startsWith("BLOCKED:"))
+      }, err => err.startsWith("BLOCKED:") && !/malformed[_ ]function[_ ]call/i.test(err))
 
       if (result) {
         const { verdict, contradictions, unsupported, revised, flag } = result
@@ -4595,7 +4598,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         const json = await res.json()
         if (json.error) throw new Error(json.error)
         return json
-      }, err => err.startsWith("BLOCKED:"))
+      }, err => err.startsWith("BLOCKED:") && !/malformed[_ ]function[_ ]call/i.test(err))
 
       if (result) {
         const { revised, changed, missing, added, found, flag } = result
@@ -4686,7 +4689,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         const json = await res.json()
         if (json.error) throw new Error(json.error)
         return json
-      }, err => err.startsWith("BLOCKED:"))
+      }, err => err.startsWith("BLOCKED:") && !/malformed[_ ]function[_ ]call/i.test(err))
 
       if (result?.revised && result.revised.trim() !== base) {
         updated[idx] = { ...updated[idx], kpRevised: result.revised.trim() }
@@ -6022,7 +6025,7 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
           break
         } catch (e: any) {
           lastError = e.message ?? String(e)
-          if (lastError.startsWith("BLOCKED:")) {
+          if (lastError.startsWith("BLOCKED:") && !/malformed[_ ]function[_ ]call/i.test(lastError)) {
             working[idx] = { ...working[idx], status: "skipped" }
             setLots([...working])
             addLog(`✗ ${lot.label} — blocked, skipping`)

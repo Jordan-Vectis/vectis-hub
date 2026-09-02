@@ -585,6 +585,13 @@ the lot surfaced in Review as a **cataloguer** mistake, which it never was. Meas
   alternating primary/fallback model, then skipped **loudly**, never silently.
 - ⚠ The strip must use `[ \t]`, never `\s`, around the bare marker: `\s` eats the newline after it
   and takes the last real sentence away with the `print(` line.
+- ⚠⚠ **`MALFORMED_FUNCTION_CALL` is the same family, and it was LOSING lots (2026-09-02).** It is
+  the model fumbling a real tool call, not a refusal — but every non-STOP finish reason is thrown
+  worded `Blocked (…)`, so `isBlock` matched it and the lot was skipped on the FIRST try and
+  reported as "content blocked" (F116378, on an overnight run). It is stochastic and clears on the
+  other model, so it now takes the same bounded 4 retries. **Never let a give-up predicate decide
+  on the `BLOCKED:` prefix alone** — the key-points and double-check routes throw
+  `BLOCKED: MALFORMED_FUNCTION_CALL`, so a prefix test throws the lot away in those stages too.
 
 ---
 

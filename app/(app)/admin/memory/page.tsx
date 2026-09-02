@@ -379,6 +379,30 @@ Locking Check — caught during the sale rather than at the final gate.
 
 Related: [[reference_auto_pipeline_apply]], [[reference_pipeline_queue]],
 [[reference_dolls_bears_descriptions]], [[reference_locking_check]].
+
+## ⚠⚠ MALFORMED_FUNCTION_CALL is the same family — and it was LOSING lots (2026-09-02)
+
+Jordan, from an overnight F116 log: \`✗ F116378 — content blocked (MALFORMED_FUNCTION_CALL),
+skipping\`. **Nothing was blocked.** Gemini returns that finish reason when it fumbles a tool call
+— the twin of writing one out as text — and it is stochastic, so it clears on the other model.
+
+It was being lost because every non-STOP finish reason is thrown worded as \`Blocked (…)\`, so the
+runner's \`isBlock\` (which just looks for "block") matched it, and only RECITATION retries: the lot
+was **skipped instantly on the first try** and reported to the morning as content blocked.
+
+Fixed by classifying it with the other tool-call failure, not with refusals:
+- \`MALFORMED_CALL\` in \`lib/pipeline-runner.ts\` — \`isBlock\` returns **false** for it, and
+  \`EMPTY_ANSWER\` now matches it, so it gets the bounded 4 tries alternating primary/fallback.
+- The same two changes in the Auto Pipeline tab's loop, plus its three \`err.startsWith("BLOCKED:")\`
+  give-up predicates and three inline block checks — the KP-check and Double-Check routes throw
+  \`BLOCKED: MALFORMED_FUNCTION_CALL\`, so a predicate that only looks at the prefix throws the lot
+  away in those stages too.
+- The batch route throws it with **its own wording** rather than "Blocked (…)".
+- The log says *"it fumbled a tool call"*, not "nothing came back".
+
+⚠ Verified against the ten error strings that actually occur — the three shapes of
+MALFORMED_FUNCTION_CALL all retry; RECITATION, SAFETY and PROHIBITED_CONTENT still count as
+blocks; rate limits and network errors are untouched.
 `,
   },
   {
