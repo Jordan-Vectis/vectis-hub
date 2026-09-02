@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
+import { actionErrorText } from "@/lib/action-error"
 import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
@@ -1296,6 +1297,61 @@ function colMatch(value: string | null | undefined, filter: string) {
   return (value ?? "").toLowerCase().includes(filter.toLowerCase().trim())
 }
 
+// ─── Mass actions: send the work in chunks so there is a real 20/400 ─────────
+//
+// Jordan, 2026-09-02: "when you press add conditions or any button that can do mass changes
+// there should be a progress bar with like 20/400". A server action returns once, at the end,
+// so on 510 lots the only honest way to show progress is to hand it the ids a chunk at a time
+// and count the chunks that have come back. Nothing about what each action DOES changes — it
+// is the same call with fewer ids.
+//
+// ⚠⚠ ONE PRESS MUST STILL BE ONE UNDO. The actions that record an undo take the id of the row
+// this press is already building and append to it (see recordBulkUndo). Without that, a chunked
+// press would leave 21 undo entries and "Undo" would reverse the last chunk only — worse than
+// no progress bar. Any new chunked action that records undo MUST thread `undoId` through.
+const CHUNK = 25
+
+type MassProgress = { done: number; total: number } | null
+
+/** Run `fn` over `ids` in chunks, reporting progress after each. Returns every chunk's result.
+ *
+ *  ⚠ `isLast` exists because every one of these actions calls `revalidatePath`, and a server
+ *  action that revalidates sends the whole re-rendered page back with its result. On a 510-lot
+ *  sale that payload is not small, and paying it 21 times would make the progress bar cost more
+ *  than it is worth — so the intermediate chunks skip it and only the final one refreshes. */
+async function runInChunks<T>(
+  ids: string[],
+  onProgress: (p: MassProgress) => void,
+  fn: (chunk: string[], undoId: string | null, isLast: boolean) => Promise<T & { undoId?: string | null }>,
+): Promise<T[]> {
+  const out: T[] = []
+  let undoId: string | null = null
+  onProgress({ done: 0, total: ids.length })
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const isLast = i + CHUNK >= ids.length
+    const res = await fn(ids.slice(i, i + CHUNK), undoId, isLast)
+    if (res && typeof res === "object" && "undoId" in res && res.undoId) undoId = res.undoId as string
+    out.push(res)
+    onProgress({ done: Math.min(i + CHUNK, ids.length), total: ids.length })
+  }
+  onProgress(null)
+  return out
+}
+
+/** The "20/400" that sits next to a running mass action. */
+function MassProgressLabel({ p }: { p: MassProgress }) {
+  if (!p) return null
+  const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
+  return (
+    <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#2AB4A6] whitespace-nowrap">
+      <span className="inline-block w-24 h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden align-middle">
+        <span className="block h-full bg-[#2AB4A6] transition-all" style={{ width: `${pct}%` }} />
+      </span>
+      {p.done}/{p.total}
+    </span>
+  )
+}
+
 function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit, onDelete, onTransfer }: {
   lots: Lot[]; auctionId: string
   auction: { id: string; code: string; name: string }
@@ -1306,6 +1362,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   onTransfer: (ids: string[]) => void
 }) {
   const [deleting, setDeleting]     = useState<string | null>(null)
+  // One progress readout, shared by every mass action — only one can run at a time.
+  const [massProgress, setMassProgress] = useState<MassProgress>(null)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [photosClearing, setPhotosClearing] = useState(false)
@@ -1370,13 +1428,17 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
 
   // Bulk conditions / descriptions. All three respect the selection: they act on
   // the SELECTED lots when any are ticked, else the whole auction (the house
-  // pattern). selectedIds() → the array to pass; scopeWord() → wording for the
+  // pattern). scopeIds() → the array to pass; scopeWord() → wording for the
   // confirm so it's always clear what will be hit.
   const [condMsg, setCondMsg]         = useState<string | null>(null)
   const [condPending, startCond]      = useTransition()
 
   const none = selected.size === 0
-  const selectedIds = () => (selected.size > 0 ? Array.from(selected) : [])
+  // The ids a mass action will actually touch. ⚠ Chunking needs them spelled out: an empty
+  // array means "the whole auction" to the server actions, which cannot be counted or split.
+  // (This replaced `selectedIds()`, which returned [] for "everything" — fine when the action
+  // did the scoping itself, useless once the toolbar has to count and slice the work.)
+  const scopeIds = () => (selected.size > 0 ? Array.from(selected) : lots.map(l => l.id))
   const scopeWord = () => (selected.size > 0 ? `the ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}` : "every lot in this auction")
 
   function doVendorLookup() {
@@ -1396,11 +1458,17 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     if (!confirm(`Put ${scopeWord()} onto ${who}?`)) return
     setFillMsg(null)
     startFill(async () => {
-      const res = await setLotsVendorReceipt(auctionId, Array.from(selected), {
-        vendor:  vendorHit.vendor  ?? "",
-        receipt: vendorHit.receipt ?? "",
-        tote:    newTote,
-      })
+      let failed: string | undefined
+      const parts = await runInChunks(Array.from(selected), setMassProgress, (chunk, undoId, isLast) =>
+        setLotsVendorReceipt(auctionId, chunk, {
+          vendor:  vendorHit.vendor  ?? "",
+          receipt: vendorHit.receipt ?? "",
+          tote:    newTote,
+        }, undoId, !isLast)).catch((e) => { failed = actionErrorText(e); return [] })
+      setMassProgress(null)
+      if (failed) { setFillMsg(`⚠ Stopped part-way — ${failed}`); return }
+      const bad = parts.find(p => !p.ok)
+      const res = bad ?? { ok: true as const, updated: parts.reduce((s, p) => s + (p.updated ?? 0), 0) }
       if (!res.ok) { setFillMsg(`⚠ ${res.error}`); return }
       // ⚠ 0 updated is NOT success — it means every ticked lot already held these values.
       // Saying "✓ Changed 0 lots" read as "done" and hid the fact nothing had happened.
@@ -1423,30 +1491,61 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     if (withCond === 0) { setCondMsg("No lots with a condition set in that scope."); setTimeout(() => setCondMsg(null), 3000); return }
     if (!confirm(`Append the condition to the description for ${scopeWord()} that has one (${withCond} with a condition; skips any that already have it). Continue?`)) return
     startCond(async () => {
-      const { updated, skipped } = await bulkAddConditionsToDescriptions(auctionId, selectedIds())
-      setCondMsg(`✓ ${updated} updated, ${skipped} skipped`)
-      setTimeout(() => setCondMsg(null), 4000)
-      await refreshUndos()
+      try {
+        // ⚠ Always send explicit ids now, so there is something to count. With nothing ticked
+        // that is every lot — the same scope the action assumes when it gets none.
+        const res = await runInChunks(scopeIds(), setMassProgress, (chunk, undoId, isLast) =>
+          bulkAddConditionsToDescriptions(auctionId, chunk, undoId, !isLast))
+        const updated = res.reduce((s, r) => s + r.updated, 0)
+        const skipped = res.reduce((s, r) => s + r.skipped, 0)
+        setCondMsg(`✓ ${updated} updated, ${skipped} skipped`)
+        setTimeout(() => setCondMsg(null), 4000)
+      } catch (e) {
+        // ⚠ Never let a failed mass action look like nothing happened — the lots done before
+        // it stopped ARE changed, and the old code showed no message at all.
+        setCondMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
+      } finally {
+        setMassProgress(null)
+        await refreshUndos()
+      }
     })
   }
 
   function handleBulkRemoveConditions() {
     if (!confirm(`Remove the "Condition appears…" sentence from the description on ${scopeWord()} that has it. Continue?`)) return
     startCond(async () => {
-      const { updated, skipped } = await bulkRemoveConditionsFromDescriptions(auctionId, selectedIds())
-      setCondMsg(`✓ ${updated} updated, ${skipped} skipped`)
-      setTimeout(() => setCondMsg(null), 4000)
-      await refreshUndos()
+      try {
+        const res = await runInChunks(scopeIds(), setMassProgress, (chunk, undoId, isLast) =>
+          bulkRemoveConditionsFromDescriptions(auctionId, chunk, undoId, !isLast))
+        const updated = res.reduce((s, r) => s + r.updated, 0)
+        const skipped = res.reduce((s, r) => s + r.skipped, 0)
+        setCondMsg(`✓ ${updated} updated, ${skipped} skipped`)
+        setTimeout(() => setCondMsg(null), 4000)
+      } catch (e) {
+        setCondMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
+      } finally {
+        setMassProgress(null)
+        await refreshUndos()
+      }
     })
   }
 
   function handleClearDescriptions() {
     if (!confirm(`Clear the description on ${scopeWord()}. Lots excluded from AI keep their hand-typed descriptions and are left alone. This can be undone. Continue?`)) return
     startCond(async () => {
-      const { updated, skippedExcluded } = await bulkClearDescriptions(auctionId, selectedIds())
-      setCondMsg(`✓ ${updated} cleared${skippedExcluded ? `, ${skippedExcluded} AI-excluded left alone` : ""}`)
-      setTimeout(() => setCondMsg(null), 5000)
-      await refreshUndos()
+      try {
+        const res = await runInChunks(scopeIds(), setMassProgress, (chunk, undoId, isLast) =>
+          bulkClearDescriptions(auctionId, chunk, undoId, !isLast))
+        const updated = res.reduce((s, r) => s + r.updated, 0)
+        const skippedExcluded = res.reduce((s, r) => s + r.skippedExcluded, 0)
+        setCondMsg(`✓ ${updated} cleared${skippedExcluded ? `, ${skippedExcluded} AI-excluded left alone` : ""}`)
+        setTimeout(() => setCondMsg(null), 5000)
+      } catch (e) {
+        setCondMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
+      } finally {
+        setMassProgress(null)
+        await refreshUndos()
+      }
     })
   }
 
@@ -1832,10 +1931,20 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     if (!confirm(`Delete ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return
     setBulkDeleting(true)
     start(async () => {
-      for (const id of selected) await deleteLot(id, auctionId)
-      setSelected(new Set())
-      setBulkDeleting(false)
-      onDelete()
+      // Already one call per lot — it just never said how far along it was.
+      const ids = Array.from(selected)
+      setMassProgress({ done: 0, total: ids.length })
+      try {
+        for (let i = 0; i < ids.length; i++) {
+          await deleteLot(ids[i], auctionId)
+          setMassProgress({ done: i + 1, total: ids.length })
+        }
+        setSelected(new Set())
+      } finally {
+        setMassProgress(null)
+        setBulkDeleting(false)
+        onDelete()
+      }
     })
   }
 
@@ -1848,10 +1957,14 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     setPhotosClearing(true)
     start(async () => {
       try {
-        await bulkClearLotPhotos(Array.from(selected), auctionId, deleteFromStorage)
+        await runInChunks(Array.from(selected), setMassProgress, async (chunk) => {
+          await bulkClearLotPhotos(chunk, auctionId, deleteFromStorage)
+          return {}
+        })
         setSelected(new Set())
         onDelete()
       } finally {
+        setMassProgress(null)
         setPhotosClearing(false)
       }
     })
@@ -1859,12 +1972,22 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
 
   async function handleGenerateTitles() {
     if (selected.size === 0) return
+    const n = selected.size
     startTitles(async () => {
-      await generateTitlesFromDescriptions(auctionId, Array.from(selected))
-      setTitlesMsg(`✓ Titles generated for ${selected.size} lot${selected.size !== 1 ? "s" : ""}`)
-      setSelected(new Set())
-      onDelete()
-      setTimeout(() => setTitlesMsg(null), 3000)
+      try {
+        await runInChunks(Array.from(selected), setMassProgress, async (chunk) => {
+          await generateTitlesFromDescriptions(auctionId, chunk)
+          return {}
+        })
+        setTitlesMsg(`✓ Titles generated for ${n} lot${n !== 1 ? "s" : ""}`)
+        setSelected(new Set())
+      } catch (e) {
+        setTitlesMsg(`⚠ Stopped part-way — ${actionErrorText(e)}`)
+      } finally {
+        setMassProgress(null)
+        onDelete()
+        setTimeout(() => setTitlesMsg(null), 5000)
+      }
     })
   }
 
@@ -1877,12 +2000,20 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     const anyUnticked  = selectedLots.some(l => !l.addedToBC)
     const newValue     = anyUnticked  // true → mark; false → unmark all
     startBc(async () => {
-      const { count } = await bulkSetLotsAddedToBC(Array.from(selected), auctionId, newValue)
-      setBcMsg(`${newValue ? "✓ Marked" : "↺ Unmarked"} ${count} lot${count === 1 ? "" : "s"} ${newValue ? "as added to BC" : ""}`)
-      setSelected(new Set())
-      onDelete()
-      await refreshUndos()
-      setTimeout(() => setBcMsg(null), 3500)
+      try {
+        const res = await runInChunks(Array.from(selected), setMassProgress, (chunk, undoId, isLast) =>
+          bulkSetLotsAddedToBC(chunk, auctionId, newValue, undoId, !isLast))
+        const count = res.reduce((s, r) => s + r.count, 0)
+        setBcMsg(`${newValue ? "✓ Marked" : "↺ Unmarked"} ${count} lot${count === 1 ? "" : "s"} ${newValue ? "as added to BC" : ""}`)
+        setSelected(new Set())
+      } catch (e) {
+        setBcMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
+      } finally {
+        setMassProgress(null)
+        onDelete()
+        await refreshUndos()
+        setTimeout(() => setBcMsg(null), 5000)
+      }
     })
   }
 
@@ -1892,12 +2023,20 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     const anyNotExcluded = selectedLots.some(l => !l.aiExcluded)
     const newValue = anyNotExcluded
     startExclude(async () => {
-      const { count } = await bulkSetLotsAiExcluded(Array.from(selected), auctionId, newValue)
-      setExcludeMsg(`${newValue ? "🚫 Excluded" : "✓ Unexcluded"} ${count} lot${count === 1 ? "" : "s"} from AI`)
-      setSelected(new Set())
-      onDelete()
-      await refreshUndos()
-      setTimeout(() => setExcludeMsg(null), 3500)
+      try {
+        const res = await runInChunks(Array.from(selected), setMassProgress, (chunk, undoId, isLast) =>
+          bulkSetLotsAiExcluded(chunk, auctionId, newValue, undoId, !isLast))
+        const count = res.reduce((s, r) => s + r.count, 0)
+        setExcludeMsg(`${newValue ? "🚫 Excluded" : "✓ Unexcluded"} ${count} lot${count === 1 ? "" : "s"} from AI`)
+        setSelected(new Set())
+      } catch (e) {
+        setExcludeMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
+      } finally {
+        setMassProgress(null)
+        onDelete()
+        await refreshUndos()
+        setTimeout(() => setExcludeMsg(null), 5000)
+      }
     })
   }
 
@@ -1909,13 +2048,23 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       id:         l.id,
       startingBid: roundUpToIncrement(Math.ceil(l.estimateLow! * bidPct / 100)),
     }))
+    const byId = new Map(updates.map(u => [u.id, u]))
     startBids(async () => {
-      await setStartingBids(auctionId, updates)
-      setBidsMsg(`✓ Starting bids set for ${updates.length} lot${updates.length !== 1 ? "s" : ""}`)
-      setShowBids(false)
-      setSelected(new Set())
-      onDelete()
-      setTimeout(() => setBidsMsg(null), 3000)
+      try {
+        await runInChunks(updates.map(u => u.id), setMassProgress, async (chunk) => {
+          await setStartingBids(auctionId, chunk.map(id => byId.get(id)!))
+          return {}
+        })
+        setBidsMsg(`✓ Starting bids set for ${updates.length} lot${updates.length !== 1 ? "s" : ""}`)
+        setShowBids(false)
+        setSelected(new Set())
+      } catch (e) {
+        setBidsMsg(`⚠ Stopped part-way — ${actionErrorText(e)}`)
+      } finally {
+        setMassProgress(null)
+        onDelete()
+        setTimeout(() => setBidsMsg(null), 5000)
+      }
     })
   }
 
@@ -2078,6 +2227,9 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   className={`${TB_NEUTRAL} hover:border-red-500 hover:text-red-400`}>
                   {condPending ? "Working…" : "🧹 Clear Descriptions"}
                 </button>
+                {/* "20/400" — the whole point of chunking the work. One readout for every mass
+                    action, since only one can run at a time. */}
+                <MassProgressLabel p={massProgress} />
               </div>
             </div>
           )}
@@ -2189,6 +2341,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               className={`${TB_BTN} border-red-700 text-red-500 dark:text-red-400 hover:bg-red-500/10`}>
               {bulkDeleting ? "Deleting…" : "🗑 Delete lots"}
             </button>
+            {/* Same readout as the Descriptions row — whichever mass action is running. */}
+            <MassProgressLabel p={massProgress} />
           </div>
         )}
       </div>

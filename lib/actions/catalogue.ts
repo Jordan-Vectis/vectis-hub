@@ -102,19 +102,46 @@ async function updateLotLogged(lotId: string, data: Record<string, any>, ctx: Lo
 type UndoField = { before: unknown; after: unknown }
 type UndoEntry = { lotId: string; fields: Record<string, UndoField> }
 
+// ⚠⚠ ONE PRESS = ONE UNDO ROW, even though the toolbar now sends the work in chunks so it can
+// show progress (2026-09-02). `appendTo` is the id this function returned for the first chunk;
+// every later chunk of the same press appends to that row instead of creating its own.
+// Without it a 510-lot press would leave 21 undo entries and "Undo" would reverse the last 25
+// lots only — silently worse than before the progress bar existed.
+//
+// Deliberately keyed on the row's own id rather than a new column: no schema change, and a
+// stale/foreign id simply falls back to creating a row.
 async function recordBulkUndo(
   auctionId: string,
   session: Awaited<ReturnType<typeof requireCataloguer>>,
   label: string,
   entries: UndoEntry[],
-) {
+  appendTo?: string | null,
+): Promise<string | null> {
   const real = entries.filter((e) => Object.keys(e.fields).length > 0)
-  if (real.length === 0) return
+  if (real.length === 0) return appendTo ?? null
   try {
-    await prisma.catalogueBulkUndo.create({
+    if (appendTo) {
+      const existing = await prisma.catalogueBulkUndo.findFirst({
+        where:  { id: appendTo, auctionId, actorId: session.user.id, undone: false },
+        select: { id: true, entries: true },
+      })
+      if (existing) {
+        const merged = [...((existing.entries as any[]) ?? []), ...real]
+        await prisma.catalogueBulkUndo.update({
+          where: { id: existing.id },
+          // The label carries the running total, so the button reads the whole press.
+          data:  { entries: merged as any, label: label.replace(/\(\d+\)\s*$/, `(${merged.length})`) },
+        })
+        return existing.id
+      }
+    }
+    const row = await prisma.catalogueBulkUndo.create({
       data: { auctionId, actorId: session.user.id, actorName: changedByOf(session), label, entries: real as any },
+      select: { id: true },
     })
+    return row.id
   } catch { /* undo is a convenience — never fail the actual action if this write fails */ }
+  return appendTo ?? null
 }
 
 // Loose equality for the conflict check: a lot is only rolled back on a field
@@ -437,7 +464,10 @@ export async function setLotsVendorReceipt(
   // where the flagged problem IS a mistyped tote. Manage Lots doesn't pass it,
   // so its behaviour is unchanged.
   input: { vendor: string; receipt: string; tote?: string },
-): Promise<{ ok: boolean; error?: string; updated?: number }> {
+  undoId?: string | null,
+  /** Intermediate chunk of a chunked press — skip the page revalidation (see runInChunks). */
+  skipRevalidate?: boolean,
+): Promise<{ ok: boolean; error?: string; updated?: number; undoId?: string | null }> {
   try {
     const session = await requireCataloguer()
     await requireNotBCLocked(auctionId, session)
@@ -478,9 +508,9 @@ export async function setLotsVendorReceipt(
       updated++
     }
 
-    await recordBulkUndo(auctionId, session, `Change vendor / receipt (${updated})`, undo)
-    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-    return { ok: true, updated }
+    const newUndoId = await recordBulkUndo(auctionId, session, `Change vendor / receipt (${updated})`, undo, undoId)
+    if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true, updated, undoId: newUndoId }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Couldn't change those lots" }
   }
@@ -1369,32 +1399,32 @@ async function logBulkFlag(lotIds: string[], auctionId: string, field: keyof typ
 }
 
 // Bulk set AI excluded — used by the mass-select action on Manage Lots.
-export async function bulkSetLotsAiExcluded(lotIds: string[], auctionId: string, value: boolean) {
+export async function bulkSetLotsAiExcluded(lotIds: string[], auctionId: string, value: boolean, undoId?: string | null, skipRevalidate?: boolean) {
   const session = await requireCataloguer()
-  if (lotIds.length === 0) return { count: 0 }
+  if (lotIds.length === 0) return { count: 0, undoId: undoId ?? null }
   const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
   const changing = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds }, auctionId, aiExcluded: { not: value } }, select: { id: true } })
   await logBulkFlag(lotIds, auctionId, "aiExcluded", "AI Excluded", value, ctx)
   const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { aiExcluded: value } })
-  await recordBulkUndo(auctionId, session, `${value ? "Exclude" : "Un-exclude"} from AI (${changing.length})`,
-    changing.map((l) => ({ lotId: l.id, fields: { aiExcluded: { before: !value, after: value } } })))
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-  return { count: r.count }
+  const newUndoId = await recordBulkUndo(auctionId, session, `${value ? "Exclude" : "Un-exclude"} from AI (${changing.length})`,
+    changing.map((l) => ({ lotId: l.id, fields: { aiExcluded: { before: !value, after: value } } })), undoId)
+  if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { count: r.count, undoId: newUndoId }
 }
 
 // Bulk set — used by the mass-select action on Manage Lots.
-export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, value: boolean) {
+export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, value: boolean, undoId?: string | null, skipRevalidate?: boolean) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  if (lotIds.length === 0) return { count: 0 }
+  if (lotIds.length === 0) return { count: 0, undoId: undoId ?? null }
   const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
   const changing = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds }, auctionId, addedToBC: { not: value } }, select: { id: true } })
   await logBulkFlag(lotIds, auctionId, "addedToBC", "Added to BC", value, ctx)
   const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { addedToBC: value } })
-  await recordBulkUndo(auctionId, session, `${value ? "Mark" : "Unmark"} added to BC (${changing.length})`,
-    changing.map((l) => ({ lotId: l.id, fields: { addedToBC: { before: !value, after: value } } })))
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-  return { count: r.count }
+  const newUndoId = await recordBulkUndo(auctionId, session, `${value ? "Mark" : "Unmark"} added to BC (${changing.length})`,
+    changing.map((l) => ({ lotId: l.id, fields: { addedToBC: { before: !value, after: value } } })), undoId)
+  if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { count: r.count, undoId: newUndoId }
 }
 
 // Mass action — remove ALL photos from the selected lots.
@@ -1961,7 +1991,11 @@ const scopeWhere = (auctionId: string, lotIds?: string[]) =>
 export async function bulkAddConditionsToDescriptions(
   auctionId: string,
   lotIds?: string[],
-): Promise<{ updated: number; skipped: number }> {
+  /** The undo row this press is already building — see recordBulkUndo. */
+  undoId?: string | null,
+  /** Intermediate chunk of a chunked press — skip the page revalidation. */
+  skipRevalidate?: boolean,
+): Promise<{ updated: number; skipped: number; undoId: string | null }> {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
 
@@ -1990,9 +2024,9 @@ export async function bulkAddConditionsToDescriptions(
     updated++
   }
 
-  await recordBulkUndo(auctionId, session, `Add conditions to descriptions (${updated})`, undo)
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-  return { updated, skipped }
+  const newUndoId = await recordBulkUndo(auctionId, session, `Add conditions to descriptions (${updated})`, undo, undoId)
+  if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { updated, skipped, undoId: newUndoId }
 }
 
 // The inverse: strip EVERY "Condition appears …" sentence back out of the description,
@@ -2004,7 +2038,10 @@ export async function bulkAddConditionsToDescriptions(
 export async function bulkRemoveConditionsFromDescriptions(
   auctionId: string,
   lotIds?: string[],
-): Promise<{ updated: number; skipped: number }> {
+  undoId?: string | null,
+  /** Intermediate chunk of a chunked press — skip the page revalidation. */
+  skipRevalidate?: boolean,
+): Promise<{ updated: number; skipped: number; undoId: string | null }> {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
 
@@ -2029,9 +2066,9 @@ export async function bulkRemoveConditionsFromDescriptions(
     updated++
   }
 
-  await recordBulkUndo(auctionId, session, `Remove conditions from descriptions (${updated})`, undo)
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-  return { updated, skipped }
+  const newUndoId = await recordBulkUndo(auctionId, session, `Remove conditions from descriptions (${updated})`, undo, undoId)
+  if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { updated, skipped, undoId: newUndoId }
 }
 
 // Clear descriptions — but ONLY on lots going through AI. aiExcluded lots have a
@@ -2039,7 +2076,10 @@ export async function bulkRemoveConditionsFromDescriptions(
 export async function bulkClearDescriptions(
   auctionId: string,
   lotIds?: string[],
-): Promise<{ updated: number; skippedExcluded: number }> {
+  undoId?: string | null,
+  /** Intermediate chunk of a chunked press — skip the page revalidation. */
+  skipRevalidate?: boolean,
+): Promise<{ updated: number; skippedExcluded: number; undoId: string | null }> {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
 
@@ -2062,9 +2102,9 @@ export async function bulkClearDescriptions(
     updated++
   }
 
-  await recordBulkUndo(auctionId, session, `Clear descriptions (${updated})`, undo)
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-  return { updated, skippedExcluded }
+  const newUndoId = await recordBulkUndo(auctionId, session, `Clear descriptions (${updated})`, undo, undoId)
+  if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { updated, skippedExcluded, undoId: newUndoId }
 }
 
 // Highest existing line number for a receipt base, e.g. "R000123" → 4 when

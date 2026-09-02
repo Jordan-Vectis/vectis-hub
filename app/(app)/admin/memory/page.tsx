@@ -2399,35 +2399,100 @@ PROPOSED FIX, NOT APPLIED - ⚠ JACK OWNS THE WIZARD IDLE CODE: have pointer-dow
   {
     filename: "manage_lots_bulk_undo.md",
     content: `---
-name: Manage Lots — filters persist, bulk conditions/clear, Undo
-purpose: The 2026-07-17 Auction Manager changes. Read before touching Manage Lots bulk actions or filters.
-last_updated: 2026-07-17
+name: manage-lots-filters-persist-bulk-conditions-clear-multi-step-undo
+description: "The 2026-07-17 Auction Manager changes — sessionStorage filter persistence, selection-scoped condition actions, clear-descriptions, and the CatalogueBulkUndo table. Read before touching Manage Lots bulk actions."
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: 225e3050-dbc8-4a9e-81cf-ca954774137e
+  modified: 2026-08-21T11:41:11.865Z
 ---
 
-# Auction Manager (Manage Lots) — 5 changes (2026-07-17) — NEEDS RUN MIGRATIONS
+# Auction Manager (Manage Lots) — 5 changes (2026-07-17, STAGING) — NEEDS RUN MIGRATIONS
 
-All in auction-tabs.tsx (ManageLotsTab) + lib/actions/catalogue.ts.
+All in \`auction-tabs.tsx\` (ManageLotsTab) + \`lib/actions/catalogue.ts\`.
 
-1. **Filters survive opening a lot.** Opening a lot pushes ?lot=, which swaps the tab for the editor and unmounts ManageLotsTab, losing all filter/sort state. Fixed with sessionStorage keyed catalogue_filters_<auctionId> (restore on mount, save on change). ⚠ Selection is deliberately NOT persisted — a stale tick could drive a bulk action at the wrong lots.
+1. **Filters survive opening a lot.** Opening a lot pushes \`?lot=\`, which swaps the whole tab for the editor, unmounting ManageLotsTab and losing all filter/sort \`useState\`. Fixed with **sessionStorage** keyed \`catalogue_filters_<auctionId>\`: restore on mount (queueMicrotask + a \`filtersRestored\` ref so the initial empty state doesn't overwrite), save on any filter/sort change. ⚠ **Selection is deliberately NOT persisted** — a stale tick surviving a round-trip could drive a bulk action at the wrong lots.
 
-2. **Add Conditions respects selection.** bulkAddConditionsToDescriptions was auction-wide always (the bug); now scoped to selected lots if any ticked, else all (same as Remove/Clear).
+2. **Add Conditions now respects selection.** \`bulkAddConditionsToDescriptions(auctionId, lotIds?)\` — was auction-wide always (the bug). Now scoped: **selected lots if any ticked, else all** (the \`scopeWhere\` helper + the house pattern setStartingBids uses). Same scoping on remove/clear.
 
-3. **Remove Conditions** — strips EVERY "Condition appears …" sentence, any wording, with its joiner.
+3. **Remove Conditions** — \`bulkRemoveConditionsFromDescriptions\`. Strips EVERY \`Condition appears …\` sentence, any wording, with its joiner (newline or the legacy space).
 
-⚠⚠ 2026-08-20 — ADD REPLACES, REMOVE STRIPS ALL (Jordan: "we are now getting duplicate conditions and removing them only removes one"). The old Add de-duplicated with description.includes("Condition appears <CURRENT condition>.") and Remove stripped only that exact sentence — so a lot regraded AFTER its sentence went in (a box condition added, a Locking Check suggestion accepted) got a SECOND sentence, and Remove only took the current one. Now ONE shared helper set in lib/condition.ts — withConditionSentence (strip any existing, append the current one on its own line), stripConditionSentences, hasConditionSentence, conditionSentence (no doubled full stop when the condition already ends in one) — used by all three call sites: bulk Add, bulk Remove, and the per-lot "+ Add condition to description" button. A sentence runs from "Condition appears" to the END OF ITS LINE (a box condition has a full stop mid-sentence). Remove is no longer filtered to lots with a condition set — a lot whose grade was cleared still carries the sentence. Never reintroduce an exact-text includes() check.
+⚠⚠ **2026-08-20 — ADD REPLACES, REMOVE STRIPS ALL (Jordan: "we are now getting duplicate conditions and removing them only removes one").** The old Add de-duplicated with \`description.includes("Condition appears <CURRENT condition>.")\` and Remove stripped only that exact sentence — so a lot regraded AFTER its sentence went in (box condition added, Locking Check suggestion accepted) got a SECOND sentence, and Remove only took the current one. Now ONE shared helper set in \`lib/condition.ts\` — \`withConditionSentence\` (strip any existing, append the current one on its own line), \`stripConditionSentences\`, \`hasConditionSentence\`, \`conditionSentence\` (no doubled full stop when the condition ends in one, e.g. "Near Mint. Box is Good.") — used by all three call sites: bulk Add, bulk Remove, and the per-lot "+ Add condition to description" button in auction-tabs.tsx. A sentence runs from "Condition appears" to the END OF ITS LINE (a box condition has a full stop mid-sentence, so "first full stop" would cut it). Remove is no longer filtered to \`condition: not null\` — a lot whose grade was cleared still carries the sentence. Newline join (2026-08-19) unchanged. Never reintroduce an exact-text includes() check.
 
-⚠ 2026-08-19 — ADD CONDITIONS JOINS WITH A NEW LINE, NOT A SPACE (Jordan). The condition is its own statement, not the tail of the description's last sentence. Changed in THREE places that must stay in step: bulkAddConditionsToDescriptions (the ✚ Add Conditions bulk button), addConditionToDesc in auction-tabs.tsx (the per-lot "+ Add condition to description" button), and the remover. ⚠ bulkRemoveConditionsFromDescriptions now strips BOTH joins — newline first, then space, then bare — because every lot conditioned before this change still carries the space form; dropping the space branch would strand them. Nothing downstream needed changing: lib/condition.ts norm() collapses \s+ to a single space, so checkConditionInDescription, the Locking Check condDesc criterion and the Description Copier condition check all treat a newline exactly like a space.
+4. **Clear Descriptions** — \`bulkClearDescriptions\`. ⚠ **ALWAYS skips \`aiExcluded\` lots** (hand-typed descriptions), regardless of selection — that was the explicit ask. Clears description → title becomes "Untitled".
 
-4. **Clear Descriptions** — ALWAYS skips aiExcluded lots (hand-typed descriptions), regardless of selection. Clears description; title becomes "Untitled".
+5. **Multi-step, conflict-safe Undo.** New table **\`CatalogueBulkUndo\`** {auctionId, actorId, actorName, label, entries Json, undone} — schema + migration \`20260717150000_add_catalogue_bulk_undo\` + run-migrations array. **NEEDS Run Migrations** (banner prompts; per [[feedback_vectis]] don't tell Jordan).
+   - Each field-editing bulk action calls \`recordBulkUndo(auctionId, session, label, entries)\` where entries = \`[{lotId, fields:{col:{before,after}}}]\`. Wired into: add/remove conditions, clear descriptions, bulkSetLotsAiExcluded, bulkSetLotsAddedToBC. NOT delete/transfer/photos (can't cleanly restore).
+   - \`listBulkUndos\` (this user's non-undone actions, newest first) + \`undoBulk(id)\`. Undo is **conflict-safe**: per field, only rolls back if the lot's CURRENT value still equals the \`after\` we set (\`sameValue\` = normalised string compare); a lot changed since is skipped + counted. Restoring a description regenerates the title.
+   - UI: an amber "↶ Undo: <label>" button at the start of the toolbar (top of stack); press again to step back. \`refreshUndos()\` after every bulk action; \`onDelete()\` re-pulls lots after undo. Scoped to the actor (you only undo your OWN mass actions); the per-lot conflict check protects a colleague's edits.
+   - ⚠ Why a dedicated table not the change log: \`CatalogueLotEvent\` stores DISPLAY LABELS ("Description") not column names, stringifies values, and is best-effort (drops rows) — too lossy to reverse. \`recordBulkUndo\` stores typed before/after in JSON. Keep them separate.
+   - Degrades gracefully pre-migration: \`recordBulkUndo\` and \`refreshUndos\` both swallow errors, so the actions still work and the Undo button just doesn't appear until migrations run.
 
-5. **Multi-step, conflict-safe Undo.** New CatalogueBulkUndo table (NEEDS Run Migrations). Every field-editing bulk action records a per-lot before/after snapshot; the amber "↶ Undo: <label>" button (top of toolbar) reverses the most recent, press again to step back. Conflict-safe: a lot changed since the action is skipped, never clobbered. Scoped to the actor (you undo only your own mass actions). Covers add/remove conditions, clear descriptions, bulk AI-exclude, bulk added-to-BC — NOT delete/transfer/photos.
-
-⚠ Dedicated table, not the change log — the log stores display labels + best-effort rows, too lossy to reverse. Degrades gracefully pre-migration (undo just doesn't appear).
+⚠ The Add/Remove/Clear condition buttons + Undo are gated \`!bcLocked\` (hidden for locked non-admins) — their server actions call \`requireNotBCLocked\` which throws, and a thrown server action is redacted in production. See [[reference_lot_change_log]] for the logging choke-point these still flow through.
 
 ## 2026-07-22 — toolbar tidy + Status column removed
-- Toolbar regrouped into one bordered bar with labelled groups: Undo (when present) · Tools (Pull Vendor/Receipt, Mass Add, Set Starting Bids, Unique ID Matcher) · Descriptions (Add/Remove Conditions, Clear Descriptions — group label shows "— N ticked" / "— all lots") · Export (BC Macro Tote/Receipt, Photos .zip, Excel, shortened labels). Status messages collect on one line under the bar. A separate teal SELECTION BAR appears when lots are ticked, led by an "N selected" chip: Mark added to BC, Exclude from AI, Generate Titles, Transfer, divider, then the destructive trio (Unlink photos / Delete photos from storage / Delete lots). All handlers and !bcLocked gating unchanged; shared styles TB_LABEL/TB_BTN/TB_NEUTRAL.
-- Status column REMOVED from the table ("doesn't mean anything") — header, filter, pill, sort option, STATUS_STYLES gone; a saved sortCol "status" in sessionStorage is ignored on restore. Lot status data untouched, just not shown here. STATUSES constant kept (lot editor uses it).
-- AI column filter is now ONE combined dropdown (fAi): All / 🚫 Excluded from AI / Not excluded / ✨ Upgraded / Not upgraded. The old fAiExcluded state filtered but had NO dropdown in the UI — this exposed it. sessionStorage restore maps old fAiUpgraded/fAiExcluded shapes into fAi.`,
+
+- **Toolbar reorganised** (Jordan: "particularly messy"): one bordered bar with labelled groups — **Undo** (when present) · **Tools** (Pull Vendor/Receipt, Mass Add, Set Starting Bids, Unique ID Matcher) · **Descriptions** (Add/Remove Conditions, Clear Descriptions; the group label shows "— N ticked" / "— all lots" instead of per-button counts) · **Export** (BC Macro Tote/Receipt, Photos .zip, Excel — shortened labels under the group heading). Shared button styles \`TB_LABEL\`/\`TB_BTN\`/\`TB_NEUTRAL\` (module level, next to COL_INPUT). Status messages collect on ONE line under the bar. **Selection bar**: a separate teal-tinted bar appears under the toolbar when lots are ticked, leading with an "N selected" chip — Mark added to BC, Exclude from AI, Generate Titles, Transfer, then a divider, then the destructive trio (Unlink photos, Delete photos from storage, Delete lots). Buttons no longer repeat the count (the chip carries it). All handlers/gating (\`!bcLocked\`, selection-only rendering) unchanged.
+- **Status column REMOVED** from the table (Jordan: "doesn't mean anything") — header, filter select, body pill, \`"status"\` sort option (a saved \`sortCol: "status"\` in sessionStorage is ignored on restore), \`uniqueStatuses\`, \`STATUS_STYLES\` all gone. \`STATUSES\` constant kept (still used by the lot editor). Lot status itself is untouched in the data — just not shown here.
+- **AI column filter combined** — the AI column's dropdown is now ONE \`fAi\` filter: All / 🚫 Excluded from AI / Not excluded / ✨ Upgraded / Not upgraded. ⚠ The old \`fAiExcluded\` state existed and filtered but had NO dropdown in the UI (lost at some point) — this exposed it. sessionStorage restore maps old saved shapes (\`fAiUpgraded\`/\`fAiExcluded\`) into \`fAi\`.
+
+### ⚠ Change Vendor now sets the TOTE as well (2026-08-12)
+
+Jordan, on production: "The change vendor button in here isnt working its saying complete but not changing them it needs to change tote receipt and vendor number."
+
+Two faults, one symptom:
+1. **Manage Lots never passed \`tote\`.** \`setLotsVendorReceipt\` has taken an optional \`tote\` since the End of Day work, but Manage Lots deliberately did not send it ("so its behaviour is unchanged"). Typing a TOTE therefore moved receipt + vendor and left the lot on its old tote. It now sends the tote whenever \`vendorHit.kind === "tote"\`. ⚠ Do not "restore" the old scoping — Jordan asked for all three explicitly.
+2. **\`updated === 0\` was reported as success** — "✓ Changed 0 lots" reads as done. That is exactly what he saw when the ticked lots already had the right receipt and vendor and only the tote was wrong: nothing to change, so nothing changed, and the message said it worked. Zero updated is now an amber "Nothing changed — already on …".
+
+⚠ The action itself was always correct (it only writes fields that differ, logs via \`updateLotLogged\` with source \`vendor_change\`, and supports per-sale Undo). The bug was entirely in the caller — check the caller before suspecting \`setLotsVendorReceipt\`.
+
+## Added By + Date Added filters (2026-08-14)
+
+Every column now has a filter. **Added By** is a \`<select>\` built from the people who have actually added a lot to *that* sale — a dropdown beats free text for "what did Keiran do", and it can't be mistyped. **Date Added** is a native \`<input type="date">\` (with \`dark:[color-scheme:dark]\`, RULES rule 2). Both join the existing sessionStorage persistence and \`filtersActive\`.
+
+⚠ The day comparison uses **local date parts, never \`toISOString()\`** — UTC would file anything catalogued after 01:00 BST under the previous day and disagree with the Date Added column right beside it.
+
+⚠ **The bulk actions are SELECTION-SCOPED** — they only render once lots are ticked. Jordan asked for "mass select lots and mark them as excluded from ai" on 2026-08-14 when \`bulkSetLotsAiExcluded\` had existed for months; the toolbar simply looks like it has no such button until something is selected. Check for an existing bulk action before building one.
+
+## The selection bar is ALWAYS visible now (2026-08-14)
+
+Jordan: *"can we make the options that appear when you select just be visible at all times"* — and the reason is the one from the same day: he asked for a mass AI-exclude that had existed for months, because **you cannot look for a button you have never seen**. The bar renders whatever the selection, greyed with "Tick lots to use these" when empty.
+
+⚠ **Every button in it is disabled when nothing is ticked.** Several of those handlers fall back to *"every lot in this auction"* on an empty selection (\`scopeWord()\`, \`selectedIds()\`), which was harmless while the bar only existed during a selection and emphatically is not now — a permanently-visible "🗑 Delete lots" with that fallback would be catastrophic.
+
+⚠ The **Registered Bidders banner was removed from the sale page** the same day (Jordan's call) — it sat above everything and pushed the whole page down. \`registered-bidders-panel.tsx\` and the \`bidderRegistrations\` include still exist; only this page stopped rendering it. The two changes roughly cancel out in page height, which matters for [[reference_bc_macro_ahk]].
+
+## 2026-09-02 — every mass action shows 20/400
+
+Jordan: *"when you press add conditions or any button that can do mass changes there should be a
+progress bar with like 20/400"*. A server action returns once, at the end, so the only honest way
+to show progress is to hand it the ids **a chunk at a time** (25) and count the chunks back.
+Nothing about what any action DOES changed — it is the same call with fewer ids.
+
+\`runInChunks(ids, onProgress, fn)\` + \`<MassProgressLabel>\` in \`auction-tabs.tsx\`, wired into all
+nine: Add / Remove Conditions, Clear Descriptions, Generate Titles, Mark added to BC, Exclude from
+AI, Delete lots, Unlink / Delete photos, Set Starting Bids, Change vendor / receipt. One shared
+\`massProgress\` state — only one can run at a time. The readout sits on both the Descriptions row
+and the selection row.
+
+⚠⚠ **ONE PRESS IS STILL ONE UNDO.** \`recordBulkUndo\` takes the id of the row this press is already
+building and **appends** to it (keyed on the row's own id — no new column, no migration); the
+label's \`(N)\` is rewritten to the running total. Without that a 510-lot press would leave 21 undo
+entries and Undo would reverse the last 25 lots only — worse than having no progress bar. **Any new
+chunked action that records undo MUST thread \`undoId\` through.**
+
+⚠ \`skipRevalidate\` on the intermediate chunks: a server action that calls \`revalidatePath\` sends
+the whole re-rendered page back with its result, and paying that 21 times on a 510-lot sale would
+cost more than the progress bar is worth. Only the final chunk refreshes.
+
+⚠ \`scopeIds()\` replaces \`selectedIds()\` for these — an empty array meant "the whole auction" to the
+actions, which cannot be counted or split, so the toolbar now always spells the ids out (every lot
+when nothing is ticked — the same scope as before).
+
+⚠ A mass action that fails part-way now SAYS so, naming the error and pointing at the Undo list.
+It used to leave no message at all while the lots done before the failure stayed changed.
+`,
   },
   {
     filename: "local_boot_safety.md",
