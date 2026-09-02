@@ -3801,8 +3801,9 @@ Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (~30 models, r
 name: Opening Message
 description: Copy and paste this at the start of every new Claude Code session to set expectations
 type: opening_message
+originSessionId: 30e4bce3-8e7b-41dd-9dea-f40497af1528
+modified: 2026-09-02T16:03:26.823Z
 ---
-
 # Opening Message — paste this at the start of every session
 
 Hi Claude. Before we start, here are the rules for working with me:
@@ -3811,19 +3812,19 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 **Ask before building.** If a task involves creating a new page, moving files, adding a new section, or connecting to an external service — ask me where I want it first. Don't assume.
 
-**Understand the JOB before redesigning a screen.** On 2026-08-18 several rounds went into rearranging the Admin Centre from screenshots - collapsible groups, a totes table, button layouts - before anyone asked what the page was FOR. It exists because customers ring up asking where their things are, and the moment that was said the real faults were obvious in one pass: it was answering "which of our two systems is this lot in", which is the one thing the admin must never have to care about. If a screen keeps needing another tweak, stop and ask who uses it and what question they are answering.
+**Understand the JOB before redesigning a screen.** On 2026-08-18 I spent several rounds rearranging the Admin Centre from screenshots — collapsible groups, a totes table, button layouts — before asking what the page was actually for. It exists because customers ring up asking where their things are, and the moment that was said the real faults were obvious in one pass: it was answering "which of our two systems is this lot in", which is the one thing the admin must never have to care about. If a screen keeps needing another tweak, stop and ask who uses it and what question they are answering.
 
 **Common sense on confirmation.** You don't need to check with me on every small thing — fixing a bug, a TypeScript error, a styling tweak within an existing file is fine to just do. But if the decision involves WHERE something lives, WHAT it connects to, or anything that affects the structure of the app — ask first.
 
+**Design philosophy is now a RULE.** RULES.md has a "Design philosophy" section — read it before building any screen. Use the width available (narrow columns are for phone-read prose only); dark mode is the DEFAULT so check it first; anything symbol- or colour-coded needs a key; borrow the real world's convention (first aid is green, not red); build for the iPads with ~44px touch targets; and never let "nothing happened" look like success.
+
 **Keep responses short.** One paragraph max unless explaining something technical. Lead with the action or answer, skip preamble. No summaries at the end, no "here's what I did" recaps.
 
-**Don't give me commands to run — any of them.** Any admin operation that needs triggering manually must have a proper UI button. This also covers DIAGNOSTICS: don't paste a node/npm/browser-console line "so you can see the check for yourself". Run it yourself and tell me the result. (2026-08-17: a scratch test script got pasted at me as if it were something to run.)
-
-**Refresh the changelog seed as part of EVERY push** (npm run changelog:seed, commit the result). Railway's build has no .git at all, so a release can only record its own headline commit — the committed seed is the ONLY route by which anything else reaches Admin → Patches & Changes. It went stale by 33 commits and a full day's work showed as one line (2026-08-17).
+**Don't give me commands to run — any of them.** Any admin operation that needs triggering manually must have a proper UI button. This also covers **diagnostics**: don't paste a \`node\`/\`npm\`/browser-console line "so you can see the check for yourself". Run it yourself and tell me the result. (2026-08-17: a scratch test script got pasted at me as if it were something to run.)
 
 **Match the complexity of the solution to the simplicity of the request.** If I say "put a copy on the site", embed it statically — don't build a syncing system.
 
-**Don't blame the cataloguers for the phantom report counts.** I've confirmed in person that nobody is making those lots, the barcode scanner isn't used, and the X-vs-F auction code is a red herring — it's an unidentified tablet/code trigger. Do not re-litigate this or suggest the users did it themselves.
+**Don't blame the cataloguers for the phantom report counts.** I've confirmed in person that nobody is making those lots, the barcode scanner isn't used, and the X-vs-F auction code is a red herring — it's an unidentified tablet/code trigger. Do not re-litigate this or suggest the users did it themselves. (Full context in the phantom-catalogue-counts memory.)
 
 ---
 
@@ -3833,19 +3834,22 @@ This is the **Vectis Hub** — an internal tool for Vectis Auctions. It is NOT a
 
 **Production:** https://vectis-production.up.railway.app
 **Staging:** https://vectis-staging.up.railway.app
-**Reports-only:** Separate Railway environment, deploys from reports-only branch (DIVERGED — has its own server.js and Logo handling)
+**Sandbox:** https://vectis-hub-sandbox.up.railway.app — staging's CODE against a Neon branch of PRODUCTION's data (added 2026-08-18, because staging's own data had drifted so far that screens looked right there and wrong on live). ⚠ Its background jobs are off ONLY because \`CRON_SECRET\` is unset — never add one, or it polls the real mailboxes and backs up to the real bucket. Deploys from \`staging\`, so one push updates staging and sandbox together.
+**Reports-only:** Separate Railway environment, deploys from \`reports-only\` branch (DIVERGED — has its own server.js and Logo handling)
 **GitHub:** https://github.com/Jordan-Vectis/vectis-hub
 **Local path:** C:\\Dev apps\\vectis-hub
 
-I (Jordan) never run the app locally. I always use the Railway staging URL. Any feature that only works locally is useless.
+I (Jordan) never run the app locally — always a Railway URL. Any feature that only works locally is useless.
+
+⚠⚠ **I do my real work on PRODUCTION.** Measured 2026-09-02: I was on \`vectis-production.up.railway.app\` running a live sale all morning while Claude assumed staging and twice told me a fix was "live for you" when it was only on \`staging\`. **A push to staging does NOT reach me.** Check which environment I'm in before saying anything is live, and remember pushing to \`main\` still needs me to say so.
 
 ---
 
 ## Tech stack
 
 - Next.js 16.2 (App Router), TypeScript, Tailwind CSS v4 (CSS-first — NO tailwind.config.ts, config goes in the CSS file)
-- Prisma 7.7 with @prisma/adapter-pg (requires adapter — no direct URL in client)
-- PostgreSQL on Neon (NOT Railway — never look for a Postgres service in Railway)
+- Prisma 7.7 with \`@prisma/adapter-pg\` (requires adapter — no direct URL in client)
+- PostgreSQL on **Neon** (NOT Railway — never look for a Postgres service in Railway)
 - NextAuth v5 beta (JWT sessions, Credentials provider)
 - Socket.IO for live auction real-time events
 - Google Gemini API (lot descriptions, BC Marketing articles)
@@ -3853,170 +3857,341 @@ I (Jordan) never run the app locally. I always use the Railway staging URL. Any 
 - Business Central OData API (BC Reports, BC Warehouse, BC Marketing)
 - Cloudflare R2 for lot photo storage
 - D-ID API for AI Presenter avatar
-- pdf-lib + sharp + bwip-js for server-side PDF generation (NEVER pdfkit — fails on Railway with missing Helvetica.afm)
+- **pdf-lib + sharp + bwip-js** for server-side PDF generation (NEVER pdfkit — it fails on Railway with missing Helvetica.afm)
 
 Key config notes:
-- prisma generate runs as part of npm run build
-- trustHost: true in auth.config.ts — required for Railway domain
-- proxy.ts (not middleware.ts) — Next.js renamed middleware. Matcher excludes static image extensions (svg/png/jpg/etc) so /public images load on public pages (/submit, /value) without being redirected to /login. New public-page assets must have their extension in the exclusion.
-- Auth split: auth.config.ts (Edge-safe) + auth.ts (full, uses Prisma)
-- Prisma client generated at app/generated/prisma/
-- DATABASE_URL, AUTH_SECRET, NEXTAUTH_URL set in Railway Variables
+- \`prisma generate\` runs as part of \`npm run build\`
+- \`trustHost: true\` in \`auth.config.ts\` — required for Railway domain
+- \`proxy.ts\` (not middleware.ts) — Next.js renamed middleware
+- Auth split: \`auth.config.ts\` (Edge-safe) + \`auth.ts\` (full, uses Prisma)
+- Prisma client generated at \`app/generated/prisma/\`
+- \`DATABASE_URL\`, \`AUTH_SECRET\`, \`NEXTAUTH_URL\` set in Railway Variables
 
 ---
 
 ## Git workflow
 
-- Default branch for ALL work: staging — never push to main unless I explicitly say "push to main" or "merge to production"
-- "Push it" or "deploy it" are NOT permission to push to main
-- Always git pull origin staging before pushing — another developer also pushes to this branch
-- Merge to production: git push origin staging:main
+- Default branch for ALL work: **\`staging\`** — never push to \`main\` unless I explicitly say "push to main" or "merge to production"
+- "Push it" or "deploy it" are NOT permission to push to main — I must say "push to main" specifically
+- Always \`git pull origin staging\` before pushing — another developer also pushes to this branch
+- **Merge to production:** a plain fast-forward often fails because hotfixes get committed straight to \`main\` and never back-merged (branches diverge). Procedure: trial \`git merge --no-commit --no-ff origin/staging\` first to check for conflicts → \`git merge --no-ff origin/staging\` into \`main\` → push \`main\` → then \`git checkout staging; git merge --ff-only main; git push origin staging\` so both branches realign. Only when I say "push to main".
+- ⚠ **Refresh the changelog seed as part of EVERY push** (\`npm run changelog:seed\`, commit the result). Railway's build has no \`.git\` at all, so a release can only record its own headline commit — the committed seed is the ONLY route by which anything else reaches Admin → Patches & Changes. It went stale by 33 commits and a full day's work showed as one line (2026-08-17). It refuses to shrink the file, so running it can only ever help.
+
+---
+
+## Roles & permissions
+
+- **ADMIN** — full access, hardcoded for it@vectis.co.uk, can't be deleted
+- All other roles are free-form strings on \`User.role\` — custom-creatable via \`/admin/role-defaults\`
+- Role names normalised to \`UPPER_SNAKE_CASE\`
+- Pre-seeded defaults: \`COLLECTIONS\`, \`CATALOGUER\`
 
 ---
 
 ## Database migrations
 
-Whenever a new Prisma migration is added, ALSO add the equivalent SQL to the MIGRATIONS array in app/api/admin/run-migrations/route.ts. The Run Migrations button on /admin is the one-click fix — prisma migrate deploy is unreliable on Railway.
+Whenever a new Prisma migration is added, ALSO add the equivalent SQL (\`CREATE TABLE IF NOT EXISTS\` / \`ALTER TABLE ... ADD COLUMN IF NOT EXISTS\`) to the \`MIGRATIONS\` array in \`app/api/admin/run-migrations/route.ts\`. The Run Migrations button on /admin is the one-click fix for Railway — \`prisma migrate deploy\` is unreliable there.
 
 ---
 
 ## Memory workflow
 
-The Claude Memory viewer at /admin/memory is a static page — content is hardcoded in the ENTRIES array in app/(app)/admin/memory/page.tsx. Whenever memory files are updated, ALSO update the corresponding entry in the ENTRIES array and push to staging in the same commit.
+The Claude Memory viewer at \`/admin/memory\` is a static page — content is hardcoded in the \`ENTRIES\` array in \`app/(app)/admin/memory/page.tsx\`. Whenever memory files are updated, ALSO update the corresponding entry in the ENTRIES array and push to staging in the same commit.
 
 ---
 
 ## Lot identifier rules — CRITICAL
 
-Two active fields. Never interchange them.
-- receiptUniqueId: format R000016-413 — for AI runs and receipt matching
-- barcode: format F066001 — physical label on item
+Two active fields. Never interchange them. (\`lotNumber\` was REMOVED from the schema 2026-05-28.)
 
-(lotNumber has been removed from the schema. Folder in Description Copier is receiptUniqueId || barcode.)
+| Field | Format | Example | Use |
+|---|---|---|---|
+| \`receiptUniqueId\` | \`[A-Za-z]\\d{4,7}-\\d{1,6}\` | \`R000016-413\` | BC's ID, imported by 🔗 BC Match |
+| \`barcode\` | \`[A-Za-z]\\d{6,7}\` or unique ID format | \`F066001\` | Physical label — THE identifier |
 
-receiptUniqueId: ⚠ the Hub mints NO unique IDs any more (2026-08-06, Jordan's decision) — a lot is created with receiptUniqueId = NULL everywhere (wizard, import, mass create, Photo Only), Change Vendor / End of Day tools no longer mint for blanks, and the ONLY population path is 🔗 BC Match & Import (bulkAssignUniqueIds — BC Lines export matched by barcode, writes BC's own UniqueID). The BARCODE is a lot's identifier until then; blank unique IDs pre-BC are the CORRECT state, never a bug to fix by re-adding minting. The old advisory-lock + MAX scheme (2026-06-17 fix) survives only in the uncalled fillLotsFromTotes — leave it dead. Still no DB unique constraint (historic dupes block it).
+⚠ **The Hub mints NO unique IDs (changed 2026-08-06).** \`receiptUniqueId\` is NULL at creation
+everywhere (wizard, import, mass create, Photo Only; Change Vendor no longer backfills blanks) and
+is populated ONLY when 🔗 BC Match & Import pulls BC's own UniqueIDs in by barcode after the
+overnight import. Blank unique IDs pre-BC are the CORRECT state — never "fix" them by re-adding
+minting. The barcode is a lot's only identifier until BC Match, so it matters more than ever.
 
 Detection regex:
-- Unique ID: /^[A-Za-z]\\d{4,7}-\\d{1,6}$/
-- Barcode: /^[A-Za-z]\\d{6,7}$/ or unique ID pattern
-- Strip non-ASCII before testing: .replace(/[^\\x20-\\x7E]/g, "")
+- Unique ID: \`/^[A-Za-z]\\d{4,7}-\\d{1,6}$/\`
+- Barcode: \`/^[A-Za-z]\\d{6,7}$/\` or unique ID pattern
+- Strip non-ASCII before testing: \`.replace(/[^\\x20-\\x7E]/g, "")\`
+
+⚠ **Never use \`receiptUniqueId\` to decide whether a lot exists in BC — BARCODE ONLY** (my explicit
+rule, 2026-08-07, in RULES.md): legacy minted IDs collide with BC's numbering for other items, and
+the old barcode-OR-uniqueId test silently kept 292 lots off the overnight sheet. (Matching **by**
+BC's own imported IDs — Push to BC, AI apply within a sale — is fine.)
+
+Photo-filename and copier maps still use two-way matching (barcode + receiptUniqueId) — that's
+matching a lot's OWN fields, not deciding BC presence.
+
+\`Folder\` in Description Copier must always be \`receiptUniqueId || barcode\` — never just one.
 
 ---
 
 ## Lot titles
 
-Max 83 characters. First 83 characters of the description, truncated with … if longer. No sentence splitting — full stops do NOT break the title. Fallback: "Untitled".
+Max **83 characters**. First 83 characters of the description, truncated with \`…\` if longer. **No sentence splitting — full stops do NOT break the title** (this was changed; the old "first sentence" behaviour was wrong and cut titles like "Mixed group. A group of..." down to "Mixed group"). Fallback: \`"Untitled"\` if description empty.
+
+---
 
 ## Lot status values
 
-ENTERED | REVIEWED | PUBLISHED | SOLD | UNSOLD | WITHDRAWN — default on creation: ENTERED
+\`ENTERED | REVIEWED | PUBLISHED | SOLD | UNSOLD | WITHDRAWN\` — default on creation: \`ENTERED\`
+
+---
 
 ## Auction types
 
-GENERAL | DIECAST | TRAINS | VINYL | TV_FILM | MATCHBOX | COMICS | BEARS | DOLLS
+\`GENERAL | DIECAST | TRAINS | VINYL | TV_FILM | MATCHBOX | COMICS | BEARS | DOLLS\`
 
 ---
 
 ## Estimate parsing
 
-Regex: /£([\\d,]+)\\s*[–\\-]\\s*£?([\\d,]+)/
-Accepts en-dash and hyphen, optional £ on second value. Strip commas from numbers.
+Regex: \`/£([\\d,]+)\\s*[–\\-]\\s*£?([\\d,]+)/\`
+- Accepts en-dash and hyphen, optional £ on second value
+- Strip commas: \`£1,000–£2,000\` → 1000, 2000
 
-Bidding increments: £0–50: £5 | £50–200: £10 | £200–700: £20 | £700–1000: £50 | £1000–3000: £100 | £3000–7000: £200 | £7000–10000: £500 | £10000+: £1000
+Bidding increment rounding:
+- £0–50: nearest £5
+- £50–200: nearest £10
+- £200–700: nearest £20
+- £700–1000: nearest £50
+- £1000–3000: nearest £100
+- £3000–7000: nearest £200
+- £7000–10000: nearest £500
+- £10000+: nearest £1000
 
 ---
 
 ## Batch AI run rules
 
-- maxDuration: 300s. Up to 24 images per lot. 12-second delay between lots.
-- Retry loop is infinite — never silently fail a lot. Only abort on Gemini content block.
-- Rate limit backoff: exponential — Math.min(60000 * 2^(attempt-1), 1800000)
-- Other error backoff: Math.min(attempt * 12000, 30000)
+- \`maxDuration\`: 300 seconds. Up to **24 images per lot**. **12-second delay between lots**.
+- Retry loop is **infinite** — never silently fail a lot. Only abort on Gemini content block.
+- Rate limit backoff: exponential — \`Math.min(60000 * 2^(attempt-1), 1800000)\` (60s → 120s → ... → 30 min cap)
+- Other error backoff: \`Math.min(attempt * 12000, 30000)\` (12s → 24s → 30s cap)
 - On retry, alternate between primary and fallback model
-- Returns HTTP 200 even when lots fail — always check results[0].status, not res.ok
-- Join description lines with \\n, never space — collapsing to space destroys formatting
-- English output enforced (2026-06-24): a LANGUAGE_RULE is appended to the system instruction AND the user prompt in the batch route, forcing British English. Without it Gemini mirrored foreign-language packaging (German Märklin/Fleischmann/Roco model railway boxes etc.) and returned non-English descriptions. Applies to Pipeline Batch stage + standalone Batch Run (shared route). Re-run any lots already generated in another language.
-- Double Check English safety net (2026-06-24): DOUBLE_CHECK_INSTRUCTION has a LANGUAGE section — non-English descriptions must be flagged in "contradictions" AND fully translated into British English in "revised". Needed because the DC route sets verdict from contradictions/unsupported (not the model's verdict field) and the pipeline only applies "revised" when verdict is "issues", so a non-English description must populate "contradictions" or the translation is dropped. Catches anything the batch English rule misses, at the final DC review gate.
-- Condition must NOT appear in AI descriptions (it's added manually by a human to the separate condition field). Fixed 2026-06-25: the Model Railway presets (strict + free) used to instruct including a condition statement and showed "condition appears Excellent to Near Mint" in their examples; replaced with an explicit do-not-include rule + condition-free examples, matching the Vinyl preset. IMPORTANT: built-in presets are DB-overridable (aiPreset table; DB always wins over the lib default), so if the Model Railway preset was edited/saved in the UI the code change has no effect — reset or re-save it in the preset editor.
+- Returns HTTP 200 even when lots fail — always check \`results[0].status\`, not \`res.ok\`
+- Join description lines with \`\\n\`, never \` \` — collapsing to a space destroys formatting
 
-Always check before calling .text(): (1) response.promptFeedback?.blockReason and (2) response.candidates?.[0]?.finishReason — only "STOP" and "MAX_TOKENS" are acceptable. 503 from Gemini = transient, retry. Use 422 (not 500) for content blocks.
+## Gemini response handling
+
+Always check BEFORE calling \`.text()\`:
+1. \`response.promptFeedback?.blockReason\` — blocked prompt
+2. \`response.candidates?.[0]?.finishReason\` — only \`"STOP"\` and \`"MAX_TOKENS"\` are acceptable
+
+503 from Gemini = transient, retry. 422 (not 500) for content blocks.
 
 ---
 
-## BC OData API — critical field differences
+## BC OData API — critical field name differences
 
-- Auction_Lines_Excel: auction code = EVA_AuctionNo
-- Receipt_Lines_Excel: auction code = EVA_SalesAllocation
-- These are NOT interchangeable — wrong field = silent failure or 400 error
+\`Auction_Lines_Excel\` uses **\`EVA_AuctionNo\`** for auction code.
+\`Receipt_Lines_Excel\` uses **\`EVA_SalesAllocation\`** for auction code.
+These are NOT interchangeable — wrong field = silent failure or 400 error.
 
-Always use /api/bc/api-viewer?endpoint=<Name>&limit=1 to confirm field names before writing new BC queries. Complex OR filters time out — run per-key in parallel with Promise.allSettled. Use @odata.nextLink for pagination, NOT $skip (BC has ~38k row $skip limit). $apply=groupby is NOT supported.
+Always use \`/api/bc/api-viewer?endpoint=<Name>&limit=1\` to confirm field names before writing new BC queries.
+
+Complex OR filters time out — run per-key in parallel with \`Promise.allSettled\`.
+
+⚠⚠ **Our BC cache had NO delete path until 2026-08-19.** Every Data Sync stage is upsert-only — deliberately, so a partial walk can never wipe good data — which meant a row **deleted in BC lived in our copy forever**. Found because Jordan put BC's own screen beside ours: receipt R008537 returns **50** lines live, our cache held **143**. The 93 ghosts were temp A995 lines BC deleted on re-receipting, and their barcodes had since been used on OTHER customers' lots — which is how one customer's tote search showed another customer's items. **Stage 8 (\`sync/reconcile-deleted\`)** now asks live BC what each suspect receipt actually holds and removes what BC no longer has; it also runs at the end of the nightly cron. ⚠ It is the ONLY stage allowed to delete: live BC is the sole authority, an empty answer deletes nothing, a failed fetch stops the run.
+
+⚠ **BC keeps "who catalogued it" in THREE fields and the obvious one is usually empty.** \`EVA_CataloguedBy\` is a short code ("KS") and is blank on tens of thousands of lines; \`EVA_CataloguedByUser\` and \`EVA_CreatedBy\` hold a Windows username ("ANNABELL.FENBY"). Sampling 200 catalogued lines with a blank code: 98 had the user field, **all 200** had CreatedBy. \`bcPersonName()\` in \`lib/cataloguer-directory.ts\` is the one place that resolves any of them to a real name.
+Use \`@odata.nextLink\` for pagination, NOT \`$skip\` (BC has a ~38k row $skip limit).
+\`$apply=groupby\` is NOT supported by BC OData.
 
 ---
 
 ## PDF generation
 
-Always use pdf-lib (pure JS). Logo: sharp rasterises SVG → PNG, then pdfDoc.embedPng(). Helper: lib/pdf-logo.ts. Barcodes: bwip-js for Code 128. Always generate server-side. Use fixed slot heights.
+- Always use **pdf-lib** (pure JS, no disk reads). Never pdfkit.
+- Logo: use \`sharp\` to rasterise the Vectis SVG → PNG, then \`pdfDoc.embedPng()\`. Helper: \`lib/pdf-logo.ts\`
+- Barcodes: \`bwip-js\` for Code 128, outputs PNG buffers
+- Always generate server-side — browser print is inconsistent
+- Use fixed slot heights — divide usable area into fixed slots, don't autosize
+
+---
+
+## API route patterns
+
+Every route handler must be wrapped in try/catch. Error response shape: \`{ error: string }\` always. HTTP codes: 401 unauthorised, 404 not found, 422 Gemini content block, 500 server error.
+
+---
+
+## Hardcoded constants (do not change without flagging)
+
+| Constant | Value |
+|---|---|
+| Lot title max length | 83 chars |
+| Max images per lot (batch) | 24 |
+| Max images per lot (chat) | 6 |
+| Inter-lot delay | 12,000 ms |
+| Rate limit backoff cap | 1,800,000 ms |
+| Batch route maxDuration | 300 s |
+| Chat route maxDuration | 120 s |
+| BC fetch timeout | 45,000 ms |
+| BC page size | 500 |
+| BC token refresh buffer | 60 s |
 
 ---
 
 ## BC Warehouse — Location History tab
 
-DO NOT change the design or behaviour of the Location History tab in /tools/bc-warehouse. It was accidentally replaced once already. Two modes: Tote and Barcode. API route: /api/bc/location-history. Most recent row highlighted with bg-blue-950/30.
+DO NOT change the design or behaviour of the Location History tab in \`/tools/bc-warehouse\`. It was accidentally replaced once already. Two modes: Tote number and Barcode. API route: \`/api/bc/location-history\`. Results show movements with From/To/Changed by/Date. Most recent row highlighted with \`bg-blue-950/30\`.
 
 ---
 
-## Common gotchas
+## Common gotchas / standing fixes
 
-- fillLotsFromTotes must SELECT receiptUniqueId and preserve existing IDs — earlier bug wiped them
+- \`fillLotsFromTotes\` must SELECT \`receiptUniqueId\` and preserve existing IDs — earlier bug wiped them
 - Hub cards / app permissions: distinguish "key not configured" (default all-on) from "key present but empty" (respect empty). Don't use array length as the configured signal
 - Mass-select async: use server-side atomic ops, not client-side list arithmetic — React state is async
 - CORS preflight blocks custom headers on ntfy.sh — use JSON body POST format
 - Auction codes get reused across years — sort by date DESC and pick most recent
-- WarehouseItem.auctionName is a cache — use "Refresh auction names from BC" button to re-pull
+- \`WarehouseItem.auctionName\` is a cache — use "Refresh auction names from BC" button to re-pull
 
 ---
 
-## Current feature surface (as of 2026-05-29)
+## Current feature surface (as of 2026-06-11)
 
-Website (/website): Live vectis.co.uk iframe preview, Back End Controller tab, Banner Manager (/website/banner) for hero carousel slides.
+### Facilities — First Aid + Site Plan (NEW 2026-08-11/12)
 
-Auction Controller (/auction-controller): Password-gated Socket.IO clerk interface. Current lot display, asking/increment, auto-bids, Fair Warning, Hammer + 3s countdown, WebRTC camera broadcast. Results page at /auction-controller/results.
+**First Aid** (\`/tools/first-aid\`, app key \`FIRST_AID\`): emergency steps, first aiders, kit/defib/eyewash locations, and the accident book (statutory BI 510 layout — part 4 employer-only, in the Hub). **Its public page is \`/first-aid\`** — the ONE route outside the login gate, so anyone on site can use it without an account. ⚠ Everything shown there is world-readable; accident reports are readable ONLY in the Hub.
 
-Submissions (/submissions): Customer submission pipeline with statuses PENDING_ASSIGNMENT through COMPLETED. Channels: Email, Web Form, Phone, Walk-in.
+**Site Plan** (\`/tools/site-plan\`, app key \`SITE_PLAN\`): the building drawing, uploaded once, that any app pins equipment onto. First Aid pins its kits; fire equipment etc. can follow without a second copy. Pins are PERCENTAGES of the image; images only, never PDFs.
 
-Follow-ups (/follow-ups): Submissions with DECLINED or FOLLOW_UP status.
+### Website (/website)
+Live vectis.co.uk preview in iframe with page nav buttons. Back End Controller tab embeds \`/auction-controller\`. Banner Manager at \`/website/banner\` — manage hero carousel slides (headline, subtext, CTA, image, active toggle, reorder). Changes live instantly via server actions. DB model: \`HeroSlide\`.
 
-Contacts (/contacts): Customer database with paginated list, create modal, detail overlay (Details/Seller/Buyer/Documents tabs).
+### Auction Controller (/auction-controller)
+Password-gated Socket.IO clerk interface. Phases: login → auction select → control. Control panel: current lot display, set asking/increment, place auto-bids, Fair Warning, Hammer + 3s countdown, pause messages, WebRTC camera broadcast to viewers. Results display page at \`/auction-controller/results\`.
 
-Cataloguing (/tools/cataloguing): Auction list (Active/Completed split, Complete toggle) with Export/Import xlsx. Per-auction tabs: Manage Lots (KP column ✓/— + Has KP/No KP filter; AI column 🚫 excluded/✨ upgraded; AI Excluded filter; Added By + Date Added columns; bulk Exclude/Unexclude from AI via bulkSetLotsAiExcluded), Add Lot, Photo Only, Import Lots, Upload Photos, AI Upgrade, Review (key points highlighted, error flagging, AI flag note amber banners + inline edit, AI-flagged only filter, fullscreen photo viewer — also on tablet), Statistics (Lots Missing Photos), Lot History, Auction Settings, **📤 Push to BC** (copy-paste BC-import builder — fills Short Description/estimates/Size Classification/categories matched by UniqueID, not position). CatalogueLot.aiFlagNote (TEXT nullable) — set by pipeline/recheck, cleared by saveLotDescription. bcLocked = auction.addedToBC && userRole !== "ADMIN". Lotting Up, Research, Tablet Mode.
+### Submissions (/submissions)
+Customer submission pipeline. Statuses: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED/DECLINED/FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED. Channels: Email, Web Form, Phone, Walk-in. Filter by status/channel/department/search. **List view + Board (kanban) view toggle** (\`?view=board\`). Detail page is a **two-column dashboard** with a **status dropdown** (assign/Accept/Decline removed) and a **needs-follow-up tickbox** (flag). Department/cataloguer assignment removed. Photo lightboxes zoom+pan (\`components/zoomable-lightbox.tsx\`).
+**Customer photo upload (\`/submit/[token]\`):** public, no login, step-by-step wizard, take-photo option, no size limits/max compatibility (older customers), Vectis branding. Link never expires (only closes on COMPLETED/DECLINED). \`Submission.photoUploadToken\`.
+**Cataloguer valuation (\`/value/[token]\`):** public, no login, Vectis branding — a cataloguer values items individually with comments. Generated via a "Valuation Request Link" card that pre-fills an Outlook-web email (business, not desktop) to a chosen cataloguer + a display-only "Sent to" note. \`Submission.valuationToken/valuationNotes/valuationSubmittedAt/valuationSentTo\`, \`Item.externalEstimate/externalNotes\`.
 
-Auction AI (/tools/auction-ai) — 12 tabs, grouped sidebar (Chat/Run/History/Tools/Reference): Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Saved Runs, KP Check Runs, Description Copier, Barcode Sorter, Instructions, Macro Downloader. All run tabs alternate primary/fallback model on retries. applyAiDescriptionOne estimate fields optional — only Batch sets estimates. KP Check: validates descriptions (partial word matches don't count), stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation, uses React 18 batching fix. AI Upgrade: mass rewrite (/api/auction-ai/upgrade). Auto Pipeline: chains Batch→Key Points→Double Check (TEST ORDER 2026-06-05); Batch applies desc+estimate to catalogue + saves aiFlagNote; KP auto-applies; DC is final MANUAL Review & Apply gate. Stage cards show per-reason "not processed" breakdown. Re-check Cataloguer Flags button (text-only AI scan on existing descriptions, /api/auction-ai/recheck-flags). React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
+### Follow-ups (/follow-ups)
+Submissions with DECLINED or FOLLOW_UP status, ordered by lastFollowUpAt. Send Follow-up action per row. Matches submissions styling (dark-mode fixed).
 
-BC Marketing (/tools/bc-marketing): 9 tabs — Content Generator (16 types), Paste & Generate, Insights, Saved Drafts, Hashtag Bank, Web Descriptions, Social Auto Posts, Social Media Images, Email Lists (buyer emails from BC AttendenceRegister by keyword+date, CSV export with sale codes). BC codes never in AI output.
+### Contacts (/contacts)
+Customer database. Paginated list + search. Create modal (salutation, name, email, phone, address, isSeller/isBuyer). Detail overlay: Details / Seller / Buyer / Documents tabs.
 
-BC Warehouse (/tools/bc-warehouse): Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
+### Cataloguing (/tools/cataloguing)
+Auction list **split into two tables: Active and Completed** (Complete toggle → \`toggleAuctionComplete\`). **Filterable** (2026-06-26): shared filter bar (search code/name + Type + status dropdowns) in client component \`auctions-tables.tsx\`; both tables filter together. Each Type shows a **fun emoji** (🚂🚗🎬🧸…) on the desktop list, the tablet list (\`tablet/auctions/page.tsx\`), and the New Auction dropdown — single source of truth in \`lib/auction-types.ts\` (\`auctionTypeEmoji\`/\`auctionTypeLabel\`/\`AUCTION_TYPES\`). Per-auction tabs: **Manage Lots** (filters per column, inline edit, mass actions: mark added to BC, generate titles, transfer, delete lots, delete photos, **Exclude/Unexclude from AI** via \`bulkSetLotsAiExcluded\`; **KP column** ✓/— with Has KP/No KP filter; **AI column** shows 🚫 excluded / ✨ upgraded; **AI Excluded filter**; **Added By** column sortable by \`createdByName\`), Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics (incl. Lots Missing Photos stat), Lot History, Auction Settings. \`CatalogueLot.aiExcluded\` boolean gates lots from all AI runs. Export/Import xlsx. \`bcLocked\` = \`auction.catalogued && userRole !== "ADMIN"\` (⚠ MOVED off \`addedToBC\` on 2026-09-02 — the Catalogued tick is the lock now). Tablet lot cards show key points + creator name (👤). **Review tab** (shared, also on tablet): key points highlighted in description, error flagging (\`reviewFlag\`), **AI flag note** (\`aiFlagNote\` TEXT nullable — set by pipeline when AI spots a potential cataloguer mistake, cleared by \`saveLotDescription\`; shown as amber ⚠️ banner with inline edit), **"⚠️ AI-flagged only" filter toggle**, **fullscreen photo viewer** (hover "⛶ Fullscreen" on any image in the photo modal). Lotting Up, Research (/tools/cataloguing/research — quick-launch + invisible timer), Tablet Mode.
 
-BC Reports (/tools/bc-reports): Cataloguing report (barcode/uniqueid/compare), Packing report, Shipping report (parcels by country/region/size, estimated revenue from the rate sheet, country×size grid, PDF).
+**Shipped 2026-08-17 — read the linked memory before touching any of these:**
+- **Auction Manager ⭐ "Currently working on"** — star a sale to pin it above Active Auctions. ⚠ PER USER (\`CatalogueAuctionFavourite\`) and NOT a sale status; keep it out of the status filters and the overview PDF.
+- **Review tab: "the key points are wrong, not the description"** — correct the cataloguer's key points, or record that they were the mistake (\`kpFix*\`), and the lot stops being chased. ⚠ The key points are UPSTREAM of the description: fixing only the description leaves the wrong fact in the notes and the next Key Points run puts it straight back. Plus **✨ Fix all AI-flagged**, which generates every correction, lists them, and writes only the rows still ticked.
+- **Photography → Upload photos (any sale)** — the same uploader with no sale picked; codes are matched across every UNCOMPLETED sale and each photo saves to whichever sale its lot is in. The label-reading/grouping engine now lives in **\`lib/photo-scan.ts\`**, shared with the sale's own tab — never grow a second copy. A photo matching nothing is listed and simply not saved (a holding area was built and then removed on Jordan's reversal — don't rebuild it).
+- **Idle gap ends at LOT START, not the save** — measuring to the save folded a lot's own working time into the break (a 20-minute break plus a 35-minute lot read as 55 minutes and tripped a 30-minute threshold). ⚠ The start is stamped by the SERVER; never trust a client start or \`now − clientDuration\` except as a LATER bound.
 
-Packing (/tools/packing): Royal Mail dispatch. Packers: Full Time/Agency/Ex-Staff, aliases, barcode sheet PDF.
+**Lotting Up (/tools/cataloguing/lotting-up):** Upload photo → Gemini groups items into proposed lots with bounding box overlays. API: \`/api/lotting-up\`.
 
-Auction Monitor (/tools/auction-monitor): Live WebSocket (wss://www.vectis.co.uk/wss/{auctionId}). ntfy.sh push notifications (10 alert rules, JSON body POST).
+**Research (/tools/cataloguing/research):** Quick-launch search in Google/eBay/WorthPoint/Catawiki/Vectis/Wikipedia. Invisible timer logs research time via \`navigator.sendBeacon\`.
 
-IT Help (/tools/it-help): IT knowledge base + AI chat (searches articles + tickets, cites sources).
+**Tablet Mode (/tools/cataloguing/tablet):** Touch-optimised iPad interface for ADMIN/CATALOGUER roles.
 
-IT Tools (/tools/it-tools): IT utilities + ModelPingTester.
+### Auction AI (/tools/auction-ai) — 14 tabs, grouped sidebar
+Sidebar groups: **Chat** (Chat Window) · **Run** (Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade) · **History** (Saved Runs, KP Check Runs) · **Tools** (Description Copier, Barcode Sorter placeholder) · **Reference** (Instructions, Macro Downloader, **BC Import Check**). _(The old "Models" tab was removed 2026-06-29 and merged into **Admin → AI Models**.)_
 
-Tickets (/tools/tickets): IT helpdesk with statuses, priorities, configurable categories, comments, resolution notes.
+**BC Import Check** (Reference group): client-side reconciler for when the "add to BC" macro breaks part-way through. Upload the import sheet (ReceiptNumber/Count/pipe-separated Barcodes — old tote-keyed sheets still accepted) + the BC Lines export → matches by barcode, drops lots already in BC, outputs a fresh re-run sheet (\`BC_Import.csv\`) of only the lots left. Lots in BC with a non-zero Errors value are flagged separately (not re-run). ⚠ The parsing/reconcile ENGINE is shared with the End of Day morning-after panel — one copy in \`lib/bc-import-sheets.ts\`; the tab is just its dark-styled UI.
 
-Cataloguing Reports (/tools/reports): Cataloguing performance with time ranges, per-user stats + charts. Marketing Reports (/tools/marketing-reports): GA4 website analytics (visitors, sources, pages, devices, countries) via the GA4 Data API.
+Presets in \`lib/auction-ai-presets.ts\`: Vinyl, TV/Film, Modern Diecast, Comics, Model Railway (strict+free), Teddy Bears, General Toys, Military Figures, Matchbox.
 
-Saleroom Trainer (/tools/saleroom-trainer): Iframe training guide.
+**Model alternation (all run tabs):** Batch, KP Check, Double Check, Pipeline, AI Upgrade alternate primary/fallback model on retries via \`attempt % 2 === 0\`. Fallback set in the top-level sidebar dropdown.
 
-Internal Warehouse (/tools/warehouse): Vectis physical warehouse (separate from BC Warehouse). Sub-pages: /customers, /receipts, /inbound, /locate, /history, /warehouse, /reports.
+**\`applyAiDescriptionOne\` estimate rule:** \`aiEstimateLow\`/\`aiEstimateHigh\` are OPTIONAL — omitting them preserves existing DB values. Only Batch sets estimates; DC and KP must NOT pass them or they wipe Batch's estimates.
 
-Admin (/admin): About, Users & Permissions, Roles & Defaults, Home Page, Departments, Cataloguing Reports, Devices, Claude Memory, Run Migrations, Backup (R2 backup viewer + cross-table search), Documents (nested folders, drag-and-drop R2 upload), Invoices (flat file store, any file type, R2 invoices/ prefix, InvoiceFile model), Idle Timer (yellowMins/redMins/reasons config), **Lot Change Log** (/admin/lot-log — CatalogueLotEvent table; overhauled 2026-07-01 to log EVERYTHING via lib/lot-log.ts: creation with entered details, every field edit from every path, deletion, photo changes; with action/source(tool)/batchId columns + filters. NEEDS Run Migrations).
+**Key Points Check:** Validates descriptions against key points via Gemini. Returns verdict, contradictions, unsupported claims, optional revised description. Persisted in \`AuctionRun\`/\`AuctionLot\` (saved batch runs) or \`PipelineRun\`/\`PipelineLot\` (Auto Pipeline) — there is NO \`KPCheckRun\`/\`KPCheckLot\` table. Partial word matches do NOT satisfy a key point — exact meaning must be present.
 
-Databases (/databases): Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (~30 models).
+**Double Check:** Second-pass AI validation. Counts boxes/units, not vehicles within a set title (e.g. "Thunderbird 1 & 3" = one item). Uses the React 18 batching fix — see below.
+
+**AI Upgrade:** Mass description rewrite. Pick transformation modes (shorten/expand/humanise/grammar/etc.), run, before/after review, accept individually or all. Route: \`/api/auction-ai/upgrade\`.
+
+**Auto Pipeline:** Chains Batch → **Key Points** → **Double Check** (TEST ORDER from 2026-06-05 — KP inserts missing points, DC cleans up duplications). No lots ever marked FAILED — content blocks = skipped, errors retry infinitely. Stored in \`PipelineRun\` / \`PipelineLot\` tables. Key behaviours:
+- **Batch applies description + estimate straight to the catalogue** and saves \`CatalogueLot.aiFlagNote\` if the AI detects a potential cataloguer mistake.
+- **Key Points auto-applies** (stage 2) — inserts missing key points, writes to catalogue.
+- **Double Check = MANUAL review** (stage 3, does NOT auto-apply). Lots appear in Review & Apply section. Applying writes to catalogue.
+- **Recovery:** review section shows any lot whose AI text isn't yet on the catalogue (\`kpRevised\` vs \`appliedDesc\`), so old completed runs can be applied retroactively.
+- **Stage card "not processed" breakdown:** KP and DC cards now show per-reason counts (e.g. "· 5 no key points recorded · 2 batch did not succeed") instead of just a number.
+- **Re-check Cataloguer Flags button:** below the stage cards. Text-only AI scan on all lots with descriptions + key points — no images, no full re-run. Saves results to \`CatalogueLot.aiFlagNote\`. Route: \`/api/auction-ai/recheck-flags\`.
+
+**React 18 batching fix — CRITICAL pattern:**
+Never call \`setState(prev => prev.map(...))\` in a loop of 100+ items — React 18 batches/collapses them, leaving most items stuck. Fix:
+\`\`\`typescript
+const working = items.map(...)  // local copy
+// in loop after each update:
+working[idx] = { ...working[idx], ...update }
+setState([...working])  // full array replace — React cannot batch these away
+\`\`\`
+
+**Export/Import:** Export button on \`/tools/cataloguing/auctions\` generates xlsx (Auction + Lots sheets). Import merges: id → receiptUniqueId → barcode; creates new if no match. Routes: \`/api/catalogue/export\`, \`/api/catalogue/import\`.
+
+**\`bcLocked\` pattern:** \`auction.catalogued && userRole !== "ADMIN"\` — gates all lot mutations once a sale is ticked **Catalogued**. Only ADMINs can edit locked lots. ⚠⚠ It moved off \`addedToBC\` on 2026-09-02, because that tick became a measured barcode count against BC (the In BC column). Never point \`requireNotBCLocked\` back at \`addedToBC\`.
+
+### Auction AI presets (lib/auction-ai-presets.ts)
+- Vectis Strict: Vinyl & Memorabilia
+- Vectis Strict: TV & Film Collectibles
+- Vectis Strict: Modern Diecast (general)
+- Vectis Strict: Comics & Toys
+- Vectis Strict: Model Railway + Vectis Free: Model Railway
+- Vectis Strict: Teddy Bears
+- Vectis Strict: General Toys & Collectables
+- **Vectis Strict: Military Figures** — examples-first, Set 2055 Confederate Cavalry fully detailed, WRONG OUTPUT example included
+- **Vectis Strict: Matchbox** — full 1-75 reference table, 6 examples, 10 rules covering casting features (wipers/mirror/tow hook), wheel type, colour variants, box grading
+
+### BC Marketing (/tools/bc-marketing) — 5 tabs
+Content Generator (16 content types, DB-sourced lots), Paste & Generate, Insights, Saved Drafts (DRAFT/APPROVED/PUBLISHED), Hashtag Bank. BC internal codes (F025, DM0126 etc.) must NEVER appear in AI output.
+
+### BC Warehouse (/tools/bc-warehouse) — 8 tabs
+Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due (per-aisle PDFs), Unsold Items, Data Sync, DB Explorer.
+
+### BC Reports (/tools/bc-reports)
+Cataloguing report (barcode / uniqueid / compare modes), Packing report (fuzzy matcher + aliases), **Shipping report** (Shipping tab — parcels by country/region/city/month, items-by-size + estimated shipping revenue ex VAT, shipped-vs-collected by size, country×size, World/UK maps, PDF export). ⚠ Read the [Vectis Hub Project] memory for the full shipping data model + the many date/reconciliation gotchas before touching it.
+
+### Packing (/tools/packing + /tools/packing/packers)
+Royal Mail dispatch. Packers: Full Time / Agency / Ex-Staff groups, aliases, barcode sheet PDF (10 rows/page, Code 128, Vectis logo header).
+
+### Auction Monitor (/tools/auction-monitor)
+Live WebSocket monitor (\`wss://www.vectis.co.uk/wss/{auctionId}\`). Tracks bids, session totals, sale-state flags. ntfy.sh push notifications (10 alert rules, JSON body POST). Persistent lot-outcomes store (~2000 lots).
+
+### IT Help (/tools/it-help)
+Internal IT knowledge base + AI assistant. Articles with categories (GENERAL/HARDWARE/SOFTWARE/NETWORK/APP/HOW_TO). Chat searches articles + tickets and cites sources.
+
+### IT Tools (/tools/it-tools)
+IT utility page with ModelPingTester component for testing Gemini model availability.
+
+### Tickets (/tools/tickets)
+Internal IT helpdesk. Statuses: OPEN/IN_PROGRESS/AWAITING_RESPONSE/RESOLVED/CLOSED. Priorities: LOW/MEDIUM/HIGH/URGENT. Configurable categories (\`Category\` model). Comments thread + resolution notes. Import at \`/tools/tickets/import\`.
+
+### Job Board (/tools/job-board) — admin-only, LIVE on production 2026-06-17
+SEPARATE from Tickets. Asana-style kanban: New·Mailbox / New·Manual / In Progress / Waiting / Done. Models \`ITJob\` + \`ITJobMessage\` (NOT Ticket). Cards → full-screen detail modal (status, assignee from managed IT-staff list \`User.isITStaff\`, original email shown in FULL/no trimming, conversation of customer replies + internal notes, Outlook-web Email button). **Email auto-import** via a public webhook \`POST /api/it-mailbox/inbound?key=IT_INBOUND_SECRET\`: IT@vectis.co.uk → Outlook redirect → Power Automate (Send email V2, Reply-To=From) → Make.com (Custom mailhook → HTTP POST form-urlencoded) → webhook. Reply threading via Office 365 Conversation Id (\`VH-CID:\` body marker). **The Make HTTP-module URL is the staging-vs-prod switch — currently points to PRODUCTION.** Microsoft Graph route exists but is DORMANT (tenant blocked admin consent). Full detail in the [Vectis Hub Project] memory file.
+
+### Reports (/tools/reports)
+Cataloguing performance with time ranges (7d/30d/90d/6m/1y/all). Per-user stats + charts. Research time included. Per-user at \`/tools/reports/[userId]\`. **PDF exports:** Summary (one-page team league table) + Export all / per-person (\`/api/reports/pdf\`, builder \`lib/reports-pdf.ts\`) — see [[reference_reports_pdf]]. **Cataloguer Activity Report** at \`/tools/reports/activity\` (team-wide away/activity + its own PDF) — see [[reference_idle_report]]. Stats computed in **orphan-aware SQL** (phantom deleted-lot logs excluded); day/week/month buckets use **Europe/London** time (helpers in \`lib/cataloguing-reports.ts\`). Admin-only phantom-log cleanup/inspect + Save activation-log tooling on the overview.
+
+### Manager Portal (/tools/manager-portal)
+New section under Cataloguing on the home page (\`MANAGER_PORTAL\` app key). Every sale's lot count across **Hub DB + BC combined**, cataloguing pace, projected milestone dates, per-cataloguer leaderboard. Completed sales show "✓ Added to BC" (not doubled). Timing-log counts exclude orphaned (phantom) logs — same rule as Reports.
+
+### Saleroom Trainer (/tools/saleroom-trainer)
+Iframe embedding \`/saleroom-trainer.html\` static training guide.
+
+### Internal Warehouse (/tools/warehouse)
+Vectis's own physical warehouse (separate from BC Warehouse). Dashboard + sub-pages: /customers, /receipts, /inbound, /locate, /history, /warehouse, /reports. DB models: Contact, WarehouseReceipt, WarehouseContainer, WarehouseMovement, WarehouseLocation.
+
+### Accounts (/tools/accounts) — admin-only, AI bookkeeping + reconciliation
+Automates the monthly NatWest/expenses spreadsheet. Create a month → scan/photograph invoices+receipts → **Run AI** (Gemini reads supplier/item/date/total/VAT, suggests VAT code + nominal column) → review in an Excel-style grid (grouped per card) → **Export to Excel**. Splits multi-receipt photos / multi-invoice PDFs; learns supplier→coding rules. **Reconciliation** (\`/[monthId]/reconcile\`) matches bank/card statement transactions to entered invoices — single, part-payment (one invoice many payments), and chunked (one payment many invoices) matching + ✨ Smart match; receipt-missing flag; shared Reserve pool for receipts from other checks. Models \`AccountingMonth\`/\`AccountingDocument\`/\`AccountingSupplierRule\`/\`AccountingCardholder\`/\`BankStatement\`/\`BankTransaction\`. **STAGING-only, not on production yet.** Full detail in [Vectis Hub Project].
+
+### Admin (/admin)
+About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices (serial/user tracking), Claude Memory, Run Migrations, **Lot Change Log** (audit of EVERY lot mutation — create/edit/delete/photo, with action/source/tool — via \`lib/lot-log.ts\`; overhauled 2026-07-01), **Cataloguing Categories** (\`/admin/categories\` — DB-managed category/subcategory list cataloguers pick from). Also: **Backup** (DB backup files in R2, cross-table search), **Documents** (nested folder tree, drag-and-drop R2 upload), **Invoices** (flat file store), **Cataloguer Activity Timer** (\`/admin/activity-timer\` — reasons list only + "👁 Preview the popup"; \`IdleTimerConfig\` singleton id \`"global"\`; per-user thresholds live on Admin → Users), **Unaccounted Time** (\`/admin/unaccounted-time\`), **Terms & Signatures** (\`/admin/terms\`, + popup preview), **Data & Compliance** (\`/admin/compliance\`), **AI Models** (\`/admin/ai-models\`, 2026-06-29 — pick the Gemini model per AI feature; ⚠ never hardcode a model default in a route, use \`getToolModel(slot)\` from \`lib/ai-models.ts\`, \`ToolModel\` table — see RULES.md "AI Model Selection").
+
+### Databases (/databases)
+Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (read-only explorer, ~30 models, row counts + 3 sample rows).
 
 ---
 
@@ -4024,80 +4199,328 @@ Databases (/databases): Customers, Receipts, Totes, Lots, Bids editors + Browse 
 
 A shadow-clerking aid for running an auction on TWO platforms at once: Vectis (Bidpath) and Saleroom (GAP). The clerk works one platform; these pages show what to press on the other.
 
-**The reference card on /tools/auto-clerk is the SOURCE OF TRUTH** for which buttons exist and when to press them. Read it before changing any auto-clerk code — the button mappings are fiddly and easy to get wrong (I got them wrong repeatedly before they were documented).
+**The reference card on /tools/auto-clerk is the SOURCE OF TRUTH** for which buttons exist and when to press them. Read it before changing any auto-clerk code — the button mappings are fiddly and easy to get wrong (got them wrong repeatedly before they were documented).
 
-Launcher (/tools/auto-clerk) layout (tidied 2026-06): (1) 🧪 Testing section — three scenarios built/tested one at a time: Scenario 1 "Clerk on Vectis → auto Saleroom" (READY = /auto-clerk-fake-saleroom.html), Scenario 2 "Clerk on Saleroom → auto Vectis" (coming next), Scenario 3 "Fully automated (timers)" (coming soon). (2) 📡 Shadow views — read-only Combined + Bidpath→Saleroom + Saleroom→Bidpath. (3) Sync Logic Reference card. (4) Legacy simulation in a collapsed details element — old BroadcastChannel dashboard + 4 panels + Coordinator, reference only.
+**Launcher (/tools/auto-clerk) layout (tidied 2026-06):** (1) **🧪 Testing** section with three scenarios being built/tested one at a time — Scenario 1 "Clerk on Vectis → auto Saleroom" (READY = /auto-clerk-fake-saleroom.html), Scenario 2 "Clerk on Saleroom → auto Vectis" (coming next), Scenario 3 "Fully automated (timers)" (coming soon). (2) **📡 Shadow views** — read-only Combined + Bidpath→Saleroom + Saleroom→Bidpath. (3) **Sync Logic Reference** card. (4) **Legacy simulation** in a collapsed <details> — the old BroadcastChannel dashboard + 4 panels (auto-clerk-bidpath/saleroom/commentary/controls.html) + Coordinator, kept for reference only.
 
 Pages:
-- /tools/auto-clerk-live — Bidpath → Saleroom shadow (reads Bidpath WebSocket directly)
-- /tools/auto-clerk-saleroom — Saleroom → Bidpath shadow (reads GAP via relay)
-- /tools/auto-clerk-combined — both side by side in iframes
-- /auto-clerk-fake-saleroom.html — end-to-end test rig: a DUMB Saleroom replica + a separate auto-clerk that only presses its real buttons. (1) Dumb replica (whole Saleroom UI from /public/auto-clerk-saleroom.html / Saleroom Trainer): buttons (bBid, btn-sell, btn-next, bFW, btn-undo, Room, Pass, Offer) react normally via their own act() handlers; no knowledge of Bidpath; own placeholder lot list advanced by Next; new act('online') = saleroom.com online customer bid (advances one increment, green). (2) Auto-clerk (top dark bar: WS URL + Auction ID + Connect + Production/Staging presets + Show raw): reads Bidpath WS and ONLY calls autoClick(id)→el.click() on real buttons, no state reaching-in. Mapping: bid Online/Saleroom → nothing (already on Saleroom); other platforms (Room/Telephone/Invaluable/BSCB/Commission) → click Bid; bid amount drops below last seen → click Undo; lotInformationUpdate Sold → click Sell; activeLotChange → click Next; getFairWarningStatus true → click Fair warn. (3) Test helper: green "+ Saleroom online bid" button fires act('online') to simulate an independent saleroom bidder. Same .click() approach will drive a console-pasted script on the real Saleroom GAP page later (swap element IDs for real ones). (4) ABSOLUTE-AMOUNT targeting + failsafes: clicking Bid only steps one increment so platforms starting at different amounts lag; fix uses the custom-amount box next to A (#bidOverride) — replica act('bid') reads it (value present = bid that exact amount, else step). Auto-clerk drives Saleroom to the absolute current Vectis bid each time (set box + click Bid), so missed presses self-correct on the next bid. Failsafes: verify-after-press + retry up to 4x (syncSaleroomToTarget/readSaleroomBid), coalesce fast bids onto latest target, pre-sell reconcile (bring Saleroom to hammer before Sell), 2s watchdog re-sync if behind, red #syncWarn banner if stuck. bpTargetBid holds target. URL + auction ID persist in localStorage. Shows a Saleroom-style clerking screen (lot, current bid, asking, message) mirroring the live auction. The six Saleroom buttons (BID, ROOM, SELL, NEXT, FAIR WARNING, UNDO) animate when auto-clerk logic would press them: room/commission bid → BID; lot sold → SELL then NEXT (2.2s apart); FW → FAIR WARNING. Online bids update state but don't press buttons (automatic on Saleroom). "Show raw" toggle dumps every WS message + flags unrecognised command names with a red UNK badge.
+- \`/tools/auto-clerk-live\` — Bidpath → Saleroom shadow (reads Bidpath WebSocket directly)
+- \`/tools/auto-clerk-saleroom\` — Saleroom → Bidpath shadow (reads GAP via relay)
+- \`/tools/auto-clerk-combined\` — both side by side in iframes
+- \`/auto-clerk-fake-saleroom.html\` — **end-to-end test rig: a DUMB Saleroom replica + a separate auto-clerk that only presses its real buttons**. Architecture is deliberately decoupled:
+  - **Dumb replica** (the whole Saleroom UI, based on \`/public/auto-clerk-saleroom.html\` / the Saleroom Trainer): buttons (\`bBid\`=Bid, \`btn-sell\`=Sell, \`btn-next\`=Next, \`bFW\`=Fair warn, \`btn-undo\`=Undo, Room, Pass, Offer, etc.) just react normally via their own \`act()\` handlers. The replica has NO knowledge of Bidpath. It runs its own placeholder lot list (Corgi etc.) advanced by Next clicks. New \`act('online')\` = a saleroom.com online customer bid (advances one increment, green Online notification).
+  - **Auto-clerk** (top dark bar: WS URL + Auction ID + Connect + Production/Staging presets + Show raw + connection pill): reads the Bidpath WS and the ONLY thing it ever does to the replica is \`autoClick(id)\` → \`el.click()\` on a real button (brief coloured press highlight). No reaching into replica state, no faking bid rows, no label patching. Mapping: bid \`Online\`/\`Saleroom\` → **nothing** (already on Saleroom); bid any other platform (Room/Telephone/Invaluable/BSCB/Commission) → click **Bid**; bid amount drops below last seen → click **Undo**; \`lotInformationUpdate\` Sold → click **Sell**; \`activeLotChange\` (Vectis advanced) → click **Next**; \`getFairWarningStatus\` true → click **Fair warn**.
+  - **Test helper**: green **"+ Saleroom online bid"** button in the top bar fires \`act('online')\` so you can simulate an independent saleroom.com bidder (the bidding stream that doesn't come from Bidpath).
+  - The whole point: prove the "press the button on the other platform" pipeline works for real. Same \`.click()\` approach will drive a console-pasted script on the real Saleroom GAP page later (just swap the element IDs for the real ones — "the part where Jordan tells me where the buttons are").
+  - **ABSOLUTE-AMOUNT targeting + failsafes (2026-06):** clicking Bid only steps ONE increment, so when platforms start at different amounts (e.g. Vectis £40, Saleroom £30) Saleroom always lags. Fix: the real Saleroom has a custom-amount box next to the **A** field — type an amount + press Bid to execute at exactly that figure. The replica's \`act('bid')\` now reads that box (\`#bidOverride\`): if it has a value, bid at that exact amount, else step one increment. Auto-clerk drives Saleroom to the **absolute** current Vectis bid every time (sets the box + clicks Bid), so a missed press self-corrects on the next bid. Failsafes: (1) verify-after-press + retry up to 4× (\`syncSaleroomToTarget\`, reads \`readSaleroomBid()\`); (2) coalesce fast bids onto the latest target; (3) pre-sell reconcile — before clicking Sell, bring Saleroom to the hammer figure first so a lot never sells at the wrong price; (4) 2s watchdog re-syncs if behind; (5) red \`#syncWarn\` banner if stuck after retries. \`bpTargetBid\` holds the target. Auction ID + URL persist in localStorage. Shows a Saleroom-style clerking screen (lot, current bid, asking, message) mirroring the live auction. The six Saleroom buttons (BID, ROOM, SELL, NEXT, FAIR WARNING, UNDO) animate when auto-clerk logic would press them: room/commission bid → BID; lot sold → SELL then NEXT (2.2s apart); FW → FAIR WARNING. Online bids update state but don't press buttons (automatic on Saleroom). "Show raw" checkbox dumps every WS message + flags unrecognised command names with a red UNK badge — use for debugging silent feeds.
 
 Data sources:
-- Bidpath: direct WebSocket wss://www.vectis.co.uk/wss/{auctionId}. Message data is in parsed.content (NOT parsed.data — this was a real bug). liveBidEvent has content.amount/asking/platform (BSCB=room, Online, Saleroom)/lot_id.
-- Saleroom (GAP): no public feed. A console script (copy button on the page) uses a MutationObserver on hammer-price / asking-price / lot-number / auction-message-content, POSTs to /api/gap-relay (in-memory store, CORS open, must stay in publicPaths in auth.config.ts), and the shadow page polls every 1s.
+- **Bidpath:** direct WebSocket \`wss://www.vectis.co.uk/wss/{auctionId}\`. Message data is in \`parsed.content\` (NOT \`parsed.data\` — this was a real bug). \`liveBidEvent\` has \`content.amount/asking/platform\`(BSCB=room, Online, Saleroom)\`/lot_id\`.
+- **Saleroom (GAP):** no public feed. A console script (copy button on the page) runs a MutationObserver on \`hammer-price\` / \`asking-price\` / \`lot-number\` / \`auction-message-content\`, POSTs to \`/api/gap-relay\` (in-memory store, CORS open — must stay listed in publicPaths in \`auth.config.ts\`), and the shadow page polls every 1s.
 
 Core sync rules (full detail on the reference card):
-- ONLY Vectis Online (platform === "Online") and Saleroom Online (platform === "Saleroom") bids are automatic on the other platform — no clerk action. Every other platform value (Room, Telephone, Invaluable, BSCB, any third-party source) needs the clerk to press BID on Saleroom. This is an ALLOWLIST not a denylist — if Bidpath emits a new platform name, the safe default is "needs BID" until verified auto-synced.
+- **Only Vectis Online (\`platform === 'Online'\`) and Saleroom Online (\`platform === 'Saleroom'\`) bids are automatic on the other platform — no clerk action.** Every other platform value coming through Bidpath (\`Room\`, \`Telephone\`, \`Invaluable\`, \`BSCB\`, any third-party source) needs the clerk to press BID on Saleroom. This is allowlist not denylist — if Bidpath emits a new platform name (e.g. \`LiveAuctioneers\`), the safe default is "needs BID" until you verify it's auto-synced.
 - Lot start: catch the lower platform up — BID on Saleroom / SALEROOM button on Vectis.
-- Same-amount tie: ROOM on Saleroom = favour Vectis (default at lot start); ! on Vectis = favour Saleroom. The ! is the ONLY ! button and only drops the Vectis bidder.
+- Same-amount tie: ROOM on Saleroom = favour Vectis (default at lot start); \`!\` on Vectis = favour Saleroom. The \`!\` is the ONLY \`!\` button and only drops the Vectis bidder.
 - Fair Warning after 15s inactivity (both, manual). Sell 20s after FW (both, manual): Vectis HAMMER then NEXT LOT; Saleroom SELL then NEXT.
 - Undo: **auto-detected in Scenario 1 only** (the rig clicks Undo when the Vectis amount drops below the last seen, until matched — card rule 6 updated 2026-08-04); manual on the shadow views and for clerk mistakes. Saleroom buttons have NO exclamation marks.
 
-## Recent work (2026-08-13/14) — ⚠ SPLIT: some on production, most STAGING-ONLY
+---
 
-ON PRODUCTION (merged 2026-08-14, main = 9acfb0cd): Marketing Business Plan, the Auto Pipeline overnight queue, the photo-upload error message, and Jack's first two Lotting Up commits.
-STAGING ONLY (10 commits, main is behind): everything marked (S) below — including both F109 data-safety fixes and the Auto Pipeline auto-apply fix.
+## Recent work (2026-09-01/02) — ALL ON PRODUCTION (merged to main 2026-09-02, cbe2e9c3 — 18 commits)
 
-- **Marketing Reports → Business Plan** — saved plans, AI suggestions from the analytics, A4 PDF. ⚠ The GA figures are FROZEN onto the plan; never make the page, the AI or the PDF read live GA. Marketing Reports is now **gated on its app permission** like every other tool (it wasn't — anyone logged in could open it), so anyone not ticked is bounced to /hub.
-- **Auto Pipeline overnight queue** — queue several sales, each with its OWN settings, run SERVER-SIDE so nothing need be left open. ⚠ The tab's own Run button still runs in the browser. Never gives up on retries (Jordan's instruction).
-- (S) **⚠⚠ Auto Pipeline "auto-apply isn't applying" — ROOT CAUSE FOUND.** Jordan's 512-lot Trains sale finished with everything unapplied; the log showed every write failing with "Server Action … was not found" — DEPLOY SKEW, caused by deploying while his tab was open. Every apply had its own catch that logged a line and carried on, so one deploy silently turned the rest of the sale into no-ops under a "Pipeline complete!". Worse, Apply All's catch was completely EMPTY — pressing it on a stale page wrote nothing, restored the list and said nothing. Both fixed, plus the mode is read live (toggling mid-run used to change the screen only), saveLot retries, and failed writes get their own red banner. ⚠ Do not deploy while Jordan has a long run going.
-- (S) **⚠ F109 data safety — two separate faults, both spotted by Jordan.** (1) BC Match LOST A LOT: "594 BC rows · 595 our lots" with every count reconciling to 594. Two lots shared a barcode, the lookup map kept only one, and the loser appeared in NO category at all. It is now its own orange status, NEITHER lot is imported, and the panel checks its own arithmetic. (2) The DUPLICATE CHECKER OFFERED TO DELETE A REAL LOT — two different Steiff bears (F109630/F109631) had both ended up on R008767-129, and it grouped on unique ID alone. It now only deletes when the BARCODES agree; clashing IDs and clashing barcodes are read-only. Jordan fixed F109 by hand.
-- (S) **Admin → Patches & Changes** — the development record plus an AI progress report for managers and a printable PDF. ⚠ The app has no GitHub access, so history is captured at BUILD time plus a committed seed. NO NAMES in the report (Jordan's call), and it is a LOG not a summary — no intro, every change covered.
-- (S) **Description Copier — a real condition check.** The old popup fired on every visit saying the same thing. It now compares each lot's RECORDED condition against its description: missing / never graded / reworded, each listed as buttons that jump to the lot. ⚠ Grade matching is case-SENSITIVE so "a good example" is not read as a condition.
-- (S) **Photo upload failures now say why** — one photo of 860 failed with Next's four-line "omitted in production builds" boilerplate. describeActionError turns that into one line plus the log reference, and names a stale deploy as such.
-- (S) **Auction Manager** — a "Lots with photos" column showing e.g. 400/500, green once every lot has one.
+⚠ Two of these were faults that had been **silently losing or mangling work for weeks**, both found
+by reading the change log rather than guessing. If a report and the catalogue disagree, read the log.
+
+- **⚠⚠ Applying an AI description was wiping the condition line.** "Add Conditions is really
+  glitchy, I press it over and over" was never the button — it was correct every time.
+  \`ai_apply\` wrote over the whole description field, taking \`Condition appears …\` off any lot that
+  had one: **151 of 246 applies on F114 in one day, 620 across all sales.** \`keepConditionLine\` in
+  \`lib/condition.ts\` is now in all four apply paths. It never ADDS a line to a lot that hadn't got
+  one, and only OUR wording is ever touched.
+- **⚠⚠ An overnight run resumed a saved run whose lots had been cleared** and skipped 210 of them
+  while reporting "601 described · 600 applied" (F113). The catalogue now overrules a saved row
+  that holds text against a blank lot, and the report shows "390 of 600" with a red banner when
+  the two disagree.
+- **A leaked tool call is not a description.** Gemini sometimes writes out its search
+  (\`tool_code print(google_search.search(…))\`) instead of answering; it isn't empty, so the empty
+  guard missed it and 10 F113 lots reached the catalogue that way. Now stripped and failed in all
+  four AI routes, and the Review tab's ⚠ needs-attention finds the ones already written.
+  **\`MALFORMED_FUNCTION_CALL\` is the same family** and was worse — it arrived worded "Blocked (…)",
+  so a lot was thrown away on the first try. Both now take bounded retries on the other model.
+- **Every mass action on Manage Lots shows 20/400.** The work goes over in chunks of 25; one press
+  is still ONE undo (the undo row is appended to), and only the last chunk revalidates.
+- **⚠⚠ THE EDIT LOCK MOVED.** It is now the **Catalogued** tick, not "Added to BC"
+  (\`requireNotBCLocked\`, 28 call sites). All 39 sales had both ticks identical, so nothing locked
+  or unlocked on the day. **Added to BC** on Auction Manager is now a measured **594/616** barcode
+  count against the BC sync — as is the "BC" flag on the auctions overview PDF.
+- **The model can be changed mid-run.** The Auto Pipeline held the model from the render that
+  started the run, so changing the sidebar dropdown changed the screen and nothing else.
+- **💬 Help box in the top bar** — ask "where do I go to do an overnight run?" and get the screen
+  plus a link. It only knows the tools you can open, done by filtering the context server-side
+  (never by instructing the model), and it blocks questions about tools you don't have.
+- **💷 Reserves** — a Reserve column and bulk set on Manage Lots, and Locking Check reminds you
+  which lots have one to enter in BC. ⚠ Deliberately simple: it does NOT check BC. I built a
+  self-clearing version first and Jordan rejected it — *"its not that complex"* — and it would
+  have lied until the next Data Sync.
+- **Review tab: ⚠️ Re-check AI flags**, scoped to the lots on screen, snapshotting the existing
+  flags first.
+
+⚠ **Working-style notes from this session:** don't deploy while a run is going; check which
+environment Jordan is in before saying a fix is live; and when he says something is "glitchy",
+read the change log before assuming a person or a button is at fault — twice it was neither.
+
+---
+
+## Recent work (2026-08-20) — ON PRODUCTION (merged to main 2026-08-21, 727fe320 — main = staging at that point, 48 commits incl. Overnight AI Upgrade runs, the Add/Remove Conditions fix and Jack's Clerk/Saleroom Trainer)
+
+Everything below is on staging; \`main\` is still on the 2026-08-19 merge. **Needs Run Migrations on both environments.**
+
+- **⚠⚠ THE AI QUOTA IS 4 REQUESTS A MINUTE.** Google Cloud → Quotas on project \`auction-ai\`: *"Request limit per model per minute, paid tier 1"* = **4** for gemini-omni-flash. Every model 429'd at once because the cap is per PROJECT. That single number explains the batch route's 12-second wait, and it is why the bulk tools now pace themselves. ⚠ The real fix is a quota increase — the rows are adjustable, and there is a quota adjuster under Configurations. Concurrent AI tools compete for the same 4/min.
+- **⚠⚠ THE INCHES MARK BREAKS JSON.** \`6"/15cm\` is written with a double quote, so an unescaped one makes the model's reply unparseable — and nearly every bears/diecast description has one. \`parseModelJson\` now repairs it. ⚠ My own salvage from that morning had been returning HALF a description as a complete answer; \`extractJsonField\` now refuses a value that doesn't terminate cleanly.
+- **The product-code guard was accusing the AI of inventing codes that were present.** It only recognised a code when 2–4 letters butt against the digits, so it was blind to \`Daisy, 65705\` and \`Skidoo 65705\`. Now strict about accusing, generous about exonerating.
+- **Three empty catches found and fixed** — the Review tab's Auto-fix and Locking Check's Suggest conditions both reported failures nowhere, so they looked like they "did nothing". ⚠ Look for \`catch {}\` justified as "one failure must not stop the run".
+- **BC Corrections shows only live mismatches**, so it agrees with Tote Check. It was merging in saved rows and reading 97 against a real 4.
+- **⚠ Tote Check itself was deliberately left ALONE** (Jordan) — its noisy flagging is what led him to find duplicated receipts sharing a tote in BC. A cleverer check would have hidden the real fault. Only the **Match BC write guard** was kept: it refuses to auto-write receipt/vendor when a tote is on two receipts, because the winner is decided by row order and it would have rewritten four CORRECT lots.
+- \`readJsonResponse\` — \`upstream error\` is Railway's proxy mid-deploy, not the Hub; it no longer surfaces as a JSON parser error.
+
+### Working-style notes from this session
+- **Reporting a doubt is useful; silently writing a guess is not.** Keep checks noisy, keep writes cautious — that is the shape Jordan endorsed after the tote-check episode.
+- **A "BC says" column is only as true as the TABLE it came from.** \`WarehouseTote\` describes totes, not lots. Check which BC table a comparison actually read before trusting it.
+- **\`new Map(array.map(...))\` is silent data loss** when the key isn't unique. Tote numbers, receipt numbers and barcodes have all turned out to be non-unique here.
+
+## Recent work (2026-08-19) — long session — MERGED TO MAIN at the end of the day
+
+⚠ **Needs Run Migrations on production** — three new personal tools added tables.
+
+- **🧪 Instructions Testing tab** (Auction AI → Run) — the Auto Pipeline over 5–10 hand-picked lots for trying instruction wording. ⚠⚠ **PREVIEW ONLY, never writes** — don't add an apply. Retries bounded, not infinite, so a test can't hang.
+- **AI instructions rewritten** — Dolls & Bears re-ordered (maker → name → code → positives → negatives → size), plus new **Modern Diecast & Tinplate** and **TV & Film** instructions. ⚠⚠ The lesson: *a rule stated once, in a different section from the examples, does not survive* — the "start with the maker" rule was being dropped for exactly that reason.
+- **Dolls & Bears clean-up now runs after Key Points and Double Check too** — the spaced \`CB 165133\` kept coming back because the KP stage restores the cataloguer's exact wording and nothing cleaned up behind it.
+- **✚ Add Conditions puts the condition on a new line**; the remover strips both joins, since every lot conditioned before today still has the space form.
+- **Exclude from AI on the tablet lot view** — ⚠ it wasn't merely missing: the tablet form had no such field, so **every tablet save was writing \`aiExcluded: false\`** and silently un-excluding lots.
+- **Admin Centre barcode search: 📍 Where it is** — location plus full move history, reusing BC Warehouse's route without touching that tab.
+- **Unaccounted Time was an hour out in BST** — a server component formatting dates without \`Europe/London\`. Times, the day column and the date range all fixed.
+- **The activity prompt now asks at the SAVE, never mid-lot** (Jordan's call) — a walk-away is remembered rather than erased by the first tap back. Trigger is inactivity, not lot duration, so a genuine 45-minute lot is never asked about.
+- **Overnight runner audited** — it does obey everything the tab does (aiExcluded is excluded at the shared route, so it can't drift). Two fixes: its AI flags now reach the Lot Change Log, and a long rate-limit wait can no longer let the same sale run twice.
+- **Auto Pipeline: a finished run can be reset and re-run** — Reset Progress was hidden whenever a load returned zero lots, which is exactly what a finished sale does.
+- **AI Upgrade: "Fix brand capitalisation"** — Marvel not marvel, DC not Dc.
+- **Three new /jordan tools** (CV Workshop, Garage, Documents) — details in local memory ONLY, never the shared record.
+
+## Recent work (2026-08-13/14) — ALL ON PRODUCTION (the ⧗ items went up with the 2026-08-19 merge)
+
+The first half merged 2026-08-14 (main = \`9acfb0cd\`): Marketing Business Plan, the Auto Pipeline overnight queue, the photo-upload error message, and Jack's first two Lotting Up commits. The rest — marked ⧗ below, including both F109 data-safety fixes and the Auto Pipeline auto-apply fix — sat on staging until the **2026-08-19** merge and is now live too.
+
+- **Marketing Reports → Business Plan** ([[reference_marketing_plan]]) — saved plans, ✨ AI suggestions from the analytics, 🖨 A4 PDF. ⚠ The GA figures are FROZEN onto the plan; never make the page/AI/PDF read live GA. Marketing Reports is now **gated on its app permission** like every other tool (it wasn't — anyone logged in could open it), so anyone not ticked is bounced.
+- **Auto Pipeline overnight queue** ([[reference_pipeline_queue]]) — queue several sales, each with its OWN settings, run SERVER-SIDE so nothing need be left open. ⚠ The tab's own Run button still runs in the browser. Never gives up on retries (my instruction).
+- ⧗ **⚠⚠ Auto Pipeline "auto-apply isn't applying" — ROOT CAUSE FOUND** ([[reference_auto_pipeline_apply]]). My 512-lot Trains sale finished with everything unapplied; the log showed every write failing with *"Server Action … was not found"* — **deploy skew, caused by Claude deploying while my tab was open**. Every apply had its own catch that logged a line and carried on, so one deploy silently turned the rest of the sale into no-ops under a "🎉 Pipeline complete!". Worse, **Apply All's catch was completely empty** — pressing it on a stale page wrote nothing, restored the list and said nothing. Both fixed, plus: the mode is read live (toggling mid-run used to change the screen only), \`saveLot\` retries, and failed writes get their own red banner. **⚠ Don't deploy while I have a long run going.**
+- ⧗ **⚠ F109 data safety — two separate faults, both mine to spot** ([[reference_unique_id_assignment]]). (1) **BC Match lost a lot**: "594 BC rows · 595 our lots", every count reconciling to 594. Two lots shared a barcode, the map kept only one, and the loser appeared in NO category. Now its own orange status, **neither imported**, plus a self-checking arithmetic warning. (2) **The Duplicate Checker offered to delete a REAL lot** — two different Steiff bears (F109630/F109631) had both ended up on \`R008767-129\`, and it grouped on unique ID alone. It now only deletes when the **barcodes agree**; clashing IDs and clashing barcodes are read-only. I fixed F109 by hand.
+- ⧗ **Admin → Patches & Changes** ([[reference_patches_changes]]) — the development record + ✨ AI progress report for managers + 🖨 PDF. ⚠ The app has no GitHub access, so history is captured at BUILD time plus a committed seed. **No names in the report** (my call), and it's a **LOG not a summary** — no intro, every change covered.
+- ⧗ **Description Copier — a real condition check** (RULES.md → Description Copier). The old popup fired on every visit saying the same thing. It now compares each lot's **recorded** condition against its description: missing / never graded / reworded, each listed as buttons that jump to the lot. ⚠ Grade matching is **case-SENSITIVE** so *"a good example"* isn't read as a condition.
+- ⧗ **Photo upload failures now say why** ([[reference_smart_scan_photo_upload]]) — one photo of 860 failed with Next's four-line "omitted in production builds" boilerplate. \`describeActionError\` turns that into a line plus the log reference, and names a stale deploy as such.
+- ⧗ **Auction Manager** — a "Lots with photos" column showing e.g. 400/500, green once complete.
 - Jack's work rode along: Lotting Up gained sale-adding, whole-bench photo reading, a movable target band, 44px touch targets, and pricing from our own sold archive.
+
+## Recent work (2026-08-06/07) — End of Day hardened + idle fix + the macro — ALL ON PRODUCTION (four merges to main)
+
+- **⚠ THE SHEET IS RECEIPT-KEYED NOW** ([[reference_end_of_day_bc]]) — the overnight macro works receipt-by-receipt in BC and looks for the exact filename **\`BC_Import.csv\`**: header \`ReceiptNumber,LotCount,Barcodes\`, **one row per receipt** (a receipt spanning several totes = one row). The original tote grouping + dated filename were wrong and got hand-fixed on the day. A missing RECEIPT now blocks a lot from the sheet (red panel); a missing tote is only an amber "can't verify" check.
+- **⚠ In-BC matching is BARCODE ONLY — my explicit rule: unique IDs are never used for any sort of matching** (now in RULES.md Lot Identifiers). The old barcode-OR-uniqueId test silently counted **292 pending lots across 10 sales** as already-in-BC (legacy minted \`{receipt}-N\` IDs collide with BC's numbering for OTHER items — F121 showed 132 of 184). Never re-add it.
+- **\`sync/totes-all\`** ([[bc_api_reference]]) — BC's \`Receipt_Totes_Excel\` feed DROPS a tote once ticked Catalogued (and a $filter on Catalogued is silently ignored), which left ~19,700 tote shells with no receipt and made End of Day flag real receipts as "not in BC" (63 false flags). The **eva/tot custom API** (page 76804, found in the AL source) serves the FULL 20,561-row table — new Data Sync stage 6/7 + nightly cron walk it.
+- **End of Day quality-of-life** ([[reference_end_of_day_bc]]): check rows redesigned as plain-words comparisons (red "on the lot" → green "BC says", vendor NAMES both sides); 🔧 Fix what BC can prove is **preview-first** (modal of every change before Apply); 🔕 **per-warning ignore** for stale-sync false flags (\`EodCheckDismissal\` table — in run-migrations; duplicate_barcode/no_tote/no_receipt never ignorable); **🌅 morning-after panels** — Import Check (engine shared with the Auction AI tab via \`lib/bc-import-sheets.ts\`) + **BC Match across ALL sales** (\`matchBcLinesAcrossAuctions\` → loops \`bulkAssignUniqueIds\`; the macro puts every sale into ONE BC sale so the per-sale modal can't take the export); **NO auto-refresh (my call)** — actions set a stale banner, the ⟳ button (with "lots last pulled / BC synced" readout + ✓ flash) re-runs the heavy checks only when pressed.
+- **Idle popup false-positive FIX** ([[reference_idle_within_lot_server_confirm]]) — Kathy got a "2h+ away" popup while saving lots every few minutes: the two WITHIN-LOT checks measured "this page untouched" (blind to other tabs/devices/the camera; the wizard stays mounted-hidden on tab switch). They now confirm with the server before showing, like the lot-start check always did. **Diagnostic: a popup with no matching IdleGateDecision/IdleLog row = device-local false positive.**
+- **Resume-unfinished-lot REMOVED** ([[reference_lot_wizard_resume]]) — I called it "very buggy"; banner/autosave/actions all gone, \`CatalogueLotDraft\` table left inert. Don't rebuild without discussing.
+- **The AHK macro rebuilt — v5 on my PC, not in git** ([[reference_bc_macro_ahk]]) — settle-waits instead of fixed sleeps (faster AND no misclicks), look-before-typing + copy-back verify (receipt verified BEFORE Enter), popup-proof close (the confirm dialog must visibly appear before Yes is clicked), resume via progress log, 3-strikes circuit breaker. ⚠ AutoHotkey v2 is installed on my PC — **validate any script with \`/ErrorStdOut /Validate\` before handing it over**, and deliver files to my Downloads, not as chat text (a copy-paste lost 14 lines once). I declined the macro watchdog/companion idea — don't re-pitch it.
+- Jack's work rode along: **Research tab → "Item Valuations"** (price a customer's photos from our sold archive, deliberately low-leaning), a **"Clear vendor details"** button on the wizard tote step, and a self-reverted sale-lookup experiment.
 
 ## Recent work (2026-08-04/05) — big session — ALL ON PRODUCTION (three merges to main, 2026-08-05)
 
-- **End of Day → BC** — the headline: /tools/cataloguing/end-of-day generates the overnight hotkey sheet (every lot not yet in BC, barcode-matched vs the sync, grouped by tote, exact ToteNumber/LotCount/Barcodes format). Tote-check-powered **checks**, 🔧 **Fix what BC can prove** (loops the Tote Check autocorrect), **tick-and-move bar**, and 📝 **typed Mass re-map** (wrong → right lines, preview mandatory). ⚠ Run Data Sync first; only cross-tote duplicate barcodes ever come OFF the sheet (visibly).
-- **Hub workflow captured** — ⚠ unique IDs are **PROVISIONAL** until 🔗 BC Match imports BC's own IDs (runs after each overnight macro); Push to BC runs once at the END after the AI pipelines; invoicing/customer accounts live entirely in BC + the website provider. **Barcode is the stable ID — never flag mid-flow unique-ID mismatches as errors.**
-- **BC Warehouse Excel filters + PDFs** — shared FilterTable (Excel column dropdowns) on all 4 results tables; 🖨 PDF prints exactly what's on screen; totes columns gained Customer no, dropped Status/State.
-- **Admin Centre rebuilt** — merged one-row-per-item Hub→BC journey + "Who catalogued this lot?"; "In BC" = **barcode** match (never addedToBC); lot no = currentLotNo; STATUS removed (again — don't reintroduce); oversized UI is deliberate. Plus a "Who catalogued this sale?" tab.
-- **AI cost** — Claude prompt caching via cachePrefix (BC Source "ask the code" wired); run-cost estimate above Run on Batch/Pipeline; editable prices in Admin → AI Models (AiModelRate). ⚠ The Anthropic Console spend was NOT the Hub — check Console → Usage.
-- **Auto Clerk review fixes** — rig undo rolls back S.hi; downward undo sync (watchdog stays upward-only); onlineBidAt replica feed kills phantom ROOM bids; gap-relay classifies sold/passed BEFORE bid substrings ("Sold to internet bidder" trap).
+- **End of Day → BC** ([[reference_end_of_day_bc]]) — the headline: \`/tools/cataloguing/end-of-day\` generates the overnight import sheet (every lot not yet in BC, barcode-matched vs the sync). ⚠ Format details SUPERSEDED 2026-08-07 — see the section above: RECEIPT-keyed, \`BC_Import.csv\`. Tote-check-powered **checks**, 🔧 **Fix what BC can prove** (loops the Tote Check autocorrect), **tick-and-move bar**, and 📝 **typed Mass re-map** (\`wrong → right\` lines, preview mandatory). ⚠ Run Data Sync first; only cross-receipt duplicate barcodes ever come OFF the sheet (visibly).
+- **Hub workflow captured** ([[project_hub_workflow]]) — ⚠ unique IDs are **PROVISIONAL** until 🔗 BC Match imports BC's own IDs (runs after each overnight macro); Push to BC runs once at the END after the AI pipelines; invoicing/customer accounts live entirely in BC + the website provider. **Barcode is the stable ID — never flag mid-flow unique-ID mismatches as errors.**
+- **BC Warehouse Excel filters + PDFs** ([[reference_warehouse_filter_table]]) — shared \`<FilterTable>\` (Excel column dropdowns) on all 4 results tables; 🖨 PDF prints exactly what's on screen; totes columns gained Customer no, dropped Status/State.
+- **Admin Centre rebuilt** ([[reference_admin_centre]]) — merged one-row-per-item Hub→BC journey + "Who catalogued this lot?"; "In BC" = **barcode** match (never addedToBC); lot no = \`currentLotNo\`; STATUS removed (again — don't reintroduce); oversized UI is deliberate. The other dev added a "Who catalogued this sale?" tab.
+- **AI cost** ([[reference_ai_cost]]) — Claude prompt caching via \`cachePrefix\` (BC Source "ask the code" wired); run-cost estimate above Run on Batch/Pipeline; editable prices in Admin → AI Models (\`AiModelRate\`). ⚠ The Anthropic Console spend was NOT the Hub (no key, no ToolModel rows) — check Console → Usage.
+- **Auto Clerk review fixes** ([[reference_auto_clerk_review]]) — rig undo rolls back S.hi; downward undo sync (watchdog stays upward-only); \`onlineBidAt\` replica feed kills phantom ROOM bids; gap-relay classifies sold/passed BEFORE bid substrings ("Sold to internet bidder" trap).
 - **Devices** — ⬇ Export to Excel button.
+- Housekeeping: the local MEMORY.md index was compacted to one line per entry — keep it tight.
 
 ## Recent work (2026-07-23/24) — reports + activity popup — now ON PRODUCTION (swept up by the 2026-08-04/05 merges)
 
-- **Cataloguing Performance PDFs** — /tools/reports has **Summary (PDF)** (one-page team league table plus team-wide by-auction, by-reason and daily-output breakdowns) and **Export all (PDF)** (one clean page per cataloguer); clicking a name gives just that person. One route (/api/reports/pdf with ?summary=1 / ?range= / ?userId=) and one builder (lib/reports-pdf.ts). ⚠ Every figure is scoped to the selected period — Jordan rejected v1 for showing "Today" and "This week" columns inside a 30-day report.
-- **"idle" removed from user-facing URLs** — now /admin/activity-timer, /admin/unaccounted-time and /tools/reports/activity; the old paths are redirect stubs. Code identifiers, DB tables (IdleLog / IdleGateDecision) and API routes still say "idle" — leave those alone. Jordan flagged the URLs twice, so don't let them drift back.
-- **Activity popup reworked** — heading softened to "How was this time spent?", multi-select reasons, fully manual time sliders (nothing auto-adjusts — two earlier models were rejected), a live "Not allocated" figure, an "Other" reminder, and a warning on submit when time is left unallocated. Whole minutes only, rounded up.
-- **⚠ Reporting knock-ons (fixed 2026-07-24) — the important bit.** The split writes SEVERAL IdleLog rows per break, which broke three things: unallocated time was **excusing gaps** in both the Unaccounted Time report and the save-gate (a real loophole, now excluded from both covering checks); breaks were counted per row (now per occasion via groupIdleOccasions); and "Most Common Reason" could read "Unallocated" (now excluded, with its own figure instead). If you change how the popup writes rows, re-check all three.
-- **Preview buttons** on /admin/terms and /admin/activity-timer ("👁 Preview the popup"). ⚠ The activity popup's markup exists in TWO places — inline in lot-wizard-tab.tsx and in components/idle-prompt-preview.tsx — keep them in sync.
-- **Admin → Data & Compliance** (/admin/compliance) — plain-English internal note on what data the Hub holds, where it lives, who it is shared with, with staff monitoring flagged as the priority area. Keep its lists updated whenever a new integration is added.
+- **Cataloguing Performance PDFs** ([[reference_reports_pdf]]) — \`/tools/reports\` has **Summary (PDF)** (one-page team league table + team-wide by-auction / by-reason / daily-output breakdowns) and **Export all (PDF)** (a clean page per cataloguer); clicking a name gives just that person. One route (\`/api/reports/pdf\` \`?summary=1\` / \`?range=\` / \`?userId=\`) + one builder (\`lib/reports-pdf.ts\`). ⚠ Everything is **period-scoped** — Jordan rejected v1 for showing "Today"/"This week" columns inside a 30-day report.
+- **"idle" removed from user-facing URLs** — \`/admin/activity-timer\`, \`/admin/unaccounted-time\`, \`/tools/reports/activity\`. Old paths are redirect stubs. **Code, DB tables (IdleLog/IdleGateDecision) and API routes still say "idle" — leave those.** Jordan flagged the URLs twice; don't let them drift back.
+- **Activity popup reworked** ([[reference_activity_popup_preview]]) — heading softened to "How was this time spent?", **multi-select** reasons, **fully manual** time sliders (no auto-adjusting — he rejected two earlier models), a live "Not allocated" figure, an **"Other" reminder**, and a **warning on submit when time is left unallocated**. Whole minutes only, rounded up.
+- **⚠ Reporting knock-ons — the important bit:** the split writes SEVERAL IdleLog rows per break, which broke three things (all fixed 2026-07-24): unallocated time was **excusing gaps** in both the Unaccounted Time report and the save-gate (a real loophole — closed by excluding UNALLOCATED from both covering checks); breaks were counted per row (now per **occasion** via \`groupIdleOccasions\`); and "Most Common Reason" could read "Unallocated" (now excluded, with its own figure instead). **If you change how the popup writes rows, re-check all three.**
+- **Preview buttons** — \`/admin/terms\` ([[reference_terms_aup]]) and \`/admin/activity-timer\` both have "👁 Preview the popup". ⚠ The activity popup's markup exists in **TWO** places (inline in \`lot-wizard-tab.tsx\` + \`components/idle-prompt-preview.tsx\`) — keep them in sync.
+- **Admin → Data & Compliance** ([[reference_compliance_page]]) — plain-English internal note (what data the Hub holds, where, who it's shared with, staff monitoring flagged as the priority). Keep its lists updated when a new integration is added.
 
-⚠ **The other developer pushes to staging too.** Always pull before pushing AND run a build after pulling — their commit broke the staging build once (pdf-lib's drawRectangle has no borderRadius option; it is a type error that fails the build).
+⚠ **The other developer pushed to staging mid-session** (auctions-overview PDF, per-working-day idle split, a test-popup button on the activity timer admin page) and **their commit broke the staging build** — \`borderRadius\` on pdf-lib's \`drawRectangle\` (see [[feedback_pdf_patterns]]). I fixed it. Always \`git pull origin staging\` before pushing, and run \`npx next build\` after pulling — their code can break yours.
+
+## Recent work (2026-07-20/21) — big session; most ON MAIN, a few STAGING-only
+
+⚠ Deploy status matters this session — check before assuming something is live:
+- **ON MAIN (production):** deploy-skew auto-reload ([[reference_deploy_skew]]); local-boot safety — server.js gates migrate/reset/cron on !dev ([[reference_local_dev_boot]], ⚠ .env = PRODUCTION); /admin/memory gated server-side (secret /jordan entry now admin-only in UI, still in repo); Manage Lots — sessionStorage filter persistence + selection-scoped Add/Remove Conditions + Clear Descriptions (skips aiExcluded) + multi-step conflict-safe Undo (new **CatalogueBulkUndo** table) ([[reference_manage_lots_bulk_undo.md]] → reference_manage_lots_bulk_undo); pipeline auto-apply/review = segmented toggle; Google quota errors translated across all 11 /jordan AI routes (friendlyGeminiError); **idle-gap detector /admin/idle-gaps + SERVER-SIDE idle gate in createLot** ([[reference_idle_gaps_detector]]); Jack's idle within-lot fix + reports lot-vs-idle split. NEW TABLES merged to main (**NEEDS Run Migrations on production** — the banner does it, don't tell Jordan): CatalogueBulkUndo, McocWarFight, JordanSavedChat, plus patch-notes/app-reload from Jack.
+- **~~STAGING ONLY~~ — on production since the 2026-08-21 merge (727fe320):** reports **Today** filter; idle popup shows the **time window** (from…to, with next-day hint); idle gate **30-min start-of-day grace** spanning the day boundary (assessGap). Holiday reason button already covers legit early leaves (any logged reason = "covered", hidden from the unexplained report).
+- **/jordan (local memory only, [[reference_jordan_secret_menu]]):** saved per-fight War path + node photos; roster "Fix names" (renameChampion); roster analysis "what to rank up"; Counters deep-dive dropdown + split screenshots; scan-roster snaps to Champion DB names + multi-screenshot + per-picture rank; Champion DB per-row delete + dup hint; roster TWO-COLUMN layout; saved chats; must-use attackers in the War planner. ⚠ Can't browser-verify /jordan (account-gated) — build+typecheck is the proof.
+
+⚠ **Idle diagnosis is on PRODUCTION data** (Keiran Southgate incident) — .env=production; use read-only SELECT. Working hours computed **Europe/London on the server** (Railway=UTC) via workingMsLondon/assessGap in lib/idle-gaps.ts.
+
+## Recent work (2026-07-14) — Tablet lots: filter by cataloguer — RESOLVED (committed/merged since; Jack + others push to staging too — pull before push)
+
+Added a **Cataloguer filter** dropdown to the tablet lots list (\`tablet-tabs.tsx\` → \`TabletManageLots\`, \`/tools/cataloguing/tablet/auctions/[id]\`): built from the distinct \`createdByName\` values on that auction, with an ✕ to clear; only renders when 2+ people have catalogued there; combines with the existing search + sort chips, and the "N of M" count shows when either filter is active. Client-side only, no API/schema change. tsc + build pass. **Not committed** — Jordan said he'd commit/push it from a different chat (files: \`app/(app)/tools/cataloguing/tablet/auctions/[id]/tablet-tabs.tsx\` + the memory ENTRIES entry).
+
+## Recent work (2026-07-14) — iPad policy terms gate + signatures — ON PRODUCTION (merged to main 2026-07-14, 502c133) · ⚠ NEEDS Run Migrations ON PRODUCTION (TermsAcceptance) — until clicked, the popup simply does not appear (fails safe, no lockout)
+
+App-wide **terms acceptance gate**: every user reads + signs the iPad Acceptable Use Policy once before using the app. Blocking modal in \`app/(app)/layout.tsx\` (Vectis logo letterhead, policy from \`lib/terms.ts\`, Accept → canvas signature pad → Submit). Enforced server-side (children not rendered until signed, not just a CSS overlay). New \`TermsAcceptance\` table (decoupled from User → no login-lockout; migration-safe try/catch so it can't break login pre-migration). Admin view \`/admin/terms\` shows signatures + timestamps + who's outstanding, with an admin "mark signed" safety valve. Adversarial review caught 5 issues (dark-mode ink invisible, overlay bypass, no admin remediation, blank-sig guard, orphan count) — all fixed. Also added the **Vectis logo centred in the top bar** and made the **hub home page full-width** (dropped max-w-6xl, up to 6 columns). **NEEDS Run Migrations** on staging. Client canvas signature composited onto white; pad surface forced white so ink shows in dark mode.
+
+## Recent work (2026-07-07) — Lot wizard spell flagging — ON PRODUCTION (merged to main 2026-07-14, 502c133)
+
+Added **spell FLAGGING** (flag only, no auto-fix — Jordan's choice) to the lot wizard's Key Points / Description (step 3). Fully client-side + offline: \`lib/spellcheck.ts\` lazy-loads a 274k-word British/English list (\`public/dict/en-words.txt\`, ~2.7MB, built from the an-array-of-english-words package then committed) and lists unrecognised words underneath the field, debounced. Ignores brand names (reuses the wizard's \`BRANDS_LIST\`), all-caps codes (LNER/GWR), catalogue numbers/scales (anything with a digit), and a small hobby-term allowlist. Chose this over AI because Jordan worried AI would be too slow for the fast tablet flow. **Lesson (again):** editing \`/admin/memory/page.tsx\` — its ENTRIES are backtick template literals, so escape inline-code backticks (\`\\\`\`); I broke a staging deploy this session with a raw backtick and now verify with \`npx esbuild <file> --outfile=/dev/null\` (tsc + local \`next build\` did NOT catch it; \`npm run build\` is a no-op on this Windows shell due to the NODE_OPTIONS bash syntax). No migration.
+
+## Recent work (2026-07-07) — Lot wizard step-1 (tote/vendor) rework — ON PRODUCTION (merged to main 2026-07-14, 502c133)
+
+Fixed a real data-integrity bug + reworked the cataloguing **lot wizard** opening step (\`lot-wizard-tab.tsx\`). Root bug: \`selectTote\`/\`lookupVendorFromBC\` only filled vendor/receipt when blank (\`if (!vendor)\`), so changing the tote kept the previous vendor/receipt → lot saved with mismatched identity. Rework: **removed the Tote/Vendor/Receipt Pin buttons** (kept the category pin, per Jordan); **tote is the source of truth** — it always overwrites vendor+receipt, and editing the tote clears them; **"Start cataloguing →"** locks tote/vendor/receipt for the batch (state \`locked\`); **"Change Tote / Vendor"** wipes the fields for clean re-entry and a **confirmation modal** appears when switching vendor. An adversarial review workflow caught 6 real holes (stale vendor/receipt on not-in-BC totes, receipt→vendor desync, a Back-button stranding the Start button, a false "tote not found" on prefill) — all fixed. Full detail in the shared \`/admin/memory\` Lot Wizard entry. Client-only, no migration.
+
+## Recent work (2026-08-11/12) — Facilities, First Aid, Site Plan — ON PRODUCTION (main = 17563e59)
+
+- **New Facilities home-page section.** **First Aid** (\`/tools/first-aid\`) — emergency steps, first aiders, kit/defib locations, and the accident book. Its **public page \`/first-aid\` is the ONE route outside the login gate**, so agency staff, contractors and visitors can use it with no account. Exact-match allowlist entry (never a prefix), top-level route, no public GET, one write-only report endpoint. ⚠ Everything on that page is world-readable.
+- The report follows the **statutory accident book (BI 510)** — parts 1–3 public, **part 4 employer-only inside the Hub** (date reported, recorded by, RIDDOR, notes). ⚠ **NOT certified legally compliant** — sign-off is for Vectis's H&S people.
+- **Green throughout, not red** — first aid signage is green/white (ISO 7010); red means fire equipment.
+- **Site Plan** (\`/tools/site-plan\`) — the building drawing, uploaded once, that any app pins equipment onto. First Aid pins its kits; fire equipment can follow without a second copy. Pins are percentages of the image; images only, never PDFs.
+- **Auto Pipeline** — \`appliedDesc\` is now persisted by the auto-apply paths (lots were reappearing in Review & Apply, and Apply all was overwriting newer human edits); **Double Check auto-applies too** ("auto apply should mean auto apply"); a **↻ Resume** button catches up lots that missed a run.
+- **Activity popup** — sliders that could never be satisfied (\`splitStepMs\`), grouped + colour-coded reasons, an optional message, a Groups panel, download/upload of the whole setup, and proper touch targets. Plus an **exclude lunch breaks** toggle on the activity report (stated on screen AND printed on the PDF).
+- **Catch-up sheet** on a sale — upload the BC export, get a sheet of what is still missing.
+- **Photo upload** — a "don't add a photo the lot already has" tickbox (filename match, with a loud note when a whole folder is skipped).
+- **Change Vendor** now sets the **tote** as well, and no longer reports 0 changes as success.
+- A **three-agent code review** of the day's work; everything it found was fixed, including a catch-up run that could overwrite cataloguers' hand-written descriptions.
+
+⚠ **Two of my own mistakes worth not repeating:** I pushed a broken build because I piped \`next build\` into \`grep\`, which returns success even when the build fails — **always check the real exit code**. And a hardcoded fallback (\`?? "📍"\`) sitting next to a lookup hid the lookup being completely broken for a day.
+
+## Recent work (2026-07-07) — Lot Lookup — ON PRODUCTION (merged to main 2026-07-14, 502c133)
+
+Admin-only card (\`/tools/lot-lookup\`) under the **Cataloguing & AI** hub section, **renamed "Admin Centre" (🎛️) 2026-07-07** (route + key stay LOT_LOOKUP; a home for admin tools, lot lookup being the first). Not its own "Vectis Admin" section (I built that then removed it per Jordan). The lookup: search by receipt / tote / customer(vendor) number → shows matching lots in BOTH the Hub cataloguing DB (CatalogueLot→CatalogueAuction) and BC (synced WarehouseItem cache), grouped per sale, with catalogued status. Hub sections/cards auto-render from \`SECTION_DEFS\`/\`APP_CARD_DEFS\` in \`lib/app-cards.ts\` — no seed/migration. Vendor matched EXACTLY on both sides (C###### number; substring would leak other customers — caught by adversarial review). Tote search bridges via WarehouseTote.receiptNo (items aren't tote-tagged), so results are receipt-scoped (noted in UI). Full detail in the shared \`/admin/memory\` entry. Live-BC-free, no migration.
+
+## Recent work (2026-07-07) — BC Warehouse tote reports — ON PRODUCTION (merged to main 2026-07-14, 502c133)
+
+Two separate tote reports (don't confuse them):
+- **BC Warehouse → Tote Data** (\`/tools/bc-warehouse\`, DB-backed via \`/api/warehouse/tote/report\`): fixed the permanently-empty "By Category" chart — it joined active totes to items on \`toteNo\`, but BC never fills the item tote field (2 of ~202k items have one). Now joins on **receiptNo**; each bar shows the item count; note that a receipt spans several categories. Details + the two-stage tote-sync \`catalogued\` quirk are in [[bc_api_reference]].
+- **BC Reports → Warehouse Report** (\`/tools/bc-reports\`, LIVE BC via \`/api/bc/warehouse\`): (1) the whole report now **excludes catalogued totes** (By Cataloguer already did; By Category/Total/Raw now match) — card relabelled "Totes to catalogue". (2) Added a **date-range filter** on **SystemCreatedAt** (tote created/arrived) — Jordan confirmed the field via BC API Viewer; filtered in JS in the route; undated totes surfaced as \`meta.undated\`; Raw's all-"No" Catalogued column swapped for a Created column. (3) Added a **"Hide bench & blank-location totes" checkbox** (excludeBench) — drops totes whose \`EVA_TOT_ToteLocation\` is blank or contains "BENCH" (BENCH10/11… = cataloguing benches); \`meta.locationExcluded\` count + a Location column in Raw. Prod check: 2,073 active = 58 blank + 626 bench + 1,389 shelved. All live-BC-only, no migration.
+
+## Recent work (2026-07-07) — Accounts "Auto match / Unknown" card option — ON PRODUCTION (merged to main 2026-07-14, 502c133)
+
+The Accounts card selector (admin month page, "📌 Card / account") gained a **🔍 Auto match / Unknown** option for invoices where Jordan doesn't know whose card they belong to:
+
+- Docs upload with the sentinel cardholder **"Unknown"** (\`UNKNOWN_CARDHOLDER\` in \`lib/accounting.ts\` — non-empty so it passes upload validation and survives saves; never encode Unknown as \`""\`, that coerces to Vectis).
+- **Run AI now also extracts \`cardLast4\`** (last 4 digits of the paying card printed on the receipt; new nullable \`AccountingDocument.cardLast4\` column — migration in run-migrations 2026-07-07). For an Unknown doc it's matched against the **trailing 4 digits in the managed card names** (e.g. "B Goodall 5895") via \`cardLast4FromName\`/\`resolveCardholderByLast4\` (assigns only when EXACTLY ONE card matches). Resolution happens client-side in the Approve modal (shows "🔍 Auto-matched via card ending NNNN" / "❓ No card matched") AND server-side in the apply route as a fallback (covers detail-modal Re-read and the wizard's readAll, which post no cardholder).
+- Unresolved docs sit in their own **"Unknown" section** of the month table (header hint) until reconcile: card-scoped statements now match against their own lines PLUS ❓-prefixed Unknown lines (scoping widened in **3 places that must stay in step**: \`autoMatchStatement\`, reconcile-client \`scopedEntries\`, wizard \`statementState\`) — except an Unknown line whose \`cardLast4\` differs from the statement card's digits (excluded). **Matching an Unknown line stamps its cardholder with the statement's card** (Jordan's decision) — in \`setTransactionMatch\` and \`autoMatchStatement\`; both now also revalidate the reconcile path.
+- Guards: "Unknown" is a **reserved name** (createCardholder/renameCardholder reject it); the landing-page orphan detector excludes it (merge UI would mis-tag every unresolved line); localStorage pin allows it; approve/detail selects include it as an extra option.
+- Wizard capture flow deliberately unchanged (option is admin-selector only, per Jordan); wizard matching still sees Unknown lines and stamping is server-side.
+- \`cardLast4\` added to the transfer-import allowlist. NEEDS Run Migrations on staging.
+
+## Recent work (2026-07-06/07) — personal /jordan tools (LOCAL memory only — NOT shared)
+
+A long session entirely on my **private \`/jordan\` menu** (gated to \`jordan.orange\`; 404 for everyone else — nothing in the shared app changed). Full detail is in [[reference_jordan_secret_menu]]. ⚠ **/jordan is SECRET — never put any of it in the shared \`/admin/memory\` ENTRIES; local memory only.** Headline:
+- **Ask AI personality selector** — FUNNY / NORMAL / CORTANA / JARVIS / HAL 9000 / ZEN (persona re-skins the panel via \`--jsys-*\` CSS vars + swaps the system prompt server-side) and **image uploads** in the chat (Ask AI + Cooking chef; pick/paste/drag).
+- **MCOC** — AW path planner now gives multiple team + ranked attacker options, DB-backed defender type-ahead, per-defender nodes, a **War tier** picker, a grounded **node-buff lookup** with an optional **war-map screenshot** to correct it, and remembers the last inputs. Champion DB **"Update meta"** made **resumable** (persisted \`staleBefore\`) + **rate-limit resilient** (backs off and keeps going, never restarts).
+
+**General Gemini lessons (reusable in the shared app too):**
+- **Grounding (Google Search) CANNOT be combined with \`responseMimeType: application/json\`.** Grounded replies occasionally leak prose into the JSON and fail \`JSON.parse\`. Fall back to an **ungrounded strict-JSON** call on a PARSE failure (not just on tool/grounding errors), and harden the loose parser so it never rethrows the raw V8 "Unexpected token" error.
+- **\`lib/gemini-retry.ts\` \`withGeminiRetry\` now backs off on 429 / RESOURCE_EXHAUSTED too** (\`isRateLimitError\`, longer wait than a 503). For big grounded batch jobs, also pace + back off client-side and make the run **resumable** so rate limits never force a full restart.
+- **Full width, never a centred \`max-w … mx-auto\` column** on data/tool/chat pages (I've flagged the "squash to the middle" twice) — [[feedback_full_width]].
+
+## Recent work (2026-07-01/02) — Auction AI instructions, lot log, cataloguer prod fixes — ALL MERGED TO MAIN
+
+Long session, all shipped to production (main). Durable details live in the dedicated memory files; quick handoff:
+- **Auction AI instructions = single source of truth (DB).** Rebuilt: removed code-vs-DB merge, "Custom (paste my own)", session-only inline editor; runs resolve by key server-side; added Export/Import (v2, syncs favourites) + ★ favourites (pinned top). Key points are now AUTHORITATIVE (batch route bans overriding a stated class/number/livery; the standalone Batch Run now also sends key points). See [[reference_ai_instructions_single_source]].
+- **New self-classifying Trains "Free" instruction** (SINGLE/GROUP/BULK/MIXED styles, no condition, books=title-only, honours key points) + condition-stripped "Strict" were DESIGNED and given to Jordan to paste. ⚠ These are DATA — unknown if Jordan pasted them into the staging DB yet; then Export→Import to production. Not code.
+- **Lot change log overhauled** to log EVERY mutation via \`lib/lot-log.ts\`. See [[reference_lot_change_log]].
+- **Model-retirement hardening:** \`getToolModel(slot, clientModel)\` ignores retired models (\`RETIRED_MODELS\`). Fixed cataloguers' \`gemini-2.0-flash\` 404 (stale cached iPad bundle posting a dead model). Add newly-retired names to that set.
+- **Cataloguer prod fixes:** production REDACTS thrown server-action messages → the Review-tab actions now RETURN \`{ok,error}\` and show the real reason; **Review tab now BYPASSES the BC lock** (QA corrections allowed after an auction is in BC; lock still applies everywhere else). Save errors show inline at the button.
+- **Cross-dev memory freshness rule** added to RULES.md (compare local memory vs the staging \`ENTRIES\`; warn if stale; never overwrite the shared array from stale local).
+- ⚠ Production needs **Run Migrations** once (AiPreset.favourite + CatalogueLotEvent.action/source/batchId + backlog) — reads are migration-safe/best-effort so nothing's broken meanwhile. (Stated once — do not nag, per [[feedback_vectis]].)
+- Reverted an uncommitted activation-log pointer tweak (pointerType=mouse is a documented red herring — [[reference_phantom_catalogue_counts]]).
+
+## Recent work (as of 2026-07-01) — Cataloguing reports + Manager Portal
+
+- **Manager Portal** (\`/tools/manager-portal\`) — new section under Cataloguing on the home page (see feature blurb above). Combined Hub+BC lot totals, pace, projected milestones, per-cataloguer leaderboard.
+- **Announcements now instant** — the app-wide banner updates live via Socket.IO (\`announcement:changed\`), no page refresh needed.
+- **Reports grouped on the home page** — Marketing + Cataloguing reports moved under a new "Reports" home-card group.
+- **Phantom cataloguing counts FIXED — ON PRODUCTION.** Deleted-lot timing logs were inflating everyone's counts. Cause: loose \`CatalogueTimingLog.lotId\` (no FK) orphaning on delete + an unvalidated wizard step-8 Save. Reports now exclude orphaned logs; wizard validates the whole form + duplicate/cadence guards + server backstop; admin cleanup/inspect/Save-activation-log tooling on /tools/reports. ⚠ The tablet activation trigger is still UNKNOWN (instrumentation live). NEVER say the cataloguers did it (see the top rule + phantom memory).
+- **Full /tools/reports code review — 13 fixes. NOW ON PRODUCTION** (staging→main 2026-07-02; commit \`fcc8c20\` + activation-log enrichment \`242608c\`). ⚠ That same production push also carried another dev's **Sale Statistics tool** + **Lot change log overhaul** (\`CatalogueLotEvent\` action/source/batchId columns) — **Run Migrations must be clicked on PRODUCTION** for those columns (non-breaking; lot saves work without it, the change log just won't record until it's run). Adversarial multi-agent review; every fix verified **numerically-equivalent** to the old stats before shipping. Highlights: overview stats now computed in **orphan-aware SQL** (no whole-table load, no \`Math.min(...)\` crash on "All time", no giant \`IN\` list); **Manager Portal counts now orphan-excluded too** (it had been re-inflating); day/month bucketing moved to **Europe/London**; \`kpPct\` population fix; access re-assert via \`getEffectiveSession()\`; malformed \`?from/?to\` no longer crashes; save-attempt route can't be spoofed. Reusable helpers added to \`lib/cataloguing-reports.ts\`: \`ukDayKey\`, \`ukDayStartUtc\`, \`minOf\`, \`maxOf\`.
+  - **Lessons (apply to any stat/report work):** any new count of \`CatalogueTimingLog\` MUST exclude orphans with \`(t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))\`; never \`Math.min(...bigArray)\` (throws past ~100k args — use \`minOf\`/\`maxOf\`); bucket days in Europe/London not server UTC; and verify displayed numbers match before shipping a stat refactor.
+
+## Recent work (as of 2026-06-29) — ON PRODUCTION (merged to main 2026-06-29 ~16:53, commit \`239dab2\`)
+
+⚠ **After this deploy, Run Migrations must be clicked on PRODUCTION** (\`/admin\`) — pending DB changes: **\`AiPreset.favourite\` + \`CatalogueLotEvent.action/source/batchId\` (both merged to main 2026-07-01)**, shipping \`WarehouseItem.collectionNo\`/\`sizeClassification\` + index, the condition-report tables/columns, and earlier staging-only ones (\`User.lastTote/lastVendor/lastReceipt\`, \`ConditionWording\`, \`Announcement\`, \`PipelineLot.appliedDesc\`, subcategory inserts). Ask Jordan whether this was done before assuming production is healthy.
+
+⚠ **Instruction TEXT does NOT auto-sync to production (2026-07-01 merge).** The merge to main deployed the single-source instructions CODE (+ export/import, key-points fix, favourites) to production, but production's \`aiPreset\` rows are a SEPARATE database. The new self-classifying Trains "Free" instruction and condition-stripped "Strict" are DATA, not code — they only reach production via the Instructions page (paste) or Export (staging) → Import (production). Until then production still runs its own old Model Railway instructions. See [[reference_ai_instructions_single_source]].
+
+Heavy multi-session iteration on the **BC Reports → Shipping report** (full data model + gotchas in [Vectis Hub Project]). Revenue = per parcel: dearest lot at its first-item rate + every other lot at its size's additional rate, ex VAT (\`lib/shipping-rates.ts\`, static snapshot of Shipping Rates.xlsx); Rest of World = quote-only £0. Sections: parcels by country/region/city, By Month, items-by-size, shipped-vs-collected by size, country×size, maps, PDF (\`/api/bc/shipping/pdf\`). Core: \`lib/shipping-analytics.ts\`. Ran **two adversarial review workflows**; fixed ~12 bugs.
+
+**Lessons (now in project memory) — apply to ANY report work:**
+- The recurring bug class is **DATE-WINDOW logic.** Filter the warehouse/location views by **\`auctionDate\`, NOT \`bcModifiedAt\`** (a recently-touched old lot wrongly lands in "last 12 months"). Date presets must format from **LOCAL** fields, not \`toISOString()\` (BST shifts a day). Guard month cutoffs against day-overflow (31 Mar→28 Feb) and against inverting on ranges ≤1 month.
+- **Everything must reconcile to the headline** — region/size/month all sum to the same totals (use largest-remainder when splitting a rounded estimate across buckets).
+- **Keep all report + PDF text PLAIN and SIMPLE** — it's read by non-technical staff ("for idiots"). No jargon.
+- **pdf-lib \`drawText\` does NOT wrap** — use the \`wrapLines\`/\`drawWrapped\` helpers, AND leave a ~8pt gap after a table or free text overlaps the last row.
+- BC emits the literal **\`UK\`** as well as \`GB\` (merged via \`COUNTRY_ALIASES\`); off-sheet European territories are priced at the western-EU tier (Jordan's call).
+- Collected-in-person items have **no shipment record** (only a COL docket) → excluded from shipping revenue; the collection estimate is shown *alongside* the revenue, never subtracted.
+- ⚠ Shipping sizes/revenue depend on a **COMPLETE receipt-lines resync** (BC Warehouse → Data Sync).
+
+**Also built 2026-06-29 but STAGING-ONLY (after the 16:53 prod merge — NOT on production yet):**
+- **Admin → AI Models** (\`/admin/ai-models\`) — central **per-tool Gemini model config** (\`ToolModel\` table + \`lib/ai-models.ts\`; ⚠ **never hardcode a model — use \`getToolModel(slot)\`** and add new AI features to the \`AI_TOOLS\` registry; see RULES.md "AI Model Selection"). ~20 routes wired; standalone pickers seed from it; "Apply to all" mass-set; the old Auction AI "Models" tab (enable/disable + tester) was **merged in**. Built after Google retired \`gemini-2.0-flash\` (404), which had been hardcoded in 4 routes. ⚠ **Needs Run Migrations (new \`ToolModel\` table)** — on staging now, and on production when this batch deploys.
+- **Admin overview** (\`/admin\`) regrouped into sections (People & Access / Cataloguing / Content & Communication / System & AI) on a full-width grid (up to 6 cards wide); the Idle Timer card sits under Cataloguing.
+- **Description Copier** (Auction AI → Tools) shows a "Have you added conditions to the description?" reminder modal each time the tab is opened.
+- **Home Page Cards** (\`/admin/home-cards\`) got **Export / Import** (JSON) so the home-page setup can be matched across staging/main.
+~~⚠ This whole batch is on **staging only** — a future "push to main" is needed to put it (and the \`ToolModel\` migration) on production.~~ **SUPERSEDED: merged to main 2026-07-14 (502c133) — this batch IS now on production.** The shipping report was already on production (\`239dab2\`).
+⚠ **Lesson reinforced:** the \`/admin/memory\` page's ENTRIES are backtick template literals — never put a raw backtick in the content, and run a real \`next build\` (NOT just \`tsc\`) after editing it. A raw \`\` \`active\` \`\` broke the build this session.
+
+## Recent work (as of 2026-06-26) — ON PRODUCTION
+
+- **BC Import Check** — new Auction AI tab (see Reference group above). Fixes the hotkey macro breaking mid-batch by reconciling the to-do sheet against the BC export and handing back only the lots still to run.
+- **Subcategory lists synced to Business Central** (Admin → Cataloguing Categories). TRAINS got its 7 missing master codes, then **+211 more** across 18 categories from the BC "Auction Statistics by Sub-Category" export (Military went 1→108 maker ranges — Britains, King & Country, Timpo…; Sports 2→18; Kits 1→11; Star Wars 9→23; Collectables 16→38). The stats export is *historical*, so it mixes current + retired/typo codes: the retired TRAINS item-type scheme (LOCOMOTIVES/WAGONS/TRACK) was excluded, the rest kept **as-is to match BC** (prune unwanted ones at /admin/categories). Updated \`DEFAULT_CATEGORY_MAP\` + idempotent multi-category run-migrations INSERT (ON CONFLICT on categoryId,name — \`ensureCategoriesSeeded\` only seeds an EMPTY db, so the live db needs the migration).
+
+Also live from 2026-06-25: **Receipt** made required in the lot wizard; **Tote/Vendor/Receipt remembered per user account** (follows shared iPads — \`User.lastTote/lastVendor/lastReceipt\`); box/packaging **condition wording is DB-managed** (Admin → Condition Wording); manual **Announcements** banner (Admin → Announcements); pipeline fixes (RECITATION auto-retry, per-stage skip reasons, per-lot ↻ re-run, raw-JSON leaks fixed via \`lib/model-json.ts\`); **\`auth.ts\` hardened with an explicit \`select\`** so adding \`User\` columns can't lock login out before Run Migrations.
+
+**⚠ Needs Run Migrations (staging + production):** the 211 subcategory inserts, \`User.lastTote/lastVendor/lastReceipt\`, \`ConditionWording\`, \`Announcement\`, \`PipelineLot.appliedDesc\`.
 
 ## Recent work (as of 2026-06-24)
 
-Long session on the Accounts tool (/tools/accounts, admin-only) — mostly bank/card statement reconciliation. All on STAGING only.
-- Reconcile is its own page (/tools/accounts/[monthId]/reconcile, blue Reconcile button at top of the month page). All statements stacked + collapsible with a summary stat strip; "Unmatched only" toggle; per-statement Clear matches + fullscreen View.
-- Smarter matching: dropdown shows only exact-amount candidates (or nearest 5); part-payment matching (one invoice paid by several capped payments, e.g. Google Ads £500 caps); chunked-payment matching (one payment covering several invoices); ✨ Smart match button (subset-sum — auto-finds the invoices that add up to a payment).
-- "Receipt missing" per-transaction flag; "Missing invoices" copy-to-email button.
-- Shared Reserve pool: park entered lines that belong to another check (out of the month table/export/matching). Reserve panel on every reconcile (filter + multi-select + Pull selected/Pull all/Un-reserve) + a full-grid Reserves page (/tools/accounts/reserves).
-- Month extras: rename month, ★ favourite the month, move lines to another month, possible-duplicate quick filter (scoped per cardholder), instant tap-feedback spinners on slow nav (tablet). Export matched to Excel.
-- Cataloguing categories now DB-managed at Admin → Cataloguing Categories (/admin/categories) — add/rename/reorder/delete; feeds desktop + tablet dropdowns.
-- Box/packaging condition wording presets DB-managed at Admin → Condition Wording (/admin/condition-wording) — add/rename/reorder/delete; feeds the wording picker in all three lot editors. ConditionWording table (NEEDS Run Migrations).
-- NEEDS Run Migrations on staging (AccountingMonth.favourite, BankTransaction.receiptMissing, AccountingDocument.reserved, LotCategory/LotSubcategory).
+Long session on the **Accounts tool** (\`/tools/accounts\`, admin-only) — mostly building out bank/card statement **reconciliation**. ~~All on staging only~~ **— merged to main 2026-07-14 (502c133), so this IS now on production.**
+
+- **Reconcile is its own page** now: \`/tools/accounts/[monthId]/reconcile\` (blue "Reconcile" button at the TOP of the month page). All statements shown stacked, each **collapsible** with a **summary stat strip** (transactions/spend/matched/unmatched/credits/ignored/receipt-missing); **"Unmatched only"** toggle; per-statement **"Clear matches"** and **"👁 View"** (fullscreen statement viewer).
+- **Smarter matching:** match dropdown shows only exact-amount candidates (or nearest 5), sorted by description similarity; auto-match less cautious (date + description tiebreak). **Part-payment matching** = ONE invoice paid by SEVERAL capped bank payments (Google Ads £500 caps; tracks outstanding balance). **Chunked-payment matching** (the dual) = ONE bank payment covering SEVERAL small invoices (attach multiple, "£X of £Y covered · £Z to go"). **✨ Smart match** button = subset-sum, auto-finds which invoices add up to a payment.
+- **"Receipt missing"** per-transaction flag (real payment, no paperwork) — red badge, counts as handled, feeds the **"Missing invoices"** copy-to-email button.
+- **Shared Reserve pool:** park entered lines that belong to a DIFFERENT check (out of the month table/export/matching until placed). Reserve panel on every reconcile (filter + tickbox multi-select + **Pull selected / Pull all shown / Un-reserve**); plus a full-grid **Reserves page** (\`/tools/accounts/reserves\`).
+- **Month-page extras:** rename month, **★ favourite/star** the month you're working on (pinned + highlighted on the index), **move lines to another month**, **possible-duplicate quick filter** (scoped per cardholder, names its partner line), brighter amount text, and **instant tap-feedback spinners** on slow navigations (Next 16 \`useLinkStatus\` — fixes the dead-feeling Reconcile button on tablet). **Export matched to Excel** (filtered to reconciled lines).
+
+Also built: **cataloguing categories are now DB-managed** at **Admin → Cataloguing Categories** (\`/admin/categories\`) — add/rename/reorder/delete categories + subcategories (was a hardcoded \`CATEGORY_MAP\`). Feeds the desktop + tablet cataloguing dropdowns via the \`useCategoryMap()\` hook + \`/api/catalogue/categories\`, with the bundled default as fallback.
+
+**⚠ Needs Run Migrations on staging** — several new columns/tables this session: \`AccountingMonth.favourite\`, \`BankTransaction.receiptMissing\`, \`AccountingDocument.reserved\`, \`LotCategory\` + \`LotSubcategory\` (the reconciliation base tables \`BankStatement\`/\`BankTransaction\` + \`AccountingDocument.currency/originalAmount/splitGroupId\` were earlier).
+
+Full detail in the [Vectis Hub Project] memory file.
+
+## Recent work (as of 2026-06-17)
+
+Big batch SHIPPED TO PRODUCTION (commit \`04c410b\`): submissions redesign (two-column dashboard, status dropdown, List/Board views, follow-up flag), customer photo upload (\`/submit/[token]\`), cataloguer valuation links (\`/value/[token]\`), **receipt unique-ID fix** (advisory lock + MAX, no more skipped/duplicate/blank IDs from tablet cataloguing), tablet 7-char limits + warning on Tote/Vendor/Receipt, the **IT Job Board** (see above). \`IT_INBOUND_SECRET\` set on staging AND production (same value).
+
+**⚠ OUTSTANDING (do this first if not done):** after the production deploy finished, the production **Admin → Run Migrations** button must be clicked once (creates ITJob/ITJobMessage tables + new Submission/Item columns). Then smoke-test: \`/tools/job-board\` loads, a test email to IT@ creates a card, a submission detail page + photo links work. Ask Jordan whether this is done before assuming the Job Board is fully working on production.
+
+## Recent work (as of 2026-06-01)
+
+- **AI Upgrade tab** added to Auction AI (12th tab); sidebar reorganised into Chat/Run/History/Tools/Reference groups
+- **Pipeline rework:** Batch now applies descriptions+estimates to the catalogue; Double Check auto-applies; Key Points is now a manual Review & Apply step (was auto-applying). \`PipelineLot.batchDesc\` column added for DC before/after (needs migration run).
+- **Estimates chain fix:** \`applyAiDescriptionOne\` estimate fields made optional so DC/KP no longer wipe Batch's estimates
+- **Cataloguing:** auctions list split into Active/Completed tables with a Complete toggle; Manage Lots gained an "Added By" column; tablet lot cards show key points + creator
+- **Packers:** Export/Import JSON to migrate packers+aliases between environments (\`/api/packers/import\`)
+- **BC Reports:** fixed date-preset double-highlight (track active preset by state, not date comparison) and flashing bar-chart labels (\`isAnimationActive={false}\`)
+- **Double Check prompt:** added rule to count boxes/units, not vehicles inside a set title
 
 ## Working-style reminders that came up this session
 
-- When unsure how a real-world workflow maps to buttons/actions, ASK one question at a time and write the answers down — don't invent logic (I invented a 1.5s double-bid detector and a same-amount auto-detector that were never asked for).
-- Don't add behaviour that wasn't requested. Build exactly what's asked.
-- Phantom cataloguing report counts: NEVER blame the cataloguers (confirmed nobody makes those lots; scanner unused; X-vs-F is a red herring). Any new count of CatalogueTimingLog must exclude orphaned logs; when changing report/stat maths, verify the numbers still match before shipping.`,
+- When unsure how a real-world workflow maps to buttons/actions, ASK one question at a time — don't invent logic.
+- Don't add behaviour that wasn't requested. Build exactly what's asked, no more.
+- **Pipeline data lives in its own DB tables (\`PipelineRun\`/\`PipelineLot\`), separate from the catalogue.** When descriptions "go missing", check whether they reached the \`CatalogueLot\` at all vs sitting only in the pipeline DB.
+- **When a fix "isn't working," add a visible diagnostic log line** (counts of the relevant data) rather than guessing repeatedly — it pinpointed the catalogue-descriptions-empty issue in one reload. Also account for Railway deploy time (~2-3 min) before assuming a fix failed.
+- \`??\` only catches null/undefined — use \`||\` when a field may be stored as an empty string \`""\` (this caused a recovery fallback to silently fail).
+- **Don't sink time into heavy local verification** (e.g. spinning up Docker/Postgres) for low-risk, idempotent DB changes — \`run-migrations\` reports any failing statement without blocking the rest, and Railway regenerates Prisma on deploy. Validate the SQL by reasoning + a quick build, then ship to staging. Jordan runs migrations after every update.
+`,
   },
   {
     filename: "feedback_vectis.md",
@@ -4105,8 +4528,9 @@ Long session on the Accounts tool (/tools/accounts, admin-only) — mostly bank/
 name: General Feedback & Collaboration Style
 description: How Jordan likes to work — tone, approach, and patterns to avoid
 type: feedback
+originSessionId: c6d23232-5237-4155-ac52-72fb165d9d56
+modified: 2026-08-17T16:07:46.977Z
 ---
-
 Keep responses short — one paragraph max unless explaining something technical. Lead with the action or answer, skip preamble.
 
 **Why:** User explicitly asked for concise answers early on.
@@ -4131,11 +4555,56 @@ When Jordan says something simple like "take a copy and put it on the site", do 
 
 ---
 
-Don't give Jordan commands to run - not to fix things, and not to check them either.
+Don't give Jordan commands to run — not to fix things, and not to check them either.
 
-**Why:** He called this out when I told him to run fetch() in the console to trigger a migration. It happened again on 2026-08-17 in a subtler form: I finished a message with a "node ...scratchpad/gap2.mjs" line as evidence for a fix. It was a throwaway test on my own machine that he could not usefully run, and he had to ask "WHats that node thing you pasted?" - the harness renders shell-tagged blocks with a Run button, so it read as an instruction.
+**Why:** He called this out when I told him to run \`fetch()\` in the console to trigger a migration. It happened again on 2026-08-17 in a subtler form: I finished a message with a \`node …scratchpad/gap2.mjs\` line as evidence for a fix. It was a throwaway test on my own machine that he could not usefully run, and he had to ask *"WHats that node thing you pasted?"* — the harness renders shell-tagged blocks with a Run button, so it read as an instruction.
 
-**How to apply:** Any admin operation that might need triggering manually must have a proper UI button (like the Run Migrations button). And VERIFICATION IS CLAUDE'S JOB, NOT HIS - run the check, then report the result in prose. Never paste a node/npm/console line as proof or as an invitation. If a check is worth him having permanently, it belongs behind a button in the app, not in a message.`,
+**How to apply:** Any admin operation that might need triggering manually must have a proper UI button (like the Run Migrations button). And **verification is my job, not his** — run the check, then report the result in prose. Never paste a \`node\`/\`npm\`/console line as proof or as an invitation. If a check is worth him having permanently, it belongs behind a button in the app, not in a message.
+
+---
+
+**NEVER tell Jordan to Run Migrations — not even once. The app tells him now.**
+
+**Why:** Jordan (2026-07-01) said the reminders are annoying; he escalated on 2026-07-15 — he doesn't want them AT ALL, and asked for the app to surface it instead of me. So a **pending-migrations banner** was built (2026-07-15): admins see an amber app-wide banner with a "Run migrations now" button whenever the MIGRATIONS array has changed since it was last run; it disappears once run. See the shared /admin/memory entry.
+
+**How to apply:** Keep adding new SQL to the \`MIGRATIONS\` array in \`app/api/admin/run-migrations/route.ts\` as always (that rule stands — see [[feedback_migrations]]) — but say NOTHING to Jordan about running it: no "NEEDS Run Migrations", no wrap-up bullet, no "one time on record" note. The banner is the notification. Same spirit for any routine step he already knows (pull-before-push, etc.) — don't narrate them.
+
+---
+
+**⚠⚠ The DESCRIPTION COPIER's layout is frozen — and ONLY that page.**
+
+**Why:** Jordan (2026-08-14): *"Its also very important this appears underneath what was already there as moving elements on the screen will break the macro."* His **AutoHotkey macro** reads the Description Copier **by screen coordinates** while typing into BC (see [[reference_bc_macro_ahk]]), so moving anything on that page makes it type into the wrong field — silently, overnight. He then scoped it: *"The macro only touched the description copier everything else is fine to be moved around."*
+
+**How to apply:** on the **Description Copier** the lot card and its Copy Description buttons come FIRST; banners and summaries go below them; the page's height must not vary with the data (a banner that grows with the number of flagged lots moves everything under it on some sales and not others — keep it collapsed or below the working area); making an existing element taller counts too. If something must go above the card, **ask** — it means re-recording the macro. ⚠ **Everywhere else in the Hub, layout is an ordinary design decision** — do not apply this rule to other screens. Written up as **RULES.md → Design philosophy rule 6**.
+
+---
+
+**Don't drive the browser/preview tools by default. Typecheck, lint and (for anything non-trivial) \`npx next build\` are the normal proof.**
+
+**Why:** Jordan (2026-07-17): *"Lets stop the you looking at the browser thing I dont think its adding much of a benefit and is just slowing you down… If it would really help for a future issue thats fine but for now its not doing much."* He checks the work on the Railway staging URL himself — a local browser pass mostly duplicates that while costing him wait time. This OVERRIDES the harness's standing \`<verification_workflow>\` ("after editing previewable code, verify it works… never ask the user to check manually") and the PostToolUse hook that nags for \`preview_start\` after every edit — **those are defaults, Jordan's instruction wins.** Do not re-litigate it each session.
+
+**How to apply:** Default to no browser. Ship on typecheck/lint/build, say plainly what was and wasn't verified, and let Jordan look on staging. Reach for the browser only when it is the ONLY way to settle a real question, and say why in one line first. It genuinely earned its keep once — the [[reference_deploy_skew]] fix, where faking a post-deploy 404 was the only way to prove the auto-reload fired, and it caught a blank-page bug that review had missed. That bar — "the answer is unknowable without it" — is the test, not "the change is visible". ⚠ Note \`/jordan\` pages can't be browser-verified at all (account-gated; never use his credentials) — build-verify those and say so.
+
+## ⚠⚠ "It is glitchy" — read the change log first (2026-09-02)
+
+Twice in one session a screen Jordan called broken was working perfectly, and the
+\`CatalogueLotEvent\` log said so within minutes:
+
+- *"The add conditions button is really glitchy, I press it over and over"* — the button was
+  correct every time; applying AI descriptions was stripping the condition line back off
+  (151 of 246 applies that day, 620 across all sales).
+- *"601 lots described but well over 100 lots have no description"* — the overnight run had
+  resumed a saved run whose lots had since been cleared, and skipped them.
+
+**Before agreeing a control is faulty, query \`CatalogueLotEvent\` / \`CatalogueBulkUndo\` for what
+actually wrote to those lots and when.** Both answers took one read-only query. Guessing would
+have meant rewriting a button with nothing wrong with it — and in the first case he was already
+sure the button was to blame, so it took the log to show otherwise.
+
+⚠ Also from that session: **don't deploy while he has a run going**, and **check which
+environment he is in before saying a fix is live** — he works on PRODUCTION, so a staging push
+does not reach him (see [[user_profile]]).
+`,
   },
   {
     filename: "feedback_memory_workflow.md",
