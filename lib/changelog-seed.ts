@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"63a416e4f52ef52b8d67f568e02b1bae2a68d794","author":"Jordan Orange","date":"2026-09-02T15:39:17+01:00","subject":"Help box: suggestions from what you were given, and a real block"},
+  {"sha":"733d14c5b20e52b1bd109c34ba8547065cbd990f","author":"Jordan Orange","date":"2026-09-02T14:59:12+01:00","subject":"Refresh changelog seed"},
   {"sha":"e89b010e6838a7a62288544669da1df1a00832b3","author":"Jordan Orange","date":"2026-09-02T14:59:10+01:00","subject":"Help box: judge the person being viewed as, not the admin"},
   {"sha":"96f7f6078fd2fa5d4880aaeb69c08a4136f9919e","author":"Jordan Orange","date":"2026-09-02T13:49:49+01:00","subject":"Refresh changelog seed"},
   {"sha":"8081655030584e02d6fc74cd32b260ff8d51720b","author":"Jordan Orange","date":"2026-09-02T13:49:47+01:00","subject":"Help box in the top bar"},
