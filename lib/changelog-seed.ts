@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-01, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-02, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f1506622e5e425e514611abd26f569fdf69b7988","author":"Jordan Orange","date":"2026-09-02T09:31:48+01:00","subject":"The catalogue overrules a saved run row when the lot is empty"},
+  {"sha":"5fb207978e644cc3320cd69e3da7fa2c22246d3e","author":"Jordan Orange","date":"2026-09-01T13:49:06+01:00","subject":"Refresh changelog seed"},
   {"sha":"9587903502376ec33187fd32ad9238e963e28de9","author":"Jordan Orange","date":"2026-09-01T13:49:04+01:00","subject":"Auto Pipeline: changing the model mid-run now takes effect"},
   {"sha":"8185961630583d8fc1f250d3ed53fd92bf4f3e3d","author":"Jordan Orange","date":"2026-09-01T12:35:23+01:00","subject":"Refresh changelog seed"},
   {"sha":"e97204894740f09185d80df71e85d4c21e840dba","author":"Jordan Orange","date":"2026-09-01T12:35:21+01:00","subject":"Review tab: re-check the AI flags from the Review page"},
