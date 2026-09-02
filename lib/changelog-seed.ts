@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"14d571a014db715569c3e33e74f06b018166295b","author":"Jordan Orange","date":"2026-09-02T13:16:30+01:00","subject":"Auctions overview PDF: BC is measured too"},
+  {"sha":"66f597054d669b5ed90c21c1874c5eb9493473e0","author":"Jordan Orange","date":"2026-09-02T13:02:53+01:00","subject":"Refresh changelog seed"},
   {"sha":"05cfc7d16f0f064382c476589ebceb4e3775ebc2","author":"Jordan Orange","date":"2026-09-02T13:02:52+01:00","subject":"Lock on Catalogued; \"In BC\" measured from the barcodes"},
   {"sha":"7199767bf058440034afc4c0945aed0a24deb3e6","author":"Jordan Orange","date":"2026-09-02T10:38:39+01:00","subject":"Refresh changelog seed"},
   {"sha":"bfad9e9d5490c1c1d1b6d9f17cb780dbbca89746","author":"Jordan Orange","date":"2026-09-02T10:38:37+01:00","subject":"Every mass action on Manage Lots shows 20/400"},
