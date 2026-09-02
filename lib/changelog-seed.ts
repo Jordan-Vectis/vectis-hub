@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"d0c0a46f2862c5ff26c1c8d0f850938c6abd4129","author":"Jordan Orange","date":"2026-09-02T16:14:11+01:00","subject":"Reserves: record them here, reminded at Locking Check"},
+  {"sha":"f24c4cd35a9ef4cd3a1d62e83aeadb3a07f2c7be","author":"Jordan Orange","date":"2026-09-02T15:52:01+01:00","subject":"Refresh changelog seed"},
   {"sha":"e65c9f8dbaaa6d57f7488ef5ec3137321c901ad4","author":"Jordan Orange","date":"2026-09-02T15:51:59+01:00","subject":"MALFORMED_FUNCTION_CALL is not a refusal - stop losing the lot"},
   {"sha":"53321bafbd0cf992919f1d7183358d7f14aa9a51","author":"Jordan Orange","date":"2026-09-02T15:39:19+01:00","subject":"Refresh changelog seed"},
   {"sha":"63a416e4f52ef52b8d67f568e02b1bae2a68d794","author":"Jordan Orange","date":"2026-09-02T15:39:17+01:00","subject":"Help box: suggestions from what you were given, and a real block"},
