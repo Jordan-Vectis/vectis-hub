@@ -72,6 +72,33 @@ people who can plainly see them on their own home page. Caught by running the fi
 real users before shipping; the test also asserts no destination is gated tighter than an
 \`allUsers\` card.
 
+## The suggested questions, and blocking
+
+**Suggestions are fetched, never hardcoded.** The first version had three fixed examples in the
+component, so Ben — a cataloguer with only CATALOGUING — was *offered* "Where do I go to do an
+overnight run?" for a tool he cannot open (Jordan, 2026-09-02, from a screenshot). They now come
+from \`suggestedQuestions(ctx)\` — the same filtered set as the answers — via \`GET /api/help/ask\`.
+
+⚠⚠ **"Can open" is not "would ever want".** Packing, Auction Monitor and IT Help are open to
+everyone (their cards are \`allUsers\`), so taking the first three allowed offered a cataloguer
+"How do I post a parcel?" (Jordan: *"Why parcels?"*). Suggestions now come **only from
+destinations gated by an app the person was granted** — those describe their job — and it shows
+FEWER rather than padding with a universal one. Someone with nothing granted gets the universal
+ones, which really are all they have. Wording is deliberately plain and short (37 characters at
+most): "How do I add a lot?", "How do I price something?", "How do I refresh BC?".
+
+⚠ **Asking about a tool they cannot open is BLOCKED before the AI**, not left to the model to
+phrase (Jordan: *"if he asks about it it needs to block him"*). \`blockedDestination()\`
+keyword-matches the question against the full list; if the best forbidden match clearly beats
+anything they can open, the route returns a fixed refusal naming the tool and never calls the
+model. Naming it back is not a leak — they typed it — and it beats a vague "I can't see a tool
+for that". It is deliberately conservative: a question that fits both ways is answered from what
+they have, because wrongly saying "you don't have access" is worse than a vague answer.
+
+⚠ In \`matchScore\` the \`also\` keywords carry the weight and the NAME is only a weak tie-break.
+Scoring name fragments like "a sale" made "where do I add photos to a sale" match *Manage Lots*
+instead of *Photography*, so the block named the wrong tool — caught in testing before shipping.
+
 ## Measured across every real user before shipping
 
 0 leaks. Context is 2.6k–12.6k characters depending on access — a cataloguer with two sections is

@@ -12,13 +12,17 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 
-type Turn = { role: "user" | "model"; text: string; links?: { name: string; href: string }[] }
+type Turn = {
+  role: "user" | "model"
+  text: string
+  links?: { name: string; href: string }[]
+  /** A question about a tool this person cannot open — shown as a refusal, not an answer. */
+  blocked?: boolean
+}
 
-const EXAMPLES = [
-  "Where do I go to do an overnight run?",
-  "How do I add photos to a sale?",
-  "Where do I check a sale before it goes to BC?",
-]
+// ⚠ The suggested questions are FETCHED, never hardcoded. A fixed list here offered a
+// cataloguer with only CATALOGUING "Where do I go to do an overnight run?" — a tool he cannot
+// open (Jordan, 2026-09-02). They come from the same filtered set as the answers.
 
 export default function HelpButton() {
   const [open, setOpen]       = useState(false)
@@ -26,6 +30,7 @@ export default function HelpButton() {
   const [turns, setTurns]     = useState<Turn[]>([])
   const [busy, setBusy]       = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  const [examples, setExamples] = useState<string[]>([])
   const panelRef  = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -43,6 +48,15 @@ export default function HelpButton() {
   }, [open])
 
   useEffect(() => { if (open) inputRef.current?.focus() }, [open])
+
+  // Asked for once, the first time it is opened.
+  useEffect(() => {
+    if (!open || examples.length > 0) return
+    fetch("/api/help/ask")
+      .then(r => r.json())
+      .then(d => setExamples(d.examples ?? []))
+      .catch(() => { /* no suggestions is fine — the box still works */ })
+  }, [open, examples.length])
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [turns, busy])
 
   async function ask(question: string) {
@@ -64,7 +78,7 @@ export default function HelpButton() {
       })
       const data = await res.json()
       if (data.error) { setError(data.error); return }
-      setTurns([...asked, { role: "model", text: data.answer ?? "", links: data.links ?? [] }])
+      setTurns([...asked, { role: "model", text: data.answer ?? "", links: data.links ?? [], blocked: !!data.blocked }])
     } catch {
       // ⚠ Say something. A help box that goes quiet when it fails is the worst possible one.
       setError("Couldn't reach the server — try again in a moment.")
@@ -97,10 +111,10 @@ export default function HelpButton() {
           </div>
 
           <div className="max-h-[22rem] overflow-y-auto px-4 py-3 space-y-3">
-            {turns.length === 0 && !busy && (
+            {turns.length === 0 && !busy && examples.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs text-gray-500">For example:</p>
-                {EXAMPLES.map(e => (
+                {examples.map(e => (
                   <button
                     key={e}
                     onClick={() => ask(e)}
@@ -117,7 +131,9 @@ export default function HelpButton() {
                 <p key={i} className="text-xs text-gray-300 bg-gray-800 rounded-lg px-3 py-2 ml-6">{t.text}</p>
               ) : (
                 <div key={i} className="space-y-2">
-                  <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{t.text}</p>
+                  <p className={`text-sm whitespace-pre-wrap leading-relaxed ${t.blocked ? "text-amber-400" : "text-gray-200"}`}>
+                    {t.blocked && <span className="mr-1" aria-hidden>🔒</span>}{t.text}
+                  </p>
                   {t.links && t.links.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {t.links.map(l => (

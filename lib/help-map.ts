@@ -24,6 +24,9 @@ import { ALL_APPS, APP_SECTIONS, hasAppAccess, getAllowedSections, type AppKey }
 export type Destination = {
   /** What it is called on screen — say it back to the user in these words. */
   name: string
+  /** A question a person would actually type to find this. Used for the suggestions in the
+   *  panel, which are drawn from what THIS person can open — never a hardcoded list. */
+  ask?: string
   /** Where it is. A path so the answer can link straight to it. */
   href: string
   /** The app permission that gates it. Undefined = everyone signed in can reach it. */
@@ -41,6 +44,7 @@ export type Destination = {
 export const DESTINATIONS: Destination[] = [
   // ── Auction AI ──────────────────────────────────────────────────────────────
   {
+    ask: "How do I run the AI on a sale?",
     name: "Auction AI → Auto Pipeline", href: "/tools/auction-ai?tab=pipeline", app: "AUCTION_AI",
     what: "Runs a whole sale through the AI in three stages — Batch Run writes the descriptions, Key Points Check puts every key point back in, Double Check reads them over. Start it here and leave the tab open, or queue it to run overnight with nothing open.",
     also: ["overnight run", "run a sale through ai", "describe a sale", "pipeline", "auto apply"],
@@ -88,11 +92,13 @@ export const DESTINATIONS: Destination[] = [
     also: ["bulk", "mass change", "add conditions", "starting bids", "delete lots"],
   },
   {
+    ask: "How do I check the descriptions?",
     name: "A sale → Review", href: "/tools/cataloguing/auctions", app: "CATALOGUING", section: "AUCTION_MANAGER",
     what: "Read the descriptions against the key points. Shows what needs attention, what only needs a wording check, and anything the AI flagged as a possible cataloguer mistake.",
     also: ["check descriptions", "key points missing", "ai flagged", "mistakes"],
   },
   {
+    ask: "How do I check a sale is ready?",
     name: "A sale → Locking Check", href: "/tools/cataloguing/auctions", app: "CATALOGUING", section: "AUCTION_MANAGER",
     what: "The last check before a sale goes to BC and the website — blocking problems first, then the ones worth a look.",
     also: ["final check", "before publishing", "ready to lock"],
@@ -108,19 +114,22 @@ export const DESTINATIONS: Destination[] = [
     also: ["unique ids blank", "match bc", "import ids"],
   },
   {
+    ask: "How do I make the import sheet?",
     name: "Cataloguing → End of Day → BC", href: "/tools/cataloguing/end-of-day", app: "CATALOGUING", section: "END_OF_DAY",
     what: "Builds tonight's import sheet: every lot not yet in BC, grouped by tote, in the exact format the overnight macro reads. Run Data Sync first.",
     also: ["overnight sheet", "import sheet", "end of day", "tote sheet"],
   },
   {
+    ask: "How do I add a lot?",
     name: "Cataloguing → Tablet Cataloguing", href: "/tools/cataloguing/tablet/auctions", app: "CATALOGUING", section: "TABLET_CATALOGUING",
     what: "The tablet-shaped version of cataloguing, for entering lots on the shared iPads in the warehouse.",
     also: ["ipad", "tablet", "add lots on the floor"],
   },
   {
+    ask: "Where do I add photos?",
     name: "Cataloguing → Photography", href: "/tools/cataloguing/photography", app: "CATALOGUING", section: "PHOTOGRAPHY",
     what: "Upload photos to a sale's lots, matched by the barcode label in the picture or by the filename.",
-    also: ["upload photos", "add pictures", "smart scan"],
+    also: ["upload photos", "add photos", "photos to a sale", "add pictures", "photograph", "smart scan"],
   },
   {
     name: "Cataloguing → Lotting Up", href: "/tools/cataloguing/lotting-up", app: "CATALOGUING", section: "LOTTING_UP",
@@ -128,6 +137,7 @@ export const DESTINATIONS: Destination[] = [
     also: ["split into lots", "group items"],
   },
   {
+    ask: "How do I price something?",
     name: "Cataloguing → Item Valuations", href: "/tools/cataloguing/research", app: "CATALOGUING", section: "RESEARCH",
     what: "Price an item from photos, using what we have actually sold.",
     also: ["what is it worth", "valuation", "research"],
@@ -135,6 +145,7 @@ export const DESTINATIONS: Destination[] = [
 
   // ── Business Central ────────────────────────────────────────────────────────
   {
+    ask: "How do I refresh BC?",
     name: "BC Warehouse → Data Sync", href: "/tools/bc-warehouse", app: "BC_WAREHOUSE",
     what: "Pulls the latest data down from Business Central. Anything in the Hub that says 'in BC' is answered from this, so run it before the checks that depend on it.",
     also: ["sync bc", "refresh bc", "out of date", "not showing in bc"],
@@ -145,6 +156,7 @@ export const DESTINATIONS: Destination[] = [
     also: ["where is a lot", "location", "tote", "find an item"],
   },
   {
+    ask: "Where is a customer's item?",
     name: "Admin Centre", href: "/tools/lot-lookup", app: "ADMIN_CENTRE",
     what: "Answers 'where is this customer's item?' — search by receipt, tote, customer, sale or barcode and see the whole journey in one row.",
     also: ["customer ringing", "where is their item", "look up a receipt", "who catalogued it"],
@@ -162,6 +174,7 @@ export const DESTINATIONS: Destination[] = [
 
   // ── Reports & people ────────────────────────────────────────────────────────
   {
+    ask: "How many lots have we done?",
     name: "Cataloguing Reports", href: "/tools/reports", app: "REPORTS",
     what: "How much each cataloguer has done over a period, with charts and printable PDFs.",
     also: ["performance", "how many lots", "per cataloguer", "league table"],
@@ -193,16 +206,19 @@ export const DESTINATIONS: Destination[] = [
   // these behind an app key hid it from people who can plainly see it on their home page, which
   // is how the first version of this map was wrong (caught by the permission test, 2026-09-02).
   {
+    ask: "How do I post a parcel?",
     name: "Packing / Dispatch", href: "/tools/packing",
     what: "Royal Mail dispatch — book parcels, print labels, and the packers' barcode sheet.",
     also: ["post", "royal mail", "dispatch", "labels"],
   },
   {
+    ask: "How do I watch a live sale?",
     name: "Auction Monitor", href: "/tools/auction-monitor",
     what: "Watch a live sale as it runs, with push alerts on the rules you set.",
     also: ["live sale", "watch the auction", "alerts"],
   },
   {
+    ask: "Who do I tell about a broken printer?",
     name: "IT Help", href: "/tools/it-help",
     what: "The IT knowledge base and its own AI chat, for computer and equipment problems rather than 'where do I go' questions.",
     also: ["printer", "password", "broken", "it problem"],
@@ -252,6 +268,86 @@ export function allowedHelpContext(
     .map(c => ({ name: c.defaultLabel, href: c.href, what: c.defaultDescription }))
 
   return { destinations, cards }
+}
+
+/** Up to three questions THIS person could usefully ask.
+ *
+ *  ⚠ Never hardcode these in the component: a fixed list offered Ben Kennington — a cataloguer
+ *  with only CATALOGUING — "Where do I go to do an overnight run?", a tool he cannot open
+ *  (Jordan, 2026-09-02). The suggestions have to come from the same filtered set as the answers.
+ *
+ *  ⚠⚠ And "can open" is not "would ever want". Three tools are open to EVERYONE signed in
+ *  (Packing, Auction Monitor, IT Help, whose Hub cards are `allUsers`), so simply taking the
+ *  first three allowed offered a cataloguer "How do I post a parcel?" (Jordan: "Why parcels?").
+ *  Questions about a tool the person was deliberately GRANTED come first — those describe their
+ *  job — and the universal ones only fill a gap. */
+export function suggestedQuestions(ctx: HelpContext): string[] {
+  const asks = (list: Destination[]) => list.map(d => d.ask).filter((q): q is string => !!q)
+  const granted = asks(ctx.destinations.filter(d => d.app))   // gated → someone chose to give it
+  // ⚠ Show FEWER rather than pad. A cataloguer with two granted questions was having a third
+  // added from the everyone-can-open tools, which is how "How do I post a parcel?" turned up
+  // under a cataloguer's Help box. Two relevant suggestions beat three with a stranger in them.
+  if (granted.length > 0) return granted.slice(0, 3)
+  // Nothing granted at all — the universal tools are genuinely all they have.
+  return asks(ctx.destinations.filter(d => !d.app)).slice(0, 3)
+}
+
+// ─── Asking about something you cannot open ─────────────────────────────────
+// Jordan, 2026-09-02: "if he asks about it it needs to block him". Leaving it to the model to
+// say "I can't see a tool for that" is both vague and a matter of the model's mood — a question
+// that plainly means a tool this person does not have gets a fixed, honest refusal instead, and
+// never reaches the AI at all.
+
+function tokens(s: string): string[] {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, " ").split(/\s+/).filter(t => t.length > 2)
+}
+
+/** How strongly a question points at one destination.
+ *
+ *  ⚠ The `also` keywords carry the weight, not the name. A name part is often a generic
+ *  fragment — "A sale → Manage Lots" contains "a sale" — and scoring those like real keywords
+ *  made "where do I add photos to a sale" match Manage Lots instead of Photography, so the block
+ *  named the wrong tool (caught in testing, 2026-09-02). Keywords describe what someone would
+ *  actually type; names are only a weak tie-breaker. */
+function matchScore(question: string, d: Destination): number {
+  const q = " " + question.toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, " ") + " "
+  let score = 0
+
+  // What people actually ask — the strong signal.
+  for (const phrase of d.also ?? []) {
+    if (q.includes(` ${phrase.toLowerCase()} `)) score += phrase.includes(" ") ? 6 : 3
+  }
+
+  // The name, weakly, and with the leading article dropped so "a sale" cannot carry a match.
+  for (const raw of d.name.toLowerCase().split("→")) {
+    const part = raw.trim().replace(/^(a|an|the)\s+/, "")
+    if (part.length > 3 && q.includes(` ${part} `)) score += 2
+  }
+
+  const qt = new Set(tokens(question))
+  for (const t of tokens(d.name)) if (qt.has(t)) score += 1
+  return score
+}
+
+/**
+ * The destination a question is asking about that this person may NOT open — or null.
+ *
+ * ⚠ Deliberately conservative: it only blocks when the best forbidden match clearly beats
+ * anything they CAN open. A question that fits both ways is answered from what they have, never
+ * refused, because a help box that wrongly says "you don't have access" is worse than a vague one.
+ */
+export function blockedDestination(question: string, ctx: HelpContext): Destination | null {
+  const allowedNames = new Set(ctx.destinations.map(d => d.name))
+  const best = (list: Destination[]) =>
+    list.reduce<{ d: Destination | null; s: number }>(
+      (acc, d) => { const s = matchScore(question, d); return s > acc.s ? { d, s } : acc },
+      { d: null, s: 0 },
+    )
+
+  const forbidden = best(DESTINATIONS.filter(d => !allowedNames.has(d.name)))
+  if (!forbidden.d || forbidden.s < 3) return null          // not clearly about anything
+  const allowed = best(ctx.destinations)
+  return forbidden.s > allowed.s ? forbidden.d : null
 }
 
 /** The context as the text the model reads. Kept stable and boring so Claude can cache it. */

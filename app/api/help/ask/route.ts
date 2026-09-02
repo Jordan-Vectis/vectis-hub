@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError } from "@/lib/ai-provider"
-import { allowedHelpContext, helpContextText } from "@/lib/help-map"
+import { allowedHelpContext, helpContextText, suggestedQuestions, blockedDestination } from "@/lib/help-map"
 
 export const maxDuration = 60
 
@@ -46,6 +46,31 @@ Rules:
   from where they are sitting, the list simply is the Hub.
 - No preamble, no "great question", no bullet lists unless you are genuinely listing places.`
 
+// GET /api/help/ask → { examples: string[] }
+// The panel's suggested questions. ⚠ They come from THIS person's allowed destinations — a
+// hardcoded list offered a cataloguer "Where do I go to do an overnight run?" for a tool he
+// cannot open (Jordan, 2026-09-02). Same filter as the answers, or it is the same bug again.
+export async function GET() {
+  try {
+    const session = await getEffectiveSession()
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    const dbUser = await prisma.user.findUnique({
+      where:  { id: session.user.id },
+      select: { role: true, allowedApps: true, appPermissions: true },
+    })
+    if (!dbUser) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    const ctx = allowedHelpContext(
+      dbUser.role ?? "",
+      (dbUser.allowedApps as string[] | null) ?? [],
+      dbUser.appPermissions as Record<string, any> | null,
+    )
+    return NextResponse.json({ examples: suggestedQuestions(ctx) })
+  } catch {
+    // Suggestions are a convenience — an empty list just means the panel opens without them.
+    return NextResponse.json({ examples: [] })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Who the screen is behaving as — the impersonated user when an admin is viewing as someone.
@@ -73,6 +98,19 @@ export async function POST(req: NextRequest) {
     )
     if (ctx.destinations.length === 0 && ctx.cards.length === 0) {
       return NextResponse.json({ answer: "You don't have any tools in your Hub yet — ask IT to give you access.", links: [] })
+    }
+
+    // ⚠⚠ BLOCK BEFORE THE AI, NOT IN THE PROMPT. A question that plainly means a tool this
+    // person cannot open gets a fixed refusal and never reaches the model at all (Jordan,
+    // 2026-09-02: "if he asks about it it needs to block him"). Naming the tool back is not a
+    // leak — they typed it — and it is far more use than "I can't see a tool for that".
+    const blocked = blockedDestination(question, ctx)
+    if (blocked) {
+      return NextResponse.json({
+        blocked: true,
+        answer: `${blocked.name} isn't part of your Hub — you don't have access to it, so I can't help you with it. Ask IT if you think you should have.`,
+        links: [],
+      })
     }
 
     const model = await getToolModel("help_assistant")

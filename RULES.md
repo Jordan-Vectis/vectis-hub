@@ -917,6 +917,20 @@ Three guards on the same principle, keep all of them:
 - The links it returns are **checked back against the allowed set**, so a hallucinated path can
   never become a clickable link to somewhere they cannot go.
 
+- **The suggested questions are FETCHED, never hardcoded.** A fixed list in the component offered
+  a cataloguer with only CATALOGUING "Where do I go to do an overnight run?" — same filter as the
+  answers, or it is the same bug in a different place. ⚠⚠ And they come only from destinations
+  gated by an app the person was **granted**: three tools are open to everyone (`allUsers` cards),
+  so taking the first three allowed offered a cataloguer "How do I post a parcel?". It shows
+  **fewer** rather than padding with a universal one.
+- **A question about a tool they cannot open is BLOCKED before the AI**, by
+  `blockedDestination()`, which returns a fixed refusal naming the tool. Naming it back is not a
+  leak — they typed it. It is conservative on purpose: anything that fits both ways is answered
+  from what they have, because wrongly saying "you don't have access" is worse than a vague answer.
+  ⚠ In `matchScore` the `also` keywords carry the weight and the name is only a weak tie-break —
+  scoring name fragments like "a sale" made "add photos to a sale" match Manage Lots instead of
+  Photography, so the refusal named the wrong tool.
+
 Knowledge comes from the app's own structure — `APP_CARD_DEFS`, `APP_SECTIONS`, and the
 hand-written `DESTINATIONS` list for the tabs that appear in neither.
 
