@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"bfad9e9d5490c1c1d1b6d9f17cb780dbbca89746","author":"Jordan Orange","date":"2026-09-02T10:38:37+01:00","subject":"Every mass action on Manage Lots shows 20/400"},
+  {"sha":"783ea10778217d7b1283666a080682ca090e1e80","author":"Jordan Orange","date":"2026-09-02T09:31:54+01:00","subject":"Refresh changelog seed"},
   {"sha":"f1506622e5e425e514611abd26f569fdf69b7988","author":"Jordan Orange","date":"2026-09-02T09:31:48+01:00","subject":"The catalogue overrules a saved run row when the lot is empty"},
   {"sha":"5fb207978e644cc3320cd69e3da7fa2c22246d3e","author":"Jordan Orange","date":"2026-09-01T13:49:06+01:00","subject":"Refresh changelog seed"},
   {"sha":"9587903502376ec33187fd32ad9238e963e28de9","author":"Jordan Orange","date":"2026-09-01T13:49:04+01:00","subject":"Auto Pipeline: changing the model mid-run now takes effect"},
