@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f7064b492a540e0c78d57d57d1a62864bdcdef78","author":"Jordan Orange","date":"2026-09-02T16:30:31+01:00","subject":"Reserves: simplify the reminder to what was actually asked for"},
+  {"sha":"619d77d15fed7cfefd7a8f99a5c15ee89e3c0eec","author":"Jordan Orange","date":"2026-09-02T16:14:13+01:00","subject":"Refresh changelog seed"},
   {"sha":"d0c0a46f2862c5ff26c1c8d0f850938c6abd4129","author":"Jordan Orange","date":"2026-09-02T16:14:11+01:00","subject":"Reserves: record them here, reminded at Locking Check"},
   {"sha":"f24c4cd35a9ef4cd3a1d62e83aeadb3a07f2c7be","author":"Jordan Orange","date":"2026-09-02T15:52:01+01:00","subject":"Refresh changelog seed"},
   {"sha":"e65c9f8dbaaa6d57f7488ef5ec3137321c901ad4","author":"Jordan Orange","date":"2026-09-02T15:51:59+01:00","subject":"MALFORMED_FUNCTION_CALL is not a refusal - stop losing the lot"},
