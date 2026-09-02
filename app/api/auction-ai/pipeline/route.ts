@@ -19,7 +19,27 @@ export async function GET(req: NextRequest) {
     })
 
     if (!run) return NextResponse.json({ run: null })
-    return NextResponse.json({ run })
+
+    // ⚠⚠ Say whether each lot is ACTUALLY empty in the catalogue right now.
+    //
+    // The run's own rows are its record of what it produced, and `appliedDesc` stays the only
+    // proof a lot's text reached the catalogue — that is not re-derived here and must not be
+    // (see the appliedDesc note). But a saved row can outlive the thing it describes: on F113
+    // a 🧹 Clear Descriptions wiped 499 lots between two runs, and the report went on stating
+    // "600 applied to the catalogue" while 210 of them held nothing at all (Jordan, 2026-09-02).
+    // So the live description is reported ALONGSIDE, purely so the page can show the
+    // disagreement instead of asserting the stale half of it.
+    const auction = await prisma.catalogueAuction.findFirst({
+      where:   { code },
+      orderBy: { createdAt: "desc" },   // codes get reused across years — newest wins
+      select:  { lots: { select: { id: true, description: true } } },
+    })
+    const blank = new Set(
+      (auction?.lots ?? []).filter(l => !(l.description ?? "").trim()).map(l => l.id)
+    )
+    return NextResponse.json({
+      run: { ...run, lots: run.lots.map(l => ({ ...l, catalogueBlank: blank.has(l.lotId) })) },
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Unknown error" }, { status: 500 })
   }

@@ -33,6 +33,9 @@ type Lot = {
   kpMissing: string | null
   kpAdded: string | null
   appliedDesc: string | null
+  /** The lot's description is EMPTY in the catalogue right now — sent by the API alongside
+   *  the run's own rows, never derived from them. See the banner below. */
+  catalogueBlank?: boolean
 }
 
 type Filter = "all" | "attention" | "applied" | "waiting" | "skipped"
@@ -40,6 +43,13 @@ type Filter = "all" | "attention" | "applied" | "waiting" | "skipped"
 /** The text that would go to the catalogue: key points revised it last, batch wrote it first. */
 function latestText(l: Lot): string {
   return (l.revised ?? l.description ?? "").trim()
+}
+
+/** Any text this run holds for the lot. ⚠ Broader than latestText on purpose: the columns are
+ *  written by different stages, so testing one would miss a lot whose row was filled in by
+ *  another — and this decides whether we claim the catalogue has lost something. */
+function producedText(l: Lot): string {
+  return (l.revised || l.description || l.batchDesc || l.appliedDesc || "").trim()
 }
 
 /** ⚠ Same comparison the Auto Pipeline's Review & Apply uses — appliedDesc is the ONLY record
@@ -109,6 +119,13 @@ export default function RunClient({ code }: { code: string }) {
     applied:   lots.filter(isApplied).length,
     waiting:   lots.filter(notStarted).length,
     skipped:   lots.filter(l => l.batchStatus === "skipped" || l.batchStatus === "empty").length,
+    // ⚠⚠ Rows that say the text reached the catalogue, on lots that are EMPTY there now.
+    // On F113 that was 210 lots while the page said "600 descriptions written to the
+    // catalogue" — the run had resumed a saved run whose lots had since been cleared, so it
+    // skipped them and then reported the older run's work as its own (Jordan, 2026-09-02).
+    // The counts above are the run's own record and stay exactly as they were; this is the
+    // reality check printed next to them.
+    goneFromCatalogue: lots.filter(l => l.catalogueBlank && !!producedText(l)).length,
   }), [lots])
 
   const shown = useMemo(() => {
@@ -229,11 +246,29 @@ export default function RunClient({ code }: { code: string }) {
           <div>
             <p className="font-semibold">{code} finished.</p>
             <p className="opacity-90 mt-0.5">
-              {counts.applied} description{counts.applied === 1 ? "" : "s"} written to the catalogue
+              {counts.applied - counts.goneFromCatalogue} description{counts.applied - counts.goneFromCatalogue === 1 ? "" : "s"} written to the catalogue
               {counts.attention > 0 ? ` · ${counts.attention} worth a look below` : ""}
               {item.skipped > 0 ? ` · ${item.skipped} the AI refused` : ""}.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* ⚠⚠ The run's record and the catalogue disagree. This is the one thing this page must
+          never paper over: on F113 it read "600 descriptions written to the catalogue" while
+          210 lots held nothing, because the run had resumed a saved run whose lots were cleared
+          in between and skipped every one of them. Never fold this into the counts above —
+          say which number is which and what to do. */}
+      {counts.goneFromCatalogue > 0 && (
+        <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm mb-4">
+          <p className="font-semibold text-red-700 dark:text-red-300">
+            ⚠ {counts.goneFromCatalogue} lot{counts.goneFromCatalogue === 1 ? " is" : "s are"} empty in the catalogue
+          </p>
+          <p className="text-red-700/90 dark:text-red-300/90 mt-1">
+            This run holds a description for {counts.goneFromCatalogue === 1 ? "it" : "them"}, but the lot{counts.goneFromCatalogue === 1 ? " has" : "s have"} nothing
+            on {counts.goneFromCatalogue === 1 ? "it" : "them"} now — usually because the descriptions were cleared after the run
+            produced them. <strong>Queue this sale again</strong> and it will do exactly {counts.goneFromCatalogue === 1 ? "that one" : "those"} and nothing else.
+          </p>
         </div>
       )}
 
@@ -242,7 +277,15 @@ export default function RunClient({ code }: { code: string }) {
         <div className={`rounded-2xl border p-5 mb-5 ${tone.card}`}>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Stat label="Lots described so far" value={String(described)} />
-            <Stat label="Applied to the catalogue" value={String(counts.applied)} />
+            {/* The run's own count, minus the ones that are no longer there. The full figure is
+                still in the "Applied" filter below; this tile is about the catalogue. */}
+            <Stat
+              label="Applied to the catalogue"
+              value={counts.goneFromCatalogue > 0
+                ? `${counts.applied - counts.goneFromCatalogue} of ${counts.applied}`
+                : String(counts.applied)}
+              tone={counts.goneFromCatalogue > 0 ? "amber" : undefined}
+            />
             <Stat label="Need a look" value={String(counts.attention)} tone={counts.attention > 0 ? "amber" : undefined} />
             <Stat label="Couldn't be done" value={String(item.skipped)} tone={item.skipped > 0 ? "amber" : undefined} />
           </div>

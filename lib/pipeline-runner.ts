@@ -315,7 +315,13 @@ export async function runQueueSlice(): Promise<SliceResult> {
       await flush({ status: "CANCELLED", finishedAt: new Date(), lastMessage: `Couldn't load ${item.code} — the sale wasn't found.` })
       return { ran: true, code: item.code, status: "CANCELLED", done: 0, total: 0, stage: item.stage, message: "sale not found" }
     }
-    const { lots } = state
+    const { lots, staleCleared } = state
+    // ⚠ Say it out loud. A run that quietly re-does 210 lots looks identical to one that
+    // quietly skips them, and the whole fault this guards against was invisible until the
+    // change log was read by hand.
+    if (staleCleared > 0) {
+      addLog(`  ↻ ${staleCleared} lot${staleCleared === 1 ? "" : "s"} had been emptied in the catalogue since the last run — running ${staleCleared === 1 ? "it" : "them"} again`)
+    }
 
     if (item.kind === "upgrade") {
       addLog(`   AI Upgrade · ${item.upgradeModes.split(",").filter(Boolean).join(", ")} · everything held for morning review`)
@@ -359,7 +365,7 @@ export async function runQueueSlice(): Promise<SliceResult> {
 // ── Loading ─────────────────────────────────────────────────────────────────
 // Mirrors the tab's handleLoad so the same lots are in scope, including the two
 // filters. Reads through the same routes, so one definition of "the lots".
-async function loadLots(item: NonNullable<Item>): Promise<{ auctionId: string; lots: Lot[] } | null> {
+async function loadLots(item: NonNullable<Item>): Promise<{ auctionId: string; lots: Lot[]; staleCleared: number } | null> {
   const code = item.code.trim().toUpperCase()
   const catRes = await fetch(`${base()}/api/auction-ai/catalogue-lots?code=${encodeURIComponent(code)}`, { headers: cronHeaders() })
   if (!catRes.ok) return null
@@ -377,7 +383,7 @@ async function loadLots(item: NonNullable<Item>): Promise<{ auctionId: string; l
       currentDesc: l.description || "",
       appliedDesc: l.description || "",
     }))
-    return { auctionId: cat.auctionId, lots }
+    return { auctionId: cat.auctionId, lots, staleCleared: 0 }
   }
 
   // ⚠ This read is NOT best-effort. The saved per-lot state is the only record
@@ -390,23 +396,50 @@ async function loadLots(item: NonNullable<Item>): Promise<{ auctionId: string; l
   const saved: Record<string, any> = {}
   for (const sl of (pipe?.run?.lots ?? [])) saved[sl.lotId] = sl
 
+  // ⚠⚠ THE CATALOGUE OVERRULES THE SAVED ROW WHEN THE LOT IS NOW EMPTY.
+  //
+  // Measured on F113 (Jordan, 2026-09-02: "601 lots described but well over 100 lots have no
+  // description"). A browser run described the sale in the morning; at 15:10 he pressed
+  // 🧹 Clear Descriptions, which blanked 499 lots; at 16:11 the overnight run picked up the
+  // SAME saved run, whose rows still said batch/key points/double check done. `!l.batchStatus`
+  // then skipped 249 of them outright — the log even says "601 lots in scope · Batch run —
+  // 352 to do" — and 210 lots were still empty in the morning while the report claimed 600
+  // applied. `currentDesc` took the saved text over the catalogue's, so every later stage
+  // "checked" wording that was no longer on the lot.
+  //
+  // A saved row that claims a description, against a lot with none, is STALE — the catalogue
+  // has been cleared or wiped underneath it. Forget its statuses so the lot runs again.
+  //
+  // ⚠ Only when the row actually claims TEXT. A "skipped" (the AI refused) or "nothing" (no
+  // photos) row has no description by design, and resetting those would send a content-blocked
+  // lot back through the AI every single night.
+  // ⚠ ANY text the run holds counts, not just `description`. The columns are written by
+  // different stages (batch → description + batchDesc, key points → revised, and appliedDesc
+  // records the write), so testing one of them would quietly miss the lots whose row was
+  // filled in by a different stage.
+  const savedTextOf = (s: any) =>
+    (s?.revised || s?.description || s?.batchDesc || s?.appliedDesc || "").trim()
+
+  let staleCleared = 0
   let lots: Lot[] = (cat.lots ?? []).map((l: any) => {
     const s = saved[l.id]
+    const stale = !!savedTextOf(s) && !(l.description ?? "").trim()
+    if (stale) staleCleared++
     return {
       id:          l.id,
       label:       l.barcode || l.receiptUniqueId || l.id,
       keyPoints:   l.keyPoints ?? "",
       imageUrls:   l.imageUrls ?? [],
-      currentDesc: s?.description || l.description || "",
-      batchStatus: s?.batchStatus ?? undefined,
-      kpStatus:    s?.kpStatus ?? undefined,
-      dcStatus:    s?.dcStatus ?? undefined,
-      appliedDesc: s?.appliedDesc || l.description || "",
+      currentDesc: stale ? "" : (s?.description || l.description || ""),
+      batchStatus: stale ? undefined : (s?.batchStatus ?? undefined),
+      kpStatus:    stale ? undefined : (s?.kpStatus ?? undefined),
+      dcStatus:    stale ? undefined : (s?.dcStatus ?? undefined),
+      appliedDesc: stale ? "" : (s?.appliedDesc || l.description || ""),
     }
   })
   if (item.onlyWithPhotos) lots = lots.filter(l => l.imageUrls.length > 0)
   if (item.skipHasDesc)    lots = lots.filter(l => !(l.currentDesc ?? "").trim())
-  return { auctionId: cat.auctionId, lots }
+  return { auctionId: cat.auctionId, lots, staleCleared }
 }
 
 async function saveLot(code: string, lotId: string, label: string, fields: Record<string, any>): Promise<void> {

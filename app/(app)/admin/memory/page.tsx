@@ -609,98 +609,201 @@ THEREFORE lib/changelog-seed.ts IS THE ONLY ROUTE by which the app can ever see 
   {
     filename: "pipeline_overnight_queue.md",
     content: `---
-name: Auto Pipeline - overnight queue (server-side)
-purpose: The queue that runs several sales back to back with different settings and nothing left open. Read before touching lib/pipeline-runner.ts, the server.js cron loop, or the cron-auth guards on the AI routes.
-last_updated: 2026-08-13
+name: auto-pipeline-overnight-queue
+description: "The server-side queue that runs several sales back to back with different settings, with nothing left open. Read before touching the pipeline runner, the cron loop, or the cron-auth guards."
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: 6d191af2-9e5e-45d2-9de5-c0e8bc04c1ae
+  modified: 2026-08-20T15:58:42.422Z
 ---
 
-# Auto Pipeline - overnight queue (built 2026-08-13)
+# Auto Pipeline — overnight queue (built 2026-08-13)
 
-Jordan's ask: "can I have the ability to que different auctions with different setting so for example if I want to run a bears auction through and when it finished it starts the trains one overnight". Asked where it should run, he chose the SERVER-SIDE option over a browser-tab queue, knowing it was the bigger build.
+Jordan: "can I have the ability to que different auctions with different setting so for example if I want to run a bears auction through and when it finished it starts the trains one overnight". He chose the **server-side** option over a browser-tab queue, knowing it was the bigger build.
 
-WARNING: the Auto Pipeline tab's own Run button STILL RUNS IN THE BROWSER - its loops, its 12-second gaps, its backoff. It only continues while that tab is open and the PC is awake. The queue is the way to run unattended. Do not conflate the two when diagnosing "it stopped overnight".
+⚠ **The Auto Pipeline tab's own Run button still runs in the BROWSER** — its loops, its 12s gaps, its backoff. It only continues while that tab is open and the PC is awake. The queue is the way to run unattended. Don't conflate the two.
 
 ## Shape
 
-- PipelineQueueItem - one row per queued sale, carrying its OWN settings (preset, model, fallback, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed) plus progress, retryAfter, heartbeatAt and a logText morning report. NEEDS Run Migrations. Per-lot progress still lives in PipelineRun / PipelineLot keyed by auction code - that is what makes a slice resumable.
-- lib/pipeline-runner.ts is the worker. server.js ticks /api/cron/pipeline-queue every 30 seconds; each tick does a roughly nine-minute SLICE and hands back, and the next tick carries on from the same lot.
-- UI (MOVED 2026-08-14): its own page at **/tools/auction-ai/overnight** (overnight-client.tsx), with a per-run page at **/tools/auction-ai/overnight/[code]** (run-client.tsx). Server actions in lib/actions/pipeline-queue.ts, list at GET /api/auction-ai/queue, per-lot detail from GET /api/auction-ai/pipeline?code=.
+- **\`PipelineQueueItem\`** — one row per queued sale, carrying its OWN settings (preset, model, fallback, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed) plus progress, \`retryAfter\`, \`heartbeatAt\` and a \`logText\` morning report. **NEEDS Run Migrations.** Per-lot progress still lives in \`PipelineRun\`/\`PipelineLot\`, keyed by auction code — that is what makes a slice resumable.
+- **\`lib/pipeline-runner.ts\`** — the worker. \`server.js\` ticks \`/api/cron/pipeline-queue\` every 30s; each tick does a ~9-minute **slice** then hands back, and the next tick carries on from the same lot.
+- UI (**moved 2026-08-14**): its own page at **\`/tools/auction-ai/overnight\`** (\`overnight-client.tsx\`) with a per-run page at **\`/tools/auction-ai/overnight/[code]\`** (\`run-client.tsx\`). Actions in \`lib/actions/pipeline-queue.ts\`, list at \`GET /api/auction-ai/queue\`, per-lot detail from \`GET /api/auction-ai/pipeline?code=\`.
 
-## The queue also runs AI UPGRADE jobs (2026-08-20)
+## ✨ The queue also runs AI UPGRADE jobs (2026-08-20)
 
-Jordan asked for the AI Upgrades overnight as well, and chose the SAME overnight page (a run KIND on the queue form: Auto Pipeline / AI Upgrade) and save-for-morning-review over auto-apply.
+Jordan: "Can I have a way of doing the ai upgrades overnight as well?" — chose the SAME overnight page (a run **kind** on the queue form: ⚙ Auto Pipeline / ✨ AI Upgrade) and **save-for-morning-review** over auto-apply.
 
-- PipelineQueueItem.kind ("pipeline" | "upgrade") + upgradeModes (comma-separated keys) + a new UpgradeLot table (queueId+lotId unique; original/revised/status/accepted). NEEDS Run Migrations. UpgradeLot rows ARE the resume record (a lot with a row is never re-run) and the review data.
-- WARNING: an overnight upgrade run writes NOTHING to the catalogue. Every rewrite is held in UpgradeLot; the morning page /tools/auction-ai/overnight/upgrade/[id] (keyed by queue-item ID, because the same sale can also have a pipeline run queued — run-client.tsx filters kind !== "upgrade" when finding its item by code) shows before/after with Accept / Accept All. Accept = acceptUpgradeLot action → applyAiDescriptionOne (the same logged path the tab uses) → row marked accepted. Accept REFUSES when the lot's description has changed since the rewrite (compared against UpgradeLot.original) — the appliedDesc overwrite-newer-edits trap, blocked by design. Accept All loops client-side so one refusal doesn't stop the rest.
-- The runner branch runUpgradeKind uses the same withRetry / slices / heartbeat / 12s-gap machinery and calls THE SAME /api/auction-ai/upgrade route the tab uses (isCronRequest added alongside the session check) — never re-implement the mode instructions in the runner. A content block becomes row status "blocked", an empty result "empty"; both appear on the review page's "Refused / empty" filter.
-- lib/upgrade-modes.ts is now the single source of the UPGRADE_MODES list (page.tsx imports it; the instruction TEXT stays in the upgrade route's MODE_INSTRUCTIONS). addToPipelineQueue validates modes against it server-side.
-- The duplicate-in-queue check is now per code+kind, so a pipeline run and an upgrade run may coexist for one sale — the queue is strictly serial, they can never interleave.
-- The queue API returns upgradeDone/upgradeAccepted per item so the list card can say "N rewrites waiting for review"; progress on upgrade cards is labelled lots (one stage), not steps.
+- **\`PipelineQueueItem.kind\`** ("pipeline" | "upgrade") + **\`upgradeModes\`** (comma-separated keys) + new **\`UpgradeLot\`** table (queueId+lotId unique, original/revised/status/accepted) — **NEEDS Run Migrations**. \`UpgradeLot\` rows ARE the resume record (a lot with a row is never re-run) and the review data.
+- ⚠⚠ **An overnight upgrade run writes NOTHING to the catalogue.** Every rewrite is held in \`UpgradeLot\`; the morning page **/tools/auction-ai/overnight/upgrade/[id]** (keyed by queue-item ID because the same sale can also have a pipeline run queued — run-client.tsx now filters \`kind !== "upgrade"\` when finding its item by code) shows before/after with Accept / Accept All. Accept = \`acceptUpgradeLot\` action → \`applyAiDescriptionOne\` (same logged path as the tab) → row marked accepted. **Accept REFUSES if the lot's description changed since the rewrite** (compares against \`UpgradeLot.original\`) — the appliedDesc overwrite-newer-edits trap, blocked by design. Accept All loops client-side so one refusal doesn't stop the rest.
+- Runner branch \`runUpgradeKind\` in lib/pipeline-runner.ts: same withRetry/slices/heartbeat/LOT_GAP machinery, calls **the same \`/api/auction-ai/upgrade\` route** the tab uses (\`isCronRequest\` added alongside session) — never re-implement the mode instructions. Content block → row status "blocked"; empty result → "empty"; both surfaced on the review page's "Refused / empty" filter.
+- **\`lib/upgrade-modes.ts\` is now the single source of the UPGRADE_MODES list** (page.tsx imports it; instruction TEXT stays in the upgrade route's MODE_INSTRUCTIONS). \`addToPipelineQueue\` validates modes against it server-side.
+- Duplicate-in-queue check is now per **code+kind** — a pipeline run and an upgrade run may coexist for one sale (queue is strictly serial, they can't interleave).
+- Queue API returns \`upgradeDone\`/\`upgradeAccepted\` per item so the list card says "N rewrites waiting for review"; progress on upgrade cards is labelled **lots** (one stage), not steps.
 
-## The queue is GONE from the Auto Pipeline tab (2026-08-14)
+## ⚠ The panel is GONE from the Auto Pipeline tab (2026-08-14)
 
-Jordan: "I really dont like how this overnight que works... revert the Auto Pipeline to not have the overnight que stuff then make a new page called Overnight AI runs or something similar... I think you should be able to list out all the runs then click inside of them to see what is actually happening."
+Jordan: *"I really dont like how this overnight que works… revert the Auto Pipeline to not have the overnight que stuff then make a new page."* \`pipeline-queue-panel.tsx\` is **deleted**; the tab has a signpost link only. **Do not put a queue back on that tab.** Two things were wrong with it living there: the thing you check in the morning was buried inside the thing you drive by hand, and — the real fault — **a queued sale silently inherited whatever the Auto Pipeline tab was set to at that moment**, so what a sale would run with depended on a screen somewhere else. The new page **states its own settings** (sale, instruction, model, fallback, toggles) on the queue form.
 
-pipeline-queue-panel.tsx is **deleted** and the Auto Pipeline tab carries a signpost link only. WARNING: do not put a queue back on that tab. Two things were wrong with it living there. The thing you check in the morning was buried at the bottom of the thing you drive by hand — and, the real fault, **a queued sale silently inherited whatever the Auto Pipeline tab happened to be set to at that moment**, so what a sale would run with depended on a screen somewhere else entirely. The new page's queue form **states its own settings**: sale, instruction, model, fallback and every toggle.
+The page chose to be a route under Auction AI (Jordan's call), so it inherits the \`AUCTION_AI\` gate from \`app/(app)/tools/auction-ai/layout.tsx\` — **do not add a second gate**. The sidebar entry is a \`<Link>\`, not a tab: the tabs are client state on one 6,000-line route, and a morning check shouldn't load it.
 
-Opening a run now shows it lot by lot, because everything needed was already stored per lot on PipelineLot and nothing was reading it: each stage's outcome, what Double Check contradicted or found unsupported, which key points were missing and which were put back, the text produced, and whether it actually reached the catalogue. WARNING: "written to the catalogue" on that page uses the SAME appliedDesc comparison as Review & Apply — do not re-derive it from the live catalogue description (see the appliedDesc entry for why that silently resurrects applied lots).
+⚠ The **machinery is untouched** — runner, slices, cron, retries, \`isCronRequest\`. This changed where you drive it from, not how it runs.
 
-Jordan chose a route UNDER Auction AI, so it inherits the AUCTION_AI gate from app/(app)/tools/auction-ai/layout.tsx — do not add a second gate. The sidebar entry is a Link, not a tab: the tabs are client state on one 6,000-line route, and a morning check should not have to load it.
+## ⚠ Adding a sale does NOT start it (2026-08-14)
 
-WARNING: the MACHINERY is untouched — the runner, the nine-minute slices, the cron loop, the retries, the cron-auth guards. This changed where you drive it from, not how it runs.
+Jordan: *"They seem to be auto starting without me saying to?"* — and he was right. There was never a start gate: the runner picks up **any** \`QUEUED\` row on its next tick (every 30s, no time-of-day check), so adding to the queue **was** the instruction to run. "Overnight" only ever meant "doesn't need your browser open".
 
-## Adding a sale does NOT start it (2026-08-14)
+Fixed without touching the runner: \`addToPipelineQueue\` now creates the row as **\`PAUSED\`**, which the runner never picks up. \`startPipelineQueueItem\` / \`startAllPipelineQueueItems\` move it to \`QUEUED\`. ⚠ **Never create these as \`QUEUED\` again.**
 
-Jordan: "They seem to be auto starting without me saying to?" — and he was right. There was never a start gate anywhere. The runner picks up ANY row with status QUEUED on its next tick, which is every 30 seconds with no time-of-day check, so adding a sale to the queue WAS the instruction to run it. "Overnight" only ever meant "does not need your browser open", never "waits until tonight".
-
-Fixed without touching the runner: addToPipelineQueue creates the row as **PAUSED**, which the runner never picks up, and startPipelineQueueItem / startAllPipelineQueueItems move it to QUEUED. WARNING: never create these as QUEUED again.
-
-WARNING: PAUSED now means two different things — **never started** versus **held mid-run** — and they are told apart by startedAt being null. Always label through **queueStatusLabel(item)** / isNotStarted(item) in lib/pipeline-queue.ts, never off QUEUE_STATUS_LABEL directly, or a brand-new sale reads as "Paused" like something went wrong.
+⚠ \`PAUSED\` now means two things — **never started** vs **held mid-run** — told apart by \`startedAt\` being null. Always label through **\`queueStatusLabel(item)\`** / \`isNotStarted(item)\` in lib/pipeline-queue.ts, never off \`QUEUE_STATUS_LABEL\` directly.
 
 ## The overnight pages deliberately MIRROR the Auto Pipeline tab's visual language (2026-08-14)
 
-Jordan: "Can it have some of the symbols and ui features of the autopipeline tab". So the run page carries the same three stage cards — ⚡ Batch Run, ✓ Key Points Check, 🔎 Double Check — with the tab's own states (gold and pulsing while running, green with a tick once past, dimmed until reached) and the same per-stage wording: "N generated OK", "N missing key points added", "N descriptions corrected", "N content blocked by AI". The lot table uses those symbols instead of prose, the run log is colour-coded the way the tab colours its own, a finished run gets the same celebration summary, and the list shows the three stages as pips.
+Jordan: *"Can it have some of the symbols and ui features of the autopipeline tab"*. The run page uses the same three stage cards (**⚡ Batch Run · ✓ Key Points Check · 🔎 Double Check**), the same states (gold + pulsing while running, green + ✓ Done once past, dimmed until reached), the same per-stage wording ("N generated OK", "⚑ N missing key points added", "⚑ N descriptions corrected", "✗ N content blocked by AI"), the same log colouring and the 🎉 finish. The list shows the three stages as pips. ⚠ Keep them in step: two visual languages for one pipeline leaves people unsure whether "issues" here means what "issues" means there.
 
-WARNING: keep the two in step. Two visual languages for one pipeline is how someone ends up unsure whether "issues" on one screen means what "issues" means on the other.
+⚠ The signpost block on the Auto Pipeline tab was also **removed** ("this doesnt need to be here") — the sidebar link is the only pointer. Don't re-add either the panel or a signpost.
 
-WARNING: the signpost block that briefly sat on the Auto Pipeline tab pointing at the new page was ALSO removed ("this doesnt need to be here") — the sidebar link is the only pointer now. Do not re-add either the queue panel or a signpost to that tab.
+## ⚠ \`PipelineQueueItem.total\` is STAGE PASSES, not lots
 
-## WARNING: PipelineQueueItem.total is STAGE PASSES, not lots
+A 601-lot sale reads ~1693 (\`601 batch + 491 key-point + 601 double-check\`) because \`outstanding()\` counts every stage pass still to do. Labelling it "Lots done" made it read as a bug. Call it **steps**, and get a real lot figure by counting \`PipelineLot\` rows that have text. Do not "fix" the runner's maths — counting stage passes is what keeps the figure meaning the same across resumed slices.
 
-A 601-lot sale reads about 1693, because outstanding() counts every stage pass still to do: 601 batch + 491 key-point + 601 double-check. Jordan hit this as "its saying lots done 1693 when there is only 601 lots in that auction?" — the figure was right and the LABEL was wrong. Call it steps, and if a real lot figure is wanted, count the PipelineLot rows that actually have text. Do NOT "fix" the runner's maths: counting stage passes is what keeps the number meaning the same thing across resumed slices.
+## ⚠ The things that will bite
 
-## The things that will bite
+- **The runner calls the SAME routes the browser does** (\`batch\`, \`key-points-check\`, \`double-check\`, \`catalogue-lots\`, \`pipeline\`, \`pipeline/lot\`, \`photo-proxy\`) over localhost, authorised by \`isCronRequest\` in **\`lib/cron-auth.ts\`** (\`Bearer \${CRON_SECRET}\`). Deliberate: those routes hold the tuned prompts, the key-points rules, the bears clean-up and the English rule. **Never re-implement a prompt in the runner** — change it in the route and both paths get it. \`isCronRequest\` is only ever used ALONGSIDE the session check, never instead of it. \`DELETE /api/auction-ai/pipeline\` (reset) is deliberately left session-only.
+- **NEVER GIVES UP (Jordan's instruction).** A lot that errors is left UNMARKED and retried across ticks and restarts, forever, with the browser's backoff (60s→30min for rate limits, 12→30s otherwise). Nothing is ever marked failed. The one exception is the pre-existing RULES one: a Gemini **content block** skips that lot (RECITATION retries 4× on the other model first). If a wait won't fit in the slice, \`SliceOver\` carries it into \`retryAfter\` so the sale sleeps exactly that long and resumes **on the same lot**.
+- **⚠ Reading saved progress is NOT best-effort.** If \`GET /api/auction-ai/pipeline\` fails, \`loadLots\` THROWS. Treating it as "nothing done yet" would send every finished lot back through the AI and, on auto-apply, overwrite good descriptions. Don't "harden" that into a silent fallback.
+- **\`flush\` splits progress from status.** Progress and the log always save; the **status** is only moved on a row that isn't \`PAUSED\`/\`CANCELLED\`. Without that split, pressing Hold mid-slice was silently undone at the end of the slice, and Remove mid-slice made the error handler throw. \`stopRequested()\` is also checked between lots so Hold takes effect in seconds.
+- **Claiming is conditional** (\`updateMany\` on the expected status) and a \`RUNNING\` row with a heartbeat older than 3 minutes is reclaimed — that is how a deploy restarting mid-sale resumes.
+- **The runner writes lots itself** (no session, so it can't use \`applyAiDescriptionOne\`) but logs through \`lib/lot-log.ts\` exactly the same, as \`changedBy: "Auto Pipeline (overnight…)"\`, \`source: "ai_apply"\`. RULES: every lot mutation logs.
 
-- THE RUNNER CALLS THE SAME ROUTES THE BROWSER DOES (batch, key-points-check, double-check, catalogue-lots, pipeline, pipeline/lot, photo-proxy) over localhost, authorised by isCronRequest in lib/cron-auth.ts (Bearer CRON_SECRET). This is deliberate: those routes hold the tuned prompts, the key-points authority rules, the bears clean-up and the English rule. NEVER re-implement a prompt inside the runner - change it in the route and both paths get it. isCronRequest is only ever used ALONGSIDE the session check, never instead of it, and DELETE /api/auction-ai/pipeline (the reset) is deliberately left session-only.
-- NEVER GIVES UP (Jordan's explicit instruction). A lot that errors is left UNMARKED and retried across ticks and across restarts, forever, with the same backoff the browser uses (60s doubling to a 30-minute cap for rate limits, 12s to 30s otherwise). Nothing is ever marked failed. The single exception is the pre-existing rule: a Gemini CONTENT BLOCK skips that lot because it will never succeed on retry, and RECITATION retries four times on the other model first. If a wait will not fit in the remaining slice, SliceOver carries it into retryAfter so the sale sleeps exactly that long and resumes ON THE SAME LOT.
-- READING SAVED PROGRESS IS NOT BEST-EFFORT. If GET /api/auction-ai/pipeline fails, loadLots THROWS. Treating that as "nothing done yet" would send every already-finished lot back through the AI and, with auto-apply on, overwrite good descriptions. Do not "harden" it into a silent fallback.
-- flush() splits progress from status. Progress and the log are always saved; the STATUS is only moved on a row that is not PAUSED or CANCELLED. Without that split, pressing Hold mid-slice was silently undone when the slice ended, and pressing Remove mid-slice made the error handler throw. stopRequested() is also checked between lots so Hold takes effect within seconds rather than at the end of a nine-minute slice.
-- Claiming a sale is conditional (updateMany on the expected status), and a RUNNING row whose heartbeat is older than three minutes is reclaimed - that is how a deploy restarting mid-sale resumes rather than stalling.
-- The runner writes lots itself (it has no session, so it cannot use the applyAiDescriptionOne server action) but logs through lib/lot-log.ts exactly the same way, as changedBy "Auto Pipeline (overnight...)" with source "ai_apply". RULES: every path that mutates a lot must log.
+Related: [[reference_auto_pipeline_apply]], [[reference_ai_providers]], [[reference_local_dev_boot]], [[feedback_migrations]]
 
-## 2026-08-19 — AUDITED AGAINST THE BROWSER TAB: IT DOES FOLLOW THE SAME RULES
+## 2026-08-19 — audited against the browser tab: it does follow the same rules
 
-Jordan asked whether the overnight runs obey everything the tab does, "for example does it not run anything excluded by ai?". Checked in code rather than assumed.
+Jordan asked whether the overnight runs obey everything the tab does, "for example does it not run anything excluded by ai?". Checked in code rather than assumed:
 
-- aiExcluded — NEVER TOUCHED, AND STRUCTURALLY SO. Both the tab and lib/pipeline-runner.ts load through the SAME /api/auction-ai/catalogue-lots route, whose Prisma query carries where: { aiExcluded: false }. An excluded lot never enters either run, so there is no second copy of the rule that could drift. ⚠ Keep it that way - do NOT give the runner its own lot query.
-- Same three server routes, so the instruction text, cleanBearsDescription, auditCodes and the strict/relaxed KP wording are identical by construction.
-- shouldKeepFlag gates all three stages, so a size that merely differs from the manufacturer raises nothing overnight either.
-- appliedDesc is only recorded when the catalogue write actually succeeded.
-- Every per-sale toggle mirrors the tab (PipelineQueueItem): preset, model, fallbackModel, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed, fastMode.
+- **\`aiExcluded\` — never touched, and STRUCTURALLY so.** Both the tab and \`lib/pipeline-runner.ts\` load through the same \`/api/auction-ai/catalogue-lots\` route, whose Prisma query carries \`where: { aiExcluded: false }\`. An excluded lot never enters either run, so there is no second copy of the rule that could drift. ⚠ Keep it that way — don't give the runner its own lot query.
+- **Same three server routes** (batch / key-points-check / double-check), so the instruction text, \`cleanBearsDescription\`, \`auditCodes\` and the strict/relaxed KP wording are identical by construction.
+- **\`shouldKeepFlag\`** gates all three stages, so a size that merely differs from the manufacturer raises nothing overnight either.
+- **\`appliedDesc\` is only recorded when the catalogue write actually succeeded** — the [[reference_auto_pipeline_apply]] rule.
+- **Every per-sale toggle mirrors the tab** (\`PipelineQueueItem\`): preset, model, fallbackModel, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed.
+- **The AI estimate is saved regardless of auto-apply**, same as the tab, because it lives in its own fields.
 
-⚡ QUICK MODE (2026-08-28) - a per-sale tick, PipelineQueueItem.fastMode, default false so an unticked sale behaves exactly as before. NEEDS Run Migrations. WHY IT MATTERS: the AI is not what is slow - every stage sleeps a FLAT 12s (LOT_GAP_MS) between lots, which on F113's 601 lots is ~2h in batch plus ~1h25m each in key points and double check, nearly FIVE HOURS of pure waiting against a few seconds per lot of model time. That 12s exists because Gemini was measured at ~4 requests a minute DURING A RATE-LIMIT STORM and has been the pace of every run since. Quick mode starts at 4s, doubles on a refusal (cap 60s), eases back 20% after 10 clean lots (floor 2s) and logs each change, so a night's run reports what the real limit is instead of anyone guessing. Rate limits reach it via withRetry's outcome.rateLimited. ⚠ ONE pacer shared by all three stages - the quota is per project, not per stage. ⚠ The AI Upgrade kind still uses the fixed gap. ⚠ Jordan REJECTED the alternatives, do not re-propose: merging the three stages into one prompt ("that double check helps find genuine errors even on clean lots") and skipping Double Check on clean lots. The untried lever is the Google Cloud quota itself.
+### ⚠ The one gap found, now fixed — overnight flags left no audit trail
 
-⚠ "712 OF 712 DONE (100%)" WITH A WHOLE STAGE STILL TO RUN (fixed 2026-08-28). On F114 the bar read 712 of 712 while Key Points was on 205 of 507 and Double Check had not started. TWO FAULTS COMPOUNDING: outstanding() required l.currentDesc for its key-points and double-check lines, and that is EMPTY for every lot before the batch stage runs, so at the start of a sale the total was just the lot count (507); and total was then FROZEN for the life of the run while tick() pinned it at Math.max(total, done), so the moment done passed 507 the bar sat on 100% for hours. FIXED: a lot batch has not reached yet now counts for all three of its stages (l.currentDesc || !l.batchStatus), and the total is RECOMPUTED every tick (done + outstanding()) instead of frozen. It can move by a few either way as refused lots stop owing later stages - that is honest; a bar stuck on 100% with an hour left is not. ⚠ Do not "stabilise" it by freezing the total again.
-- The AI estimate is saved regardless of auto-apply, same as the tab, because it lives in its own fields.
+All three stages wrote \`aiFlagNote\` with a bare \`prisma.catalogueLot.update\`, so **a flag raised overnight left NO entry in the Lot Change Log**, while the identical flag raised from the tab did (that path goes \`saveAiFlagNote\` → \`updateLotLogged\`). Against RULES.md, which requires every lot mutation to go through \`lib/lot-log.ts\`.
 
-⚠ THE ONE GAP FOUND, NOW FIXED - OVERNIGHT FLAGS LEFT NO AUDIT TRAIL. All three stages wrote aiFlagNote with a bare prisma.catalogueLot.update, so a flag raised overnight left NO entry in the Lot Change Log while the identical flag raised from the tab did (that path goes saveAiFlagNote → updateLotLogged). Against the rule directly above it. Fixed with a flagCtx(ctx) helper stamping source "ai_flag" - the same source the browser path uses, so the only difference between the two in the log is changedBy. The writes stay try/catch and advisory: a logging failure must never fail a run.
+Fixed with a \`flagCtx(ctx)\` helper stamping **\`source: "ai_flag"\`** — the same source the browser path uses, so the only difference between the two in the log is \`changedBy\` ("Auto Pipeline (overnight, queued by …)"). The writes stay \`try\`/\`catch\` and advisory: a logging failure must never fail a run.
 
-⚠⚠ 2026-08-19 - A LONG RATE-LIMIT WAIT COULD GET THE SAME SALE RUN TWICE. Found while answering "will pushes to main or server outages break the overnight run?" - this one is not about restarts at all. flush() is the ONLY thing that writes heartbeatAt and it runs ONCE PER LOT; addLog appends to an in-memory array and writes nothing. withRetry slept in-process for the whole backoff, taken in-slice whenever deadline.fits(wait). The rate-limit backoff is 60s → 120s → 240s → 480s, so from the THIRD consecutive 429 the row sat untouched for 4+ minutes, passed HEARTBEAT_STALE_MS (3 min), and the 30-second tick reclaimed it as a crashed slice while the original was still asleep and would wake and carry on. TWO SLICES ON ONE SALE - double the Gemini spend and interleaved writes. Reachable on any busy sale.
-THE FIX reuses existing machinery rather than adding a heartbeat thread: withRetry now throws SliceOver(wait) when wait >= HEARTBEAT_STALE_MS, not only when it will not fit the slice. SliceOver already carries the wait into retryAfter and the handler parks the row as QUEUED (deliberately not RUNNING, "so a stale heartbeat can't make another tick think it crashed"), so the sale sleeps exactly that long and resumes ON THE SAME LOT. Measured split - max in-process sleep is now 120s against a 180s window: in-process 12s/24s/30s, 1.5s RECITATION, 60s and 120s; steps out to the queue 240s, 480s, 960s onwards. ⚠ On resume attempt resets, so it retries at once then 60s, 120s and steps out again - it still NEVER GIVES UP, which is the standing rule. Total waiting is unchanged, it just moves to the queue where it is visible in lastMessage and cannot be mistaken for a crash.
+### Do the flags still reach the Review tab after an overnight run? YES
 
-DO PUSHES OR OUTAGES BREAK AN OVERNIGHT RUN? NO - verified 2026-08-19. The queue row stays RUNNING with heartbeatAt; after a restart the 30-second tick finds a heartbeat older than 3 minutes, takes the sale over, logs "▶ Picked {code} back up (the server restarted or the last slice ran out of time)", reloads progress from PipelineRun/PipelineLot and carries on from the same lot. The lot in flight when the process died was never marked, so it is simply redone; nothing is ever marked failed. loadLots THROWS rather than assuming "nothing done yet", so a restart cannot send finished lots back through the AI. Cost of a deploy is about a 3-minute gap plus boot; main restarts production only, staging restarts staging only. ⚠ WHAT DOES BREAK IS THE BROWSER AUTO PIPELINE TAB - deploy skew, the 512-lot Trains incident. The queue exists so nothing needs a tab open: deploy freely while the queue runs, just do not leave the tab running through one.
+The flag is written to \`CatalogueLot.aiFlagNote\`, which is exactly what the Review tab's amber banner and its "AI-flagged only" filter read — the missing piece was only the audit entry, never the flag itself. Nothing in the runner clears it: \`applyDescription\` writes \`description\` / \`title\` / \`aiUpgraded\` and does not touch \`aiFlagNote\` (the field is cleared by \`saveLotDescription\`, the Review tab's own save, which the runner never calls). ⚠ Measurement-only flags are still dropped by \`shouldKeepFlag\`, by design — see [[reference_measurement_flags]].
 
-DO THE FLAGS STILL REACH THE REVIEW TAB AFTER AN OVERNIGHT RUN? YES. The flag is written to CatalogueLot.aiFlagNote, which is exactly what the Review tab's amber banner and its "AI-flagged only" filter read - the missing piece was only the audit entry, never the flag itself. Nothing in the runner clears it: applyDescription writes description / title / aiUpgraded and does not touch aiFlagNote (that field is cleared by saveLotDescription, the Review tab's own save, which the runner never calls). ⚠ Measurement-only flags are still dropped by shouldKeepFlag, by design.
+## ⚠⚠ 2026-08-19 — a long rate-limit wait could get the SAME SALE run twice
+
+Found while answering "will pushes to main or server outages break the overnight run?" (they don't — see below). This one is not about restarts at all.
+
+**The mechanism.** \`flush()\` is the ONLY thing that writes \`heartbeatAt\`, and it runs **once per lot**. \`addLog\` appends to an in-memory array and writes nothing. \`withRetry\` slept in-process for the whole backoff, and a wait was taken in-slice whenever \`deadline.fits(wait)\` — i.e. whenever it fitted in the remaining 9 minutes. The rate-limit backoff is 60s → 120s → **240s** → 480s, so from the **third consecutive 429** the row sat untouched for 4+ minutes, passed \`HEARTBEAT_STALE_MS\` (3 min), and the 30-second tick reclaimed it as a crashed slice — while the original was still asleep and would wake and carry on. **Two slices on one sale: double the Gemini spend and interleaved writes.** Reachable on any busy sale.
+
+**The fix** reuses machinery that already existed rather than adding a heartbeat thread: \`withRetry\` now throws \`SliceOver(wait)\` when \`wait >= HEARTBEAT_STALE_MS\`, not only when it won't fit the slice. \`SliceOver\` already carries the wait into \`retryAfter\` and the handler parks the row as **QUEUED** (deliberately not RUNNING, "so a stale heartbeat can't make another tick think it crashed"), so the sale sleeps exactly that long and resumes **on the same lot**.
+
+Measured split after the change — max in-process sleep is now 120s against a 180s window:
+- sleeps in-process: 12s / 24s / 30s (other errors), 1.5s (RECITATION), 60s and 120s (first two rate limits)
+- steps out to the queue: 240s, 480s, 960s… (third rate limit onwards)
+
+⚠ On resume \`attempt\` resets, so it retries at once then 60s, 120s, and steps out again — it still **never gives up**, which is Jordan's standing rule. Total waiting is unchanged; it just moves to the queue where it is visible in \`lastMessage\` and cannot be mistaken for a crash.
+
+## Do pushes or outages break an overnight run? NO — verified 2026-08-19
+
+- The queue row stays \`RUNNING\` with \`heartbeatAt\`. After a restart the 30-second tick finds a heartbeat older than 3 minutes, takes the sale over, logs *"▶ Picked {code} back up (the server restarted or the last slice ran out of time)"*, reloads progress from \`PipelineRun\`/\`PipelineLot\` and carries on from the same lot.
+- The lot in flight when the process died was never marked, so it is simply redone. Nothing is ever marked failed.
+- \`loadLots\` **throws** rather than assuming "nothing done yet", so a restart can't send finished lots back through the AI.
+- Cost of a deploy is roughly a 3-minute gap plus boot. \`main\` restarts production only; staging restarts staging only.
+
+⚠ **What DOES break is the browser Auto Pipeline tab** — deploy skew ("Failed to find Server Action"), the 512-lot Trains incident. The queue exists so nothing needs a tab open: deploy freely while the queue runs, just don't leave the tab running through one. See [[reference_deploy_skew]] and [[reference_auto_pipeline_apply]].
+
+## ⚠⚠ 2026-08-28 — the log is a TAIL, so the reason a lot was lost got trimmed away
+
+Jordan asked why two comics lots were blocked overnight and found *"nothing returns saying why"*. Measured on production: **F113 (1,547 lots) skipped 2 — \`F113251\` (Spectacular Spider-Man #40–#90) and \`F113412\` (New X-Men #114–#156), both left with no description** — and its \`logText\` sat at **exactly 40,000 characters** with not one block line left in it. \`PipelineLot\` records \`batchStatus: "skipped"\` and **no reason at all**, so the explanation existed in one place only: a log line that \`.slice(-LOG_MAX)\` had pushed out hours earlier.
+
+**Fixed:** problem lines are now **PINNED** in their own block at the TOP of \`logText\`, outside the trim — \`isProblemLine\` = any line with **✗** (a lot lost) or **↻** (a retry that explains one); ordinary ✓ progress is still what gets trimmed. Capped at 8,000 chars, oldest dropped first and it says so. ⚠ Stored **inside the text, not a new column**, on purpose: the runner works in ~9-minute slices with nothing in memory between them, so \`splitPinned()\` re-reads the block out of the row it already writes. The run page needed no change — its log renderer already colours ✗ red and ⚠/↻ amber.
+
+⚠ Still NOT recorded: the reason on the **lot** itself. A skipped lot in the morning review still says only "skipped" — that needs a column and Jordan hasn't asked for it.
+
+Related: [[reference_ai_instruction_house_style]] for what the block actually was (RECITATION, and grounding's part in it).
+
+## ⚠⚠⚠ 2026-08-28 — "GENERATED OK" WITH NO DESCRIPTION: 179 LOTS OF 601 (30% of a sale)
+
+Found while Jordan was asking about something else entirely (*"see the double check is getting blocked a lot more often?"*). **It was not blocked.** Measured on F113: **179 lots showed "✗ content blocked by AI" at Double Check and every one of them simply had no description to check** — photos present, key points present, \`aiExcluded\` false, \`batchDesc\` empty, \`CatalogueLot.description\` empty. Their Batch Run column said **"✓ generated OK"**.
+
+**The chain, all three links silent:**
+1. \`app/api/auction-ai/batch/route.ts\` pushed **\`status: "OK"\` unconditionally** — an answer with no description was reported exactly like a good one.
+2. \`lib/pipeline-runner.ts\` tested \`r.status !== "OK"\` and **nothing else**, so it set \`batchStatus: "ok"\`, wrote the empty string to the lot and logged a ✓.
+3. Key Points then skipped it (nothing to check), Double Check set \`dcStatus: "skipped"\`, and the run page rendered **any** \`skipped\` as **"✗ content blocked by AI"** — so an empty lot and a real refusal looked identical.
+
+**Fixed, all three:** the route returns **FAILED** with *"The model returned no description."*; the runner (and the browser loop in the Auto Pipeline tab) treat that as a failure and **re-ask up to 4 times alternating models** — bounded like RECITATION, because ⚠ the "never gives up" rule must not let one always-empty lot hold up the 600 behind it — and record **\`batchStatus: "empty"\`** when they give up. The three causes are now three statuses: **\`skipped\`** = refused by the AI · **\`empty\`** = nothing came back · **\`nothing\`** = there was nothing to check (no photos / no description). \`withRetry\` takes an optional \`outcome\` object so the caller knows WHICH failure it was. ⚠ **Never collapse those three back into one label.**
+
+⚠ **The 179 lots on F113 are still empty** — the fix stops it recurring, it does not repair them. They carry \`batchStatus: "ok"\`, so a resume will not pick them up; their pipeline statuses have to be cleared first.
+
+⚠⚠ **This is the FOURTH "nothing happened looked like success" in this codebase** (Apply All, the Review tab's Auto-fix, Suggest conditions, now this). The pattern is wider than empty catches: **any success flag that is set without checking that work actually came out.** Related: [[reference_auto_pipeline_apply]].
+
+## ⚡ Quick mode — the gap finds its own level (2026-08-28)
+
+Jordan: *"the overnight runs take so long… can I have it as a separate mode I can tick on and off?"* — a per-sale tick on the queue form, alongside Apply / Only with photos / Skip described / Relaxed key points / Web search. **\`PipelineQueueItem.fastMode\`**, default false, so a sale queued without it behaves exactly as before. NEEDS Run Migrations (the /admin banner raises it).
+
+**Why it is worth anything: the AI is not what is slow.** Every stage sleeps a flat **\`LOT_GAP_MS\` = 12s** between lots. On F113 (601 lots) that is ~2h in batch plus ~1h25m each in key points and double check — **nearly five hours of pure waiting**, against a few seconds per lot of actual model time. That 12s exists because Gemini was measured at ~4 requests a minute *during a rate-limit storm* ([[reference_ai_cost]]) and has been the pace of every run since.
+
+**What quick mode does:** starts at **4s**, doubles on a refusal (cap 60s), eases back 20% after **10 clean lots** (floor 2s), and logs each change — so a night's run tells you what the real limit is instead of anyone guessing. Rate limits reach it through \`withRetry\`'s \`outcome.rateLimited\`. ⚠ **ONE pacer shared by all three stages** — the quota is per project, not per stage, so what the batch stage learns must carry into the others. ⚠ The AI Upgrade kind (\`runUpgradeKind\`) still uses the fixed gap; it takes addLog/flush as parameters and has no access to the pacer.
+
+⚠ **Jordan REJECTED the two other speed-ups, don't re-propose them:** merging the three stages into one prompt (*"that double check helps find genuine errors even on clean lots"* — and it only cuts 3× of a cost that is mostly sleeping anyway), and skipping Double Check on clean lots. The remaining untried lever is the **Google Cloud quota** itself — if it can be raised the gap can drop further, and that is his to check.
+
+## ⚠ "712 of 712 done (100%)" with a whole stage still to run (fixed 2026-08-28)
+
+Jordan on F114: the bar read **712 of 712, 100%**, while Key Points was on **205 of 507** and Double Check had not started.
+
+**Cause — two faults compounding.** \`outstanding()\` required \`l.currentDesc\` for its key-points and double-check lines, and **that is empty for every lot before the batch stage runs** — so at the start of a sale the total was just the lot count (507). \`total\` was then FROZEN (\`item.total || outstanding() + item.done\`) for the life of the run, and \`tick()\` pinned it with \`Math.max(total, done)\`, so the moment \`done\` passed 507 the bar sat on 100% for hours.
+
+**Fixed:** a lot batch has not reached yet now counts for all three of its stages (\`l.currentDesc || !l.batchStatus\`), and the total is **recomputed every tick** (\`done + outstanding()\`) instead of frozen. It can move by a few either way as lots are refused and stop owing later stages — which is honest; a bar stuck on 100% with an hour left is not.
+
+⚠ Don't "stabilise" it by freezing the total again. The work genuinely changes as a run goes on.
+
+## ⚠⚠ 2026-09-02 — a resumed run skipped 210 lots and reported them as done (F113)
+
+Jordan: *"I did an overnight run for F113 and it looks fine, 601 lots described, but when you go
+into the auction well over 100 lots have no description?"* Proved from the change log:
+
+1. A **browser** pipeline run described F113 between 11:00 and 15:00 on 1 Sept.
+2. At **15:09–15:10** he pressed 🧹 **Clear Descriptions**, blanking **499 lots** (titles to
+   "Untitled").
+3. At 16:11 the overnight run started and picked up **the same saved \`PipelineRun\`** (created
+   11:07). Its per-lot rows still said batch / key points / double check done, and the batch
+   stage filters on \`!l.batchStatus\` — so **249 lots were skipped outright**. The run log said
+   so all along: *"601 lots in scope · Batch run — 352 to do."*
+4. 39 of those were rewritten by the KP/DC stages (they do apply when they change something).
+   **210 were left exactly as the clear left them.**
+5. The report counts the **saved rows**, not the catalogue, so it said "601 described · 600
+   applied" — 600 rows claiming to be applied, 210 of those lots empty.
+
+\`currentDesc: s?.description || l.description\` was the other half: the saved text won over the
+catalogue's, so every later stage "checked" wording no longer on the lot.
+
+**Fixed — the catalogue overrules a saved row when the lot is now empty.** In \`loadLots\`, a row
+holding text (\`revised || description || batchDesc || appliedDesc\`) against a lot with a blank
+description is **stale**: its statuses are dropped so the lot runs again, and the run log says
+\`↻ N lots had been emptied in the catalogue since the last run\`.
+- ⚠ Keyed on the row **holding text**, never on the status alone — a \`skipped\` (AI refused) or
+  \`nothing\` (no photos) row has no text by design, and resetting those would send a
+  content-blocked lot back through the AI every night. Verified 0 dragged in across all 21
+  saved runs.
+- The overnight report now also gets \`catalogueBlank\` per lot from the pipeline GET (a live
+  read, **alongside** the run's rows — \`isApplied\`/\`appliedDesc\` are still NOT re-derived from
+  the catalogue, see [[reference_auto_pipeline_apply]]). "Applied to the catalogue" reads
+  "390 of 600" when they disagree, with a red banner saying to queue the sale again.
+
+⚠ **Recovering a sale this has already happened to:** if the saved run is still there, just
+queue it again — it now does exactly the empty ones. If ↺ Reset Progress has been pressed (as it
+was on F113 mid-investigation), queue it with **"skip lots that already have a description"**
+ticked, which comes to the same thing.
 `,
   },
   {
