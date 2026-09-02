@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveSession } from "@/lib/impersonation"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError } from "@/lib/ai-provider"
 import { allowedHelpContext, helpContextText } from "@/lib/help-map"
@@ -20,6 +20,14 @@ export const maxDuration = 60
 //
 // ⚠ The answer's links are checked back against the allowed set before they are returned, so
 // a hallucinated path can never become a clickable link to somewhere they cannot go.
+//
+// ⚠⚠ USE getEffectiveSession(), NEVER auth(), FOR WHO IS ASKING. Every page and layout in the
+// Hub resolves the person through it because an admin can be **viewing as** someone else, and
+// the whole screen then behaves as that person. The first version of this route called auth()
+// and so judged the real admin: Jordan, viewing as Ben Kennington (a cataloguer with only
+// CATALOGUING), asked where to do an overnight run and was told about Auction AI — a tool Ben
+// cannot open (Jordan, 2026-09-02, on the day it shipped). The filtering was right; it was
+// filtering for the wrong person.
 
 const SYSTEM = `You are the Vectis Hub's help assistant. Staff at a toy and collectables auction
 house ask you how to find things and what a screen is for.
@@ -40,7 +48,8 @@ Rules:
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
+    // Who the screen is behaving as — the impersonated user when an admin is viewing as someone.
+    const session = await getEffectiveSession()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const { question, history } = await req.json() as {

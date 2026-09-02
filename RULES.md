@@ -906,7 +906,12 @@ destination the person cannot reach before the question is sent, so someone with
 never sent a word about Accounts. **Never relax this into "the system prompt says not to mention
 it"** — a prompt is a request, a filter is a guarantee.
 
-Two guards on the same principle, keep both:
+Three guards on the same principle, keep all of them:
+- ⚠⚠ **`getEffectiveSession()`, never `auth()`**, decides who is asking. Every page and layout in
+  the Hub resolves the person that way because an admin can be **viewing as** someone else. The
+  first version called `auth()` and judged the real admin: Jordan, viewing as a cataloguer with
+  only CATALOGUING, was told about Auction AI. The filtering was right — it was filtering for the
+  wrong person. Any new route that discloses what someone may see has the same trap.
 - `/api/help/ask` reads permissions **fresh from the database**, not from the session JWT. A token
   can be hours old, and access that has been removed must not still open the door.
 - The links it returns are **checked back against the allowed set**, so a hallucinated path can

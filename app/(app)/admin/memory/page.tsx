@@ -39,7 +39,15 @@ destination the person cannot open, so someone without Accounts is not sent one 
 Accounts and no amount of clever asking can produce it. **Never "fix" a leak by adding a line to
 the prompt.**
 
-Two more guards on the same principle:
+Three more guards on the same principle:
+- ⚠⚠ **\`getEffectiveSession()\`, never \`auth()\`** decides who is asking. Every page and layout in
+  the Hub resolves the person that way because an admin can be **viewing as** someone else. The
+  version that shipped first called \`auth()\`, so it judged the real admin — Jordan, viewing as
+  Ben Kennington (a cataloguer with only CATALOGUING), asked where to do an overnight run and was
+  told about Auction AI. **The filtering was right; it was filtering for the wrong person.** Any
+  new route that discloses what someone may see has exactly this trap. Fixed the same day;
+  verified that Ben's context now contains no "Auction AI", no "Auto Pipeline" and no
+  "overnight" at all.
 - The route reads permissions **fresh from the database**, not from the session JWT — a token can
   be hours old and access that has been removed must not still open the door.
 - The links returned are **checked back against the allowed set**, so a hallucinated path can
