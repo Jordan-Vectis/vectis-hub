@@ -53,6 +53,8 @@ type AuctionData = {
   complete:    boolean
   catalogued:  boolean
   addedToBC:   boolean
+  /** Lots whose BARCODE is in the synced BC data — measured, not the tick. */
+  inBC:        number
   photography: boolean
   aiRan:       boolean
   firstLotAt:  Date | null
@@ -115,6 +117,23 @@ export async function GET(req: NextRequest) {
       },
     })
 
+    // ⚠⚠ "In BC" is MEASURED, not the old tick (2026-09-02). Same rule and same query as the
+    // Auction Manager list: lots whose BARCODE is in the synced BC data, never receiptUniqueId.
+    // The report used to print a "BC" flag straight off `addedToBC`, so a sale nobody had
+    // remembered to tick read as not in BC — two different answers to one question.
+    // ⚠ Reflects the last Data Sync, not BC live. The report says so in its own footnote.
+    let inBC = new Map<string, number>()
+    try {
+      const rows = await prisma.$queryRaw<{ auctionId: string; n: bigint }[]>`
+        SELECT l."auctionId" AS "auctionId", count(DISTINCT l.id) AS n
+        FROM "CatalogueLot" l
+        JOIN "WarehouseItem" w ON upper(w.barcode) = upper(l.barcode)
+        WHERE l."auctionId" = ANY(${rawAuctions.map(a => a.id)}::text[])
+          AND l.barcode IS NOT NULL AND btrim(l.barcode) <> ''
+        GROUP BY l."auctionId"`
+      inBC = new Map(rows.map(r => [r.auctionId, Number(r.n)]))
+    } catch { /* the BC mirror is a convenience — never fail the whole report for it */ }
+
     const auctions: AuctionData[] = rawAuctions.map(a => ({
       id:          a.id,
       code:        a.code,
@@ -125,6 +144,7 @@ export async function GET(req: NextRequest) {
       complete:    a.complete,
       catalogued:  !!(a as any).catalogued,
       addedToBC:   !!(a as any).addedToBC,
+      inBC:        inBC.get(a.id) ?? 0,
       photography: !!(a as any).photography,
       aiRan:       !!(a as any).aiRan,
       firstLotAt:  a.lots[0]?.createdAt ?? null,
@@ -283,6 +303,11 @@ async function buildPdf(
     const pageLblW  = helv.widthOfTextAtSize(pageLabel, 7.5)
     pg.drawText(pageLabel, { x: RIGHT - pageLblW, y: footerY, size: 7.5, font: helv, color: C.light })
     pg.drawText("Vectis Auctions — Auctions Overview", { x: MARGIN, y: footerY, size: 7.5, font: helv, color: C.light })
+    // ⚠ Say where the BC figure comes from. It is counted from the barcodes in the last Data
+    // Sync, not asked of BC live, so a sale pushed since then reads low — which is a fact about
+    // the sync, not the sale, and the reader has no other way to know that.
+    pg.drawText(safeAscii("BC = lots found in Business Central by barcode, as at the last Data Sync"),
+      { x: MARGIN + 168, y: footerY, size: 7, font: helv, color: C.light })
   }
 
   return doc.save()
@@ -304,8 +329,9 @@ const CC = {
   name:  { x: MARGIN,       w: 218 },
   type:  { x: MARGIN + 222, w: 60  },
   lots:  { x: MARGIN + 286, w: 60  },
-  date:  { x: MARGIN + 350, w: 120 },
-  flags: { x: MARGIN + 474, w: 85  },
+  date:  { x: MARGIN + 350, w: 84  },
+  // Pulled left to make room for the BC fraction — a short date only ever needs ~45pt.
+  flags: { x: MARGIN + 440, w: 83  },
 }
 
 // ─── Section drawing helpers ─────────────────────────────────────────────────
@@ -499,13 +525,15 @@ function drawCompletedRow(
   // Sale date
   page.drawText(safeAscii(fmtDate(a.auctionDate)), { x: CC.date.x, y: baseY, size: 8, font: fonts.helv, color: C.dark })
 
-  // Status flags (compact)
+  // Status flags (compact). ⚠ BC is MEASURED from the barcodes, not the old tick — a sale
+  // nobody remembered to tick used to print as though it were not in BC at all.
   const flags: string[] = []
-  if (a.addedToBC)   flags.push("BC")
+  if (a.lotCount > 0 && a.inBC > 0) flags.push(a.inBC >= a.lotCount ? "BC" : `BC ${a.inBC}/${a.lotCount}`)
   if (a.catalogued)  flags.push("Cat")
   if (a.photography) flags.push("Photo")
   if (flags.length > 0) {
-    page.drawText(safeAscii(flags.join(" · ")), { x: CC.flags.x, y: baseY, size: 7.5, font: fonts.helv, color: C.green })
+    // 7pt, not 7.5 — a partial sale reads "BC 84/102 · Cat · Photo" and has to fit the margin.
+    page.drawText(safeAscii(flags.join(" · ")), { x: CC.flags.x, y: baseY, size: 7, font: fonts.helv, color: C.green })
   }
 
   y -= ROW_H

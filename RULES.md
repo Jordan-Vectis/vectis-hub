@@ -887,8 +887,9 @@ the Admin Centre and End of Day → BC already answer this question.
 - ⚠ It reflects the **last Data Sync**, not BC live. The tooltip says so; don't make the page call BC.
 - The status filter is **"All lots in BC" / "Not all lots in BC"** — a count, not a flag, and a sale
   with no lots is never "all in BC".
-- ⚠ The **auctions overview PDF** still prints a "BC" flag from the old tick. If that ever matters,
-  bring it in line rather than leaving two different answers to one question.
+- The **auctions overview PDF** prints the same measurement: `BC` when every lot is found,
+  `BC 84/102` when only some are, from the same barcode query, with a footer note that it is as at
+  the last Data Sync. ⚠ Only the COMPLETED table carries status flags; the active one has none.
 
 
 ## Hardcoded Constants

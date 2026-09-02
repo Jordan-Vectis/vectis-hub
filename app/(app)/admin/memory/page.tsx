@@ -69,8 +69,11 @@ F126 478/498, F127 480/492, F134 194/252, F138 84/102.
   End of Day → BC already follow.
 - ⚠ The count reflects the **last Data Sync**, not BC live. The tooltip says so. Don't make a list
   page call BC.
-- ⚠ The **auctions overview PDF** still prints a "BC" flag from the old tick — left alone
-  deliberately (not asked for), but it is now a second answer to the same question.
+- The **auctions overview PDF** was brought in line the same day (Jordan: *"Yeah fix the pdf as
+  well"*): its STATUS column prints \`BC\` when every lot is found and \`BC 84/102\` when only some
+  are, from the same barcode query. The date column was narrowed and the flags moved left to make
+  room, the flags text dropped to 7pt, and the page footer now states that BC is counted from the
+  last Data Sync. ⚠ Only the COMPLETED table has status flags — the active one has none.
 - \`CatalogueLot.addedToBC\` (per-lot) is a different field and is untouched — it still drives
   Manage Lots' BC column and the "Mark added to BC" bulk action.
 
