@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"e89b010e6838a7a62288544669da1df1a00832b3","author":"Jordan Orange","date":"2026-09-02T14:59:10+01:00","subject":"Help box: judge the person being viewed as, not the admin"},
+  {"sha":"96f7f6078fd2fa5d4880aaeb69c08a4136f9919e","author":"Jordan Orange","date":"2026-09-02T13:49:49+01:00","subject":"Refresh changelog seed"},
   {"sha":"8081655030584e02d6fc74cd32b260ff8d51720b","author":"Jordan Orange","date":"2026-09-02T13:49:47+01:00","subject":"Help box in the top bar"},
   {"sha":"d0daea607041e9d14bebcab3df36d94d6f9c479f","author":"Jordan Orange","date":"2026-09-02T13:16:31+01:00","subject":"Refresh changelog seed"},
   {"sha":"14d571a014db715569c3e33e74f06b018166295b","author":"Jordan Orange","date":"2026-09-02T13:16:30+01:00","subject":"Auctions overview PDF: BC is measured too"},
