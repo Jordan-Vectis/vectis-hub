@@ -42,6 +42,31 @@ export default async function AuctionsPage() {
   })
   const withPhotos = new Map(photoCounts.map(g => [g.auctionId, g._count._all]))
 
+  // ── How many of each sale's lots are ACTUALLY in BC ──────────────────────────
+  // ⚠⚠ BARCODE ONLY (RULES: never decide "is this in BC?" from receiptUniqueId — legacy
+  // Hub-minted ids collide with BC's own numbering for other items). Matched against the
+  // WarehouseItem mirror of BC, which is what the Admin Centre and End of Day → BC already do.
+  // This replaced the manual "Added to BC" tick on this table (Jordan, 2026-09-02: "can we
+  // instead change that to be a check ... if the barcode exists in BC?").
+  //
+  // ⚠ It reflects the LAST DATA SYNC, not BC live — a sale pushed since the last sync reads
+  // low until Data Sync runs. The column says so on hover rather than pretending otherwise.
+  //
+  // One raw query for the whole page, upper-cased on both sides (barcodes are stored as typed).
+  // A LEFT JOIN counting matches per auction beats 16 round trips, and `distinct l.id` stops a
+  // duplicated BC row counting a lot twice.
+  let inBC = new Map<string, number>()
+  try {
+    const rows = await prisma.$queryRaw<{ auctionId: string; n: bigint }[]>`
+      SELECT l."auctionId" AS "auctionId", count(DISTINCT l.id) AS n
+      FROM "CatalogueLot" l
+      JOIN "WarehouseItem" w ON upper(w.barcode) = upper(l.barcode)
+      WHERE l."auctionId" = ANY(${auctions.map(a => a.id)}::text[])
+        AND l.barcode IS NOT NULL AND btrim(l.barcode) <> ''
+      GROUP BY l."auctionId"`
+    inBC = new Map(rows.map(r => [r.auctionId, Number(r.n)]))
+  } catch { /* the BC mirror is a convenience here — never take the page down for it */ }
+
   // The sales THIS person has starred. Migration-safe: the table arrives with the deploy but
   // only exists once the migrations have run, and an empty set simply means nobody has
   // starred anything yet — never an error page.
@@ -63,7 +88,7 @@ export default async function AuctionsPage() {
     lots: a._count.lots,
     lotsWithPhotos: withPhotos.get(a.id) ?? 0,
     catalogued: !!(a as any).catalogued,
-    addedToBC: !!(a as any).addedToBC,
+    lotsInBC: inBC.get(a.id) ?? 0,
     photography: !!(a as any).photography,
     aiRan: !!(a as any).aiRan,
     complete: !!a.complete,

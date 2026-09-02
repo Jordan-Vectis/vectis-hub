@@ -719,7 +719,7 @@ export type SaleAccessEntry = { userId: string; name: string; grantedBy: string 
 export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, manualDescriptions, allAuctions, extraAccess = [], assignableUsers = [] }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; manualDescriptions?: boolean; allAuctions: AuctionSummary[]; extraAccess?: SaleAccessEntry[]; assignableUsers?: SaleAccessUser[] }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const bcLocked     = auction.addedToBC && userRole !== "ADMIN"
+  const bcLocked     = auction.catalogued && userRole !== "ADMIN"
   const [tab, setTab]             = useState<Tab>("manage-lots")
   const [published, setPublished] = useState(auction.published)
   const [pubPending, startPub]    = useTransition()
@@ -877,7 +877,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
       {bcLocked && (
         <div className="flex-shrink-0 mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-950/40 border border-orange-700/50 text-orange-300 text-sm">
           <span className="text-lg">🔒</span>
-          <span>This auction has been <strong>Added to BC</strong> and is locked for editing. Contact an admin to make changes.</span>
+          <span>This auction is marked <strong>Catalogued</strong> and is locked for editing. Contact an admin to make changes.</span>
         </div>
       )}
 
@@ -1228,13 +1228,15 @@ function SettingsTab({ auction, isAdmin, extraAccess, assignableUsers }: {
 
         <div className="flex flex-wrap gap-6">
           {([
-            ["catalogued",  "Catalogued"],
-            ["addedToBC",   "Added to BC"],
-            ["photography", "Photography"],
-            ["aiRan",       "Ran through AI"],
-            ["complete",    "Complete"],
-          ] as const).map(([f, label]) => (
-            <label key={f} className="flex items-center gap-2 cursor-pointer">
+            // ⚠ Catalogued is the EDIT LOCK (2026-09-02) — say so on the tick itself, or it
+            // reads as one more progress marker and someone locks a live sale by accident.
+            ["catalogued",  "Catalogued 🔒", "Locks the sale: nobody but an admin can add, edit or delete its lots."],
+            ["addedToBC",   "Added to BC",   "A note only. The Auction Manager's In BC column is measured from the barcodes in the BC sync, not from this."],
+            ["photography", "Photography",   ""],
+            ["aiRan",       "Ran through AI", ""],
+            ["complete",    "Complete",      ""],
+          ] as const).map(([f, label, hint]) => (
+            <label key={f} className="flex items-center gap-2 cursor-pointer" title={hint || undefined}>
               <input type="checkbox" name={f} value="true"
                 defaultChecked={(auction as any)[f]}
                 className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
@@ -1242,6 +1244,9 @@ function SettingsTab({ auction, isAdmin, extraAccess, assignableUsers }: {
             </label>
           ))}
         </div>
+        <p className="text-xs text-amber-600 dark:text-amber-400/90 -mt-3">
+          🔒 <strong>Catalogued</strong> locks the sale — only admins can change its lots after it is ticked.
+        </p>
 
         <div className="flex items-center gap-3 pt-2">
           <button type="submit" disabled={pending}

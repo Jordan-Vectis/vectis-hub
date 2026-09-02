@@ -16,6 +16,68 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "bc_lock_and_in_bc_column.md",
+    content: `---
+name: edit-lock-is-catalogued-and-in-bc-is-measured
+description: "The sale edit lock moved from the \\"Added to BC\\" tick to the \\"Catalogued\\" tick (2026-09-02), and the Auction Manager's BC column became a measured barcode count against the BC sync instead of a tick. Read before touching requireNotBCLocked, bcLocked, or the auctions list columns."
+metadata:
+  node_type: memory
+  type: reference
+---
+
+# ⚠⚠ The lock is CATALOGUED; "In BC" is measured (2026-09-02)
+
+Jordan, on the Auction Manager list: *"We have a step I can tick for added to BC — can we instead
+change that to be a check like other parts of the system, to check if the barcode (F011011) exists
+in BC?"* He then chose to move the lock rather than lose it: *"just change the lock to the
+catalogued tick instead and then change the added to bc to be the smart check."*
+
+⚠ He first asked whether the lock was already on Catalogued — it was not, and it was worth
+checking rather than restating: \`requireNotBCLocked\` is the **only** gate (28 call sites) and it
+read \`addedToBC\`. \`catalogued\` was display-only.
+
+## What changed
+
+- **\`requireNotBCLocked\` now reads \`CatalogueAuction.catalogued\`.** Ticking Catalogued makes the
+  sale read-only for everyone but admins — wizard, Manage Lots, deletes, bulk actions, transfers.
+  \`bcLocked = auction.catalogued && role !== "ADMIN"\` in both \`auction-tabs.tsx\` and the tablet's
+  \`tablet-tabs.tsx\`. **Never re-point it at \`addedToBC\`.**
+- **\`addedToBC\` survives as a note only.** Still tickable in Auction Settings, still a badge on the
+  sale header and in the Photography / Manager Portal lists — but nothing reads it for access and
+  the Auction Manager column ignores it.
+- **The Auction Manager column is now \`594/616\`** — lots whose **BARCODE** is in the synced BC data
+  (\`WarehouseItem\`), one grouped raw query on the list page, styled like "Lots with photos".
+  Header reads **In BC**; the Catalogued header reads **Catalogued 🔒**.
+- Auction Settings spells the lock out under the ticks, because a lock that looks like a progress
+  marker is how someone freezes a live sale by accident.
+- Status filter option became **"All lots in BC" / "Not all lots in BC"** — \`matches()\` special-cases
+  it since it is a count, not a flag, and a sale with no lots is never "all in BC".
+
+## Measured before shipping
+
+**All 39 sales had \`catalogued\` and \`addedToBC\` set identically** (16 active, 3 locked either way),
+so 0 sales locked and 0 unlocked on the day. That is why this was safe to do in one go — if they
+had disagreed it would have needed a data decision first.
+
+The new column on the day: F124 616/616, F113 601/601, F120 596/596, F115 510/510, F116 501/501,
+F126 478/498, F127 480/492, F134 194/252, F138 84/102.
+
+## Traps
+
+- ⚠ **BARCODE ONLY.** RULES: never decide "is this in BC?" from \`receiptUniqueId\` — legacy
+  Hub-minted ids collide with BC's own numbering for other items. Same rule the Admin Centre and
+  End of Day → BC already follow.
+- ⚠ The count reflects the **last Data Sync**, not BC live. The tooltip says so. Don't make a list
+  page call BC.
+- ⚠ The **auctions overview PDF** still prints a "BC" flag from the old tick — left alone
+  deliberately (not asked for), but it is now a second answer to the same question.
+- \`CatalogueLot.addedToBC\` (per-lot) is a different field and is untouched — it still drives
+  Manage Lots' BC column and the "Mark added to BC" bulk action.
+
+Related: [[reference_admin_centre]], [[reference_end_of_day_bc]], [[reference_manage_lots_bulk_undo]].
+`,
+  },
+  {
     filename: "condition_line_on_ai_apply.md",
     content: `---
 name: applying-an-ai-description-must-keep-the-condition-line

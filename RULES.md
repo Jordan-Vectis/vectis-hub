@@ -850,14 +850,46 @@ in production builds…"**. So a user hitting an expected/business error (the **
 error: e?.message }`, then show `res.error` in the client. The review-tab actions
 (`saveLotDescription`, `setLotReviewFlag`, `saveAiFlagNote`) do this — otherwise a cataloguer editing
 a **BC-locked** auction (which correctly blocks non-admins) just got the masked error.
-(`bcLocked = auction.addedToBC && role !== "ADMIN"` — admins bypass, which is why "works for admin,
-not cataloguers" is the signature of a BC-lock issue.)
+(`bcLocked = auction.catalogued && role !== "ADMIN"` — admins bypass, which is why "works for admin,
+not cataloguers" is the signature of a lock issue.)
 
 **Review tab bypasses the BC lock (2026-07-01).** `saveLotDescription`, `setLotReviewFlag` and
 `saveAiFlagNote` do **not** call `requireNotBCLocked` — the Review tab is QA/corrections and
 cataloguers are allowed to fix lots even after the auction has gone to BC. The lock STILL applies
 everywhere else (`updateLot`/wizard/Manage Lots, `deleteLot`, bulk actions, `transferLots`,
 `saveLotExtraDetails`). Don't re-add the lock to the three Review actions.
+
+---
+
+## ⚠⚠ The edit lock is the CATALOGUED tick, not "Added to BC" (2026-09-02)
+
+`requireNotBCLocked` — the one gate, 28 call sites — reads **`CatalogueAuction.catalogued`**.
+Ticking Catalogued makes the whole sale read-only for everyone except admins (wizard, Manage Lots,
+deletes, bulk actions, transfers). **Do not re-point it at `addedToBC`.**
+
+Why it moved: `addedToBC` had to stay a manual tick purely to drive the lock, and that tick was the
+thing Jordan wanted replaced by a real check. Measured before the change — **all 39 sales had the
+two ticks set identically**, so nothing locked or unlocked on the day it shipped.
+
+- `addedToBC` still exists and is still tickable, but it is now **a note only**. Nothing reads it
+  for access, and the Auction Manager's column ignores it.
+- Auction Settings labels the Catalogued tick **"Catalogued 🔒"** with a line underneath saying what
+  it does — a lock disguised as a progress marker is how someone freezes a live sale by accident.
+- The Review tab still bypasses the lock (see above), unchanged.
+
+### The Auction Manager's "In BC" column is MEASURED
+
+It shows **`594/616`** — lots whose **barcode** was found in the synced BC data (`WarehouseItem`) —
+computed in one grouped raw query in `app/(app)/tools/cataloguing/auctions/page.tsx`, the same way
+the Admin Centre and End of Day → BC already answer this question.
+
+- ⚠ **BARCODE ONLY**, never `receiptUniqueId` — the standing rule above.
+- ⚠ It reflects the **last Data Sync**, not BC live. The tooltip says so; don't make the page call BC.
+- The status filter is **"All lots in BC" / "Not all lots in BC"** — a count, not a flag, and a sale
+  with no lots is never "all in BC".
+- ⚠ The **auctions overview PDF** still prints a "BC" flag from the old tick. If that ever matters,
+  bring it in line rather than leaving two different answers to one question.
+
 
 ## Hardcoded Constants
 

@@ -51,10 +51,22 @@ async function requireCataloguer() {
 }
 
 // Throws for non-admin users when the auction has been marked as Added to BC.
+// ⚠⚠ THE LOCK IS THE **CATALOGUED** TICK, NOT "ADDED TO BC" (Jordan, 2026-09-02).
+//
+// It used to read `addedToBC`, which then had to stay a manual tick purely to drive this — and
+// that is the tick he wanted turned into a real barcode check against BC. So the deliberate
+// "this sale is finished, stop editing it" switch moved to `catalogued`, which was display-only
+// before, and Added to BC became a computed count on the sale list.
+//
+// Measured before the change: all 39 sales had the two ticks set identically, so nothing locked
+// or unlocked on the day it shipped.
+//
+// ⚠ Keep this the ONLY gate — 28 call sites depend on it. Do not re-point it at `addedToBC`,
+// which no longer means "a person decided this sale is done".
 async function requireNotBCLocked(auctionId: string, session: Awaited<ReturnType<typeof requireCataloguer>>) {
   if (session.user.role === "ADMIN") return
-  const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { addedToBC: true } })
-  if (auction?.addedToBC) throw new Error("This auction has been added to BC and is locked. Only admins can make changes.")
+  const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { catalogued: true } })
+  if (auction?.catalogued) throw new Error("This auction is marked as catalogued and is locked. Only admins can make changes.")
 }
 
 function changedByOf(session: Awaited<ReturnType<typeof requireCataloguer>>): string {

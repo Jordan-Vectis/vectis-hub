@@ -16,8 +16,11 @@ export type AuctionRow = {
   lots: number
   /** Lots carrying at least one photo — shown against the total as "400/500". */
   lotsWithPhotos: number
+  /** ⚠ Also the EDIT LOCK — a catalogued sale is read-only for non-admins (2026-09-02). */
   catalogued: boolean
-  addedToBC: boolean
+  /** Lots whose BARCODE is in the synced BC data. Replaced the manual "Added to BC" tick —
+   *  it is measured, not asserted. Reflects the last Data Sync, not BC live. */
+  lotsInBC: number
   photography: boolean
   aiRan: boolean
   complete: boolean
@@ -30,8 +33,8 @@ const STATUS_FILTERS = [
   { value: "ALL",          label: "All statuses" },
   { value: "catalogued",   label: "Catalogued" },
   { value: "!catalogued",  label: "Not catalogued" },
-  { value: "addedToBC",    label: "Added to BC" },
-  { value: "!addedToBC",   label: "Not added to BC" },
+  { value: "inBC",         label: "All lots in BC" },
+  { value: "!inBC",        label: "Not all lots in BC" },
   { value: "photography",  label: "Photographed" },
   { value: "!photography", label: "Not photographed" },
   { value: "aiRan",        label: "Ran through AI" },
@@ -46,8 +49,12 @@ function matches(row: AuctionRow, search: string, type: string, status: string):
   if (type !== "ALL" && row.auctionType !== type) return false
   if (status !== "ALL") {
     const negate = status.startsWith("!")
-    const key = (negate ? status.slice(1) : status) as keyof AuctionRow
-    const val = !!row[key]
+    const key = negate ? status.slice(1) : status
+    // "In BC" is a count, not a flag — a sale counts as done only when EVERY lot is there,
+    // and a sale with no lots is not "all in BC" (nothing has happened to it yet).
+    const val = key === "inBC"
+      ? row.lots > 0 && row.lotsInBC >= row.lots
+      : !!row[key as keyof AuctionRow]
     if (negate ? val : !val) return false
   }
   return true
@@ -65,6 +72,25 @@ function PhotoCount({ withPhotos, lots }: { withPhotos: number; lots: number }) 
       title={done ? "Every lot has at least one photo" : `${lots - withPhotos} lots still have no photo`}
     >
       {withPhotos}/{lots}
+    </span>
+  )
+}
+
+/** "594/616" — how many of a sale's lots are actually in BC, matched on BARCODE against the
+ *  synced BC data. This replaced a tick someone had to remember to set, so the column can no
+ *  longer say "done" when it isn't. Same shape as PhotoCount deliberately: two counts read the
+ *  same way down the page. ⚠ It reflects the last Data Sync, which the tooltip says. */
+function BcCount({ inBC, lots }: { inBC: number; lots: number }) {
+  if (lots === 0) return <span className="text-gray-600" title="No lots on this sale yet">—</span>
+  const done = inBC >= lots
+  return (
+    <span
+      className={done ? "text-green-600 dark:text-green-400 font-medium" : inBC === 0 ? "text-gray-500" : "text-amber-600 dark:text-amber-400"}
+      title={done
+        ? "Every lot's barcode was found in BC (as at the last Data Sync)"
+        : `${lots - inBC} lot${lots - inBC === 1 ? "" : "s"} not found in BC — as at the last Data Sync, so run it if a push has just happened`}
+    >
+      {inBC}/{lots}
     </span>
   )
 }
@@ -103,8 +129,8 @@ function AuctionTable({ rows, isFav, onToggleFav }: {
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots with photos</th>
-          <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Catalogued</th>
-          <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Added to BC</th>
+          <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Marked catalogued — this also locks the sale for everyone except admins">Catalogued 🔒</th>
+          <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Lots whose barcode was found in BC, as at the last Data Sync">In BC</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Photography</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Ran through AI</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
@@ -140,7 +166,14 @@ function AuctionTable({ rows, isFav, onToggleFav }: {
             </td>
             <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction.lots}</td>
             <td className="px-4 py-3"><PhotoCount withPhotos={auction.lotsWithPhotos} lots={auction.lots} /></td>
-            {(["catalogued", "addedToBC", "photography", "aiRan"] as const).map(f => (
+            <td className="px-4 py-3 text-center">
+              {auction.catalogued
+                ? <span className="text-green-400 font-bold" title="Marked catalogued — the sale is locked for everyone except admins">✓</span>
+                : <span className="text-gray-600">—</span>}
+            </td>
+            {/* Measured, not ticked — see BcCount. */}
+            <td className="px-4 py-3 text-center"><BcCount inBC={auction.lotsInBC} lots={auction.lots} /></td>
+            {(["photography", "aiRan"] as const).map(f => (
               <td key={f} className="px-4 py-3 text-center">
                 {auction[f]
                   ? <span className="text-green-400 font-bold">✓</span>

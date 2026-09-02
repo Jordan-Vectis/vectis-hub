@@ -26,7 +26,8 @@ interface Auction {
   id: string
   code: string
   name: string
-  addedToBC: boolean
+  /** ⚠ The EDIT LOCK. Moved off addedToBC on 2026-09-02 — see requireNotBCLocked. */
+  catalogued: boolean
 }
 
 interface Lot {
@@ -78,7 +79,7 @@ const lbl = "block text-sm font-semibold uppercase tracking-wider text-gray-400 
 
 export default function TabletTabs({ auction, lots, userRole, userId, userName, showScanTimer, showLotTimer, timerRedMins }: { auction: Auction; lots: Lot[]; userRole: string; userId?: string; userName?: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number }) {
   const router = useRouter()
-  const bcLocked = auction.addedToBC && userRole !== "ADMIN"
+  const bcLocked = auction.catalogued && userRole !== "ADMIN"
   const [tab, setTab] = useState<Tab>("manage")
   const [editingLotId, setEditingLotId] = useState<string | null>(null)
   const [navDir, setNavDir] = useState<"next" | "prev" | null>(null)

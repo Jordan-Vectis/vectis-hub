@@ -42,7 +42,7 @@ export default async function TabletAuctionDetailPage({
         id: auction.id,
         code: auction.code,
         name: auction.name,
-        addedToBC: auction.addedToBC,
+        catalogued: auction.catalogued,
       }}
       lots={auction.lots.map(l => ({
         id: l.id,
