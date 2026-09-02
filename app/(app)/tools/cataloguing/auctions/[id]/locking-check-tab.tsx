@@ -42,6 +42,8 @@ interface LotItem {
   category: string | null
   aiFlagNote: string | null
   reviewFlag: string | null
+  /** A reserve recorded in the Hub. It still has to be typed into BC — see the reserve check. */
+  reserve: number | null
 }
 
 type Severity = "blocking" | "look"
@@ -59,7 +61,12 @@ const TOTE_LABEL: Record<ToteCheckIssue, string> = {
   unique_id_mismatch: "Unique ID ≠ receipt",
 }
 
-function checkOne(lot: LotItem, toteIssues: Map<string, ToteCheckIssue[]> | null): Issue[] {
+function checkOne(
+  lot: LotItem,
+  toteIssues: Map<string, ToteCheckIssue[]> | null,
+  /** Lot ids whose reserve the BC sync can already see. null = the check could not run. */
+  reserveInBc: Set<string> | null,
+): Issue[] {
   const out: Issue[] = []
   const desc = (lot.description ?? "").trim()
 
@@ -85,6 +92,14 @@ function checkOne(lot: LotItem, toteIssues: Map<string, ToteCheckIssue[]> | null
     const actual = (lot.title ?? "").trim()
     if (!actual || actual === "Untitled") out.push({ key: "title", label: "No title", severity: "blocking" })
     else if (actual !== expected)         out.push({ key: "title", label: "Title doesn't match the description", severity: "blocking" })
+  }
+
+  // ⚠⚠ THE RESERVE REMINDER. A reserve cannot be typed into BC until the lot is there, so it is
+  // recorded in the Hub first and listed here until the BC sync shows one against that barcode —
+  // no "done" tick for anybody to forget. `reserveInBc === null` means the check could not run,
+  // and it is then SKIPPED rather than passed, like the tote checks (Jordan, 2026-09-02).
+  if (reserveInBc && (lot.reserve ?? 0) > 0 && !reserveInBc.has(lot.id)) {
+    out.push({ key: "reserve", label: `Reserve £${lot.reserve} still to enter in BC`, severity: "look" })
   }
 
   if (toteIssues) {
@@ -145,6 +160,10 @@ const CRITERIA: {
   { key: "artefact",    label: "No leftover AI text in the description",    severity: "look" },
   { key: "condDesc",    label: "Condition appears in the description",      severity: "look",
     scope: l => !l.aiExcluded && !!(l.description ?? "").trim() },
+  // ⚠ Only lots that HAVE a reserve recorded here are in scope — nothing can tell us a lot
+  // OUGHT to have one. It clears itself: BC returns its own reserve on the sync (2026-09-02).
+  { key: "reserve",     label: "Reserve entered in BC",                     severity: "look", needsBc: true,
+    scope: l => (l.reserve ?? 0) > 0 },
 ]
 
 /** Tote issues are emitted as tote_<issue>, so that criterion matches on the prefix. */
@@ -157,6 +176,8 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot, onRefresh 
   onOpenLot: (id: string) => void
   onRefresh: () => void
 }) {
+  // Which lots BC already shows a reserve for. null until loaded / if it fails.
+  const [reserveInBc, setReserveInBc] = useState<Set<string> | null>(null)
   const [filter, setFilter] = useState<"blocking" | "look" | "all">("blocking")
   const [only, setOnly] = useState<string | null>(null)   // drill into one criterion
 
@@ -194,16 +215,28 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot, onRefresh 
     return () => { live = false }
   }, [auctionId])
 
+  // The reserve side. Same shape as the tote load on purpose: if it cannot be read the criterion
+  // stays null and is reported as SKIPPED, never as passed — a reserve check that quietly says
+  // "all done" would be worse than not having one.
+  useEffect(() => {
+    let live = true
+    fetch(`/api/catalogue/reserve-check?auctionId=${encodeURIComponent(auctionId)}`)
+      .then(r => r.json())
+      .then(j => { if (live && j && !j.error && Array.isArray(j.inBc)) setReserveInBc(new Set(j.inBc as string[])) })
+      .catch(() => { /* leaves it null — reported as skipped */ })
+    return () => { live = false }
+  }, [auctionId])
+
   const results = useMemo(
     () => lots.map(lot => {
-      const issues = checkOne(lot, toteIssues)
+      const issues = checkOne(lot, toteIssues, reserveInBc)
       return {
         lot, issues,
         blocking: issues.filter(i => i.severity === "blocking"),
         look:     issues.filter(i => i.severity === "look"),
       }
     }),
-    [lots, toteIssues],
+    [lots, toteIssues, reserveInBc],
   )
 
   const blocking = results.filter(r => r.blocking.length > 0)
@@ -382,7 +415,11 @@ Each one is the AI's suggestion — only accept what you have read.`)) return
         </div>
         <ul>
           {checklist.map(c => {
-            const skipped = c.needsBc && bcState !== "ready"
+            // ⚠ The reserve criterion has its OWN BC read, so it is skipped when THAT failed —
+            // not when the tote load did. Judging it by `bcState` would report it as skipped
+            // whenever the tote data was missing, and as done whenever the tote data was fine
+            // even if the reserve read had failed.
+            const skipped = c.key === "reserve" ? reserveInBc === null : (c.needsBc && bcState !== "ready")
             const ok = !skipped && c.failed === 0
             return (
               <li key={c.key}>

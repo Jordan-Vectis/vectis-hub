@@ -288,6 +288,67 @@ export async function bulkSetLotConditions(auctionId: string, updates: { id: str
   return { ok: true as const, updated: clean.length }
 }
 
+// ─── Reserves ────────────────────────────────────────────────────────────────
+// Jordan, 2026-09-02: a reserve can only be typed into BC once the lot is THERE, so he needs
+// somewhere to record it in the meantime and a reminder afterwards. The `reserve` column has
+// existed all along (and is in the Excel export and the change log) but was unused — 0 of
+// 14,532 lots had one — because nothing but the single-lot editor could write it.
+//
+// ⚠ The reminder is in Locking Check and CLEARS ITSELF: BC's own reserve comes back on the
+// sync (`WarehouseItem.reservePrice`), so nothing here needs a "done" tick to go stale.
+// See /api/catalogue/reserve-check.
+
+/** One lot, typed straight into the Manage Lots table. `null` clears it. */
+export async function setLotReserve(auctionId: string, lotId: string, reserve: number | null) {
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+    const clean = reserve == null || Number.isNaN(reserve) || reserve <= 0 ? null : Math.round(reserve)
+    await updateLotLogged(lotId, { reserve: clean }, { changedBy: changedByOf(session), source: "manage_lots" })
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true as const, reserve: clean }
+  } catch (e: any) {
+    // ⚠ RETURN the error — a thrown one is redacted in production and the BC lock is exactly
+    // the failure a cataloguer needs to be able to read (RULES).
+    return { ok: false as const, error: e?.message ?? "Couldn't save that reserve" }
+  }
+}
+
+/** The same reserve onto every ticked lot. Chunked by the toolbar, so it threads `undoId`. */
+export async function bulkSetLotReserves(
+  auctionId: string,
+  lotIds: string[],
+  reserve: number | null,
+  undoId?: string | null,
+  skipRevalidate?: boolean,
+): Promise<{ updated: number; undoId: string | null }> {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+  const clean = reserve == null || Number.isNaN(reserve) || reserve <= 0 ? null : Math.round(reserve)
+  if (lotIds.length === 0) return { updated: 0, undoId: undoId ?? null }
+
+  const lots = await prisma.catalogueLot.findMany({
+    where:  { id: { in: lotIds }, auctionId },
+    select: { id: true, reserve: true },
+  })
+  const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  const undo: UndoEntry[] = []
+  let updated = 0
+  for (const lot of lots) {
+    if ((lot.reserve ?? null) === clean) continue        // already that — not a change
+    await updateLotLogged(lot.id, { reserve: clean }, ctx)
+    undo.push({ lotId: lot.id, fields: { reserve: { before: lot.reserve, after: clean } } })
+    updated++
+  }
+  const newUndoId = await recordBulkUndo(
+    auctionId, session,
+    clean == null ? `Clear reserves (${updated})` : `Set reserve £${clean} (${updated})`,
+    undo, undoId,
+  )
+  if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { updated, undoId: newUndoId }
+}
+
 export async function setStartingBids(auctionId: string, updates: { id: string; startingBid: number }[]) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)

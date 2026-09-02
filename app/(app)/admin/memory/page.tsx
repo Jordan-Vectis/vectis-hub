@@ -16,6 +16,74 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reserves.md",
+    content: `---
+name: reserves-recorded-here-reminded-at-locking-check
+description: "Reserves are typed into Manage Lots (column + bulk) and Locking Check lists the ones still to enter in BC. ⚠ The reminder CLEARS ITSELF from BC's own reserve on the sync — no done tick. Read before touching CatalogueLot.reserve, /api/catalogue/reserve-check, or the Locking Check criteria."
+metadata:
+  node_type: memory
+  type: reference
+---
+
+# 💷 Reserves — recorded here, reminded at Locking Check (2026-09-02)
+
+Jordan: *"I need to add reserves on lots in BC but I can't do it until the lot is added to BC. I
+was thinking we could add a way to add them into our system and then it reminds me in the locking
+check?"*
+
+## What was already there
+
+\`CatalogueLot.reserve\` has existed all along — in the lot editor, the Excel export, the import
+and \`LOT_FIELD_LABELS\` — but **0 of 14,532 lots had one**, because nothing except the single-lot
+editor could write it. So this was mostly about entry and the reminder, not storage.
+
+## ⚠⚠ The reminder clears itself
+
+**BC's own reserve comes back on the sync** — \`WarehouseItem.reservePrice\`, 1,889 rows already
+carry one, and the join to our lots finds them (F111 had 8 on the day). So a lot drops off the
+list the moment the sync sees a reserve against its **barcode**. **There is no "done" tick for
+anyone to forget**, which is the same measured approach as the In BC column on Auction Manager.
+
+\`GET /api/catalogue/reserve-check?auctionId=\` returns \`{ inBc, notInBc, lastSync }\`.
+- ⚠ **BARCODE ONLY**, never \`receiptUniqueId\` — the standing rule for anything BC.
+- ⚠ Reflects the **last Data Sync**, not BC live.
+- Only lots that already have a reserve **here** are considered; nothing can tell us a lot
+  *ought* to have one.
+
+## Entering them — Manage Lots (Jordan's choice over a paste box)
+
+- A **Reserve column** in the lots table, typed straight into, saving on blur/Enter via
+  \`setLotReserve\`. ⚠ The cell puts the old value back if the write fails — a cell still showing
+  what you typed after a failed save is a lie. Errors surface in a banner, not silently.
+- A **💷 Set reserve** button on the selection row with a small panel: the same reserve onto every
+  ticked lot, empty to clear. Goes through \`bulkSetLotReserves\`, chunked by \`runInChunks\` so it
+  shows 20/400 and leaves **one** undo entry (it threads \`undoId\` — see
+  [[reference_manage_lots_bulk_undo]]).
+- A **Has reserve / No reserve** column filter.
+- ⚠ The table row opens the lot editor on click, so the cell needs \`stopPropagation\` or typing
+  in it opens the editor instead.
+
+## The Locking Check criterion
+
+\`{ key: "reserve", label: "Reserve entered in BC", severity: "look", needsBc: true,
+   scope: l => (l.reserve ?? 0) > 0 }\` — per lot it reads *"Reserve £250 still to enter in BC"*.
+
+- **Worth a look, never blocking** — it is a reminder, not a fault.
+- ⚠ It has its **own** BC read, so \`skipped\` is judged on \`reserveInBc === null\`, **not** on the
+  tote check's \`bcState\`. Judging it by \`bcState\` would call it skipped whenever the tote data
+  was missing and done whenever the tote data was fine even if the reserve read had failed.
+- ⚠ A failed read leaves it **skipped, never passed** — same rule as the tote checks. A reserve
+  check that quietly says "all done" is worse than not having one.
+
+⚠ I argued for End of Day → BC instead (Locking Check is the gate *before* BC, so it can list
+reserves that cannot be entered yet). **Jordan chose Locking Check** because it is the screen he
+actually runs at the end — don't move it without asking.
+
+Related: [[reference_locking_check]], [[reference_manage_lots_bulk_undo]],
+[[reference_bc_lock_and_in_bc_column]].
+`,
+  },
+  {
     filename: "help_box.md",
     content: `---
 name: top-bar-help-box

@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, setLotReserve, bulkSetLotReserves, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
 import { actionErrorText } from "@/lib/action-error"
 import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
@@ -962,6 +962,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
               category:        l.category,
               aiFlagNote:      l.aiFlagNote,
               reviewFlag:      l.reviewFlag,
+              reserve:         l.reserve,
             }))}
             auctionId={auction.id}
             onOpenLot={openLotInManager}
@@ -1423,6 +1424,18 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [bidPct, setBidPct]     = useState(60)
   const [bidsMsg, setBidsMsg]   = useState<string | null>(null)
   const [bidsPending, startBids] = useTransition()
+  // ── Reserves (2026-09-02) ──────────────────────────────────────────────────
+  // A reserve cannot be typed into BC until the lot is there, so it is recorded here first and
+  // Locking Check reminds him afterwards. The field has always existed; nothing but the
+  // single-lot editor could write it, which is why 0 of 14,532 lots had one.
+  const [reserveVals, setReserveVals]     = useState<Record<string, string>>({})
+  const [reserveSaving, setReserveSaving] = useState<Set<string>>(new Set())
+  const [reserveErr, setReserveErr]       = useState<string | null>(null)
+  const [showReserve, setShowReserve]     = useState(false)
+  const [reserveInput, setReserveInput]   = useState("")
+  const [reservePending, startReserve]    = useTransition()
+  const [reserveMsg, setReserveMsg]       = useState<string | null>(null)
+  const [fReserve, setFReserve]           = useState("")
 
   // Unique ID Matcher panel
   const uniqueIdInputRef = useRef<HTMLInputElement>(null)
@@ -1585,6 +1598,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
          fAi === "not_upgraded" ? !l.aiUpgraded :
          fAi === "excluded"     ?  l.aiExcluded : !l.aiExcluded)) &&
       (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.addedToBC  : !l.addedToBC )) &&
+      (fReserve === ""    || (fReserve    === "yes" ? (l.reserve ?? 0) > 0 : !((l.reserve ?? 0) > 0))) &&
       (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim())) &&
       (fAddedBy === ""    || (l.createdByName ?? "") === fAddedBy) &&
       (fDateAdded === ""  || ukDay(l.createdAt) === fDateAdded)
@@ -2073,6 +2087,64 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     })
   }
 
+  // Typed straight into the table. Saves on blur / Enter, and puts the old value back if the
+  // write fails — a cell that keeps showing what you typed after a failed save is a lie.
+  async function saveReserve(lot: Lot, raw: string) {
+    const text = raw.trim()
+    const next = text === "" ? null : Number(text)
+    if (next != null && (!Number.isFinite(next) || next < 0)) {
+      setReserveErr("A reserve has to be a number.")
+      setReserveVals(v => ({ ...v, [lot.id]: lot.reserve?.toString() ?? "" }))
+      return
+    }
+    const rounded = next == null ? null : Math.round(next)
+    if ((lot.reserve ?? null) === rounded) return          // nothing actually changed
+    setReserveSaving(s => new Set(s).add(lot.id))
+    setReserveErr(null)
+    try {
+      const res = await setLotReserve(auctionId, lot.id, rounded)
+      if (!res.ok) {
+        setReserveErr(res.error)
+        setReserveVals(v => ({ ...v, [lot.id]: lot.reserve?.toString() ?? "" }))
+      } else {
+        setReserveVals(v => ({ ...v, [lot.id]: res.reserve?.toString() ?? "" }))
+      }
+    } catch (e) {
+      setReserveErr(actionErrorText(e))
+      setReserveVals(v => ({ ...v, [lot.id]: lot.reserve?.toString() ?? "" }))
+    } finally {
+      setReserveSaving(s => { const n = new Set(s); n.delete(lot.id); return n })
+    }
+  }
+
+  // The same reserve onto every ticked lot — chunked like the other mass actions so it shows
+  // 20/400 and leaves ONE undo entry.
+  function applyBulkReserve() {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    const text = reserveInput.trim()
+    const value = text === "" ? null : Math.round(Number(text))
+    if (text !== "" && (!Number.isFinite(value!) || value! < 0)) { setReserveMsg("⚠ A reserve has to be a number."); return }
+    const what = value == null ? "Clear the reserve on" : `Put a reserve of £${value} on`
+    if (!confirm(`${what} ${ids.length} selected lot${ids.length === 1 ? "" : "s"}?`)) return
+    startReserve(async () => {
+      try {
+        const res = await runInChunks(ids, setMassProgress, (chunk, undoId, isLast) =>
+          bulkSetLotReserves(auctionId, chunk, value, undoId, !isLast))
+        const updated = res.reduce((s, r) => s + r.updated, 0)
+        setReserveMsg(`✓ ${updated} lot${updated === 1 ? "" : "s"} updated${updated < ids.length ? ` · ${ids.length - updated} already had that` : ""}`)
+        setReserveVals({})     // the table re-reads from the refreshed props
+        setSelected(new Set())
+      } catch (e) {
+        setReserveMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
+      } finally {
+        setMassProgress(null)
+        onDelete()
+        await refreshUndos()
+      }
+    })
+  }
+
   function toggleSelect(id: string) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
@@ -2342,6 +2414,13 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               title="Permanently deletes photo files from storage">
               {photosClearing ? "Removing…" : "📷🗑 Delete photos from storage"}
             </button>
+            <button
+              onClick={() => { setShowReserve(v => !v); setReserveMsg(null) }}
+              disabled={none}
+              title="Put the same reserve on every ticked lot"
+              className={showReserve ? `${TB_BTN} border-[#C8A96E] text-[#C8A96E] bg-[#C8A96E]/10` : `${TB_BTN} border-gray-600 text-gray-400 hover:border-[#C8A96E] hover:text-[#C8A96E]`}>
+              💷 Set reserve
+            </button>
             <button onClick={handleBulkDelete} disabled={bulkDeleting || none}
               className={`${TB_BTN} border-red-700 text-red-500 dark:text-red-400 hover:bg-red-500/10`}>
               {bulkDeleting ? "Deleting…" : "🗑 Delete lots"}
@@ -2485,6 +2564,46 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       )}
 
       {/* ── Set Starting Bids panel ── */}
+      {/* ── Set reserve on the ticked lots ── */}
+      {/* ⚠ A failed reserve save must SAY so — the cell silently reverting would look like the
+          number simply did not take. */}
+      {reserveErr && (
+        <div className="mb-3 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-2 text-sm text-red-600 dark:text-red-300 flex items-center justify-between">
+          <span>⚠ {reserveErr}</span>
+          <button onClick={() => setReserveErr(null)} className="ml-3 text-xs">✕</button>
+        </div>
+      )}
+
+      {showReserve && (
+        <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-[#C8A96E]/40 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-[#C8A96E]">Set reserve</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500">
+            Puts the same reserve on {selected.size} ticked lot{selected.size === 1 ? "" : "s"}.
+            Leave it empty to clear the reserve instead. This records it <strong>in the Hub</strong> — it
+            still has to be typed into BC, and Locking Check lists the ones outstanding until the
+            BC sync sees them.
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-gray-600 dark:text-gray-400">Reserve £</span>
+            <input
+              type="number" min={0} step={1} value={reserveInput}
+              onChange={e => setReserveInput(e.target.value)}
+              placeholder="e.g. 250"
+              className="w-28 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#C8A96E] text-right"
+            />
+            <button
+              onClick={applyBulkReserve}
+              disabled={reservePending || selected.size === 0}
+              className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#C8A96E] hover:bg-[#b8994e] disabled:opacity-40 text-black transition-colors"
+            >
+              {reservePending ? "Applying…" : `Apply to ${selected.size} lot${selected.size === 1 ? "" : "s"}`}
+            </button>
+            <MassProgressLabel p={massProgress} />
+            {reserveMsg && <span className="text-xs text-gray-600 dark:text-gray-400">{reserveMsg}</span>}
+          </div>
+        </div>
+      )}
+
       {showBids && (() => {
         const eligible = (selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots).filter(l => l.estimateLow != null)
         const preview  = eligible.slice(0, 3).map(l => ({
@@ -2664,6 +2783,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">KP</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">AI</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">BC</th>
+              {/* Typed in here; Locking Check reminds him which ones still need entering in BC. */}
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap" title="A reserve recorded here. It still has to be typed into BC — Locking Check lists the ones outstanding.">Reserve</th>
               <th className="px-4 py-3" />
             </tr>
             {/* Filter row */}
@@ -2716,6 +2837,13 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <option value="">All</option>
                   <option value="yes">📦 Added</option>
                   <option value="no">Not yet</option>
+                </select>
+              </td>
+              <td className="px-2 py-1.5">
+                <select value={fReserve} onChange={e => setFReserve(e.target.value)} className={COL_SELECT}>
+                  <option value="">All</option>
+                  <option value="yes">💷 Has reserve</option>
+                  <option value="no">No reserve</option>
                 </select>
               </td>
               <td />
@@ -2793,6 +2921,31 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                       ? <span title="Added to Business Central">📦</span>
                       : <span className="text-gray-700 text-xs">—</span>}
                   </button>
+                </td>
+                {/* Reserve — typed straight in. ⚠ stopPropagation, or clicking the box opens the
+                    lot editor instead of letting you type. */}
+                <td className="px-2 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-600 dark:text-gray-500">£</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      disabled={bcLocked || reserveSaving.has(lot.id)}
+                      value={reserveVals[lot.id] ?? (lot.reserve?.toString() ?? "")}
+                      onChange={e => setReserveVals(v => ({ ...v, [lot.id]: e.target.value }))}
+                      onBlur={e => saveReserve(lot, e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur() }}
+                      placeholder="—"
+                      title="A reserve recorded here. It still has to be typed into BC — Locking Check lists the ones outstanding."
+                      className={`w-20 rounded border px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-[#2AB4A6] disabled:opacity-40 ${
+                        (reserveVals[lot.id] ?? lot.reserve?.toString() ?? "")
+                          ? "border-[#2AB4A6]/50 bg-[#2AB4A6]/10 text-[#2AB4A6]"
+                          : "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#0d0d0f] text-gray-600 dark:text-gray-300"
+                      }`}
+                    />
+                    {reserveSaving.has(lot.id) && <span className="text-[10px] text-gray-500">…</span>}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                   {!bcLocked && (
