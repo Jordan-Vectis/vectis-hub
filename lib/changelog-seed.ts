@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b1f66c9adc80a79b568912f8ccd8a1320b2ce005","author":"Jordan Orange","date":"2026-09-03T12:10:24+01:00","subject":"Reserve on the tablet - and stop partial forms wiping it"},
+  {"sha":"7dd4dbbdb3244ea87d4ecf235082d2ef9a08d9b1","author":"Jordan Orange","date":"2026-09-03T11:07:37+01:00","subject":"Refresh changelog seed"},
   {"sha":"5bc9cd583cf26713fcc2a32ebb10911d00841291","author":"Jordan Orange","date":"2026-09-03T11:07:33+01:00","subject":"Reserves: drop the column, the lot editor already had the field"},
   {"sha":"7f180467d35c12b1ab4226b8498ac37ce1ec2b42","author":"Jordan Orange","date":"2026-09-02T17:08:44+01:00","subject":"Refresh changelog seed"},
   {"sha":"a2a3e5051f869139c85592fec0604ea314ece5bf","author":"Jordan Orange","date":"2026-09-02T17:08:38+01:00","subject":"Memory: today's work, and two corrections that cost time"},
