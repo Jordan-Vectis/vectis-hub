@@ -298,21 +298,11 @@ export async function bulkSetLotConditions(auctionId: string, updates: { id: str
 // sync (`WarehouseItem.reservePrice`), so nothing here needs a "done" tick to go stale.
 // See /api/catalogue/reserve-check.
 
-/** One lot, typed straight into the Manage Lots table. `null` clears it. */
-export async function setLotReserve(auctionId: string, lotId: string, reserve: number | null) {
-  try {
-    const session = await requireCataloguer()
-    await requireNotBCLocked(auctionId, session)
-    const clean = reserve == null || Number.isNaN(reserve) || reserve <= 0 ? null : Math.round(reserve)
-    await updateLotLogged(lotId, { reserve: clean }, { changedBy: changedByOf(session), source: "manage_lots" })
-    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-    return { ok: true as const, reserve: clean }
-  } catch (e: any) {
-    // ⚠ RETURN the error — a thrown one is redacted in production and the BC lock is exactly
-    // the failure a cataloguer needs to be able to read (RULES).
-    return { ok: false as const, error: e?.message ?? "Couldn't save that reserve" }
-  }
-}
+// ⚠ A SINGLE lot's reserve is typed in the lot editor, which has had a Reserve field all along
+// and saves through `updateLot` like every other field. A `setLotReserve` action existed briefly
+// for an inline column in the lots table; Jordan removed the column ("it does not need to be on
+// the actual table like this, just inside when you click on it is fine"), so the action went with
+// it. Don't add either back without asking.
 
 /** The same reserve onto every ticked lot. Chunked by the toolbar, so it threads `undoId`. */
 export async function bulkSetLotReserves(

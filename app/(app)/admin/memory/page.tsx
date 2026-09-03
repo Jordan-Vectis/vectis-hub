@@ -24,7 +24,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 39e4fc37-397c-4b8d-a570-4b59503c1913
-  modified: 2026-09-02T15:26:49.780Z
+  modified: 2026-09-03T10:04:32.560Z
 ---
 
 # 💷 Reserves — recorded here, reminded at Locking Check (2026-09-02)
@@ -52,30 +52,26 @@ just typed into BC still read as outstanding until the next Data Sync, so the sc
 been lying to him. A reminder you read and move past beats one that self-clears wrongly. The
 \`/api/catalogue/reserve-check\` route this needed was deleted.
 
-## Entering them — Manage Lots (Jordan's choice over a paste box)
+## Entering them
 
-- A **Reserve column** in the lots table, typed straight into, saving on blur/Enter via
-  \`setLotReserve\`. ⚠ The cell puts the old value back if the write fails — a cell still showing
-  what you typed after a failed save is a lie. Errors surface in a banner, not silently.
-- A **💷 Set reserve** button on the selection row with a small panel: the same reserve onto every
-  ticked lot, empty to clear. Goes through \`bulkSetLotReserves\`, chunked by \`runInChunks\` so it
-  shows 20/400 and leaves **one** undo entry (it threads \`undoId\` — see
-  [[reference_manage_lots_bulk_undo]]).
-- A **Has reserve / No reserve** column filter.
-- ⚠ The table row opens the lot editor on click, so the cell needs \`stopPropagation\` or typing
-  in it opens the editor instead.
+⚠⚠ **There is NO reserve column in the lots table.** One was built and Jordan took it straight
+out: *"it does not need to be on the actual table like this just inside when you click on it is
+fine"* (2026-09-02). **Do not put it back.**
+
+- **One lot** — the **Reserve (£)** field in the lot editor, next to Starting Bid. It has been
+  there all along and saves through \`updateLot\` like every other field; nothing new was needed.
+- **Several at once** — the **💷 Set reserve** button on the selection row opens a small panel:
+  the same figure onto every ticked lot, empty to clear. Goes through \`bulkSetLotReserves\`,
+  chunked by \`runInChunks\` so it shows 20/400 and leaves **one** undo entry (it threads
+  \`undoId\` — see [[reference_manage_lots_bulk_undo]]).
 
 ## The Locking Check criterion
 
-\`{ key: "reserve", label: "Reserve entered in BC", severity: "look", needsBc: true,
-   scope: l => (l.reserve ?? 0) > 0 }\` — per lot it reads *"Reserve £250 still to enter in BC"*.
+\`{ key: "reserve", label: "No reserve waiting to be entered in BC", severity: "look",
+   scope: l => (l.reserve ?? 0) > 0 }\` — per lot it reads *"Reserve £250 — enter it in BC"*.
 
 - **Worth a look, never blocking** — it is a reminder, not a fault.
-- ⚠ It has its **own** BC read, so \`skipped\` is judged on \`reserveInBc === null\`, **not** on the
-  tote check's \`bcState\`. Judging it by \`bcState\` would call it skipped whenever the tote data
-  was missing and done whenever the tote data was fine even if the reserve read had failed.
-- ⚠ A failed read leaves it **skipped, never passed** — same rule as the tote checks. A reserve
-  check that quietly says "all done" is worse than not having one.
+- **No \`needsBc\`, no BC read at all.** It simply lists the lots carrying a reserve.
 
 ⚠ I argued for End of Day → BC instead (Locking Check is the gate *before* BC, so it can list
 reserves that cannot be entered yet). **Jordan chose Locking Check** because it is the screen he
