@@ -4533,7 +4533,7 @@ Core sync rules (full detail on the reference card):
 
 ---
 
-## Recent work (2026-09-01/02) — ALL ON PRODUCTION (merged to main 2026-09-02, cbe2e9c3 — 18 commits)
+## Recent work (2026-09-01/03) — ON STAGING, not yet pushed to main
 
 ⚠ Two of these were faults that had been **silently losing or mangling work for weeks**, both found
 by reading the change log rather than guessing. If a report and the catalogue disagree, read the log.
@@ -4565,10 +4565,18 @@ by reading the change log rather than guessing. If a report and the catalogue di
 - **💬 Help box in the top bar** — ask "where do I go to do an overnight run?" and get the screen
   plus a link. It only knows the tools you can open, done by filtering the context server-side
   (never by instructing the model), and it blocks questions about tools you don't have.
-- **💷 Reserves** — a Reserve column and bulk set on Manage Lots, and Locking Check reminds you
-  which lots have one to enter in BC. ⚠ Deliberately simple: it does NOT check BC. I built a
-  self-clearing version first and Jordan rejected it — *"its not that complex"* — and it would
-  have lied until the next Data Sync.
+  ⚠⚠ Uses \`getEffectiveSession()\` not \`auth()\` — the first version judged the real admin, so
+  viewing-as a cataloguer still got told about Auction AI.
+- **💷 Reserves** — a Reserve (£) field in the lot editor and on the tablet editor (new), bulk 💷 Set
+  reserve on Manage Lots, Locking Check lists them as a worth-a-look reminder per lot.
+  ⚠ Deliberately simple: it does NOT check BC. A self-clearing version was built and rejected.
+  ⚠⚠ **The tablet editor was silently wiping \`reserve\` and \`startingBid\`** on every save
+  (\`extractLotData\` turns omitted fields to null — 0 of 14,706 lots had either so it never bit).
+  Fixed in \`updateLot\`: both are now preserved when the form omits them, like \`receiptUniqueId\`.
+- **⚠⚠ BC lot-number sync top-up** (2026-09-03) — \`EVA_SystemModifiedAt\` is NOT bumped when a lot
+  is numbered in BC, so the incremental auction-lines sync never re-read them — 94 F114 lots sat at
+  \`"0"\`. The sync now runs a top-up at the end of each full pass: all upcoming sales,
+  \`EVA_CurrentLotNo ne 0\`, no timestamp filter. Picked up automatically by the overnight cron.
 - **Review tab: ⚠️ Re-check AI flags**, scoped to the lots on screen, snapshotting the existing
   flags first.
 
