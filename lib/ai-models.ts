@@ -125,6 +125,33 @@ export async function getToolModel(slot: string, clientModel?: string | null): P
   return SLOT_DEFAULT[slot] || GLOBAL_FALLBACK_MODEL
 }
 
+// ── The fallback model ───────────────────────────────────────────────────────
+// ONE model, app-wide, tried when the main one is rate limited or comes back
+// with nothing. It is a setting, not a tool, so it has no AI_TOOLS entry — but
+// it is keyed-by-the-thing-configured like everything else here, so it lives in
+// the same ToolModel table under a reserved key. No new table, no migration,
+// and "no row" means "no fallback" exactly as a blank per-tool row means
+// "use the built-in default".
+//
+// ⚠ It is a DEFAULT, not an override. It decides what a screen's fallback
+// picker OPENS ON; what a queued overnight sale actually runs with is still the
+// value stored on that sale's own row. A sale must never quietly run on
+// settings from a screen somewhere else — see the header of overnight-client.
+export const FALLBACK_SLOT = "_fallback"
+
+/**
+ * The admin-set fallback model, or "" when none is set.
+ * ⚠ Global, so it has no slot to check `usable()` against — the admin dropdown
+ * therefore never offers a Claude id, the same rule the "Apply to all" control
+ * follows. A retired name is dropped here as well, so a picker seeded from this
+ * can't open on a dead model.
+ */
+export async function getFallbackModel(): Promise<string> {
+  const map = await loadConfig()
+  const m = (map[FALLBACK_SLOT] ?? "").trim()
+  return m && !RETIRED_MODELS.has(m) ? m : ""
+}
+
 // ── Claude models ────────────────────────────────────────────────────────────
 // Anthropic has no "list models" endpoint we poll like Google's, so the ids live
 // here. ⚠ Use these EXACT strings — they carry no date suffix, and appending one

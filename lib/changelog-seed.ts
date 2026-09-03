@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"bec3dd3c20c3f720dded8b24d7f5decb5913b41c","author":"Jordan Orange","date":"2026-09-03T16:03:47+01:00","subject":"Update opening message: staging only, reserves tablet fix, help box getEffectiveSession, lot-number top-up"},
   {"sha":"2508b3ac2c560404110149b655c5b50e764eba9c","author":"Jordan Orange","date":"2026-09-03T12:28:48+01:00","subject":"Refresh changelog seed"},
   {"sha":"a57e01a52a9c7aaf456c1cb2f15ccc222aaf08eb","author":"Jordan Orange","date":"2026-09-03T12:28:46+01:00","subject":"BC sync: re-read lot numbers - numbering doesn't bump the modified stamp"},
   {"sha":"fbe994716308fc4fcff527c7de68225d70e726fa","author":"Jordan Orange","date":"2026-09-03T12:10:26+01:00","subject":"Refresh changelog seed"},

@@ -6355,6 +6355,28 @@ export default function AuctionAIPage() {
   const [modelDetails,  setModelDetails]  = useState<Record<string, { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number }>>({})
   const [allowedSections, setAllowedSections] = useState<string[] | null>(null)
   const [sectionsLoaded,  setSectionsLoaded]  = useState(false)
+  const [adminFallback,   setAdminFallback]   = useState("")
+
+  // Somebody who has never touched the Fallback box starts on whatever
+  // Admin → AI Models is set to.
+  // ⚠ Only when they have NEVER chosen — hence testing for a missing key rather
+  // than a blank one. An explicit "— none —" is a decision and is left alone.
+  // Nothing is written back either, so the box keeps following the admin setting
+  // until the person picks for themselves.
+  useEffect(() => {
+    if (localStorage.getItem("ai_fallback_model") !== null) return
+    fetch("/api/ai-tool-model?slot=catalogue_batch")
+      .then(r => r.json())
+      .then(j => setAdminFallback(typeof j?.fallback === "string" ? j.fallback : ""))
+      .catch(() => {})
+  }, [])
+
+  // Applied only once the model list is in, so a fallback that has since been
+  // disabled can never leave the box rendering blank.
+  useEffect(() => {
+    if (!adminFallback || !modelList.includes(adminFallback)) return
+    setFallbackModel(cur => cur || adminFallback)
+  }, [adminFallback, modelList])
 
   useEffect(() => {
     fetch("/api/user/section-access/AUCTION_AI")

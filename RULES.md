@@ -994,3 +994,31 @@ The model each AI feature uses is configured in **Admin → AI Models** (`/admin
 - **When adding a new AI feature, add a slot to `AI_TOOLS`** and use `getToolModel` — don't invent a new hardcoded default.
 - The dropdowns reuse the enabled-models list from `/api/auction-ai/models` (which already respects the `DisabledModel` enable/disable toggles in Auction AI → Models). The two are complementary: Models tab = which models are *available*; AI Models = which model each *tool* defaults to.
 - ⚠ Google **retires** models (e.g. `gemini-2.0-flash` 404'd 2026-06-29 and broke auto-fix + 3 other routes that hardcoded it). With this config, a retirement is a one-click admin fix, not a code change. The current safe default is `gemini-3-flash-preview`.
+
+### The fallback model (2026-09-03)
+
+There is **one** fallback model for the whole app — the second model tried when the main one is
+rate limited, refuses a lot, or returns nothing. It is set on the same Admin → AI Models page and
+read with **`getFallbackModel()`** from `lib/ai-models.ts`.
+
+- It is stored in the **`ToolModel` table under the reserved key `_fallback`** (`FALLBACK_SLOT`).
+  Deliberate: it is a setting keyed by the thing configured, exactly like the per-tool rows, so it
+  needs **no schema change and no Run Migrations**. No row = no fallback. The reserved key never
+  leaves the server — the page posts a plain `fallback` field on `POST /api/admin/ai-models`.
+- ⚠⚠ **It is a DEFAULT, not an override.** It decides what a fallback picker OPENS ON. What a
+  queued overnight sale actually runs with is the value on **that sale's own row**
+  (`PipelineQueueItem.fallbackModel`), and the runner must never substitute for it — a sale
+  silently running on settings from a screen somewhere else is the exact bug the overnight queue
+  form was built to end. Changing it does not touch anything already queued.
+- Screens seed from it via **`GET /api/ai-tool-model?slot=<slot>`**, which returns
+  `{ model, fallback }`. The overnight queue form seeds both; the Auction AI sidebar seeds the
+  fallback only when the person has **never** chosen one (a missing localStorage key, not a blank
+  one — an explicit "— none —" is a decision). Neither writes the seeded value back, so the box
+  keeps following the admin setting until someone picks for themselves.
+- ⚠ The admin dropdown **never offers a Claude id**. One model is shared by every feature and most
+  of them send images or use Google Search, where `usable()` silently drops a Claude id — the same
+  reason "Apply to all" excludes them. A retired name is dropped by `getFallbackModel()` too, so a
+  picker seeded from it can never open on a dead model.
+- ⚠ **With no fallback set, "trying the other model" is a lie** — the retries all land on the same
+  model. The overnight runner's log says *"trying again — no fallback model set"* instead
+  (`hasFallback` on `withRetry`). Keep any new retry message honest the same way.

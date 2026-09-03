@@ -475,7 +475,12 @@ async function withRetry<T>(
   /** Filled in when this returns null, so the caller can record WHICH failure it was —
    *  a refusal and an empty answer are different things and must not share a status. */
   outcome?: { reason?: "blocked" | "empty"; rateLimited?: boolean },
+  /** Whether this sale has a fallback model at all. ⚠ Only for what the log SAYS:
+   *  with no fallback the retries all land on the same model, and the log claiming
+   *  "trying the other model" hid that a lot never got a real second chance. */
+  hasFallback = false,
 ): Promise<T | null> {
+  const otherModel = hasFallback ? "trying the other model" : "trying again — no fallback model set"
   let attempt = 0
   let lastError = ""
   let recitations = 0
@@ -524,7 +529,7 @@ async function withRetry<T>(
           : "nothing came back"
         if (empties < MAX_EMPTY_RETRIES) {
           empties++
-          addLog(`  ↻ ${label} — ${what}, trying the other model (${empties}/${MAX_EMPTY_RETRIES})`)
+          addLog(`  ↻ ${label} — ${what}, ${otherModel} (${empties}/${MAX_EMPTY_RETRIES})`)
           continue
         }
         addLog(`  ✗ ${label} — ${what} after ${MAX_EMPTY_RETRIES} tries, skipping`)
@@ -537,7 +542,7 @@ async function withRetry<T>(
         // and friends) will never pass, so skip the lot now.
         if (/RECITATION/i.test(lastError) && recitations < MAX_RECITATION_RETRIES) {
           recitations++
-          addLog(`  ↻ ${label} — RECITATION, trying the other model (${recitations}/${MAX_RECITATION_RETRIES})`)
+          addLog(`  ↻ ${label} — RECITATION, ${otherModel} (${recitations}/${MAX_RECITATION_RETRIES})`)
           continue
         }
         addLog(`  ✗ ${label} — ${blockReasonLabel(lastError)}, skipping`)
@@ -667,7 +672,7 @@ async function runStages(
         // whole test, and an answer with no description passed it.
         if (!String(r.description ?? "").trim()) throw new Error("The model returned no description.")
         return r
-      }, outcome)
+      }, outcome, !!item.fallbackModel)
 
       if (result) {
         const desc = result.description ?? ""
@@ -730,7 +735,7 @@ async function runStages(
         const json = await res.json()
         if (json.error) throw new Error(json.error)
         return json
-      }, kpOutcome)
+      }, kpOutcome, !!item.fallbackModel)
 
       if (result) {
         const { revised, changed, missing, added, flag } = result
@@ -807,7 +812,7 @@ async function runStages(
         const json = await res.json()
         if (json.error) throw new Error(json.error)
         return json
-      }, dcOutcome)
+      }, dcOutcome, !!item.fallbackModel)
 
       if (result) {
         const { verdict, contradictions, unsupported, revised, flag } = result
@@ -902,7 +907,7 @@ async function runUpgradeKind(
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       return json
-    }, upOutcome)
+    }, upOutcome, !!item.fallbackModel)
 
     if (result) {
       const revised = String(result.revised ?? "").trim()

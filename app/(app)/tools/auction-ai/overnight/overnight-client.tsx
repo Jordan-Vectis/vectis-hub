@@ -431,8 +431,33 @@ function QueueForm({
   useEffect(() => {
     fetch("/api/auction-ai/presets?full=1").then(r => r.json())
       .then(d => { if (Array.isArray(d)) setPresets(d) }).catch(() => {})
-    fetch("/api/auction-ai/models").then(r => r.json())
-      .then(j => { if (j.models?.length) { setModels(j.models); setModel(m => m || j.models[0]) } }).catch(() => {})
+
+    // ⚠ The form OPENS on what Admin → AI Models is set to, the same as the nine
+    // other model pickers in the app. It used to open on whatever Google's list
+    // happened to return first, so a sale queued without touching these boxes ran
+    // on an arbitrary model and the central setting was quietly ignored.
+    // Both are still per-sale choices — this only decides the starting point.
+    //
+    // One request each, awaited together, because the default has to WIN over the
+    // first-in-the-list stopgap: run separately, whichever landed first would stick.
+    Promise.all([
+      fetch("/api/auction-ai/models").then(r => r.json()).catch(() => ({})),
+      fetch("/api/ai-tool-model?slot=catalogue_batch").then(r => r.json()).catch(() => ({})),
+    ]).then(([list, dflt]) => {
+      const available: string[] = Array.isArray(list?.models) ? list.models : []
+      if (available.length) setModels(available)
+      // A model that has since been disabled is not offered, so it would render as
+      // an empty box. When the list itself failed to load we can't tell, so the
+      // configured value is trusted rather than thrown away.
+      const offered = (id: unknown): id is string =>
+        typeof id === "string" && !!id && (available.length === 0 || available.includes(id))
+
+      const main = offered(dflt?.model) ? dflt.model : (available[0] ?? "")
+      setModel(m => m || main)
+      // The fallback select excludes whatever the main model is, so seeding the two
+      // the same would leave the box blank while the state still held a value.
+      setFallbackModel(f => (f || (offered(dflt?.fallback) && dflt.fallback !== main ? dflt.fallback : "")))
+    })
   }, [])
 
   const already = useMemo(() => new Set(queuedByKind[kind].map(c => c.toUpperCase())), [queuedByKind, kind])

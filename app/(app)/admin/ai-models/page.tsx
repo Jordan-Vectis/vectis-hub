@@ -58,6 +58,10 @@ export default function AiModelsPage() {
   const [allModels, setAllModels] = useState<ModelRow[]>([]) // full list incl. disabled, with descriptions
   const [edits, setEdits]       = useState<Record<string, string>>({}) // slot -> chosen value ("" = use default)
   const [bulk, setBulk]         = useState<string>("")        // "Update all" selection
+  // The one app-wide fallback model. `savedFallback` is what the server holds,
+  // so an unsaved change shows as unsaved like every other edit on this page.
+  const [fallback, setFallback]           = useState("")
+  const [savedFallback, setSavedFallback] = useState("")
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState("")
@@ -84,6 +88,8 @@ export default function AiModelsPage() {
       if (tr.error) throw new Error(tr.error)
       setTools(tr.tools ?? [])
       setEdits(Object.fromEntries((tr.tools ?? []).map((t: Tool) => [t.slot, t.configured ?? ""])))
+      setFallback(tr.fallback ?? "")
+      setSavedFallback(tr.fallback ?? "")
       setAllModels(mr.models ?? [])
       setOverrides(rr?.overrides ?? {})
       setRateEdits({})
@@ -101,8 +107,8 @@ export default function AiModelsPage() {
     [allModels],
   )
   const dirty = useMemo(
-    () => tools.some((t) => (edits[t.slot] ?? "") !== (t.configured ?? "")),
-    [tools, edits],
+    () => tools.some((t) => (edits[t.slot] ?? "") !== (t.configured ?? "")) || fallback !== savedFallback,
+    [tools, edits, fallback, savedFallback],
   )
   const enabledCount = allModels.filter((m) => m.enabled).length
 
@@ -128,7 +134,9 @@ export default function AiModelsPage() {
       const r = await fetch("/api/admin/ai-models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ updates }),
+        // Only send the fallback when it actually changed — omitting the field
+        // leaves it untouched, so saving a tool can never clear it.
+        body: JSON.stringify({ updates, fallback: fallback !== savedFallback ? fallback : undefined }),
       })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || "Save failed")
@@ -259,6 +267,32 @@ export default function AiModelsPage() {
               Apply to all
             </button>
             <span className="text-xs text-gray-500 dark:text-gray-500">then Save below</span>
+          </div>
+
+          {/* ── The one fallback model, used by every AI feature ── */}
+          <div className="mb-5 rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Fallback model:</span>
+              <select
+                value={fallback}
+                onChange={(e) => setFallback(e.target.value)}
+                className="text-sm rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] text-gray-800 dark:text-gray-200 px-2 py-1.5 max-w-[18rem]"
+              >
+                <option value="">None — keep trying the same model</option>
+                {/* Never Claude: this one model is shared by every feature, and most of
+                    them send images or use Google Search, where a Claude id is ignored. */}
+                {optionsFor(isClaude(fallback) ? "" : fallback).filter((m) => !isClaude(m)).map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <span className="text-xs text-gray-500 dark:text-gray-500">then Save below</span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2 leading-relaxed">
+              The second model to try when the main one is busy, refuses a lot, or sends nothing back. Runs swap
+              between the two on each retry, so a lot gets a genuine second chance instead of the same model four
+              times over. Screens with a Fallback box — the overnight runs, Auction AI — open on this; each run can
+              still be given a different one.
+            </p>
           </div>
 
           {/* Per-tool config */}
