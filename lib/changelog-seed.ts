@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a57e01a52a9c7aaf456c1cb2f15ccc222aaf08eb","author":"Jordan Orange","date":"2026-09-03T12:28:46+01:00","subject":"BC sync: re-read lot numbers - numbering doesn't bump the modified stamp"},
+  {"sha":"fbe994716308fc4fcff527c7de68225d70e726fa","author":"Jordan Orange","date":"2026-09-03T12:10:26+01:00","subject":"Refresh changelog seed"},
   {"sha":"b1f66c9adc80a79b568912f8ccd8a1320b2ce005","author":"Jordan Orange","date":"2026-09-03T12:10:24+01:00","subject":"Reserve on the tablet - and stop partial forms wiping it"},
   {"sha":"7dd4dbbdb3244ea87d4ecf235082d2ef9a08d9b1","author":"Jordan Orange","date":"2026-09-03T11:07:37+01:00","subject":"Refresh changelog seed"},
   {"sha":"5bc9cd583cf26713fcc2a32ebb10911d00841291","author":"Jordan Orange","date":"2026-09-03T11:07:33+01:00","subject":"Reserves: drop the column, the lot editor already had the field"},
