@@ -77,6 +77,27 @@ fine"* (2026-09-02). **Do not put it back.**
 reserves that cannot be entered yet). **Jordan chose Locking Check** because it is the screen he
 actually runs at the end — don't move it without asking.
 
+
+## The tablet has it too — and it was silently wiping it (2026-09-03)
+
+Jordan: *"Is it in the tablet version as well? I just need the reserve option when clicking on a
+lot."* It was not, and that turned out to matter for more than convenience.
+
+\`TabletLotEdit\` saves through \`updateLot\`, and **\`extractLotData\` turns a field the form does not
+contain into \`null\`** — so every tablet save was clearing \`reserve\` **and \`startingBid\`**, neither
+of which that form has ever shown. A reserve typed on the desktop and the lot then opened on an
+iPad would have lost it without a word.
+
+⚠ It had never bitten only because **no lot in the database had either value** (0 of 14,706
+measured on the day), which is exactly why it would have started biting the week reserves went in.
+
+Two fixes, both kept:
+1. The tablet lot editor now has a **Reserve £** field under the estimates (what was asked for).
+2. ⚠⚠ **\`updateLot\` now preserves \`startingBid\` and \`reserve\` when the form omits them**, the same
+   guard \`receiptUniqueId\` already had. Fixed there rather than by adding fields to one form, so
+   no FUTURE partial form can do it either. **Add any new "not on every form" column to that
+   list.**
+
 Related: [[reference_locking_check]], [[reference_manage_lots_bulk_undo]],
 [[reference_bc_lock_and_in_bc_column]].
 `,

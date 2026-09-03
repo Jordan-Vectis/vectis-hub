@@ -38,6 +38,7 @@ interface Lot {
   description: string
   estimateLow: number | null
   estimateHigh: number | null
+  reserve: number | null
   condition: string | null
   vendor: string | null
   tote: string | null
@@ -698,6 +699,14 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
             <label className={lbl}>Est. High £</label>
             <input name="estimateHigh" defaultValue={lot.estimateHigh ?? ""} type="number" className={inp} />
           </div>
+        </div>
+
+        {/* Reserve — the same field the desktop lot editor has (Jordan, 2026-09-03: "I just need
+            the reserve option when clicking on a lot" on the tablet). Locking Check lists the
+            lots carrying one as a reminder to type it into BC. */}
+        <div>
+          <label className={lbl}>Reserve £</label>
+          <input name="reserve" defaultValue={lot.reserve ?? ""} type="number" min="0" className={inp} />
         </div>
 
         {/* Category */}

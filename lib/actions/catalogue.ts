@@ -1390,7 +1390,20 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
   // overwriting it with null — which is what happens when the wizard is saved without the field.
   const hasUniqueIdField = formData.has("receiptUniqueId")
   const { receiptUniqueId, ...dataWithoutUniqueId } = data
-  const updateData = hasUniqueIdField ? data : dataWithoutUniqueId
+  const updateData: Record<string, any> = hasUniqueIdField ? { ...data } : { ...dataWithoutUniqueId }
+
+  // ⚠⚠ THE SAME TRAP AS receiptUniqueId ABOVE, FOR THE MONEY FIELDS. `extractLotData` turns an
+  // absent form field into `null`, so ANY partial form silently wipes what it does not show. The
+  // tablet lot editor has never had `startingBid` or `reserve` on it, so every tablet save was
+  // clearing both — it has simply never bitten, because until reserves went in on 2026-09-02 no
+  // lot in the database had either (0 of 14,706 measured). A reserve typed on the desktop and a
+  // lot then opened on a tablet would have lost it silently.
+  //
+  // ⚠ Fixed here rather than by adding fields to that one form, so no FUTURE partial form can do
+  // it either. Add any new "not on every form" column to this list.
+  for (const field of ["startingBid", "reserve"] as const) {
+    if (!formData.has(field)) delete updateData[field]
+  }
 
   const old = await prisma.catalogueLot.findUnique({
     where: { id: lotId },

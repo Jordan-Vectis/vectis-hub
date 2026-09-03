@@ -52,6 +52,7 @@ export default async function TabletAuctionDetailPage({
         description: l.description,
         estimateLow: l.estimateLow,
         estimateHigh: l.estimateHigh,
+        reserve: l.reserve,
         condition: l.condition,
         vendor: l.vendor,
         tote: l.tote,
