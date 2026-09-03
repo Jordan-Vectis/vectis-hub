@@ -1880,122 +1880,142 @@ Sanity-checked on real shapes: 340 lots × 6 photos ≈ **$0.88** on Gemini 2.5 
   {
     filename: "admin_centre.md",
     content: `---
-name: Admin Centre (/tools/lot-lookup) - ONE page, four buttons, big UI
-purpose: The Admin Centre is a SINGLE page - four search-by buttons (Receipt, Tote, Customer, Sale or lot), one box, results inline. The tabs are gone. Deliberately oversized for non-technical admins. Read before touching it.
-last_updated: 2026-08-18
+name: admin-centre-tools-lot-lookup-two-tabs-big-ui
+description: "The Admin Centre is ONE page — four search-by buttons, one box, results inline (the tabs are gone). Deliberately oversized for non-technical admins. Read before touching it."
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: c5a09995-0022-4b33-8218-d1004dee3512
+  modified: 2026-08-04T14:38:13.483Z
 ---
 
-# Admin Centre — /tools/lot-lookup (rebuilt 2026-08-04, third tab 2026-08-06)
+# Admin Centre — /tools/lot-lookup (rebuilt 2026-08-04)
 
-Gated on the **\`ADMIN_CENTRE\`** app key via \`hasAppAccess\` — the page redirect **and** both API routes check it.
+Gated on the **\`ADMIN_CENTRE\`** app key via \`hasAppAccess\` (see [[reference_app_access_control]]) — page redirect **and** both API routes check it.
 
 ## ⚠ The audience is the design constraint
 
-The brief: *"this is getting used by non technical admins so really make everything nice and big and clear."* So this tool deliberately **breaks the Hub's usual 10–12px table style**: base/lg body text, \`py-3\` table rows, \`px-8 py-8\` answer panels, 2px borders, big hit targets, and plain-English wording ("Where from", "Changed to", "Not recorded") instead of raw field/source keys. Shared classes live in **\`app/(app)/tools/lot-lookup/ui.ts\`** — use them rather than re-styling, and **don't "tidy" this back down to the compact house style.** Full width (\`max-w-[1800px] mx-auto\`).
+Jordan's words: *"this is getting used by non technical admins so really make everything nice and big and clear."* So this tool deliberately **breaks the Hub's usual 10–12px table style**: base/lg body text, \`py-3\` table rows, \`px-8 py-8\` answer panels, 2px borders, big hit targets, and plain-English wording ("Where from", "Changed to", "Not recorded") instead of field/source keys. Shared classes live in **\`app/(app)/tools/lot-lookup/ui.ts\`** — use them rather than re-styling, and **don't "tidy" this back down to the compact house style.** Full width (\`max-w-[1800px] mx-auto\`), per [[feedback_full_width]].
 
-## ⚠⚠ ONE PAGE, FIVE BUTTONS - THE TABS ARE GONE (2026-08-18)
+## ⚠⚠ ONE PAGE, FIVE BUTTONS — the tabs are gone (2026-08-18)
 
-Jordan: "I want to combine all the options on this page to be a single page so keep the find a customers lots and the 3 options but all the data needs to show up on a single page. We also need to be able to search by auction and lot number on the first page. I want to make this as simple and idiot proof as possible." Asked which shape, he chose "Keep the 3 buttons and add a new one for lot number/auction", then on seeing it: "this needs to be like how it was before with a drop down list of the auctions and then an optional lot number box."
+Jordan: *"I want to combine all the options on this page to be a single page so keep the find a customers lots and the 3 options but all the data needs to show up on a single page. We also need to be able to search by auction and lot number on the first page. I want to make this as simple and idiot proof as possible."* Asked which shape, he chose **"Keep the 3 buttons and add a new one for lot number/auction"**, then on seeing it: **"this needs to be like how it was before with a drop down list of the auctions and then an optional lot number box."**
 
-It was three tabs, each hiding the other two and each with its own search box - so you had to know which tab answered your question before you could ask it. Now ONE page: pick what you have, fill in the one thing it asks for, and the answer renders underneath.
+It was three tabs, each hiding the other two and each with its own search box — so you had to know which tab answered your question before you could ask it. Now **one page**: pick what you have, fill in the one thing it asks for, and the answer renders underneath.
 
-- Receipt number / Tote number / Customer number -> one box -> FindLotsTab
-- SALE AND LOT NUMBER -> a DROPDOWN of real BC sales plus an OPTIONAL lot number -> BySaleTab (filtered to the lot when given)
-- BARCODE -> one box (barcode or unique ID) -> WhoCataloguedTab
+| Button | Asks for | Renders |
+|---|---|---|
+| Receipt number · Tote number · Customer number | one box | \`FindLotsTab\` |
+| **Sale and lot number** | a **dropdown of real BC sales** + an **optional** lot number | \`BySaleTab\` (filtered to the lot when given) |
+| **Barcode** | one box (barcode or unique ID) | \`WhoCataloguedTab\` |
 
-⚠ EACH BUTTON ASKS FOR EXACTLY ONE KIND OF THING - that is the design. A single "sale or lot" box was built first, with a parser that read F109 / F109 400 / F109400; Jordan rejected it in favour of the dropdown, because a box where you must know which of three formats to type is the opposite of idiot-proof. parseLotQuery was DELETED - don't reintroduce it. The sale list is fetched once from /api/lot-lookup/sale?sales=1 the first time that button is opened, so every code offered is one that actually has lots; a free-text fallback stays underneath for a brand-new sale or if the list fails to load.
+⚠ **EACH BUTTON ASKS FOR EXACTLY ONE KIND OF THING** — that is the design. A single "sale or lot" box was built first, with a parser that read \`F109\` / \`F109 400\` / \`F109400\`; Jordan rejected it in favour of the dropdown, because a box where you must know which of three formats to type is the opposite of idiot-proof. **\`parseLotQuery\` was deleted — don't reintroduce it.** The sale list is fetched once from \`/api/lot-lookup/sale?sales=1\` the first time that button is opened, so every code offered is one that actually has lots; a free-text fallback stays underneath for a brand-new sale or if the list fails to load.
 
-- ⚠ The three tab components still hold ALL the rendering and their result markup was deliberately left untouched - it is the part checked against real BC data. lookup-client.tsx passes each a 'controlled' prop, which hides that component's own search card and runs the query given to it. A 'nonce' bumps on every Search press so pressing it twice re-runs the same query.
-- ⚠ Their search() functions now take the query as ARGUMENTS (search(q, mode)), not from state - a controlled run happens in the same tick the props arrive, when state still holds the previous search.
-- ⚠ onClick={search} had to become onClick={() => search()}: with an argument-taking search, the bare form passes the MOUSE EVENT as the query. TypeScript caught it; it would have searched for [object Object].
+- ⚠ The three tab components still hold ALL the rendering and their result markup was deliberately left untouched — it is the part checked against real BC data. \`lookup-client.tsx\` passes each a **controlled** prop, which hides that component's own search card and runs the query given to it. A **nonce** bumps on every Search press so pressing it twice re-runs the same query.
+- ⚠ Their \`search()\` functions now take the query as **arguments** (\`search(q, mode)\`), not from state — a controlled run happens in the same tick the props arrive, when state still holds the previous search.
+- ⚠ \`onClick={search}\` had to become \`onClick={() => search()}\`: with an argument-taking search, the bare form passes the **MouseEvent as the query**. TypeScript caught it; it would have searched for \`[object Object]\`.
 
-## ⚠⚠ WHAT THIS TOOL IS FOR - READ THIS BEFORE CHANGING ANYTHING HERE
+## ⚠⚠ WHAT THIS TOOL IS FOR — read this before changing anything here
 
-Jordan, 2026-08-18, after several rounds of patching the layout without knowing the job: "we obviously get customers who ring in asking questions about there totes and lots like what auction they are in etc so the point of the admin centre is 1 hub to search to find all these answers", "Our admins are not great with computers so this all needs to be simple as possible", and the decisive one: "this customer... had some of her lots made directly in BC and some made in our system. All the admin needs to know is what auction the lots are going into, they might need to know who catalogued it and details like that. So if a lot starts in our system you can use that as what auctions its in using our own dates and sale names; if its a BC only thing that needs to be pulled in as well."
+Jordan, 2026-08-18, after several rounds of me patching the layout without knowing the job: *"we obviously get customers who ring in asking questions about there totes and lots like what auction they are in etc so the point of the admin centre is 1 hub to search to find all these answers"*, *"Our admins are not great with computers so this all needs to be simple as possible"*, and the decisive one:
 
-SO: ONE LIST OF THE CUSTOMER'S LOTS, GROUPED BY THE AUCTION THEY ARE GOING INTO, AND THE ADMIN NEVER NEEDS TO KNOW WHICH SYSTEM A LOT CAME FROM. Anything that exposes the Hub-vs-BC split is a bug in this screen, however accurate it is.
+> *"this customer... had some of her lots made directly in BC and some made in our system. All the admin needs to know is what auction the lots are going into, they might need to know who catalogued it and details like that. So if a lot starts in our system you can use that as what auctions its in using our own dates and sale names; if its a BC only thing that needs to be pulled in as well."*
 
-⚠⚠ BC's auctionCode IS OFTEN A HOLDING PEN, NOT AN AUCTION. Measured on production 2026-08-18: A995 "Temp F109 Bears" (570 items), A992 "Temp F110 - Dolls and bears day 2" (424), A999 "Lost/Missing/Re-Receipted & Lots with BC Issues" (130), A996 "Temp F119 Trains" (2), A998 "Unsold Mover" (2). Grouping by BC's field put "A995 - Temp F109 Bears - 1 Jan 2099" on screen as though it were a sale. For customer C223610 that produced THREE groups - 93 placeholder lots in a fake auction, 49 in F109, 1 loose - for what is really ONE sale.
+**So: one list of the customer's lots, grouped by the auction they are going into, and the admin NEVER needs to know which system a lot came from.** Anything that exposes the Hub↔BC split is a bug in this screen, however accurate it is.
 
-⚠ THE BARCODE NAMES THE SALE, AND BEATS BC's FIELD. F109034 -> F109. Measured across the 211,229 BC rows with a real auction code, the barcode prefix agrees 199,901 times (94.6%), and ALL 692 A995 placeholders carry an F109 barcode - the sale they are actually for.
+### ⚠⚠ BC's \`auctionCode\` is often a HOLDING PEN, not an auction
 
-resolveSale() in the route therefore goes: OUR auction if we catalogued it -> else the sale the barcode names PROVIDED WE HOLD THAT SALE (self-validating; a stray prefix cannot invent one) -> else BC's code ONLY if it is not a holding pen -> else "Not in a sale yet". The name and date always come from OUR CatalogueAuction record once the code is known. Result for C223610: 142 lots under "F109 Dolls & Bears - Day 1", plus the one genuinely unallocated.
+Measured on production 2026-08-18 — the A9xx codes are:
 
-⚠ A999 is the exception that DOES matter - it is BC's problem pile, so needsAttention marks those rows and their sale block amber. Don't lump it in with the Temps.
+| Code | Name | Items |
+|---|---|---|
+| A995 | Temp F109 Bears | 570 |
+| A992 | Temp F110 - Dolls and bears day 2 | 424 |
+| A999 | Lost/Missing/Re-Receipted & Lots with BC Issues | 130 |
+| A996 | Temp F119 Trains | 2 |
+| A998 | Unsold Mover | 2 |
 
-⚠⚠ THE HUB ALWAYS WINS - BC IS ONLY EVER THE BACKUP. Jordan, 2026-08-18: "the lot is in the hub which it should always be using first and only checking BC for backups - if there is overlaps the hub should always win."
+Grouping by BC's field put **"A995 · Temp F109 Bears · 1 Jan 2099"** on screen as though it were a sale. For customer C223610 that produced three groups — 93 placeholder lots in a fake auction, 49 in F109, 1 loose — for what is really **one sale**.
 
-⚠⚠ THE REAL ROOT CAUSE - THE SYNC NEVER DELETES (corrected 2026-08-18, after Jordan showed BC's own screen). The "duplicate barcodes" were mostly GHOSTS: rows DELETED in live BC that our upsert-only sync kept forever. Verified against live BC: receipt R008537 returns 50 rows live but our cache held 143 - the 93 extras were A995 temp lines BC deleted when the items were re-receipted, whose barcodes now belong to other customers' lots. ~1,800 A9xx rows cache-wide had the same shape. FIXED AT THE SOURCE: Data Sync stage 8 (sync/reconcile-deleted) - checks each suspect receipt (any with an A9xx row) against LIVE BC and removes what BC no longer has; deletes NOTHING on an empty or failed BC answer; also runs at the end of the nightly bc-warehouse cron. The display-level guards below stay as belt-and-braces for the window before a sync has run. Two display consequences, both fixed: (1) pickBcFor() - matching a Hub lot to a BC row on barcode alone used a Map, so WHICHEVER ROW WAS WRITTEN LAST WON and a lot could display A DIFFERENT CUSTOMER's BC record; the RECEIPT now decides, the customer is the second check, and an ambiguous barcode attaches to NOTHING rather than guessing. (2) IF THE HUB KNOWS THE BARCODE AT ALL, A LEFTOVER BC ROW FOR IT IS DROPPED - not shown, and not merged in. Measured on tote T024817 (receipt R008537, Lita Morgan): 142 BC rows, 110 of whose barcodes the Hub holds - only 17 genuinely on that tote, and 93 belonging to lots on receipt R009145, tote P006301, customer Nicola Johnson. Either way the BC row is wrong: if the Hub lot is in this search the real row is already there, and if it is not, the item is not on this receipt at all. ⚠ A FIRST ATTEMPT IMPORTED the Hub lot's details onto those rows instead of dropping them - which dragged another customer's tote (P006301) onto the screen and made it look worse, not better. "The Hub wins" means the Hub's PLACEMENT wins too. ⚠ The dropped count is REPORTED ON SCREEN (phantoms in the response), never silently swallowed - design rule 7.
+### ⚠ The BARCODE names the sale, and beats BC's field
 
-⚠ "CATALOGUED BY" - BC KEEPS THE NAME IN THREE FIELDS AND THE OBVIOUS ONE IS USUALLY EMPTY. EVA_CataloguedBy is a short code ("KS") and is BLANK ON TENS OF THOUSANDS OF LINES. Sampling 200 catalogued lines with a blank one: 98 had EVA_CataloguedByUser, ALL 200 had EVA_CreatedBy - both Windows usernames ("ANNABELL.FENBY"). Synced as cataloguedByUser / bcCreatedBy (NEEDS Run Migrations AND a receipt-lines Data Sync before they hold anything). bcPersonName(cataloguedBy, cataloguedByUser, createdBy) in lib/cataloguer-directory.ts is the ONE place that turns any of them into a person: the code through CATALOGUER_DIRECTORY, then a username matched to a directory EMAIL local-part (jake.kenyon@... = JAKE.KENYON), then title-cased as a last resort. The Hub's own createdByName still wins over all of it.
+\`F109034\` → \`F109\`. Measured across the **211,229** BC rows with a real auction code, the barcode prefix agrees **199,901 times (94.6%)**, and **all 692 A995 placeholders carry an F109 barcode** — the sale they are actually for.
 
-⚠ THE ROW SHOWS THE ANSWER, NOT THE PLUMBING. Columns are Lot / Item / Tote / Catalogued by / Where it is up to. The old "1 - In the Hub" / "2 - In Business Central" pair, the "In BC" / "Never catalogued here" cells and the "17 in both / 32 BC only" chips are GONE - they were internal state dressed up as an answer. The lot number leads, because that is what a customer rings up asking for.
+**\`resolveSale()\` in the route therefore goes:** our auction if we catalogued it → else the sale the barcode names **provided we hold that sale** (self-validating; a stray prefix can't invent one) → else BC's code **only if it isn't a holding pen** → else "Not in a sale yet". The name and date always come from **our** \`CatalogueAuction\` record once the code is known. Result for C223610: **142 lots under "F109 Dolls & Bears - Day 1"**, plus the one genuinely unallocated.
 
-⚠ formatSaleDate now blanks dates more than 5 YEARS IN THE FUTURE as well as pre-1990 ones. BC uses 0001-01-01 for "no date" on real rows and 2099-01-01 on the holding pens, and the latter was printing as "1 Jan 2099".
+⚠ \`A999\` is the exception that DOES matter — it is BC's problem pile, so \`needsAttention\` marks those rows and their sale block amber. Don't lump it in with the Temps.
 
-## ⚠ THE RESULTS LAYOUT: TOTES FIRST, THEN THE SALES (2026-08-18)
+### ⚠⚠ THE HUB ALWAYS WINS — BC is only ever the backup
 
-Jordan: "For starters remove the how a lot gets here section. Then in its place we should have a totes section... So based off whatever you search it smart matches to find everything a customer may have. The tote table needs to just have the tote number the date it was created the main and sub category and if it had been ticked as catalogued. Then underneath that a table of all the auctions with a expandable list that shows all the lots and details we have now." He also had the three stat tiles removed (in both / not yet in BC / BC only).
+Jordan, 2026-08-18: *"the lot is in the hub which it should always be using first and only checking BC for backups — if there is overlaps the hub should always win."*
 
-GONE: the "How a lot gets here" explainer panel, and the three Stat tiles (the Stat helper was deleted with them).
+**⚠⚠ THE REAL ROOT CAUSE — the sync never deletes (corrected 2026-08-18, after Jordan showed BC's own screen).** The "duplicate barcodes" were mostly GHOSTS: rows **deleted in live BC** that our upsert-only sync kept forever. Verified against live BC: receipt R008537 returns **50** rows live but our cache held **143** — the 93 extras were A995 temp lines BC deleted when the items were re-receipted, whose barcodes now belong to other customers' lots. ~1,800 A9xx rows cache-wide had the same shape. **Fixed at the source: Data Sync stage 8 (\`sync/reconcile-deleted\`)** — checks each suspect receipt (any with an A9xx row) against LIVE BC and removes what BC no longer has; deletes nothing on an empty or failed BC answer; also runs at the end of the nightly bc-warehouse cron. The display-level guards below stay as belt-and-braces for the window before a sync has run:
 
-TOTES TABLE, FIRST. Tote / Created / Category / Sub-category / Catalogued, with a count and a catalogued-vs-still-to-do split in the header. Shown for EVERY search type, not just a tote search - receipt gives every tote on that receipt, tote gives the whole receipt so its siblings show, customer gives every tote for that customer number.
+Two display consequences, both fixed:
 
-⚠ WarehouseTote.category / subCategory are NEW COLUMNS (NEEDS Run Migrations), filled by sync/totes-all from the eva/tot custom API. ⚠ The field names - articleCategory / articleSubcategory - were READ OFF A LIVE BC ROW, not guessed. bcTotApiUrl(token, "receiptTotes") returns camelCase: receiptNo, toteNo, vendorNo, articleCategory, articleSubcategory, articleSubcategory2, contentsDescription, catalogued, cataloguedAt, cataloguedBy, toteLocation, systemCreatedAt. Both columns are written behind an information_schema guard - the same deploy-before-migration pattern bcCreatedAt already used - and the lookup route falls back to a select without them. THE CATEGORIES STAY BLANK until a totes-all sync has run since the migration.
+1. **\`pickBcFor()\`** — matching a Hub lot to a BC row on barcode alone used a Map, so **whichever row was written last won** and a lot could display **a different customer's** BC record. The **receipt** now decides, the customer is the second check, and an ambiguous barcode attaches to **nothing** rather than guessing.
+2. **If the Hub knows the barcode at all, a leftover BC row for it is DROPPED — not shown, and not merged in.** Measured on tote **T024817** (receipt R008537, Lita Morgan): 142 BC rows, 110 of whose barcodes the Hub holds — only **17** genuinely on that tote, and **93** belonging to lots on receipt **R009145, tote P006301, customer Nicola Johnson**. Either way the BC row is wrong: if the Hub lot is in this search the real row is already there, and if it isn't, the item is not on this receipt at all.
 
-⚠ The date shown is bcCreatedAt (BC's systemCreatedAt), NOT syncedAt - 20,182 of 21,789 totes have one.
+   ⚠ **A first attempt IMPORTED the Hub lot's details onto those rows instead of dropping them** — which dragged another customer's tote (P006301) onto the screen and made it look worse, not better. "The Hub wins" means the Hub's *placement* wins too. ⚠ The dropped count is **reported on screen** (\`phantoms\` in the response), never silently swallowed — design rule 7.
 
-⚠ THE TOTES TABLE SCROLLS INSIDE ITSELF (max-h-[26rem], sticky header). A busy customer has hundreds of totes - measured 341 on C002603 - and an unbounded table pushes the sales section, the other half of the answer, off the screen.
+### ⚠ "Catalogued by" — BC keeps the name in three fields, and the obvious one is usually empty
 
-## ⚠ SALE GROUPS ARE COLLAPSED BY DEFAULT (2026-08-18)
+\`EVA_CataloguedBy\` is a short code ("KS") and is **blank on tens of thousands of lines**. Sampling 200 catalogued lines with a blank one: **98** had \`EVA_CataloguedByUser\`, **all 200** had \`EVA_CreatedBy\` — both Windows usernames ("ANNABELL.FENBY"). Synced as \`cataloguedByUser\` / \`bcCreatedBy\` (NEEDS Run Migrations **and** a receipt-lines Data Sync before they hold anything).
 
-Jordan: "Just show all the sales they have lots in and how many then make the list expandable to see all the details of the individual lots?" A customer's lots can span a dozen sales and hundreds of rows, and the first question is WHICH SALES their stuff is in, not show me every lot.
+**\`bcPersonName(cataloguedBy, cataloguedByUser, createdBy)\`** in \`lib/cataloguer-directory.ts\` is the one place that turns any of them into a person: the code through \`CATALOGUER_DIRECTORY\`, then a username matched to a directory **email** local-part (\`jake.kenyon@…\` ↔ \`JAKE.KENYON\`), then title-cased as a last resort. The Hub's own \`createdByName\` still wins over all of it.
 
-So in Find lots each auction band is a BUTTON: code, name, date, item count and the in-both / not-in-BC / BC-only counts, with "Show the N lots" on the right. The item table is hidden until it is opened.
+### ⚠ The row shows the answer, not the plumbing
 
-⚠ A result with only ONE sale OPENS ITSELF (open[key] ?? groups.length === 1) - collapsing a single answer is just a click in the way. A new search resets everything to collapsed. An "Open them all" / "Collapse them all" button appears once there is more than one sale, next to a summary line that now leads with the number of SALES.
+Columns are **Lot · Item · Tote · Catalogued by · Where it is up to**. The old "1 · In the Hub" / "2 · In Business Central" pair, the "✓ In BC" / "✗ Never catalogued here" cells and the "17 in both · 32 BC only" chips are **gone** — they were internal state dressed up as an answer. The lot number leads, because that is what a customer rings up asking for.
+
+⚠ \`formatSaleDate\` now blanks dates more than **5 years in the future** as well as pre-1990 ones. BC uses \`0001-01-01\` for "no date" on real rows and \`2099-01-01\` on the holding pens, and the latter was printing as "1 Jan 2099".
+
+## ⚠ The results layout: TOTES first, then the sales (2026-08-18)
+
+Jordan: *"For starters remove the how a lot gets here section. Then in its place we should have a totes section... So based off whatever you search it smart matches to find everything a customer may have. The tote table needs to just have the tote number the date it was created the main and sub category and if it had been ticked as catalogued. Then underneath that a table of all the auctions with a expandable list that shows all the lots and details we have now."* He also had the three stat tiles removed (in both / not yet in BC / BC only).
+
+**Gone:** the "How a lot gets here" explainer panel, and the three \`Stat\` tiles (the \`Stat\` helper was deleted with them).
+
+**Totes table, first.** Tote · Created · Category · Sub-category · Catalogued, with a count and a catalogued/still-to-do split in the header. It is shown for **every** search type, not just a tote search — receipt → every tote on that receipt, tote → the whole receipt so its siblings show, customer → every tote for that customer number.
+
+⚠ **\`WarehouseTote.category\` / \`subCategory\` are new columns** (NEEDS Run Migrations), filled by **\`sync/totes-all\`** from the eva/tot custom API. ⚠ The field names — **\`articleCategory\` / \`articleSubcategory\`** — were **read off a live BC row**, not guessed (\`bcTotApiUrl(token, "receiptTotes")\` returns camelCase: \`receiptNo\`, \`toteNo\`, \`vendorNo\`, \`articleCategory\`, \`articleSubcategory\`, \`articleSubcategory2\`, \`contentsDescription\`, \`catalogued\`, \`cataloguedAt\`, \`cataloguedBy\`, \`toteLocation\`, \`systemCreatedAt\`). Both columns are written behind an \`information_schema\` guard, the same deploy-before-migration pattern \`bcCreatedAt\` already used, and the lookup route falls back to a select without them. **The categories stay blank until a totes-all sync has run since the migration.**
+
+⚠ **The date is \`bcCreatedAt\`** (BC's \`systemCreatedAt\`), not \`syncedAt\` — 20,182 of 21,789 totes have one.
+
+⚠ **The totes table scrolls inside itself** (\`max-h-[26rem]\`, sticky header). A busy customer has hundreds of totes — measured 341 on C002603 — and an unbounded table pushes the sales section, the other half of the answer, off the screen.
+
+## ⚠ Sale groups are COLLAPSED by default (2026-08-18)
+
+Jordan: *"Just show all the sales they have lots in and how many then make the list expandable to see all the details of the individual lots?"* A customer's lots can span a dozen sales and hundreds of rows, and the first question is *which sales is their stuff in*, not *show me every lot*.
+
+So in **Find lots** each auction band is a **button**: code · name · 📅 date · item count · the in-both / not-in-BC / BC-only counts, with "Show the N lots" on the right. The item table is hidden until it is opened.
+
+⚠ **A result with only ONE sale opens itself** (\`open[key] ?? groups.length === 1\`) — collapsing a single answer is just a click in the way. A new search resets everything to collapsed. An **"Open them all" / "Collapse them all"** button appears once there is more than one sale, next to a summary line that now leads with the number of **sales**.
 
 ## The files
 
 | File | What |
 |---|---|
-| \`lookup-client.tsx\` | shell + the two big tab buttons (\`useState\`, no URL param) |
+| \`lookup-client.tsx\` | the single page: four search-by buttons, one input, \`parseLotQuery\`, and the result sections |
 | \`find-lots-tab.tsx\` | the original receipt / tote / customer lookup, redesigned |
-| \`who-catalogued-tab.tsx\` | one lot in, one name out |
-| \`by-sale-tab.tsx\` | pick a sale, search it by BC lot number (2026-08-06) |
+| \`who-catalogued-tab.tsx\` | one lot in, who catalogued it out |
+| \`by-sale-tab.tsx\` | a whole sale by BC lot number, with the Hub's cataloguer against each |
 | \`ui.ts\` | shared classes + the plain-English label maps + date formatting |
-| \`app/api/lot-lookup/route.ts\` | the cross-system search (behaviour unchanged) |
-| \`app/api/lot-lookup/who/route.ts\` | one lot in, who catalogued it out |
-| \`app/api/lot-lookup/sale/route.ts\` | new — a whole sale by BC lot number (2026-08-06) |
+| \`app/api/lot-lookup/route.ts\` | the cross-system search (unchanged behaviour) |
+| \`app/api/lot-lookup/who/route.ts\` | new — one lot in, who catalogued it out |
 
-## Tab 2 — "Who catalogued this lot?"
+## "Who catalogued this lot?" (the \`lot\` button, barcode/unique-ID form)
 
 Scan/type a **barcode** (\`F066001\`) **or a unique ID** (\`R000016-413\`) — both identifier fields are matched, non-ASCII stripped first (scanners emit junk). Returns a **list**, because the same barcode can legitimately appear in more than one sale.
 
 Three layers of answer, in this order:
-1. **\`CatalogueLot.createdByName\` is the authoritative answer** — the huge name at the top, with \`createdAt\`. It is blank on old/imported lots; the card explains that in plain English rather than showing nothing.
+1. **\`CatalogueLot.createdByName\` is the authoritative answer** — the huge name at the top, with \`createdAt\`. Blank on old/imported lots; the card says so in plain English rather than showing nothing.
 2. **What BC says** — \`WarehouseItem.catalogued\` / \`cataloguedBy\` / \`cataloguedAt\`. ⚠ BC stores a **staff CODE** ("KS"), so it is resolved through **\`lookupCataloguerByCode\`** (\`lib/cataloguer-directory.ts\`) — never show the raw initials. The same resolution was added to the **Find lots** tab's BC table.
-3. **Everyone who has changed it since** — grouped from **\`CatalogueLotEvent\`** (the Lot Change Log audit trail) with a "Show the full history" table. ⚠ That log only covers lots edited **since 1 July 2026**, so "no changes recorded" is normal for older lots and the UI says so.
+3. **Everyone who has changed it since** — grouped from **\`CatalogueLotEvent\`** (the [[reference_lot_change_log]] audit trail) with a "Show the full history" table. ⚠ That log only covers lots edited **since 1 July 2026**, so "no changes recorded" is normal for older lots and the UI says as much.
 
 An item found in BC with **no** matching Hub lot gets its own orange "Found in Business Central only" card.
 
-## Tab 3 — "Who catalogued this sale?" (2026-08-06)
-
-Jack's ask: *"I need to look at the sale with the lot number in from BC then see who catalogued it on our system."* Pick a sale (dropdown built from BC's own \`auctionCode\` values, newest first, with lot counts — or type the code), then a **lot number** box filters the loaded sale as you type. A single match shows the big one-answer card; otherwise the whole sale, ordered by lot number with unnumbered lots last. Plus a per-cataloguer tally you can click to filter.
-
-### ⚠⚠ BC's \`cataloguedBy\` is the IMPORT STAMP, not the cataloguer
-
-**This is the entire reason the tab exists.** Jack: *"because we import the lots in they all say they are catalogued by me and Jordan."* Lots are pushed into BC in bulk, so \`WarehouseItem.cataloguedBy\` records **whoever ran the import** on every lot in the sale. The real cataloguer is **\`CatalogueLot.createdByName\`** — the same field Manage Lots shows as its **"Added By"** column. So the tab reads the **lot number from BC** (which only exists there) and the **cataloguer from the Hub**. BC's stamp appears only on rows with no Hub match, explicitly labelled as the import stamp. **Never present BC's \`cataloguedBy\` as the cataloguer.**
-
-### ⚠ Match on the UNIQUE ID first here, barcode only as fallback
-
-The opposite order to Tab 1. A barcode is **scoped to the sale the lot went into** — measured 2026-08-05, receipt R008771's items carry \`F069598\` in sale F069, \`F078380\` in F078, \`F080575\` in F080, \`F083155-60\` in F083. So an item re-entered into a later sale picks up a **different** barcode, and matching barcode-first can attach the wrong lot — and the wrong cataloguer — to a re-sold item. Measured on F103: 585 matched by unique ID, only 16 needed the barcode fallback. Both sides are \`trim()\`ed before comparing.
-
-### ⚠ On STAGING this tab looks broken, and isn't
-
-Staging's Hub has ~3.9k lots across ~8 sales; its BC cache has **212k items across hundreds of sales**. So almost any sale you pick from the dropdown has no Hub lots at all and every row reads "Not in the Hub". Test on a sale staging actually holds — **F064, F103, F106, F091, F104**. It cost a debugging cycle on 2026-08-05.
-
-## Tab 1 — Find lots: ONE merged row per item (reworked 2026-08-04)
+## Find lots (Receipt · Tote · Customer): ONE merged row per item (reworked 2026-08-04)
 
 The two side-by-side Hub / BC panels are **gone**. They made the journey impossible to follow, because the same physical item appears on each side under a different number (\`F090447\` in the Hub, \`R008414-7\` in BC). Now: **one row per item**, grouped under a big labelled **Auction** header band (code · name · 📅 date · counts), with columns *Item · Catalogued by · 1 · In the Hub · 2 · In Business Central*, an explainer strip showing the Hub → BC flow, and three tiles — in both / Hub only / BC only. \`hub[]\` and \`bc[]\` were dropped from the API response; it returns \`rows[]\`.
 
@@ -2005,7 +2025,9 @@ The two side-by-side Hub / BC panels are **gone**. They made the journey impossi
 
 ### ⚠ "Made from tote" — trust the HUB's tote, not BC's
 
-There is a **Made from tote** column. It shows the HUB's tote, falls back to BC's WarehouseItem.toteNo (marked "from BC"), and flags an amber "⚠ BC says …" when they disagree. CATALOGUED BY works the same way: CatalogueLot.createdByName first, then BC's resolved name (marked "recorded in BC"). Don't flip either preference round - the Hub is where the work was actually done. ⚠ A PREVIOUS VERSION OF THIS NOTE SAID BC's toteNo IS "ALMOST ALWAYS EMPTY" - THAT WAS WRONG, generalised from one receipt (R008414: only 2 of 52 BC items had one). Measured across the WHOLE synced table on 2026-08-18: 192,858 of 216,244 items have a toteNo (89%) and 165,764 have a cataloguedBy. The BC fallback is doing real work on most rows; do not remove it as pointless.
+There is a **Made from tote** column. It shows the **Hub's** tote, falls back to BC's \`WarehouseItem.toteNo\` (marked "from BC"), and flags an amber "⚠ BC says …" when they disagree. **Catalogued by** works the same way: \`CatalogueLot.createdByName\` first, then BC's resolved name (marked "recorded in BC"). Don't flip either preference round — the Hub is where the work was actually done.
+
+⚠ **A previous version of this note said BC's \`toteNo\` is "almost always empty". That was wrong** — it generalised from one receipt (R008414: only 2 of 52 BC items had one). Measured across the WHOLE synced table on 2026-08-18: **192,858 of 216,244 items have a \`toteNo\` (89%)** and **165,764 have a \`cataloguedBy\`**. The BC fallback is doing real work on most rows; do not remove it as pointless.
 
 ### ⚠ The lot number is \`currentLotNo\`, NOT \`lotNo\`
 
@@ -2013,7 +2035,7 @@ BC's \`lotNo\` is \`0\` on these rows while \`currentLotNo\` holds the real numb
 
 ### ⚠ Lot STATUS is not shown anywhere in this tool
 
-It had been removed once already (same call as Manage Lots — it reads ENTERED on virtually every lot and tells an admin nothing). It came back only because it was in the original lookup component that got redesigned. \`STATUS_TONE\` was deleted from \`ui.ts\` and a comment left in its place. **Don't reintroduce it.**
+Jordan had it removed once already (same call as Manage Lots — it reads ENTERED on virtually every lot and tells an admin nothing). It came back only because it was in the original lookup component that got redesigned. \`STATUS_TONE\` was deleted from \`ui.ts\` and a comment left in its place. **Don't reintroduce it.**
 
 A **"Catalogued by"** column shows the Hub's \`createdByName\`, falling back to BC's resolved name (marked "recorded in BC").
 
@@ -2021,19 +2043,35 @@ A **"Catalogued by"** column shows the Hub's \`createdByName\`, falling back to 
 
 Every sale is shown with its **date** — a 📅 chip on each sale group in Find lots, and part of the Sale line in the Who-catalogued cards. ⚠ Two different sources: the Hub sends \`CatalogueAuction.auctionDate\` (a real DateTime → ISO), BC sends \`WarehouseItem.auctionDate\` as a **plain string** and uses **\`0001-01-01\` for "no date"**. \`formatSaleDate\` in \`ui.ts\` handles both and blanks anything before 1990 — don't format these dates inline anywhere else. BC also leaves the date off some rows of a sale, so the grouping takes the first non-empty one.
 
+Related: [[reference_lot_change_log]], [[bc_api_reference]], [[reference_departments]].
+
 ## 2026-08-19 — 📍 "Where it is" on the Barcode search
 
-Jordan: "when you search by barcode there is no location section. Would it be possible to also location history as well? We have a tab for that in the BC warehouse section". This is the page's core job — customers ring up asking where their things are — so location now gets its own card instead of being one small Fact among five inside "What Business Central says", where it already was and was easily missed.
+Jordan: *"when you search by barcode there is no location section. Would it be possible to also location history as well? We have a tab for that in the BC warehouse section"*. This is the page's core job — customers ring up asking where their things are — so location now gets its own card rather than being one small Fact among five inside "🏢 What Business Central says" (where it already was, easily missed).
 
-Barcode search renders WhoCataloguedTab (lookup-client.tsx, run.mode === "code"). The new WhereItIs card sits directly under the big "Catalogued by" answer and above the cross-check grid, and again on a BC-only row.
+Barcode search renders \`WhoCataloguedTab\` (\`lookup-client.tsx\`, \`run.mode === "code"\`). The new \`WhereItIs\` card sits directly under the big "Catalogued by" answer and above the cross-check grid, and again on a BC-only row.
 
-TWO SOURCES, DELIBERATELY SPLIT. The CURRENT LOCATION comes free with the search — it is already in the synced warehouse data (bc.location), so it paints instantly. The MOVE HISTORY is a LIVE BC call, so the card fetches it itself, per card, AFTER the answer is on screen: an admin with a customer on the phone gets the location immediately and watches the history fill in. ⚠ Never make the main search await this.
+**Two data sources, deliberately split:**
+- **Current location** comes free with the search — it is already in the synced warehouse data (\`bc.location\`). Instant.
+- **Move history** is a LIVE BC call, so the card fetches it itself, per card, AFTER the answer is on screen. An admin with a customer on the phone gets the location immediately and watches the history fill in, rather than waiting on Business Central for the whole result. Never make the main search await this.
 
-⚠ It REUSES /api/bc/location-history — the route behind BC Warehouse → Location History. RULES.md forbids changing that TAB (it was accidentally replaced once and had to be restored by hand). Calling its route is fine; never "tidy" the shared endpoint to suit the Admin Centre.
+⚠ **It reuses \`/api/bc/location-history\` — the route behind BC Warehouse → Location History.** RULES.md forbids changing that TAB (it was accidentally replaced once and had to be restored by hand); calling its route is fine, but never "tidy" the shared endpoint to suit the Admin Centre. Query is \`?mode=barcode&q=<barcode>\`.
 
-⚠ QUERIED BY BARCODE, NEVER THE UNIQUE ID — the route's barcode mode matches on the Internal Barcode change-log value, so a unique ID finds nothing. Consistent with the house rule that BC membership is decided on barcode alone. The card takes bc?.barcode || lot.barcode, so a search typed as a unique ID still resolves to the right barcode.
+⚠ **Queried by BARCODE, never the unique ID** — the route's barcode mode matches on the Internal Barcode change-log value, so a unique ID finds nothing. Consistent with the house rule that BC membership is decided on barcode alone. The card takes \`bc?.barcode || lot.barcode\` so a search typed as a unique ID still resolves to the right barcode.
 
-Failure states are worded as ordinary outcomes, never errors: not connected → "Connect to Business Central to see the move history"; 404 → "Business Central has no move record for this barcode"; empty list → "No moves recorded — it hasn't been moved since it was put away". A lot with no moves is normal and must not look like a fault. Most recent row highlighted and labelled, matching the BC Warehouse tab. Sizing follows the oversized ui.ts — don't compact it.
+Failure states are worded as ordinary outcomes, not errors: not connected → "Connect to Business Central to see the move history"; 404 → "Business Central has no move record for this barcode"; empty list → "No moves recorded — it hasn't been moved since it was put away". A lot with no moves is normal and must never look like a fault.
+
+Most recent row is highlighted and labelled, matching the BC Warehouse tab's convention. Sizing follows [[reference_admin_centre]]'s oversized \`ui.ts\` — don't compact it.
+
+## "Nothing matches that" for a lot BC plainly shows (2026-09-03)
+
+F114 lot 469 (F114439) existed in BC but the Admin Centre found nothing and said "94 not numbered
+yet". **The screen was right about what it holds** — our sync had \`currentLotNo = "0"\` for 94 F114
+lots — and wrong about BC, because **numbering a lot in BC does not bump \`EVA_SystemModifiedAt\`**,
+so the incremental auction-lines sync never re-read them. Fixed in the sync (a numbering top-up for
+upcoming sales), not here: this screen deliberately reads the sync, never BC live. If a lot number
+is missing here, run Data Sync first; if it is still missing, suspect the sync's window. Details in
+[[bc_api_reference]].
 `,
   },
   {
@@ -3388,107 +3426,358 @@ ROYAL_MAIL_API_KEY, CONDITION_INBOUND_SECRET, CONDITION_MAILBOX, CLOUDFLARE_R2_B
     filename: "bc_api_reference.md",
     content: `---
 name: BC OData API Reference
-purpose: Authoritative notes about Vectis's Business Central OData API — field names, endpoint quirks, and bugs hit in production. Read before any new BC sync or query code.
-last_updated: 2026-05-08
+purpose: Authoritative notes about Vectis's Business Central OData API — field naming conventions, endpoint quirks, and bugs we've actually hit. Read this before writing any new BC sync or query code.
+last_updated: 2026-05-13
+originSessionId: c6d23232-5237-4155-ac52-72fb165d9d56
+modified: 2026-08-06T09:06:02.811Z
 ---
-
 # Business Central OData — Reference & Gotchas
 
-## ⚠⚠ THE CACHE HAD NO DELETE PATH UNTIL 2026-08-19 — ROWS DELETED IN BC LIVED HERE FOREVER
-
-Every sync/* stage is UPSERT-ONLY, deliberately, so a partial walk can never wipe good data. The cost: a row DELETED in BC stayed in WarehouseItem indefinitely. Found when Jordan put BC's own Receipt Lines screen beside ours - receipt R008537 returns 50 rows from live BC, our cache held 143. The 93 ghosts were temp A995 lines BC deleted when the items were re-receipted, and their barcodes had since been reused on OTHER CUSTOMERS' lots - which is how a search for one customer's tote showed another customer's items in the Admin Centre. ~1,800 A9xx rows cache-wide had the same shape.
-
-POST /api/warehouse/sync/reconcile-deleted - Data Sync STAGE 8, and the tail of the nightly cron/bc-warehouse. For each SUSPECT receipt (any holding at least one A9xx row) it asks LIVE BC what that receipt actually contains and deletes the cached rows BC no longer has.
-
-⚠ IT IS THE ONLY STAGE ALLOWED TO DELETE, so the rules are strict and must stay: SUSPECTS ONLY (never a whole-table sweep deciding what to kill); LIVE BC IS THE SOLE AUTHORITY (never a heuristic, never our own cache); AN EMPTY ANSWER DELETES NOTHING (a receipt returning no rows is skipped and counted - "delete everything" must never ride on a response that may simply have failed); A FETCH ERROR STOPS THE RUN rather than skipping on. Same contract as the other stages so the Data Sync stage loop drives it unchanged.
-
-## ⚠ "WHO CATALOGUED IT" LIVES IN THREE BC FIELDS - THE OBVIOUS ONE IS USUALLY EMPTY
-
-EVA_CataloguedBy is a short CODE ("KS") and is blank on tens of thousands of lines. EVA_CataloguedByUser and EVA_CreatedBy carry a WINDOWS USERNAME ("ANNABELL.FENBY"). Measured on 200 catalogued receipt lines whose EVA_CataloguedBy was blank: 98 had CataloguedByUser, ALL 200 had CreatedBy. Synced onto WarehouseItem.cataloguedByUser / bcCreatedBy; resolved by bcPersonName() in lib/cataloguer-directory.ts (code through the directory, then username matched on the directory's EMAIL local-part, then title-cased).
-
-⚠ receiptTotes (eva/tot custom API) field names, READ OFF A LIVE ROW: receiptNo, toteNo, vendorNo, articleCategory, articleSubcategory, articleSubcategory2, contentsDescription, catalogued, cataloguedAt, cataloguedBy, toteLocation, systemCreatedAt, reserveStatus, reservePrice. camelCase, unlike the EVA_-prefixed Excel feeds.
+The app talks to BC via OData v4 endpoints exposed by the Vectis BC instance. Field names, behaviour, and pagination are all confirmed empirically (via \`/api/bc/api-viewer\`), not from BC docs.
 
 ## Diagnostic tool — always use this first
-\`/api/bc/api-viewer?endpoint=<EndpointName>&limit=1[&filter=...]\` returns sample row + every field name. Use BEFORE guessing field names.
 
-## Field naming convention
-PascalCase with underscores: \`User_ID\`, \`Date_and_Time\`, \`Field_Caption\`, \`Type_of_Change\`, \`EVA_AuctionNo\`. Vectis custom = \`EVA_\` prefix; some others = \`PTE_\` prefix.
+There is a **UI page for this**: \`/tools/bc-api-viewer\` ("BC API Viewer"). **Jordan uses this page himself.** When you need BC field names, do NOT hand Jordan raw \`/api/...\` URLs to open — just tell him the **endpoint name** (e.g. "ShipmentRequestAPI") and ask him to look it up in the BC API Viewer and paste the result. He works from the Railway staging URL, never local.
 
-## Endpoint reference (verified)
+The page is backed by the route:
+\`\`\`
+/api/bc/api-viewer?endpoint=<EndpointName>&limit=1[&filter=...]
+\`\`\`
 
-### Auction_Lines_Excel
-- Auction code: **EVA_AuctionNo** (NOT EVA_SalesAllocation)
-- Auction name: EVA_AuctionName
-- Date: EVA_AuctionDate
-- Unique ID: EVA_UniqueID
-- Description: EVA_ShortDescription
-- Hammer/estimates: EVA_HammerPrice, EVA_LowEstimate, EVA_HighEstimate
-- Catalogued: EVA_CataloguedBy, EVA_CataloguedDateTime
-- Category: EVA_ArticleCategoryCode, EVA_ArticleSubcategoryCode
-- Collection docket: EVA_CollectionNo
-- Location: EVA_ArticleLocationCode
+Returns a sample row + every field name. **Use this before guessing field names** — BC's display labels rarely match its OData field names, and the same logical field has different names on different endpoints.
 
-### Receipt_Lines_Excel
-- Auction code: **EVA_SalesAllocation** (NOT EVA_AuctionNo!)
-- Internal barcode: PTE_InternalBarcode
-- No EVA_AuctionName — must look up via Auction_Lines_Excel
-- **EVA_CFA_TOT_CreatedFromToteNo = the item's SOURCE TOTE (✅ populated, incl. old receipts — verified 2026-07-29). The real item→tote link; EVA_ArticleToteNo is empty on ~all rows. Synced into WarehouseItem.toteNo.** No SystemCreatedAt on this feed (only EVA_SystemModifiedAt); EVA_GoodsReceivedDate exists but is empty in practice (0 of ~208k rows).
+### Known field samples (captured 2026-06-26)
 
-### Auction_Receipt_Lines_Excel
-- Auction code: EVA_SalesAllocation (same as Receipt_Lines_Excel)
+\`Receipt_Lines_Excel\` is the receipt/consignment (SELLER) side — it has the vendor, NOT the buyer's destination country. Useful fields for the shipping report: \`EVA_SHIP_EVA_SizeClassification\` (parcel size band — values match the Shipping Rates sheet: \`Small\`/\`Medium\`/\`Large\`/\`Contact\`/\`Collection Only\`), \`EVA_HammerPrice\` (0 = unsold), \`EVA_AuctionDate\`, \`EVA_SalesAllocation\` (auction code), \`EVA_ReceiptNo\`, \`EVA_UniqueID\`, \`EVA_CollectionNo\` (COLxxxxxx docket), \`EVA_Collected\` (bool). \`EVA_GrossWeight\`/\`EVA_NetWeight\` exist but were 0 in samples (not maintained — don't rely on weight). **No destination-country field here** — country of dispatch is only on \`ShipmentRequestAPI\`.
 
-### Receipt_Totes_Excel (BC's ACTIVE-totes feed — SMALL, low thousands of rows)
-- Category: **EVA_TOT_ArticleCategory** · Tote no: EVA_TOT_ToteNo / EVA_TOT_No · Receipt: EVA_TOT_ReceiptNo · Location: EVA_TOT_ToteLocation · Cataloguer initials: EVA_TOT_AssignToCataloguer
-- Check-in date: **SystemCreatedAt** (guard BC empty-date 0001-01-01 → treat < 1990 as no date)
-- **⚠⚠ MEASURED (direct full pull): ~1,780 rows total; \`$skip\` pagination WORKS here**; natural order starts at ANCIENT backlog receipts (R000009…), so a "first 500 rows" slice looks like ancient data. The feed = current warehouse state (uncatalogued backlog + totes on/recently on benches).
-- ✅ **THIS is the source for "how far behind is cataloguing per category"** (settled 2026-07-30) — it holds category + location + check-in per tote. Group by \`EVA_TOT_ArticleCategory\`, keep \`EVA_TOT_ToteLocation\` containing **BENCH** (Jordan: use the LOCATION not the flag — TRAINS 74 vs 42), newest 10 by \`SystemCreatedAt\`, median. Bench counts measured 2026-07-30: TRAINS 74, VINTAGE_DIECAST 74, BEARS 57, MATCHBOX 39, MODERN_DIECAST 34, TV_FILM 34, DOLLS 21, TOY_FIGURES 20, RETRO_TOYS 17, STAR_WARS 14, PUBLICATIONS 11, VINTAGE_TOYS 10, GAMING 9, MUSIC_MEDIA 7, TRADING_CARDS 7, COLLECTABLES 5, MILITARY 4, MODELS_KITS 4, SPORTS 2.
-- ⚠ \`PTE_Benched\` is a **flow field — NEVER \`$filter\` it** (OData returns the wrong subset); test in code, or just use the location. \`EVA_TOT_CataloguedAt\` is the 0001 sentinel even on benched rows, so you can't rank by finished-time. A tote's category label can differ from its items' categories (mixed-stock receipts) — fine, since BC's own view groups by the tote's category too.
-- ⚠⚠ **Never infer from the ITEM feed whether a category uses totes.** TRAINS items have \`EVA_CFA_TOT_CreatedFromToteNo\` blank, yet TRAINS has 74 benched totes here — that wrong inference cost ~10 rounds.
-- **FETCH (if you must read this feed, e.g. "what's left to catalogue" counts): pull the WHOLE feed in one \`bcFetchAll(token, "Receipt_Totes_Excel")\` — NO $filter, NO $select — then group/filter IN CODE** (proven in app/api/bc/warehouse/route.ts). Do NOT $filter per-category (under-returns) and do NOT rely on server paging (BC emits no nextLink → only first 500 rows).
-- Item→tote link: ✅ **\`Receipt_Lines_Excel.EVA_CFA_TOT_CreatedFromToteNo\` (the item's source tote) — CONFIRMED populated 2026-07-29 incl. old receipts**; synced into WarehouseItem.toteNo since then (full Receipt Lines re-sync backfills). \`EVA_ArticleToteNo\` is empty on ~all items — never use it; receiptNo join is the legacy approximation.
+## Field-naming convention
 
-### ChangeLogEntries (verified 2026-05-08)
-- Entry_No, User_ID, Date_and_Time
-- Table_No, Table_Caption (e.g. "Auction Line", "Web Invoices")
-- Field_No, Field_Caption (e.g. "Internal Barcode", "UniqueID", "AuthCode")
-- **Type_of_Change**: "Insertion" | "Modification" | "Deletion"
-- Old_Value, New_Value
-- Primary_Key_Field_1_Value (auction code, e.g. F077)
-- Primary_Key_Field_2_Value (unique ID, e.g. R008269-4)
+OData fields are PascalCase with underscores between words:
+- \`User_ID\` (not UserId or UserID)
+- \`Date_and_Time\`
+- \`Field_Caption\`
+- \`Type_of_Change\`
+- \`Internal_Barcode\`
 
-## Critical gotchas (all hit in production)
+Vectis-specific custom fields are prefixed \`EVA_\` (e.g. \`EVA_AuctionNo\`, \`EVA_ShortDescription\`).
+Some fields use the prefix \`PTE_\` (e.g. \`PTE_InternalBarcode\`).
+Bare names (no prefix) typically come from the standard NAV/BC schema.
 
-**Field names DIFFER between similar endpoints.** EVA_AuctionNo vs EVA_SalesAllocation. Wrong field = 400 BadRequest. If errors are caught per-batch, fails silently.
+## Endpoint reference — confirmed field names
 
-**Complex OR filters time out.** Don't OR 8 startswith() clauses across thousands of rows. Use Promise.allSettled with one focused query per key.
+### \`Auction_Lines_Excel\` — auction-level data, item-row format
+| Logical field | OData name | Sample |
+|---|---|---|
+| Auction code | \`EVA_AuctionNo\` ⚠ | \`F066\`, \`A999\` |
+| Auction name | \`EVA_AuctionName\` | \`Vinyl / Music\` |
+| Auction date | \`EVA_AuctionDate\` | \`2026-05-20\` |
+| Lot's unique ID | \`EVA_UniqueID\` | \`R001049-3\` |
+| Lot number | \`EVA_LotNo\` (int) | \`322\` |
+| Description | \`EVA_ShortDescription\` | \`Rod Stewart Tour Programmes\` |
+| Hammer price | \`EVA_HammerPrice\` | \`0\` (unsold) or positive |
+| Estimates | \`EVA_LowEstimate\` / \`EVA_HighEstimate\` | \`5\` / \`10\` |
+| Vendor | \`EVA_VendorNo\` / \`EVA_VendorName\` | \`C002603\` / \`Vendor Unknown\` |
+| Catalogued by | \`EVA_CataloguedBy\` | \`DEBBIEC\` |
+| Catalogued at | \`EVA_CataloguedDateTime\` | ISO 8601 |
+| Category | \`EVA_ArticleCategoryCode\` | \`MUSIC_MEDIA\` |
+| Subcategory | \`EVA_ArticleSubcategoryCode\` | \`MEMORABILIA\` |
+| Collection docket | \`EVA_CollectionNo\` | \`COL045712\` |
+| Location | \`EVA_ArticleLocationCode\` | \`A40B3\` |
 
-**Auction codes get reused across years.** Sort by EVA_AuctionDate DESC and pick most recent — NOT first row encountered.
+### \`Receipt_Lines_Excel\` — receipt-level data, item-row format
+| Logical field | OData name |
+|---|---|
+| Auction code | \`EVA_SalesAllocation\` ⚠ (different from Auction_Lines_Excel!) |
+| (no auction name) | — must look up via \`Auction_Lines_Excel\` |
+| Internal barcode | \`PTE_InternalBarcode\` |
+| Most other fields | shared with \`Auction_Lines_Excel\` |
 
-**Cached fields go stale.** WarehouseItem.auctionName is a cache; use the "Refresh auction names from BC" button in DB Explorer to re-pull.
+### \`Auction_Receipt_Lines_Excel\` — item-level auction receipt lines
+- Same \`EVA_SalesAllocation\` for auction code as \`Receipt_Lines_Excel\`
 
-**Pagination — big feeds use @odata.nextLink, not $skip.** BC has a ~38k row $skip limit that breaks plain $skip paging on huge tables (Receipt_Lines_Excel 187k+) — use bcPageWithNext + follow @odata.nextLink. ⚠ EXCEPTION for SMALL feeds (low thousands, e.g. Receipt_Totes_Excel): $skip is fine and is the proven pattern — \`bcFetchAll\` pages the whole thing. Adding $top to an initial query disables nextLink emission.
+### \`ShipmentRequestAPI\` — one row per dispatch/parcel (buyer side) — verified 2026-06-26
+51 fields. Used by the Packing report and the Shipping report.
+| Logical field | OData name | Sample / notes |
+|---|---|---|
+| Shipment no. | \`EVA_No\` | \`SHP000002\` |
+| Status | \`EVA_Status\` | \`Released\` (live) / \`Cancelled\` (drop). Filter on THIS. |
+| Type | \`EVA_Type\` | ⚠ **always \`Collection\`** even for posted parcels — NOT a shipped-vs-collected flag, do not filter on it |
+| Collection docket | \`EVA_DocumentNo\` | \`COL000010\` — **joins to \`Receipt_Lines_Excel.EVA_CollectionNo\`** |
+| Shipment date | \`EVA_ShipmentDate\` | \`2023-10-12\` — filter field for date ranges |
+| Destination country | \`EVA_CountryRegion\` | \`GB\` — the buyer's country (matches Shipping Rates sheet codes). \`EVA_County\` does NOT match \`/country/i\`. |
+| Destination city | \`EVA_City\` | \`London\` |
+| Address | \`EVA_Address\` / \`EVA_Address2\` / \`EVA_PostCode\` | |
+| Buyer | \`EVA_Name\` / \`EVA_Email\` | |
+| Carrier / service | \`EVA_ShippingAgent\` / \`EVA_ShippingAgentService\` | \`PCF\` / \`EX24\`,\`EX48L\` |
+| Weight | \`EVA_TotalWeight\` | ⚠ often \`0\` — not maintained, don't rely on it |
+| Value | \`EVA_Value\` | goods/customs value, NOT the shipping charge — BC stores no shipping price, so revenue must come from the rate sheet |
 
-**Flow/calculated fields can't be $filtered.** An OData \`$filter\` on a BC flow field (e.g. \`PTE_Benched\` on Receipt_Totes_Excel) silently returns the WRONG subset. Pull the rows and test the field IN CODE instead.
+**Join for the Shipping report:** country lives here (\`EVA_CountryRegion\`), parcel size lives on the receipt line (\`EVA_SHIP_EVA_SizeClassification\`). Tie them via the collection number (\`EVA_DocumentNo\` = \`EVA_CollectionNo\`). Sizes are read from the locally-synced \`WarehouseItem.collectionNo\`/\`.sizeClassification\` (needs a full receipt-lines resync to backfill). See \`lib/shipping-analytics.ts\`.
 
-**Date filter syntax — OData v4.** Bare ISO 8601: \`Date_and_Time ge 2026-05-08T00:00:00Z\`. No datetime'…' wrapper.
+✅ **\`ShipmentRequestAPI\` = SHIPPED parcels only.** Confirmed (Jordan, 2026-06-29): a **collect-in-person sale raises only a COL collection docket, NOT a \`ShipmentRequestAPI\` record**. So a COL number does NOT mean shipped — both shipped and collected items get one; the *shipment request* is the shipped-only signal. Consequence: collected items are **absent from the shipping report's parcels/revenue** (no double-charge), and the report's \`collectedRefund\` (collected items priced at UK rates from \`WarehouseItem\` location="Collected") is **hypothetical lost/refund revenue**, not a deduction from the shipping total.
 
-**ge vs gt for incremental syncs.** Use ge so boundary rows aren't skipped.
+⚠ **\`EVA_DocumentNo\` is NOT always a COL number** — some shipments (a large share **pre-~Sep-2025**) carry the literal placeholder **\`"DISPATCH"\`** (or blank), which links to no collection, so their lots can't be joined. The Shipping report only joins \`/^COL/i\` dockets and counts the rest as **"unlinked"** (the parcel IS counted; its items/revenue can't be — surfaced as a per-month **"No docket"** column + an amber banner). This was the cause of the "Jul/Aug 2025 items look way too low" symptom (those months are heavy on \`DISPATCH\`). Coverage was 99.9% — proving it was the join key, not missing local data. Since unlinked parcels still carry a country, the report now **rough-estimates** their items/£ at the average per linked parcel in the same region and folds that into headline/By Month/By Region totals (kept separate as \`estItems\`/\`estRevenue\`).
 
-## Cataloguing report — two modes
+**Verifying the backfill (added 2026-06-29):** the **Data Sync** tab in \`/tools/bc-warehouse\` shows a "Shipping column coverage" line — total items · N with collection · N with size — so after a full Receipt Lines re-sync you can confirm both shipping columns populated. The numbers come from \`/api/warehouse/sync/status\` (\`withCollectionNo\`/\`withSizeClassification\` = \`count({ where: { <col>: { not: null } } })\`). The DB Explorer (\`/api/warehouse/db-explorer\`) also returns a true \`total\` (real \`count\` of matches, not just the capped page) and its count line now reads "Showing X of Y matching rows"; its \`select\` includes \`collectionNo\`/\`sizeClassification\` so those columns are visible in results.
 
-- **barcode** (default): Field_Caption='Internal Barcode', no type filter — counts edits + insertions.
-- **uniqueid**: Table_Caption='Auction Line' and Field_Caption='UniqueID' and Type_of_Change='Insertion' — strict per-lot insertion count, matches BC's filtered view.
+### \`ChangeLogEntries\` — system-wide change log
+Confirmed fields (verified 2026-05-08 via api-viewer):
 
-Cache (BCCatalogueDay, BCCatalogueEntry) is namespaced by mode via composite PK. Nightly cron at /api/cron/bc-catalogue refreshes both. UI toggle on /tools/bc-reports.
+| Logical field | OData name | Sample |
+|---|---|---|
+| Entry ID | \`Entry_No\` | \`7398859\` |
+| User | \`User_ID\` | \`MIKE.FISHWICK\` |
+| Timestamp | \`Date_and_Time\` (ISO 8601) | \`2024-09-22T01:13:30.4Z\` |
+| Table number | \`Table_No\` | \`75508\` |
+| Table affected | \`Table_Caption\` | \`Auction Line\`, \`Web Invoices\` |
+| Field number | \`Field_No\` | \`11\` |
+| Field affected | \`Field_Caption\` | \`Internal Barcode\`, \`UniqueID\`, \`AuthCode\` |
+| Type of change | \`Type_of_Change\` | \`Insertion\`, \`Modification\`, \`Deletion\` |
+| Old value | \`Old_Value\` / \`Old_Value_Local\` | \`""\` (empty if Insertion) |
+| New value | \`New_Value\` / \`New_Value_Local\` | the new field value |
+| Primary key descriptor | \`Primary_Key\` | \`Field1=0(SI120673)\` |
+| Primary key 1 | \`Primary_Key_Field_1_Value\` (also \`_No\`, \`_Caption\`) | \`F077\` (auction code) |
+| Primary key 2 | \`Primary_Key_Field_2_Value\` (also \`_No\`, \`_Caption\`) | \`R008269-4\` (unique ID) |
+| Primary key 3 | \`Primary_Key_Field_3_Value\` (also \`_No\`, \`_Caption\`) | usually empty |
 
-## Shipping report column coverage (added 2026-06-29)
+## ✅✅✅ eva/tot custom API — the FULL receipt-tote table WITH dates (discovered 2026-08-06, START HERE for tote data)
 
-The Shipping report reads parcel size/collection from the locally-synced WarehouseItem.collectionNo / .sizeClassification (backfilled by a full Receipt Lines re-sync). To confirm the backfill worked, the **Data Sync** tab in /tools/bc-warehouse shows a "Shipping column coverage" line — total items · N with collection · N with size — from /api/warehouse/sync/status (withCollectionNo / withSizeClassification = count where the column is not null). DB Explorer also returns a true total (real match count, not the capped page) and shows "Showing X of Y matching rows"; its select now includes both shipping columns so they're visible.
+BC has a **custom API page (76804 \`EVA_TOT_ReceiptToteAPI\`, found by reading the AL source)** bound to table 76800 \`EVA_TOT_ReceiptTote\` with **no filter**:
 
-## When adding a new BC integration
-1. Call /api/bc/api-viewer first to confirm field names.
-2. Cross-check this file.
-3. **If field names differ from another endpoint, document it here.**`,
+\`\`\`
+https://api.businesscentral.dynamics.com/v2.0/{tenant}/{env}/api/eva/tot/v1.0/companies({companyGUID})/receiptTotes
+\`\`\`
+
+- **20,561 rows — the whole table, catalogued totes included**, each with camelCase fields: \`receiptNo, toteNo, lineNo, vendorNo, catalogued (real JSON bool), cataloguedAt/By, articleCategory/subcategory, assignToCataloguer/Name, contentsDescription, toteLocation, reserveStatus (raw enum names like "EVA_NoReserve", NOT captions), reservePrice, systemCreatedAt, systemModifiedAt\`. **No vendorName/vendorEmail** — only \`vendorNo\`.
+- ⚠ Company must be addressed by **GUID** (\`GET …/api/eva/tot/v1.0/companies\`, match \`name === "Vectis"\`), not by name like ODataV4. Helper: \`bcTotApiUrl(token, entitySet)\` in \`lib/bc.ts\` (caches the GUID).
+- ⚠ URL tenant segment: lib/bc leaves it EMPTY (\`v2.0//production/…\`) and BC routes by the token's tenant — that works; putting a wrong/undefined literal there 400s \`RequestDataInvalid\`.
+- \`$filter=toteNo eq '…'\`, \`$count\`, nextLink paging all verified working. Verified live: T024560 → R008385/C223133/catalogued:true — the exact row \`Receipt_Totes_Excel\` refuses to serve.
+- **\`sync/totes-all\` walks it** (Data Sync stage 6 + nightly cron) to fill \`WarehouseTote.receiptNo/vendorNo/catalogued/bcCreatedAt\` for EVERY tote — this is what ended the End of Day "Receipt doesn't exist in BC" false positives (63 flagged receipts that were plainly in BC). vendorName backfills from \`WarehouseItem\` by vendorNo; \`status\` stays totes-active-only (caption vs enum-name format clash).
+- **This supersedes "bcCreatedAt is irreplaceable"** — \`systemCreatedAt\` is now re-fetchable for all rows (the no-wipe rule on WarehouseTote stays, for vendorName/status). It also likely beats the slow ChangeLogEntries date walk in \`lib/bc-tote-dates.ts\` one day (not yet migrated).
+- History of the near-misses: 2026-07-30 found ODataV4 \`Receipt_ExcelEVA_TOT_ReceiptTotesSubpage\` (20,418 rows, full table, working filters — used with \`EVA_TOT_Catalogued eq true\` for the Manager Portal "Using totes from" metric — this is the "subfilter for catalogued totes" Jordan remembers) but it carries **no date fields and was never wired into the tote sync**, so End of Day kept failing. The eva/tot API has the dates too — prefer it.
+
+## ⚠ Critical gotchas — all hit in production, all left scars
+
+### Field names DIFFER between similar endpoints
+\`Auction_Lines_Excel.EVA_AuctionNo\` vs \`Receipt_Lines_Excel.EVA_SalesAllocation\`. Both are "the auction code". Using the wrong field name returns **400 BadRequest** from BC. If your code catches errors per-batch, this fails silently and your sync looks fine while updating zero rows. (The auction-names sync was broken this way for who-knows-how-long — see the warning comment in \`/api/warehouse/sync/auction-names/route.ts\`.)
+
+### Complex OR filters time out
+A filter like \`(startswith(EVA_ArticleLocationCode, 'A36') or ... or startswith(..., 'A50')) and contains(EVA_CollectionNo, 'COL')\` across 8 aisle prefixes times out, especially when each aisle has thousands of rows. **Always use \`Promise.allSettled\` with one focused query per key** — total wall time is bounded by the slowest single query, not the sum, and one slow key won't kill the whole report.
+
+### Auction codes get reused across years
+\`F066\` was once "Pop Culture Auction including Trading Cards…" and is now "Vinyl / Music". Same code, different sale. When picking an auction name from BC, sort by \`EVA_AuctionDate\` descending and take the most recent — NOT the first row encountered.
+
+### Cached fields go stale silently
+\`WarehouseItem.auctionName\` is a cached copy of \`EVA_AuctionName\` populated only by \`/api/warehouse/sync/auction-names\`. If a sale is renamed in BC, the cache stays wrong until the next sync. The DB Explorer in \`/tools/bc-warehouse\` has a **"Refresh auction names from BC"** button to re-pull on demand.
+
+### Pagination — use \`@odata.nextLink\`, not \`$skip\`
+BC has a ~38k row \`$skip\` limit which breaks plain skip-based paging on large tables (Receipt_Lines_Excel has 187k+ items). Use \`bcPageWithNext\` and follow the \`@odata.nextLink\` instead. Set \`Prefer: odata.maxpagesize=500\` header (already done in \`bcPageWithNext\`) — adding \`$top\` to the initial query disables nextLink emission.
+
+### \`$apply=groupby\` is not supported
+Don't use it. BC will throw. Aggregate client-side after fetching rows.
+
+### Date filter syntax — OData v4 only
+Use bare ISO 8601 literals: \`Date_and_Time ge 2026-05-08T00:00:00Z\`. Don't wrap in \`datetime'…'\` (that's OData v3).
+
+### \`ge\` vs \`gt\` for incremental syncs
+The receipt-lines incremental sync uses \`EVA_SystemModifiedAt ge {lastTimestamp}\` (not \`gt\`) so items sharing a timestamp at the boundary aren't skipped.
+
+### \`EVA_ArticleToteNo\` on item feeds is EMPTY — the REAL item→tote link is \`EVA_CFA_TOT_CreatedFromToteNo\` (2026-07-29)
+\`EVA_ArticleToteNo\` (on \`Receipt_Lines_Excel\`/\`Auction_Lines_Excel\`) is null on virtually every row — confirmed 2026-07-07 on production: only **2 of ~202,000** items had one. This silently broke the BC Warehouse → **Tote Data → "By Category"** chart (INNER JOIN on tote no → always empty, "CATEGORIES 0"); it was fixed by joining on \`receiptNo\` (a receipt can span several totes/categories, so per-category tote counts there are an approximation). ✅ **UPDATE 2026-07-29: a true item→tote link DOES exist — \`EVA_CFA_TOT_CreatedFromToteNo\` on \`Receipt_Lines_Excel\` (the item's source tote), confirmed populated incl. old receipts.** The receipt-lines sync now maps it into \`WarehouseItem.toteNo\` (a **full Receipt Lines re-sync** backfills history — until then old rows have null). The By-Category chart's receipt-join could be upgraded to it one day.
+
+### ⚠⚠ \`WarehouseTote\` — never wipe the table (fixed 2026-07-30; scope narrowed 2026-08-06)
+✅ UPDATE 2026-08-06: \`receiptNo\`/\`vendorNo\`/\`catalogued\`/\`bcCreatedAt\` are now REBUILDABLE — \`sync/totes-all\` re-fetches them for every tote from the eva/tot custom API (see the section above). What remains genuinely irreplaceable for catalogued totes is **\`vendorName\` and \`status\`** (only \`sync/totes-active\` writes them, and \`Receipt_Totes_Excel\` drops ticked totes; vendorName can usually be re-derived from \`WarehouseItem\` by vendorNo, which totes-all does as a backfill). The no-wipe rule stands. Original claim, kept for history: \`bcCreatedAt\`+\`receiptNo\` were written only by \`sync/totes-active\` from \`Receipt_Totes_Excel\`, which publishes **only totes NOT ticked Catalogued** — so a wiped row could never be re-enriched. \`Totes_Excel\` carries nothing to rebuild from (only \`EVA_No, EVA_Description, EVA_Location, EVA_Bin, EVA_ParentToteNo, EVA_ParentCount, EVA_Contents\` + 3 estimate/reserve totals).
+
+- **\`sync/totes\` no longer wipes.** It used to run \`warehouseTote.deleteMany({})\` on the first batch of a \`full\` re-sync, silently destroying every enriched column. Removed — \`full\` now only means "walk the whole feed". The upsert's \`update\` branch deliberately touches only \`location\`/\`syncedAt\`, so enrichment survives. ⚠ The wipe wasn't even pruning anything: \`Totes_Excel\` has ~21,428 totes vs ~5,750 in our table, so **our copy is a SUBSET of BC's** — there are no stale rows to clear.
+- **\`/api/warehouse/clear-bc-data\` (admin, type-to-confirm) still wipes deliberately** — that's the escape hatch, kept. But its old promise that "the next sync re-pulls everything" is TRUE for items and **FALSE for tote dates**, so the dialog now warns explicitly when totes are included.
+- If tote history is ever lost, the Manager Portal's "Using totes from" still works: it takes real dates from **\`ChangeLogEntries\`** (table 76800) and only falls back to \`WarehouseTote\`.
+
+### Tote sync has two stages; \`Totes_Excel\` totes are NEVER given a \`catalogued\` flag
+\`WarehouseTote\` is filled by two syncs: Stage 4 \`/api/warehouse/sync/totes\` (\`Totes_Excel\`, all T/P totes — sets only \`toteNo\`+\`location\`, leaves \`catalogued = null\`) and Stage 5 \`/api/warehouse/sync/totes-active\` (\`Receipt_Totes_Excel\` — enriches active totes with vendor/receipt/status/\`catalogued=false\`). On production (2026-07-07) 18,926 totes are \`catalogued=null\` (Stage-4-only, never enriched) and 2,073 are \`catalogued=false\` (active). The Tote Data header calls the null ones "done" but that's just \`total − active\` — they are **un-enriched, not confirmed complete**. \`catalogued=true\` effectively never appears.
+
+### \`Receipt_Totes_Excel\` fields (confirmed via BC API Viewer 2026-07-07) — 30 fields
+The totes feed (small — low thousands of rows, well under the ~38k \`$skip\` limit). Key fields the app uses: \`EVA_TOT_No\` (tote no), \`EVA_TOT_ToteNo\`, \`EVA_TOT_ArticleCategory\`, \`EVA_TOT_AssignToCataloguer\` (initials → SALESPERSON_NAMES), \`EVA_TOT_Catalogued\` (bool — **unreliable**, sampled \`false\` even on catalogued totes; Jordan: don't trust it), \`PTE_Benched\` (bool — the **reliable "this tote has been catalogued/worked" signal**; use THIS not \`EVA_TOT_Catalogued\`), \`EVA_TOT_ToteLocation\`, \`EVA_TOT_ReceiptNo\`, \`EVA_TOT_VendorNo/VendorName\`, \`EVA_TOT_ReserveStatus\`. **Date fields:** \`SystemCreatedAt\` (ISO datetime, e.g. \`2023-08-11T13:33:09.42Z\`) = when the tote record was created/arrived (the tote's CHECK-IN/age date) — used by the BC Reports → Warehouse Report date filter AND the Manager Portal "Using totes from" table. \`EVA_TOT_CataloguedAt\` uses BC's **null-date sentinel \`0001-01-01T00:00:00Z\`** when not catalogued (guard against it if you ever filter on it). Some fields are all-null in samples (\`EVA_TOT_AssignToName\`, \`EVA_TOT_AssignToUser\`, \`EVA_TOT_CataloguedBy\`).
+
+### ⚠⚠⚠ \`Receipt_Totes_Excel\` returns ONLY UNCATALOGUED totes
+✅ SOLVED 2026-08-06: the unfiltered feed this section wished for **already exists — the eva/tot custom API** (top section). \`sync/totes-all\` uses it. Everything below stays true of \`Receipt_Totes_Excel\` itself (re-confirmed live 2026-08-06: 1,822 rows, T024560 absent, Catalogued \`$filter\` ignored both directions).
+**Measured 2026-07-30 (this is the root cause of the whole "Using totes from" saga).** The published web service returns **1,776 rows and every one has \`EVA_TOT_Catalogued = false\`**. Totes already ticked Catalogued in BC are **absent entirely**, proven three ways: (1) a \`$skip\` walk collects all 1,776 **distinct** rows, so it is complete — not a paging bug; (2) unfiltered \`@odata.count\` = 1,776; (3) **direct lookups of catalogued totes plainly visible on BC's own Receipt Totes page (T026013, T025980, T025902, T025776 …) return NOTHING**.
+
+Consequence: a category whose recent work is already ticked off looks thin — **SPORTS shows 3 totes on a bench via OData while BC's page shows ~30**. (TRAINS looked fine only because its recent totes happen to be unticked.)
+
+- ⚠ \`$filter\` on \`EVA_TOT_Catalogued\` is **also ignored** — \`eq true\` and \`eq false\` BOTH return all 1,776 rows (another flow field, like \`PTE_Benched\`).
+- **FIX = publish an UNFILTERED Receipt Totes web service in BC**, then swap \`FEED_ENDPOINT\` in \`app/api/manager-portal/bc-tote-dates/route.ts\` — a one-line change, everything else already works.
+- No alternative endpoint exists today: **11 plausible names probed → all 404**, and the OData **service root lists 0 services** (confirm with \`bcServiceDocRaw\`), so endpoints can't be enumerated — they must be known by name.
+- Our accumulated \`WarehouseTote\` cannot rescue the history: those totes were ticked catalogued **before we ever synced**, so they were never in the feed for us to capture (checked — none of the SPORTS screenshot totes are in our table).
+- The route now returns a **\`diagnostics\`** block (endpoint, rows pulled, categories, shortfall count, plain-English note) and the UI shows the **sample size per category (amber under 10)** plus a "Where these numbers come from" expander — built 2026-07-30 because Jordan asked for real debugging instead of silent under-reporting.
+
+### ✅✅ THE TOTE ENDPOINTS THAT ACTUALLY WORK (settled 2026-07-30 — start here)
+Discovered by reading **\`$metadata\`** (136 entity sets) after the OData **service root returned 0 services** — so *always read \`$metadata\` to discover endpoints*, never the service doc.
+
+| Need | Endpoint | Rows | Notes |
+|---|---|---|---|
+| **Every tote** (incl. ticked Catalogued) | **\`Receipt_ExcelEVA_TOT_ReceiptTotesSubpage\`** | **20,418** = BC table **76800 \`EVA_TOT_ReceiptTote\`** (matches BC's own Edit Tables count) | Has category, tote no, location, receipt, line no, \`PTE_Benched\`, \`EVA_TOT_Catalogued\`. \`$filter\`/\`$orderby\`/\`$count\` all WORK. ⚠ **No date property at all** (\`SystemCreatedAt\`/\`SystemModifiedAt\` 400). ⚠ Only ordering available is by tote number, and \`"T…" > "P…"\` lexically, so **query each prefix separately or pallets get buried**. |
+| **Real tote check-in DATES** | **\`ChangeLogEntries\`** \`Table_No eq 76800 and Field_Caption eq 'Tote No.' and Type_of_Change eq 'Insertion'\` | ~7,100 logged tote creations (79,728 entries for the table overall) | \`New_Value\` = tote no, \`Date_and_Time\` = creation. **Verified 10/10 EXACT against BC's own screen.** Change logging wasn't on for older totes, so it covers the recent end — which is all a "newest 10" needs. **This is the answer to "can we get the date from another table?" — yes.** ⚠ **SLOW: 24s for the full 15 pages even fetched in parallel.** It's append-only, so cache it and top up with \`… and Date_and_Time gt <bare ISO>\` — verified 200 in **5.5s** for one page (159 rows/7 days). Don't re-read the whole thing per request. |
+| Dates for un-ticked totes only | \`Receipt_Totes_Excel\` | 1,776 | Has \`SystemCreatedAt\`, but **only totes NOT ticked Catalogued** — see below. |
+| Full tote list, no category/date | \`Totes_Excel\` | 21,428 | \`EVA_No\`, location, bin, parent tote, contents, totals. No dates (\`$select SystemCreatedAt\` 400). |
+| Receipt headers | \`Receipt_Excel\` | 9,447 | ⚠ **its \`$filter\` is IGNORED** (returns the same first row regardless) and \`EVA_No\` holds C-numbers. No usable arrival date. Don't rely on it. |
+| Items + source tote + dates | \`All_Receipt_Lines_Excel\` | — | **117 fields** incl. \`EVA_SystemCreatedAt\`, \`EVA_ReceiptingDate\`, \`EVA_ScannedInDate\`, \`EVA_CreationDate\`, \`EVA_CFA_TOT_CreatedFromToteNo\`. Unexplored but the richest item feed — check here first for any item-level date need. |
+
+⚠ **All of this lives in ONE place: \`lib/bc-tote-dates.ts\` → \`computeBcToteDates(token, hiddenSet)\`.** Both the on-screen route (\`/api/manager-portal/bc-tote-dates\`) and the **PDF export** (\`…/pdf\`, builder \`lib/bc-tote-dates-pdf.ts\`) call it, so they can't drift. Never reimplement the BC queries in a route. Hidden categories (\`ManagerPortalHiddenCategory\`) are filtered inside it, so the PDF excludes them too.
+
+**The metric as shipped (\`/api/manager-portal/bc-tote-dates\`):** sample = newest 10 totes per category from the FULL table with **\`EVA_TOT_Catalogued eq true\`**; dates = change log, falling back to the dated feed → our \`WarehouseTote\` → a tote-number estimate (marked \`~\`). ⚠ **Filter on Catalogued, NOT on bench location** — 16,833 of 20,418 totes carry a \`BENCH*\` **last-known** location, so bench-filtering admits brand-new uncatalogued stock (TRAINS' newest bench totes T026621/T026613 aren't catalogued and made TRAINS look bang up to date). Verified output: SPORTS/TRAINS/MILITARY/BEARS Jun 2026, TOY_FIGURES Nov 2025, 10 totes each, **0 estimated**.
+
+**Date estimation (fallback only, validated):** tote numbers are issued in sequence, so interpolate between the nearest dated neighbours (T and P are separate sequences). Cross-validated hold-one-out: median 0d error, p90 0.6d, **99% land in the correct month**; and against 11 known SPORTS dates from BC's screen, every estimate was within **0.6 days**. (Receipt numbers are far noisier — use median-of-8-nearest there, p90 7.4d.)
+
+- ⚠ Superseded note kept for context — the old "one table" claim below was wrong because \`Receipt_Totes_Excel\` hides ticked totes:
+- ~~**"How far behind is cataloguing per category" — it is ONE TABLE: \`Receipt_Totes_Excel\`.**~~ It carries everything needed per tote: \`EVA_TOT_ArticleCategory\`, \`EVA_TOT_ToteLocation\`, \`SystemCreatedAt\`. The recipe is literally Jordan's own BC view (Receipt Totes → filter Article Category + Location \`BENCH*\` → sort Created At desc): **pull the whole feed → group by \`EVA_TOT_ArticleCategory\` → keep totes whose \`EVA_TOT_ToteLocation\` contains BENCH → newest 10 by \`SystemCreatedAt\` → median = the month.** Verified to reproduce his screenshot row-for-row (TRAINS 74 on benches, newest 10 Jun/Jul 26 → Jun 2026). **Use the LOCATION, not the \`PTE_Benched\` flag** (Jordan's call; catches more — TRAINS 74 vs 42). Measured per-category bench counts (⚠ UNCATALOGUED totes only — see the web-service limitation above; BC's own page shows more): TRAINS 74, VINTAGE_DIECAST 74, BEARS 57, MATCHBOX 39, MODERN_DIECAST 34, TV_FILM 34, DOLLS 21, TOY_FIGURES 20, RETRO_TOYS 17, STAR_WARS 14, PUBLICATIONS 11, VINTAGE_TOYS 10, GAMING 9, MUSIC_MEDIA 7, TRADING_CARDS 7, COLLECTABLES 5, MILITARY 4, MODELS_KITS 4, SPORTS 2–3.
+- ⚠⚠ **DO NOT rebuild this from \`WarehouseItem\`/receipts.** That detour cost ~10 rounds and produced R-numbers in the UI plus a whole date-estimation layer, all now deleted. Specifically dead: \`goodsReceivedDate\` (0 of ~208k rows); grouping by \`receiptNo\`; interpolating dates from tote/receipt NUMBER sequences (worked — totes p90 0.6d/99% right month, receipts median-of-8 p90 7.4d/90% — but became unnecessary once the right table was used); and \`WarehouseItem.createdAt\` as a proxy (186k rows bulk-imported one day, 91d median error).
+- ⚠⚠ **The trap that caused it:** TRAINS *items* have \`EVA_CFA_TOT_CreatedFromToteNo\` **blank**, which looks like "trains aren't toted" — WRONG. The TOTE side has 74 TRAINS totes with numbers, dates and BENCH locations. **Never infer a category's tote behaviour from the item feed; look at the tote feed.**
+- ⚠ ENV NOTE: the local \`.env\` DATABASE_URL is PRODUCTION's Neon DB — **staging runs its own DB**, so a backfill/re-sync done on staging is NOT visible to local verification scripts. BC itself is the same instance either way, so probe BC directly (token from \`BCToken\`, tenant from the JWT's \`tid\` claim — BC_* env vars are Railway-only). ⚠⚠ **\`WarehouseItem.goodsReceivedDate\` is DEAD — populated on 0 of ~208k rows (verified against production 2026-07-29).** Never date anything with it; the departments-view comment calling receiptNo→goodsReceivedDate "the path that works" was stale. The Manager Portal \`bc-tote-dates\` route does exactly this — DB-only, no live BC, can't run dry.
+- If you *do* need to READ this feed for its own sake (e.g. the BC Warehouse tab's "what's left to catalogue" counts), the proven fetch is **\`bcFetchAll(token, "Receipt_Totes_Excel")\` with NO \`$filter\`/\`$select\`, group in code** (feed is small, under the 38k \`$skip\` limit). Two approaches that UNDER-fetched, don't reuse: filtering the whole feed + server paging (BC emits no nextLink → only first 500 rows); and one \`$filter=EVA_TOT_ArticleCategory eq '<cat>'\` per category. And **never \`$filter\` on \`PTE_Benched\`** — it's a flow/calculated field, OData returns the wrong subset; test in code.
+
+### ⚠⚠ Receipt_Totes_Excel — MEASURED facts (2026-07-29, direct full pull via script)
+Settles several rounds of confusion — these numbers were measured, not inferred:
+- **1,776 rows total** (\`$top=0&$count=true\`). **\`$skip\` pagination WORKS on this endpoint** (verified pages differ) — the whole-feed \`bcFetchAll\` pull is complete and correct. Feed's natural order starts at ANCIENT receipts (R000009…) — old uncatalogued backlog totes stay in the feed, so "first 500 rows" slices look like ancient data.
+- **279 rows benched** across all categories. The feed RETAINS benched totes for some period after cataloguing (R008868, whose items were catalogued that same day, still present) — it is not strictly "active-only", but per-category benched coverage is THIN.
+- ⚠⚠ **THE TOTE LINE'S CATEGORY LABEL ≠ THE ITEMS' CATEGORIES.** R008868's tote is labelled **TV_FILM** in the feed while its 2 items are **GAMING** in WarehouseItem. Receipts hold mixed stock. This is why "benched GAMING totes" by tote label found only 5 while GAMING has 1,729 catalogued items — counting by tote label undercounts massively. **Group by ITEM category (WarehouseItem), never by EVA_TOT_ArticleCategory, for any per-category stock/age metric.**
+- **\`EVA_TOT_CataloguedAt\` is the 0001-01-01 sentinel even on benched rows** — you cannot rank benched totes by when they were finished; check-in (\`SystemCreatedAt\`) ordering is the only option in the feed.
+
+### ⚠⚠ Historical tote check-in dates — backfill avenues checked and dead (2026-07-29)
+\`Receipt_Totes_Excel.SystemCreatedAt\` is the ONLY check-in-date source BC exposes, and only while the tote is in the feed. \`WarehouseTote.bcCreatedAt\` (stored since 2026-07-27) is therefore an irreplaceable accumulator — totes that left the feed before then can never be dated. All checked via the BC API Viewer with Jordan, don't re-tread:
+- **\`Totes_Excel\`** (the full ~20k tote list): 11 fields only — \`EVA_No, EVA_Description, EVA_Location, EVA_Bin, EVA_ParentToteNo, EVA_ParentCount, EVA_Contents, EVA_TotalLowEstimate, EVA_TotalHighEstimate, EVA_TotalReserve\` (+etag). **No SystemCreatedAt, no receipt link, no dates at all.**
+- **\`Receipt_Lines_Excel\`** (77 fields): **no \`SystemCreatedAt\`** (only \`EVA_SystemModifiedAt\` — modification time, useless for arrival). \`EVA_GoodsReceivedDate\` is on the feed but empty in practice (0 of ~208k synced rows ≥ 1990). ✅ **\`EVA_CFA_TOT_CreatedFromToteNo\` — CONFIRMED populated (2026-07-29, probed 11 receipts incl. Sept/Dec 2025 ones): the item's SOURCE TOTE. This IS the item→tote link this file previously said didn't exist** — \`EVA_ArticleToteNo\` is the empty one. Only the most ancient pre-tote-era rows lack it (2/500 in the feed's oldest slice). Since 2026-07-29 the receipt-lines sync maps it into \`WarehouseItem.toteNo\` (existing column, no migration); a **full Receipt Lines re-sync** backfills history. It also exposes cross-category totes: one receipt's items span several totes/categories (R008392 → T024570 VINTAGE_DIECAST + T024571 MILITARY).
+- **\`Auction_Receipt_Lines_Excel\`** (38 fields): no SystemCreatedAt either.
+- **\`WarehouseItem.createdAt\`** (our own sync stamp): useless as a proxy — 186,726 of ~208k items bulk-imported 2026-05-04; vs known tote check-ins median error 91 days, only 12/486 receipts within 3 days.
+- Consequence 1: the Manager Portal "Using totes from" table **self-heals** — totes still being worked remain in the active feed, so everything finished from 2026-07-27 onwards gets dated by the nightly sync; pre-27-Jul finishes age out of the newest-10 sample naturally. **Nothing to re-run.**
+- Consequence 2 ⚠: **"Totes → Full" re-sync (\`/api/warehouse/sync/totes\` with \`full\`) does \`deleteMany\` on WarehouseTote first** — pressing it would permanently destroy the accumulated bcCreatedAt/receiptNo. Jordan warned 2026-07-29; a background task to make it non-destructive was spawned the same day.
+- Last-resort backfill if history is ever demanded: \`ChangeLogEntries\` insertion timestamps (heavy, coverage unverified).
+
+## Cataloguing report (\`/api/bc/cataloguing\`) — what it counts
+
+Two modes, selectable via \`?mode=\` query param:
+
+- **\`barcode\`** (default, original report) — every \`ChangeLogEntries\` row where \`Field_Caption = 'Internal Barcode'\`. No \`Type_of_Change\` filter, so barcode edits count as well as insertions. Useful as a "barcoding activity" measure.
+- **\`uniqueid\`** — \`Table_Caption = 'Auction Line' and Field_Caption = 'UniqueID' and Type_of_Change = 'Insertion'\`. Matches what staff see in BC when they filter the Change Log Entries page to those three values. Strict per-lot count.
+
+Cache (\`BCCatalogueDay\`, \`BCCatalogueEntry\`) is namespaced by \`mode\` — composite primary keys are \`(date, mode)\` and \`(date, userId, mode)\`. \`/api/cron/bc-catalogue\` populates both modes — triggered by an **EXTERNAL Railway scheduler** (there is NO in-repo scheduler for it, unlike the \`server.js\` setInterval crons; same goes for \`/api/cron/bc-packing\`). UI exposes the toggle in \`/tools/bc-reports\` Cataloguing tab; export filenames are suffixed with the mode so spreadsheets don't get mixed up.
+
+## Bidstream live-auction WebSocket (vectis.co.uk)
+
+This is NOT the BC OData API — it is the public live-auction feed running on vectis.co.uk
+(auctionmarketer-powered). Documented here because it is the other "external Vectis API" the
+app talks to, and the protocol was learned empirically — there is no published spec.
+
+### Connection
+
+\`\`\`
+wss://www.vectis.co.uk/wss/{auctionId}
+\`\`\`
+
+- \`auctionId\` is the numeric id from the bidstream URL (NOT the BC \`F0xx\` code)
+- Opens with no auth — public read-only feed
+- Server pushes JSON messages of shape \`{ command, content, tstamp }\` where \`content\` is itself
+  a JSON-stringified payload
+
+### Event types observed
+
+| \`command\` | Meaning |
+|---|---|
+| \`liveBidEvent\` | A bid was placed. \`content\` includes lot, amount, platform, bidder/winner |
+| \`sensorNetworkEvent\` | Sale-state flag changes (paused, bid quicker, etc.) — content shape varies |
+| \`getFairWarningStatus\` | Fair-warning is being declared/cleared on the current lot |
+| \`activeLotLock\` | Auctioneer has locked the current lot (about to hammer) |
+| \`activeLotChange\` | Move to next lot |
+| \`lotInformationUpdate\` | Asking price / metadata change on the active lot |
+| \`liveCommissionBidEvent\` | Stored commission bid being placed by the system |
+| \`undoLiveBid\` | Auctioneer undoing the most recent bid |
+| \`undoneBidChange\` | State after an undo settled |
+| \`liveActiveReload\` | Sale state full re-broadcast (use to resync after disconnect) |
+
+### Platform values seen on bid events
+
+- \`Online\` — bid via the public bidstream web client
+- \`Saleroom\` — bid taken in the physical room by the auctioneer
+- \`BSCB\` — likely stored / commission bids (not officially confirmed). Left as-is in the UI.
+
+### Capacity / log-rotation notes
+
+A typical sale runs ~800 lots. The auction monitor keeps a rolling event log (\`logRows\`) capped
+at 500 rows for the UI, BUT also keeps a separate \`allLotOutcomes\` store keyed by lot number
+capped at 2000 entries so session totals (sold / passed / £ hammer) survive log rotation. Do not
+derive totals from \`logRows\` — they will undercount on any sale longer than ~250 lots.
+
+## ntfy.sh push notifications (auction monitor)
+
+Used for phone alerts when sale-state thresholds trip. **Critical**: do NOT send custom headers
+(\`Title\`, \`Priority\`, \`Tags\`) — they trigger a CORS preflight that ntfy.sh rejects from the
+browser. Use the JSON body format instead:
+
+\`\`\`javascript
+fetch("https://ntfy.sh", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ topic, title, message, priority, tags }),
+})
+\`\`\`
+
+The 10 configurable alert rules (connection drop, stall, paused, bid quicker, fair warning,
+recovery, high-value sold, lot passed, periodic heartbeat, etc.) are stored in localStorage as
+\`auction_monitor_alert_rules\` and each has its own threshold + enabled flag.
+
+## Standard field-discovery pattern (when adding a new BC integration)
+
+1. Call \`/api/bc/api-viewer?endpoint=NewEndpoint&limit=1\` and inspect the \`fields\` array.
+2. Confirm the OData field name for each logical field you need.
+3. Cross-check this file — endpoint may already be documented.
+4. **If the field name differs from another endpoint, document it here.** This is the kind of bug that costs hours when forgotten.
+
+
+## ⚠⚠ The cache had NO delete path until 2026-08-19 — rows deleted in BC lived here forever
+
+Every \`sync/*\` stage is **upsert-only**, deliberately, so a partial walk can never wipe good data. The cost: a row **deleted in BC stayed in \`WarehouseItem\` indefinitely**. Found when Jordan put BC's own Receipt Lines screen beside ours — receipt **R008537** returns **50** rows from live BC, our cache held **143**. The 93 ghosts were temp **A995** lines BC deleted when the items were re-receipted, and their barcodes had since been reused on **other customers' lots** — which is how a search for one customer's tote showed another customer's items in the Admin Centre. ~1,800 A9xx rows cache-wide had the same shape.
+
+**\`POST /api/warehouse/sync/reconcile-deleted\`** — Data Sync **stage 8**, and the tail of the nightly \`cron/bc-warehouse\`. For each *suspect* receipt (any holding at least one A9xx row) it asks **live BC** what that receipt actually contains and deletes the cached rows BC no longer has.
+
+⚠ **It is the only stage allowed to delete, so the rules are strict and must stay:**
+- **Suspects only** — never a whole-table sweep deciding what to kill.
+- **Live BC is the sole authority** — never a heuristic, never our own cache.
+- **An empty answer deletes nothing.** A receipt returning no rows is skipped and counted; "delete everything" must never ride on a response that may simply have failed.
+- **A fetch error stops the run** rather than skipping on.
+
+⚠ Same contract as the other stages (\`{nextLink, maxItems}\` in, \`{itemsProcessed, pages, more, nextLink}\` out) so the Data Sync stage loop drives it unchanged; \`nextLink\` is the last receipt processed.
+
+## ⚠ "Who catalogued it" lives in THREE BC fields — the obvious one is usually empty
+
+\`EVA_CataloguedBy\` is a short **code** ("KS") and is blank on tens of thousands of lines. \`EVA_CataloguedByUser\` and \`EVA_CreatedBy\` carry a **Windows username** ("ANNABELL.FENBY"). Measured on 200 catalogued receipt lines whose \`EVA_CataloguedBy\` was blank: **98** had \`CataloguedByUser\`, **all 200** had \`CreatedBy\`. Synced onto \`WarehouseItem.cataloguedByUser\` / \`bcCreatedBy\`; resolved by **\`bcPersonName()\`** in \`lib/cataloguer-directory.ts\` (code → directory, then username matched on the directory's **email** local-part, then title-cased).
+
+⚠ **\`receiptTotes\` (eva/tot custom API) field names, read off a live row:** \`receiptNo\`, \`toteNo\`, \`vendorNo\`, \`articleCategory\`, \`articleSubcategory\`, \`articleSubcategory2\`, \`contentsDescription\`, \`catalogued\`, \`cataloguedAt\`, \`cataloguedBy\`, \`toteLocation\`, \`systemCreatedAt\`, \`reserveStatus\`, \`reservePrice\`. camelCase, unlike the \`EVA_\`-prefixed Excel feeds.
+
+## ⚠⚠ Assigning a lot number in BC does NOT bump \`EVA_SystemModifiedAt\` (2026-09-03)
+
+Measured live: \`Auction_Receipt_Lines_Excel\` for R009644-31 (F114439) had **\`EVA_CurrentLotNo = 469\`**
+with **\`EVA_SystemModifiedAt = 2026-09-01T12:29\`** — the stamp from when the line was last
+*edited*, not from when it was *numbered*. \`Auction_Lines_Excel\` for the same lot: \`EVA_LotNo = 469\`,
+\`EVA_TotalLotNo = "469"\`.
+
+The auction-lines sync is incremental on \`EVA_SystemModifiedAt ge lastTimestamp\`, so a lot that is
+numbered and then never touched again is **never re-read** — our copy stays \`"0"\`. On F114 that was
+94 lots ("94 not numbered yet" on the Admin Centre; searching F114 lot 469 found nothing). The 600
+that had numbers only had them because something else edited the line afterwards.
+
+**Fix:** \`/api/warehouse/sync/auction-lines\` now runs a **numbering top-up** after the incremental
+pass (only when it has caught up, \`more === false\`): for every sale dated **within the last week or
+the next year** (from \`WarehouseItem.auctionDate\`, which is TEXT \`YYYY-MM-DD\`), it re-reads
+\`EVA_SalesAllocation eq 'CODE' and EVA_CurrentLotNo ne 0\` with **no stamp filter** — only numbered
+lines come back (F114: 500+ rows, 1.5s) — per sale in parallel, five at a time, and writes only the
+rows we hold wrong. Response carries \`topUp: { sales, rowsRead, updated, failed }\`. The A99x/X999
+placeholder sales (dated 2099–3000) fall outside the window on purpose.
+
+- ⚠ \`PTE_InternalBarcode\` does **not** exist on \`Auction_Receipt_Lines_Excel\` (400) — filter that
+  endpoint by \`EVA_UniqueID\` or \`EVA_SalesAllocation\`. It does exist on \`Receipt_Lines_Excel\`.
+- ⚠ \`EVA_CurrentLotNo\` is **numeric** on the wire (\`ne 0\`, not \`ne '0'\`); \`EVA_TotalLotNo\` is text.
+- ⚠ In Prisma, \`NOT { currentLotNo: x }\` skips NULL rows (SQL \`NOT (NULL = x)\` is NULL) — the top-up
+  matches \`OR [{ currentLotNo: null }, { NOT … }]\` for that reason.
+`,
   },
   {
     filename: "vectis_company_facts.md",
