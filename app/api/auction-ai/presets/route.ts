@@ -24,17 +24,24 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH — toggle an instruction's favourite flag.
+// PATCH — toggle an instruction's favourite or archived flag (either, or both).
+// Archiving takes it out of the Instructions list and every run dropdown; it is
+// never a delete, and resolveInstruction still finds it by key (see the note
+// there — a queued overnight sale depends on that).
 export async function PATCH(req: NextRequest) {
   try {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-    const { key, favourite } = await req.json()
-    if (!key || typeof favourite !== "boolean")
+    const { key, favourite, archived } = await req.json()
+    if (!key || (typeof favourite !== "boolean" && typeof archived !== "boolean"))
       return NextResponse.json({ error: "Invalid body" }, { status: 400 })
 
-    await prisma.aiPreset.update({ where: { key }, data: { favourite } })
+    const data: { favourite?: boolean; archived?: boolean } = {}
+    if (typeof favourite === "boolean") data.favourite = favourite
+    if (typeof archived  === "boolean") data.archived  = archived
+
+    await prisma.aiPreset.update({ where: { key }, data })
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error("presets PATCH error:", e)
@@ -89,6 +96,11 @@ export async function POST(req: NextRequest) {
     const hasFav = Array.isArray(body?.favourites)
     const favSet = new Set<string>(hasFav ? body.favourites.filter((k: any) => typeof k === "string") : [])
 
+    // Same rule for archived (v4+): only touched when the file carries the list,
+    // so importing an older export never un-archives everything here.
+    const hasArchived = Array.isArray(body?.archived)
+    const archivedSet = new Set<string>(hasArchived ? body.archived.filter((k: any) => typeof k === "string") : [])
+
     // Category layout (v3+). Applied only to the keys being imported, and never
     // deletes categories — new category names are appended after the existing
     // ones so an import can't scramble a layout that's already arranged here.
@@ -119,16 +131,18 @@ export async function POST(req: NextRequest) {
       }
       for (const [key, instruction] of entries) {
         const place = placementOf(key)
-        const update: { instruction: string; favourite?: boolean; category?: string | null; sortOrder?: number } = { instruction }
-        const create: { key: string; instruction: string; favourite?: boolean; category?: string | null; sortOrder?: number } = { key, instruction }
+        const update: { instruction: string; favourite?: boolean; archived?: boolean; category?: string | null; sortOrder?: number } = { instruction }
+        const create: { key: string; instruction: string; favourite?: boolean; archived?: boolean; category?: string | null; sortOrder?: number } = { key, instruction }
         if (hasFav) { update.favourite = favSet.has(key); create.favourite = favSet.has(key) }
+        if (hasArchived) { update.archived = archivedSet.has(key); create.archived = archivedSet.has(key) }
         if (place) { update.category = place.category; update.sortOrder = place.sortOrder; create.category = place.category; create.sortOrder = place.sortOrder }
         try {
           await tx.aiPreset.upsert({ where: { key }, update, create })
         } catch {
-          // Pre-migration environment (no category/sortOrder columns): retry
-          // without the placement so the instruction text still lands.
-          delete update.category; delete update.sortOrder; delete create.category; delete create.sortOrder
+          // Pre-migration environment (missing category/sortOrder/archived
+          // columns): retry with just the text so the instruction still lands.
+          delete update.category; delete update.sortOrder; delete update.archived
+          delete create.category; delete create.sortOrder; delete create.archived
           await tx.aiPreset.upsert({ where: { key }, update, create })
         }
       }

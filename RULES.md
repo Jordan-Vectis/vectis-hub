@@ -494,6 +494,30 @@ drift happened even though nobody edited it in the UI). Do **not** reintroduce a
   file → tick which to apply → upserts them). `POST /api/auction-ai/presets` does the bulk upsert
   (add new / overwrite by key). Import **never deletes** — it only adds/overwrites the ticked keys.
   This is the intended way to make production match staging after an instruction change.
+- **Archive (2026-09-04).** `AiPreset.archived` (Boolean, **NEEDS Run Migrations**) takes an old
+  instruction out of the Instructions list **and out of every run-tab dropdown**, reversibly.
+  Toggled by 🗄 Archive / ↩ Restore on the view panel, or ↩ in the collapsed **🗄 Archived (N)**
+  section at the foot of the list. Same `PATCH /api/auction-ai/presets` as favourites, which now
+  accepts `{key, favourite}` and/or `{key, archived}`.
+  - ⚠⚠ **`resolveInstruction()` must NEVER check `archived`.** A queued overnight sale stores its
+    instruction as a plain string on `PipelineQueueItem.preset` — no foreign key, no validation.
+    Refusing an archived key would fail **every lot of that sale, all night, unattended**. Archiving
+    is a LIST FILTER, not a delete and not a lock.
+  - ⚠ Filtered in **`getAllInstructions()`**, never in `fetchRows()`. That function's
+    `rows.length === 0` check seeds the starter defaults, so filtering lower down would make
+    archiving the last instruction **re-seed every built-in**. One filter there hides them from all
+    five pickers at once (Chat, Batch, Pipeline, Instructions Testing, the overnight queue form).
+  - ⚠ **`getPresetLayout()` (`?layout=1`) deliberately still returns them**, flagged — it feeds the
+    tab that has to show them to restore them, and it feeds **Export all**.
+  - ⚠ The client keeps archived rows in `presets` and filters at **render**. Dropping them at load
+    would leave them out of the export file and renumber `sortOrder` around the gap on the next drag.
+  - Export/Import **v4** carries an `archived` array, guarded by `Array.isArray` exactly like
+    `favourites`, so importing an older file never un-archives anything.
+  - ⚠ Archiving whatever currently sorts first silently changes the default instruction on the four
+    tabs that auto-select `Object.keys(m)[0]`. Expected, but worth knowing.
+  - `fetchRows()` gained its own fallback tier for the new column. **Each tier drops exactly one
+    feature** — adding a column to the top select without a matching tier sends a pre-migration
+    environment straight to the raw two-column read and silently loses favourites and categories.
 - **Favourites.** `AiPreset.favourite` (Boolean, **NEEDS Run Migrations**) pins instructions to the
   top of the Instructions list (and the run-tab dropdowns, via favourites-first ordering). Toggled by
   the ★ button → `PATCH /api/auction-ai/presets {key, favourite}`. `getAllInstructions()` returns the

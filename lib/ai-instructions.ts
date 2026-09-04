@@ -23,24 +23,34 @@ async function seedDefaults(): Promise<void> {
   )
 }
 
-export type InstructionRow = { key: string; instruction: string; favourite: boolean; category: string | null; sortOrder: number }
+export type InstructionRow = { key: string; instruction: string; favourite: boolean; category: string | null; sortOrder: number; archived: boolean }
 export type CategoryRow = { name: string; sortOrder: number }
 
-// Defensive read: if the `favourite` / `category` / `sortOrder` columns haven't
-// been migrated yet (code deploys before the Run Migrations button is clicked),
-// fall back to a raw select of the existing columns so the Auction AI tools keep
-// working — favourites/categories simply stay off until the migration runs.
+// Defensive read: if the `archived` / `favourite` / `category` / `sortOrder`
+// columns haven't been migrated yet (code deploys before the Run Migrations
+// button is clicked), fall back a tier at a time so the Auction AI tools keep
+// working — the newer features simply stay off until the migration runs.
+//
+// ⚠ Each tier drops ONE feature. Adding a new column to the top select without
+// adding its own tier would send a pre-migration environment all the way down to
+// the raw two-column read, silently losing favourites and categories with it.
 async function fetchRows(): Promise<InstructionRow[]> {
   try {
-    const rows = await prisma.aiPreset.findMany({ select: { key: true, instruction: true, favourite: true, category: true, sortOrder: true } })
-    return rows.map((r) => ({ ...r, category: r.category ?? null, sortOrder: r.sortOrder ?? 0 }))
+    const rows = await prisma.aiPreset.findMany({ select: { key: true, instruction: true, favourite: true, category: true, sortOrder: true, archived: true } })
+    return rows.map((r) => ({ ...r, category: r.category ?? null, sortOrder: r.sortOrder ?? 0, archived: !!r.archived }))
   } catch {
     try {
-      const raw = await prisma.$queryRaw<{ key: string; instruction: string; favourite: boolean }[]>`SELECT "key", "instruction", "favourite" FROM "AiPreset"`
-      return raw.map((r) => ({ ...r, category: null, sortOrder: 0 }))
+      // No `archived` column yet — every instruction reads as active.
+      const rows = await prisma.aiPreset.findMany({ select: { key: true, instruction: true, favourite: true, category: true, sortOrder: true } })
+      return rows.map((r) => ({ ...r, category: r.category ?? null, sortOrder: r.sortOrder ?? 0, archived: false }))
     } catch {
-      const raw = await prisma.$queryRaw<{ key: string; instruction: string }[]>`SELECT "key", "instruction" FROM "AiPreset"`
-      return raw.map((r) => ({ ...r, favourite: false, category: null, sortOrder: 0 }))
+      try {
+        const raw = await prisma.$queryRaw<{ key: string; instruction: string; favourite: boolean }[]>`SELECT "key", "instruction", "favourite" FROM "AiPreset"`
+        return raw.map((r) => ({ ...r, category: null, sortOrder: 0, archived: false }))
+      } catch {
+        const raw = await prisma.$queryRaw<{ key: string; instruction: string }[]>`SELECT "key", "instruction" FROM "AiPreset"`
+        return raw.map((r) => ({ ...r, favourite: false, category: null, sortOrder: 0, archived: false }))
+      }
     }
   }
 }
@@ -73,19 +83,29 @@ function orderRows(rows: InstructionRow[], cats: CategoryRow[]): InstructionRow[
 // category). Seeds the starter defaults automatically only if the table is
 // completely empty (a fresh environment) — never fills in individual keys, so a
 // deleted instruction stays deleted.
+// ⚠ ARCHIVED instructions are dropped here, which is what takes them out of
+// every run-tab dropdown at once (they all read this, via the default GET and
+// ?full=1). Filter HERE and not inside fetchRows(): the empty-table check below
+// seeds the starter defaults, so archiving the last instruction would re-seed
+// the whole set of built-ins.
 export async function getAllInstructions(): Promise<InstructionRow[]> {
   let rows = await fetchRows()
   if (rows.length === 0) {
     await seedDefaults()
     rows = await fetchRows()
   }
-  return orderRows(rows, await fetchCategories())
+  return orderRows(rows.filter((r) => !r.archived), await fetchCategories())
 }
 
 // Full layout for the Instructions management tab: every instruction (with its
 // category + order) plus the persisted list of category headers (including empty
 // ones). Categories in use but not yet in the header table are appended so
 // nothing is ever hidden.
+//
+// ⚠ Deliberately returns ARCHIVED rows too, each carrying its flag. This is the
+// tab that has to show them in order to restore them, and it is also the source
+// for Export all — dropping them here would quietly leave archived instructions
+// out of the staging → production sync file.
 export async function getPresetLayout(): Promise<{ instructions: InstructionRow[]; categories: CategoryRow[] }> {
   let rows = await fetchRows()
   if (rows.length === 0) {
@@ -103,6 +123,13 @@ export async function getPresetLayout(): Promise<{ instructions: InstructionRow[
 // truth), so a run always uses exactly the saved version. Selects only the
 // instruction text (never the favourite column) so it is safe before the
 // migration. Seeds first if the table is empty. Throws if the key is missing.
+//
+// ⚠⚠ ARCHIVING IS A LIST FILTER ONLY — never add an archived check here.
+// A queued overnight sale stores its instruction as a plain string on
+// PipelineQueueItem.preset, with no foreign key and no validation. Refusing an
+// archived key would fail EVERY LOT of that sale, all night, with nobody
+// watching. Hiding an instruction from the pickers must never break a sale that
+// was queued while it was still on the list.
 export async function resolveInstruction(key: string): Promise<string> {
   if (!key) return ""
   let row = await prisma.aiPreset.findUnique({ where: { key }, select: { instruction: true } })

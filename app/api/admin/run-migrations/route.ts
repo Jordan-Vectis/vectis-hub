@@ -1791,6 +1791,11 @@ const MIGRATIONS = [
   // Quick mode on a queued sale — the runner paces itself instead of waiting a
   // flat 12s between lots. Default false, so every existing row is unchanged.
   `ALTER TABLE "PipelineQueueItem" ADD COLUMN IF NOT EXISTS "fastMode" BOOLEAN NOT NULL DEFAULT false`,
+
+  // Archive an Auction AI instruction: out of the Instructions list and out of
+  // every run dropdown, but still resolvable by key so a queued overnight sale
+  // holding that name keeps running. Default false, so nothing is hidden today.
+  `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "archived" BOOLEAN NOT NULL DEFAULT FALSE`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

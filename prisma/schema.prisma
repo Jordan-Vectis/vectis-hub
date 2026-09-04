@@ -290,6 +290,7 @@ model AiPreset {
   key         String   @id
   instruction String   @db.Text
   favourite   Boolean  @default(false)
+  archived    Boolean  @default(false) // out of the list and the run dropdowns, but still resolvable by key
   category    String? // header the instruction sits under (null = Uncategorised)
   sortOrder   Int      @default(0) // order within its category (drag-to-reorder)
   updatedAt   DateTime @updatedAt

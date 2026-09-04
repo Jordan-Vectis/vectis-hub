@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7cf6f2638a470727e4ea435741692cb205510289","author":"Jordan Orange","date":"2026-09-04T11:40:46+01:00","subject":"Rules: don't ask to push to main, Jordan says when"},
   {"sha":"6f4d88236e35e4f62ca460e13af348bd3042733f","author":"Jordan Orange","date":"2026-09-04T11:31:28+01:00","subject":"End of Day: stop flagging an empty tote"},
   {"sha":"2c720cec75b5d16b5991a56f7d9e36c80007821b","author":"Jordan Orange","date":"2026-09-04T11:15:30+01:00","subject":"Change Vendor by receipt: just clear the tote"},
   {"sha":"1c01c0f1b9b5c2c0d0fc0beb8ae7c50455179fe0","author":"Jordan Orange","date":"2026-09-04T09:51:20+01:00","subject":"chore: restore the memory page's line endings"},
