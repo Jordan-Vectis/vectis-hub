@@ -200,7 +200,9 @@ export default function EndOfDayPage() {
     if (!confirm(
       `Move the ${selected.size} ticked lot${selected.size === 1 ? "" : "s"} to ${what}?\n\n` +
       "Vendor and receipt are set from the BC data" +
-      (lookup.kind === "tote" ? ", and the lot's tote is corrected too" : "") +
+      (lookup.kind === "tote"
+        ? ", and the lot's tote is corrected too"
+        : ", and any tote that doesn't belong to that receipt in BC is cleared") +
       ". Existing unique IDs are kept. Every change is logged and can be undone per sale from Manage Lots → Undo."
     )) return
     setApplying(true); setFixResult(null)

@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"0e39438d18154c626f487d7380d8fe602132a2e7","author":"Jordan Orange","date":"2026-09-04T09:24:11+01:00","subject":"Name the Railway deployment after the work, not the changelog seed"},
   {"sha":"015780e8b3bedc118d5b704e8930957b95e885c2","author":"Jordan Orange","date":"2026-09-04T09:04:34+01:00","subject":"Merge staging into main: reserves on the tablet, BC lot-number top-up, app-wide fallback model"},
   {"sha":"ce966fb16637ff92dc4b71d1b3da2bbf475fee1f","author":"Jordan Orange","date":"2026-09-04T09:04:21+01:00","subject":"Refresh changelog seed"},
   {"sha":"277f2eb6de0776e4f024951296b5da7b12f05273","author":"Jordan Orange","date":"2026-09-03T16:59:09+01:00","subject":"Add an app-wide fallback model, and make Overnight runs open on the admin defaults"},

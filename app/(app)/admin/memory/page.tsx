@@ -2781,7 +2781,22 @@ Two faults, one symptom:
 1. **Manage Lots never passed \`tote\`.** \`setLotsVendorReceipt\` has taken an optional \`tote\` since the End of Day work, but Manage Lots deliberately did not send it ("so its behaviour is unchanged"). Typing a TOTE therefore moved receipt + vendor and left the lot on its old tote. It now sends the tote whenever \`vendorHit.kind === "tote"\`. ⚠ Do not "restore" the old scoping — Jordan asked for all three explicitly.
 2. **\`updated === 0\` was reported as success** — "✓ Changed 0 lots" reads as done. That is exactly what he saw when the ticked lots already had the right receipt and vendor and only the tote was wrong: nothing to change, so nothing changed, and the message said it worked. Zero updated is now an amber "Nothing changed — already on …".
 
-⚠ The action itself was always correct (it only writes fields that differ, logs via \`updateLotLogged\` with source \`vendor_change\`, and supports per-sale Undo). The bug was entirely in the caller — check the caller before suspecting \`setLotsVendorReceipt\`.
+⚠ The action itself was always correct (it only writes fields that differ, logs via \`updateLotLogged\` with source \`vendor_change\`, and supports per-sale Undo). The bug was entirely in the caller — check the caller before suspecting \`setLotsVendorReceipt\`.
+
+### ⚠⚠ CHANGE VENDOR BY RECEIPT CLEARS A TOTE THAT NO LONGER FITS (2026-09-04)
+
+Jordan: "when I change a vendor by receipt number it leaves the old tote number causing it to be flagged in the end of day, it should just clear the tote field".
+
+Typing a RECEIPT moved vendor and receipt but left the old tote untouched — \`lookupToteOrReceipt\` returns a null tote in receipt mode (a receipt spans many totes), and the writer's truthiness guard meant a blank never reached the update. There was NO code path anywhere that wrote a null tote.
+
+⚠⚠ IT IS NOT JUST NOISE. The stale tote makes End of Day show receipt_mismatch + vendor_mismatch, BOTH RED, and 🔧 Fix what BC can prove then corrects vendor/receipt back FROM that tote — silently reversing the change that was just made.
+
+\`setLotsVendorReceipt\` now clears a tote BC does not place on the receipt being set. Done in the SERVER, so all three callers behave the same (Manage Lots, the End of Day intervention bar, End of Day's typed mass re-map) — none of them needed changing.
+
+- ⚠⚠ A TOTE BC DOES PLACE ON THE NEW RECEIPT IS KEPT. Typing a receipt asserts the receipt; it says nothing against a tote that already agrees. MEASURED ON PRODUCTION 2026-09-04: of 4,476 active-sale lots holding both a tote and a receipt, 4,365 have a tote that matches and only 111 do not. A blanket clear would wipe thousands of correct totes across a ticked sale and trade a red flag for an amber No tote on the lot (no_tote, which is NOT ignorable). Never simplify this to an unconditional clear.
+- ⚠ AN EMPTY ANSWER FROM BC CLEARS NOTHING. No totes listed for that receipt = the tote is left alone. The tote feed has had real gaps (a tote ticked Catalogued used to vanish from it — the reason sync/totes-all exists), and silence is not evidence. Same rule as sync/reconcile-deleted. Measured: 0 lots in that state.
+- Tote mode is unchanged: an explicit tote is simply set.
+- Both confirm dialogs now say the tote will be cleared. Also in RULES.md.
 
 ## Added By + Date Added filters (2026-08-14)
 
