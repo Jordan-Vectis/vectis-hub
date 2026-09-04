@@ -971,6 +971,74 @@ The page's `CHECK_META` entry, its row renderer case and its "not ignorable" cla
 `duplicate_barcode` remains the only check the server refuses to let anyone ignore.
 
 ---
+## 🎥 IT Tools → Screen Recorder (2026-09-04)
+
+Jordan: *"I just start the recording and its stored in the hub"* — for recording Auto Clerk tests,
+the website, a fault, anything on the screen. Recording ONLY; a private livestream was offered and
+not pursued (no TURN server, and the socket layer has no login check — see the memory record).
+
+`app/(app)/tools/it-tools/recorder-tab.tsx` + `app/api/it-tools/recordings/*` + `ScreenRecording`
+(**NEEDS Run Migrations**). Browser `getDisplayMedia` + `MediaRecorder`; on Stop the browser PUTs the
+file **straight to R2 on a presigned URL** (a recording is hundreds of MB; the server body limit is
+20 MB and the proxy silently truncates past it), then registers the row.
+
+- **Desktop Chrome/Edge only.** iOS has no `getDisplayMedia`, so the iPads can't record; the tab
+  says so and still lets them play recordings. Everyone signed in can see every recording, the same
+  as the rest of IT Tools (`allUsers`).
+- ⚠⚠ **The recording lives in the tab's memory until it is saved.** Three guards, keep all three:
+  the IT Tools page keeps the recorder **mounted** (`hidden`, not unmounted) once opened, so
+  switching tabs doesn't kill it; `beforeunload` fires while anything is unsaved — recording,
+  uploading, **or a failed save still held in memory**; and unmounting mid-recording (a link
+  elsewhere in the Hub) **stops and saves what was captured** rather than dropping it. The
+  **Pop out** window hides this page's chrome AND the Hub top bar (a `<style>` from the page — the
+  shell layout can't read the query) so there is nothing to click away to. A second Pop out click
+  must **focus** the existing window: it probes with `window.open("", name)`, which returns an
+  existing window *without* navigating it — navigating would reload one that is recording.
+- ⚠ **Nothing unsaved is discarded until a NEW capture has begun.** Pressing Record with a failed
+  save in memory asks first — **inline, never `confirm()`**: a modal can outlive the click's transient
+  activation (~5 s in Chromium) and `getDisplayMedia` then refuses to open. Even after "yes" the old
+  recording and its retry / save-locally buttons stay until the picker has actually produced a
+  stream — and if the old file had already reached storage, it is **registered first** (idempotent
+  POST) so it lands in the list where it can be deleted, never left as an object nothing points at.
+  A closed picker, or screen capture blocked by the OS, gets an amber notice — a Record button that
+  silently does nothing reads as broken.
+- ⚠ **Record is guarded while the picker or mic prompt is up** (`startingRef` + `starting`). Without
+  it a double-click, or a click during Chrome's non-modal mic bubble, started a SECOND recorder into
+  the same chunk array — an unplayable interleaved file, and the first recorder and its stream leaked.
+- ⚠ **An in-flight save is guarded at MODULE scope, not in state.** The unmount path starts a save
+  with no component behind it; a state-held `beforeunload` is torn down with the instance, leaving a
+  minutes-long PUT unguarded. `pendingSaves` + one module-level listener cover it, and a save that
+  fails after its component has gone is stashed (`stranded`) and handed to the next mount so retry and
+  save-locally are still there.
+- **A stalled upload can be cancelled** (the XHR is kept and aborted) and the recording stays in
+  memory with both retry and save-locally on offer. A recorder error mid-recording is a **notice**,
+  not the error box — `upload()` clears the error box on its way in, which would have announced a
+  truncated file as "✓ Saved".
+- **Play URLs are signed for 8 hours**, not the Documents route's one: a `<video>` fetches lazily in
+  Range requests, each checked against the expiry, so an hour meant seeking or resuming an hour
+  after pressing Play died with a 403. A failed Play/Delete on one row shows above the table
+  (`actionError`); only a failed *load* replaces it (`listError`).
+- ⚠⚠ **Fail at the free step, never after the upload.** `upload-url` touches the table
+  (`findFirst`) *before* signing, so a missing migration or a down database fails before the
+  browser spends minutes pushing a file the save could never register.
+- ⚠⚠ **A retry never re-uploads.** The client keeps the key once the PUT succeeds and a retry only
+  re-registers it; the save `POST` is **idempotent on key** (returns the existing row). Without
+  both, every retry left another unlisted, undeletable object in the bucket.
+- ⚠ **Only a definite 404 means "nothing was saved".** The save route HEADs the object itself and
+  turns any other failure into a 503 that says the file *may well be there* — `objectExistsInR2`
+  returns false on *every* error, which would have told people their upload was lost when it wasn't.
+  R2 is strongly consistent, so there is no eventual-consistency wait after a 200 PUT.
+- ⚠ **Size cap is 2,000,000,000 bytes, not 2 GiB** — `sizeBytes` is a Postgres INTEGER (max
+  2,147,483,647) and 2 GiB is one byte over. The cap is checked against the client-declared size
+  and is **not bound into the signature** (same as the Documents route); the route is
+  session-gated, so that is accepted rather than fixed. Bitrate is 2.5 Mbit/s (~1.1 GB/hour).
+- `MediaRecorder` records only the **first** audio track, so system audio and the microphone are
+  **mixed with an AudioContext**. MP4 is preferred where the browser can produce it; Chrome's WebM
+  carries no duration (seek bar broken), so WebM playback uses the seek-to-end trick.
+- The save route validates the key against the **exact shape** `upload-url` mints, never a prefix.
+- Registered in `lib/help-map.ts` ("How do I record my screen?").
+
+---
 ## ⚠⚠ The edit lock is the CATALOGUED tick, not "Added to BC" (2026-09-02)
 
 `requireNotBCLocked` — the one gate, 28 call sites — reads **`CatalogueAuction.catalogued`**.

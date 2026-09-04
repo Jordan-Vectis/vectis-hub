@@ -1796,6 +1796,21 @@ const MIGRATIONS = [
   // every run dropdown, but still resolvable by key so a queued overnight sale
   // holding that name keeps running. Default false, so nothing is hidden today.
   `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "archived" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // IT Tools → Screen Recorder: one row per recording, written only after the
+  // file has landed in R2 (the browser uploads straight there).
+  `CREATE TABLE IF NOT EXISTS "ScreenRecording" (
+    "id"             TEXT NOT NULL,
+    "title"          TEXT NOT NULL,
+    "key"            TEXT NOT NULL,
+    "contentType"    TEXT NOT NULL,
+    "sizeBytes"      INTEGER NOT NULL,
+    "durationMs"     INTEGER NOT NULL,
+    "recordedBy"     TEXT NOT NULL,
+    "recordedByName" TEXT NOT NULL,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ScreenRecording_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

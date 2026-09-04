@@ -223,6 +223,13 @@ export const DESTINATIONS: Destination[] = [
     what: "The IT knowledge base and its own AI chat, for computer and equipment problems rather than 'where do I go' questions.",
     also: ["printer", "password", "broken", "it problem"],
   },
+  // ── IT Tools ────────────────────────────────────────────────────────────────
+  {
+    ask: "How do I record my screen?",
+    name: "IT Tools → Screen Recorder", href: "/tools/it-tools?tab=recorder",
+    what: "Record any screen, window or tab from the browser and keep the video in the Hub — for showing a fault, recording an Auto Clerk test, or a walk-through of the website. Computer only; the iPads can't do it.",
+    also: ["screen recording", "record the screen", "screen capture", "video of my screen", "record a test", "recordings"],
+  },
 ]
 
 /** Every AppKey mentioned in the map really exists. Cheap guard against a typo'd key

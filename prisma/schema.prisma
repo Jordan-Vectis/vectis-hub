@@ -1350,6 +1350,22 @@ model DocumentFile {
   createdAt  DateTime        @default(now())
 }
 
+// A screen recording made from IT Tools → Screen Recorder. The browser captures a
+// screen, window or tab and uploads the file STRAIGHT to R2 (presigned PUT — a
+// recording can run to hundreds of MB, far past the 20 MB server body limit);
+// this row is written only after that upload succeeds, so a row always has a file.
+model ScreenRecording {
+  id             String   @id @default(cuid())
+  title          String
+  key            String   // R2 object key, recordings/…
+  contentType    String   // video/mp4 or video/webm — whatever the browser could produce
+  sizeBytes      Int
+  durationMs     Int
+  recordedBy     String   // email
+  recordedByName String
+  createdAt      DateTime @default(now())
+}
+
 // Pre-typed email reply snippets staff can copy into customer responses.
 // Lives behind the IT Tools "Templates" tab.
 model EmailTemplate {

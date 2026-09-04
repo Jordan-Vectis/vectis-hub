@@ -1,9 +1,11 @@
 ﻿"use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import ModelPingTester from "@/components/model-ping-tester"
 import BcSourceTab from "./bc-source-tab"
+import RecorderTab from "./recorder-tab"
 
 const FALLBACK_MODEL = "gemini-3-flash-preview"
 
@@ -17,11 +19,39 @@ type Template = {
   sortOrder: number
 }
 
+type Tab = "reply" | "templates" | "bc-source" | "recorder"
+const TABS: Tab[] = ["reply", "templates", "bc-source", "recorder"]
+const isTab = (t: string | null): t is Tab => !!t && (TABS as string[]).includes(t)
+
+// useSearchParams needs a Suspense boundary on a client page, and it earns it: the
+// Help box links to ?tab=recorder, and a mount-only read of window.location did
+// nothing when you were already on IT Tools. It also means a deep link opens on
+// the right tab first time, rather than flashing Draft Reply and its fetches.
 export default function ITToolsPage() {
-  const [tab, setTab] = useState<"reply" | "templates" | "bc-source">("reply")
+  return <Suspense fallback={null}><ITToolsInner /></Suspense>
+}
+
+function ITToolsInner() {
+  const params = useSearchParams()
+  // ?tab=recorder&popout=1 is what the recorder's "Pop out" button opens: the same
+  // page in a small window with this page's heading and tab bar hidden AND the Hub
+  // top bar hidden (the <style> below — the shell's layout can't see the query),
+  // so the window has nothing to click away to while the screen is being recorded.
+  const popout = params.get("popout") === "1"
+  const [tab, setTab] = useState<Tab>(() => (isTab(params.get("tab")) ? (params.get("tab") as Tab) : "reply"))
+  useEffect(() => { const t = params.get("tab"); if (isTab(t)) setTab(t) }, [params])
+  // ⚠ The recorder holds an in-progress recording in memory, so once it has been
+  // opened it stays MOUNTED (hidden, not removed) while you look at the other tabs.
+  // Unmounting it mid-recording would stop the recording.
+  const [recorderOpened, setRecorderOpened] = useState(tab === "recorder")
+  useEffect(() => { if (tab === "recorder") setRecorderOpened(true) }, [tab])
+  // Data-bearing tabs get the width (RULES → design rule 1); the prose tabs keep the column.
+  const wide = tab === "bc-source" || tab === "recorder"
 
   return (
-    <div className={tab === "bc-source" ? "p-8 max-w-[1700px] mx-auto" : "p-8 max-w-5xl mx-auto"}>
+    <div className={popout ? "p-4" : wide ? "p-8 max-w-[1700px] mx-auto" : "p-8 max-w-5xl mx-auto"}>
+      {popout && <style>{"header{display:none}"}</style>}
+      {!popout && (<>
       <div className="mb-6">
         <Link href="/hub" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300">← Hub</Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">IT Tools</h1>
@@ -31,24 +61,31 @@ export default function ITToolsPage() {
       </div>
 
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
-        {(["reply", "templates", "bc-source"] as const).map(t => (
+        {TABS.map(t => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => {
+              setTab(t)
+              // Keep the URL in step, or a Help-box link to ?tab=recorder is a no-op
+              // whenever the address already says that while another tab is showing.
+              window.history.replaceState(null, "", `/tools/it-tools?tab=${t}${popout ? "&popout=1" : ""}`)
+            }}
             className={`text-sm font-medium px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === t
                 ? "border-cyan-500 text-cyan-700"
                 : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 dark:text-gray-200"
             }`}
           >
-            {t === "reply" ? "✍️ Draft Reply" : t === "templates" ? "📋 Templates" : "🧩 BC Source"}
+            {t === "reply" ? "✍️ Draft Reply" : t === "templates" ? "📋 Templates" : t === "bc-source" ? "🧩 BC Source" : "🎥 Screen Recorder"}
           </button>
         ))}
       </div>
+      </>)}
 
       {tab === "reply"     ? <DraftReplyTab /> : null}
       {tab === "templates" ? <TemplatesTab />  : null}
       {tab === "bc-source" ? <BcSourceTab />   : null}
+      {recorderOpened && <div hidden={tab !== "recorder"}><RecorderTab popout={popout} active={tab === "recorder"} /></div>}
     </div>
   )
 }

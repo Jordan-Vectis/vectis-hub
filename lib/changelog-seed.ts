@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"0f19429898ffb5d0a72fa49fb04839d156b5fd72","author":"Jordan Orange","date":"2026-09-04T15:33:22+01:00","subject":"Archived instructions leave every dropdown at once"},
   {"sha":"69f70f846aaf59294fc6259212b22ef725c70834","author":"Jordan Orange","date":"2026-09-04T15:00:17+01:00","subject":"Instructions: archive an old one, and bring it back"},
   {"sha":"7cf6f2638a470727e4ea435741692cb205510289","author":"Jordan Orange","date":"2026-09-04T11:40:46+01:00","subject":"Rules: don't ask to push to main, Jordan says when"},
   {"sha":"6f4d88236e35e4f62ca460e13af348bd3042733f","author":"Jordan Orange","date":"2026-09-04T11:31:28+01:00","subject":"End of Day: stop flagging an empty tote"},
