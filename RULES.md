@@ -301,6 +301,11 @@ Default branch for all new work is **`staging`** unless told otherwise.
 
 Before every git push, ask yourself: "Did the user explicitly name `main`?" If not, push to `staging` only.
 
+⚠⚠ **And do not ASK to push to main either** (Jordan, 2026-09-04: *"you dont need to ask I will tell
+you when"*). Finish the work, push to `staging`, say plainly what is sitting there and therefore not
+live for him — then stop. No offer, no reminder, no "just say the word". He works on production all
+day and picks the moment himself. Same shape as the Run Migrations rule: state it once, never nag.
+
 ### ⚠ Refresh the changelog seed before pushing
 
 ```bash
