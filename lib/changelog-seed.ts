@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-03, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-04, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -10,10 +10,17 @@
 //     npm run changelog:seed
 // Never edit it by hand. Ingest is keyed on sha, so re-seeding only ever adds
 // what is missing — it can't duplicate or overwrite anything.
+//
+// The very newest commit is deliberately NOT in here. The refresh folds itself
+// into that commit, which changes its sha, so it is recorded by the deploy
+// capture instead and lands here on the next refresh. Between the two, nothing
+// is missed and no commit is filed twice.
 
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"015780e8b3bedc118d5b704e8930957b95e885c2","author":"Jordan Orange","date":"2026-09-04T09:04:34+01:00","subject":"Merge staging into main: reserves on the tablet, BC lot-number top-up, app-wide fallback model"},
+  {"sha":"ce966fb16637ff92dc4b71d1b3da2bbf475fee1f","author":"Jordan Orange","date":"2026-09-04T09:04:21+01:00","subject":"Refresh changelog seed"},
   {"sha":"277f2eb6de0776e4f024951296b5da7b12f05273","author":"Jordan Orange","date":"2026-09-03T16:59:09+01:00","subject":"Add an app-wide fallback model, and make Overnight runs open on the admin defaults"},
   {"sha":"bec3dd3c20c3f720dded8b24d7f5decb5913b41c","author":"Jordan Orange","date":"2026-09-03T16:03:47+01:00","subject":"Update opening message: staging only, reserves tablet fix, help box getEffectiveSession, lot-number top-up"},
   {"sha":"2508b3ac2c560404110149b655c5b50e764eba9c","author":"Jordan Orange","date":"2026-09-03T12:28:48+01:00","subject":"Refresh changelog seed"},

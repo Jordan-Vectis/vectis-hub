@@ -875,10 +875,23 @@ Jordan: "We have made so many changes today but the patches tab only has 1 thing
 
 THEREFORE lib/changelog-seed.ts IS THE ONLY ROUTE by which the app can ever see a change that is not a deploy's headline commit. It had gone stale by 33 commits.
 
-- npm run changelog:seed (scripts/refresh-changelog-seed.mjs) regenerates it from the full LOCAL history. ⚠ RUN IT AND COMMIT THE RESULT AS PART OF EVERY PUSH - now a rule in RULES.md under the branch/deploy rules. Ingest is keyed on sha, so re-seeding only ever adds what is missing.
+- npm run changelog:seed (scripts/refresh-changelog-seed.mjs) regenerates it from the full LOCAL history. ⚠ RUN IT AS PART OF EVERY PUSH - now a rule in RULES.md under the branch/deploy rules. Ingest is keyed on sha, so re-seeding only ever adds what is missing.
 - Two guards, both deliberate: it REFUSES to write from a shallow clone, and REFUSES to shrink the file. Writing a 1-commit seed would delete the committed history and leave the page emptier than before - far worse than not refreshing at all.
 - The "record is complete up to X" banner now reads its date from SEED_COMPLETE_TO (the seed's newest entry) and only appears when the changes on screen actually fall PAST that date. It previously keyed off the capture source alone with a HARDCODED "13 August", so it was permanently on and permanently wrong - a real signal turned into wallpaper. ⚠ Never hardcode that date again.
 - The permanent alternative - a read-only GitHub token so the app tops itself up - remains REJECTED (2026-07-17). Refreshing the seed is the agreed price of the app having no credentials.
+
+## ⚠⚠ THE SEED FOLDS INTO THE WORK COMMIT - IT MAKES NO COMMIT OF ITS OWN (2026-09-04)
+
+Jordan, looking at Railway's deployment list: "How come all the pushes are just called this in railway?" Every deployment, and every release row on this very page, was titled "Refresh changelog seed".
+
+Cause: Railway names a deployment after the HEAD COMMIT of the push, and capture-changelog.mjs reads that same commit for the release headline. Committing the seed refresh LAST made it HEAD every single time, so the real work was buried underneath a housekeeping title. Measured on main: 5 of the last 6 commits were seed refreshes.
+
+The refresh now AMENDS ITSELF INTO the commit it describes, so the deployment is named after the work.
+
+- It amends ONLY when that is unmistakably safe: HEAD unpushed, not a merge commit, nothing else staged, no rebase in progress. Any doubt and it writes the file, prints why it stopped, and leaves the commit alone. It NEVER force-pushes. Pass --no-amend for the old behaviour. All four guards were tested in a throwaway clone.
+- ⚠⚠ THE NEWEST COMMIT IS DELIBERATELY LEFT OUT of the seed. Amending gives it a new sha, so recording the old one would file a commit that no longer exists - and since ingest is keyed on sha, the next refresh would add the new sha BESIDE it as a permanent DUPLICATE row, not a correction. The deploy capture records HEAD under its final sha instead, and the next refresh files it. Verified: 0 dead shas and 0 duplicates across 742 entries. Never fix this by including HEAD.
+- The shrink guard discounts HEAD when amending, or a file written by an earlier --no-amend run would look like the record shrinking.
+- isHousekeeping now also matches Refresh changelog seed, so the roughly 30 already in the history stop padding the manager report.
 
 ## THINGS NOT TO UNDO
 

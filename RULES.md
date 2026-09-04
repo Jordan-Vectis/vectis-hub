@@ -307,8 +307,27 @@ Before every git push, ask yourself: "Did the user explicitly name `main`?" If n
 npm run changelog:seed
 ```
 
-Run it and commit the result **as part of every push**, or the work will not appear in
-Admin → **Patches & Changes**.
+Run it **as part of every push**, or the work will not appear in Admin → **Patches & Changes**.
+
+⚠ **It folds itself into your last commit — it does not make one of its own** (2026-09-04).
+Railway names a deployment after the **HEAD commit of the push**, and `capture-changelog.mjs`
+reads that same commit for the release headline. While the refresh was a separate commit pushed
+on top, it was always HEAD — so **every** Railway deployment and **every** release row was titled
+*"Refresh changelog seed"*, with the actual work buried underneath (Jordan, 2026-09-04: *"How come
+all the pushes are just called this in railway?"*). Now the seed rides inside the commit it
+describes, and the deployment is named after the work.
+
+- It amends **only** when that is unmistakably safe: HEAD unpushed, not a merge commit, nothing
+  else staged, no rebase in progress. Otherwise it writes the file, prints why it stopped, and
+  leaves the commit to you. It never force-pushes. `--no-amend` forces the old behaviour.
+- ⚠ **The newest commit is deliberately absent from the seed.** Amending changes its sha, so
+  recording the old one would file a commit that no longer exists — and because ingest is keyed
+  on `sha`, the next refresh would add the new sha *beside* it as a permanent duplicate row on
+  Patches & Changes. The deploy capture records HEAD under its final sha instead, and the next
+  refresh files it. Nothing is missed and nothing is filed twice. Do not "fix" this by including
+  HEAD.
+- `isHousekeeping` in `lib/changelog.ts` also matches *"Refresh changelog seed"*, so the ~30 such
+  commits already in the history stop padding the manager report. No new ones are created.
 
 **Railway's build has no `.git` directory.** `scripts/capture-changelog.mjs` therefore falls
 through to `RAILWAY_GIT_COMMIT_SHA` / `_MESSAGE` and records **exactly one commit per release** —

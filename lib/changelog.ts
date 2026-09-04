@@ -63,8 +63,10 @@ function currentDeployCommit(): RawCommit | null {
 
 /** Changes that are internal plumbing rather than anything that went out.
  *  Kept in the record (the history should be complete) but flagged so the
- *  manager report isn't padded with them. */
-const HOUSEKEEPING = /^(memory|rules|docs?|chore|typo|lint|wip|merge |revert )/i
+ *  manager report isn't padded with them.
+ *  ⚠ "Refresh changelog seed" is in here for the ~30 of them already in the
+ *  history. The refresh folds into its work commit now and makes no more. */
+const HOUSEKEEPING = /^(memory|rules|docs?|chore|typo|lint|wip|merge |revert |refresh changelog seed)/i
 export function isHousekeeping(subject: string): boolean {
   return HOUSEKEEPING.test(subject.trim())
 }
