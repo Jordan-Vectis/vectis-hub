@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { AI_TOOLS, invalidateToolModelCache } from "@/lib/ai-models"
+import { AI_TOOLS, FALLBACK_SLOT, invalidateToolModelCache } from "@/lib/ai-models"
 
 export const maxDuration = 30
 
@@ -40,14 +40,19 @@ export async function GET() {
       effective: config[t.slot] || t.default,
     }))
 
-    return NextResponse.json({ tools, models })
+    // The app-wide fallback lives in the same table under a reserved key, so it
+    // rides along with the config read rather than costing a second query.
+    return NextResponse.json({ tools, models, fallback: config[FALLBACK_SLOT] ?? "" })
   } catch (e: any) {
     console.error("admin/ai-models GET error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }
 
-// POST /api/admin/ai-models  { updates: [{ slot, modelId }] }  (modelId "" = revert to default)
+// POST /api/admin/ai-models  { updates: [{ slot, modelId }], fallback? }
+//   modelId "" = revert that tool to its built-in default
+//   fallback   = the app-wide fallback model; "" clears it. Omit the field to
+//                leave it alone (so an ordinary tool save never touches it).
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -60,7 +65,13 @@ export async function POST(req: NextRequest) {
         ? [{ slot: body.slot, modelId: body.modelId ?? "" }]
         : []
 
-    const validSlots = new Set(AI_TOOLS.map((t) => t.slot))
+    // The reserved key is never sent by the page — it comes in as its own
+    // `fallback` field, so the storage detail stays on this side.
+    if (typeof body?.fallback === "string") {
+      updates.push({ slot: FALLBACK_SLOT, modelId: body.fallback })
+    }
+
+    const validSlots = new Set([...AI_TOOLS.map((t) => t.slot), FALLBACK_SLOT])
     for (const u of updates) {
       if (!u || !validSlots.has(u.slot)) continue
       if (!u.modelId) {

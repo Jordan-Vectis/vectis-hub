@@ -298,21 +298,11 @@ export async function bulkSetLotConditions(auctionId: string, updates: { id: str
 // sync (`WarehouseItem.reservePrice`), so nothing here needs a "done" tick to go stale.
 // See /api/catalogue/reserve-check.
 
-/** One lot, typed straight into the Manage Lots table. `null` clears it. */
-export async function setLotReserve(auctionId: string, lotId: string, reserve: number | null) {
-  try {
-    const session = await requireCataloguer()
-    await requireNotBCLocked(auctionId, session)
-    const clean = reserve == null || Number.isNaN(reserve) || reserve <= 0 ? null : Math.round(reserve)
-    await updateLotLogged(lotId, { reserve: clean }, { changedBy: changedByOf(session), source: "manage_lots" })
-    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-    return { ok: true as const, reserve: clean }
-  } catch (e: any) {
-    // ⚠ RETURN the error — a thrown one is redacted in production and the BC lock is exactly
-    // the failure a cataloguer needs to be able to read (RULES).
-    return { ok: false as const, error: e?.message ?? "Couldn't save that reserve" }
-  }
-}
+// ⚠ A SINGLE lot's reserve is typed in the lot editor, which has had a Reserve field all along
+// and saves through `updateLot` like every other field. A `setLotReserve` action existed briefly
+// for an inline column in the lots table; Jordan removed the column ("it does not need to be on
+// the actual table like this, just inside when you click on it is fine"), so the action went with
+// it. Don't add either back without asking.
 
 /** The same reserve onto every ticked lot. Chunked by the toolbar, so it threads `undoId`. */
 export async function bulkSetLotReserves(
@@ -1400,7 +1390,20 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
   // overwriting it with null — which is what happens when the wizard is saved without the field.
   const hasUniqueIdField = formData.has("receiptUniqueId")
   const { receiptUniqueId, ...dataWithoutUniqueId } = data
-  const updateData = hasUniqueIdField ? data : dataWithoutUniqueId
+  const updateData: Record<string, any> = hasUniqueIdField ? { ...data } : { ...dataWithoutUniqueId }
+
+  // ⚠⚠ THE SAME TRAP AS receiptUniqueId ABOVE, FOR THE MONEY FIELDS. `extractLotData` turns an
+  // absent form field into `null`, so ANY partial form silently wipes what it does not show. The
+  // tablet lot editor has never had `startingBid` or `reserve` on it, so every tablet save was
+  // clearing both — it has simply never bitten, because until reserves went in on 2026-09-02 no
+  // lot in the database had either (0 of 14,706 measured). A reserve typed on the desktop and a
+  // lot then opened on a tablet would have lost it silently.
+  //
+  // ⚠ Fixed here rather than by adding fields to that one form, so no FUTURE partial form can do
+  // it either. Add any new "not on every form" column to this list.
+  for (const field of ["startingBid", "reserve"] as const) {
+    if (!formData.has(field)) delete updateData[field]
+  }
 
   const old = await prisma.catalogueLot.findUnique({
     where: { id: lotId },
