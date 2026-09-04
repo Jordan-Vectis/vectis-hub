@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useInstructionOptions } from "./use-instructions"
 
 // ─── Instructions Testing ─────────────────────────────────────────────────────
 //
@@ -98,11 +99,9 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
   const cancelRef = useRef(false)
   const logRef    = useRef<HTMLDivElement>(null)
 
+  useInstructionOptions(setInstructions, setPreset)
+
   useEffect(() => {
-    fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
-      setInstructions(m)
-      setPreset(p => p || Object.keys(m)[0] || "")
-    }).catch(() => {})
     fetch("/api/auction-ai/auctions").then(r => r.json()).then(d => { if (Array.isArray(d)) setAuctionList(d) }).catch(() => {})
   }, [])
 

@@ -9,6 +9,7 @@ import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
 import BcImportCheckTab from "./bc-import-check-tab"
 import InstructionsTestTab from "./instructions-test-tab"
+import { useInstructionOptions, announceInstructionsChanged } from "./use-instructions"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 import RunCostEstimate from "@/components/run-cost-estimate"
 import Link from "next/link"
@@ -364,12 +365,7 @@ function ChatTab({ model }: { model: string }) {
   const [lastSearchQueries, setLastSearchQueries] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
-      setInstructions(m)
-      setPreset(p => p || Object.keys(m)[0] || "")
-    }).catch(() => {})
-  }, [])
+  useInstructionOptions(setInstructions, setPreset)
 
   async function send() {
     if (!message.trim() && !images.length) return
@@ -539,11 +535,9 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
   const [runList,      setRunList]      = useState<{ id: string; code: string; _count: { lots: number } }[]>([])
   const [keyPointsMap, setKeyPointsMap] = useState<Record<string, string>>({})
 
+  useInstructionOptions(setInstructions, setPreset)
+
   useEffect(() => {
-    fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
-      setInstructions(m)
-      setPreset(p => p || Object.keys(m)[0] || "")
-    }).catch(() => {})
     fetch("/api/auction-ai/runs").then(r => r.json()).then(setRunList).catch(() => {})
     // Pre-load auction code from cataloguing page "Upgrade with AI" button
     const raw = localStorage.getItem("batch_preload")
@@ -2242,6 +2236,7 @@ function InstructionsTab() {
       })
       if (!res.ok) throw new Error("Save failed")
       setPresets(p => [...p, { key: name, instruction: draftText, favourite: false, category: null, sortOrder: 0, archived: false }])
+      announceInstructionsChanged()
       setSelected(name); setMode("view"); setNewName("")
     } catch (e: any) { setError(e.message) }
     setSaving(false)
@@ -2272,6 +2267,7 @@ function InstructionsTab() {
       })
       if (!res.ok) throw new Error("Delete failed")
       setPresets(p => p.filter(x => x.key !== key))
+      announceInstructionsChanged()
       setSelected(null); setMode("view")
     } catch (e: any) { setError(e.message) }
     setSaving(false)
@@ -2308,6 +2304,7 @@ function InstructionsTab() {
         body: JSON.stringify({ key, archived: next }),
       })
       if (!res.ok) throw new Error()
+      announceInstructionsChanged()     // empty it out of the run tabs' dropdowns now, not on the next reload
       if (next) setShowArchived(true)   // so it doesn't just vanish with no trace
     } catch {
       setPresets(ps => ps.map(x => x.key === key ? { ...x, archived: !next } : x))  // revert
@@ -2387,6 +2384,7 @@ function InstructionsTab() {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "import failed")
       setImportRows(null)
       await load()
+      announceInstructionsChanged()   // an import can add, and can archive
     } catch (err: any) { setError(`Import failed: ${err.message}`) }
     setImporting(false)
   }
@@ -4172,11 +4170,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     loggedModelRef.current = globalModel
   }, [globalModel, running])
 
+  useInstructionOptions(setInstructions, setPreset)
+
   useEffect(() => {
-    fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
-      setInstructions(m)
-      setPreset(p => p || Object.keys(m)[0] || "")
-    }).catch(() => {})
     fetch("/api/auction-ai/auctions").then(r => r.json()).then(d => { if (Array.isArray(d)) setAuctionList(d) }).catch(() => {})
     // Pre-load auction code from cataloguing "AI Upgrade" button
     const raw = localStorage.getItem("pipeline_preload")

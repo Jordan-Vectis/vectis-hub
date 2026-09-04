@@ -513,6 +513,16 @@ drift happened even though nobody edited it in the UI). Do **not** reintroduce a
     would leave them out of the export file and renumber `sortOrder` around the gap on the next drag.
   - Export/Import **v4** carries an `archived` array, guarded by `Array.isArray` exactly like
     `favourites`, so importing an older file never un-archives anything.
+  - ⚠⚠ **Every picker reloads on change, via `useInstructionOptions`** (`use-instructions.ts`).
+    They each used to fetch once on mount with `[]` deps, and this page keeps its tabs MOUNTED
+    (hidden with CSS, not unmounted) — so an archived instruction stayed sitting in the Batch,
+    Chat, Pipeline and Instructions Testing dropdowns, still pickable, until a full page reload.
+    Jordan: *"If they are archived I dont want them to show on any drop downs anywhere"*.
+    Anything that changes which instructions EXIST calls `announceInstructionsChanged()` —
+    archive, restore, delete, new, import. **Add the call to any new one, and use the hook rather
+    than a fifth copy of the fetch.**
+  - ⚠ The hook also drops a selection that has just been archived (`p && m[p] ? p : first`).
+    Without it the picker shows a value with no matching `<option>` and renders blank.
   - ⚠ Archiving whatever currently sorts first silently changes the default instruction on the four
     tabs that auto-select `Object.keys(m)[0]`. Expected, but worth knowing.
   - `fetchRows()` gained its own fallback tier for the new column. **Each tier drops exactly one
