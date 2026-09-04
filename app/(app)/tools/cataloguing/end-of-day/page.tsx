@@ -72,10 +72,8 @@ const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "w
     label: "No vendor on the lot", tone: "warn", order: 8,
     hint: "The tote has a vendor in BC but the lot doesn't.",
   },
-  no_tote: {
-    label: "No tote on the lot", tone: "warn", order: 9,
-    hint: "Still on the sheet (it runs on receipts), but without a tote the lot can't be verified against the BC tote data. Tick them, type the right tote in the bar below, apply.",
-  },
+  // ⚠ no_tote is deliberately absent — the route no longer sends it (2026-09-04).
+  // The sheet runs on receipts, so an empty tote is not a problem for tonight.
   no_receipt: {
     label: "No receipt on the lot — off the sheet until one is set", tone: "bad", order: 10,
     hint: "The sheet is grouped by receipt, so these can't go on it. Tick them, type the tote or receipt in the bar that appears, and apply.",
@@ -869,7 +867,7 @@ function CheckPanel({ check, selected, onToggle, onIgnore, onRestore }: {
   const allTicked = check.lots.length > 0 && check.lots.every(l => selected.has(l.id))
   // duplicate_barcode changes what goes on the sheet, so it can't be ignored;
   // a missing tote/receipt is something to FIX, not hide.
-  const ignorable = !!onIgnore && check.key !== "duplicate_barcode" && check.key !== "no_tote" && check.key !== "no_receipt"
+  const ignorable = !!onIgnore && check.key !== "duplicate_barcode" && check.key !== "no_receipt"
   const tickedHere = check.lots.filter(l => selected.has(l.id))
   const ignored = check.ignored ?? []
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
@@ -1050,12 +1048,6 @@ function IssueLine({ checkKey, l }: { checkKey: string; l: CheckLot }) {
       return (<>
         <span className="opacity-70">doesn&apos;t match the F066001 format</span>
         {l.tote && <Chip tone="plain" label="tote">{l.tote}</Chip>}
-      </>)
-    case "no_tote":
-      return (<>
-        <Chip tone="bad" label="tote">none</Chip>
-        <span className="opacity-70">still on the sheet, but can&apos;t be checked against BC — tick, type the tote, apply</span>
-        {l.receipt && <Chip tone="plain" label="receipt">{l.receipt}</Chip>}
       </>)
     case "no_receipt":
       return (<>

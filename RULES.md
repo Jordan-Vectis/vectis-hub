@@ -905,12 +905,31 @@ shown something cleverer: *"I just wanted it so if I pressed change vendor it cl
 field?"*. A version that kept a tote BC still places on the new receipt was built and **rejected as
 more than was asked for** — do not reintroduce it.
 
-⚠ The lot then appears on End of Day under **"No tote on the lot"** (`no_tote`, amber, still on the
-sheet) rather than the two red mismatch flags. That is the honest state — nobody knows which tote it
-is in — and it is set again by typing the right tote into the same box.
+⚠ A cleared tote raises **nothing** on End of Day — the empty-tote flag was removed the same day
+(next rule). Tote Check and Locking Check still show it.
 
 Both confirm dialogs say the tote will be cleared. A field that empties itself without warning is
 how people stop trusting a tool.
+
+---
+
+## ⚠ End of Day does NOT flag an empty tote (2026-09-04)
+
+Jordan: *"on the end of day remove the flag for empty totes it doesnt matter as we do everything of
+receipt anyway"*.
+
+The overnight sheet is keyed on **receipt**. A lot with no tote goes on it and imports perfectly
+well, so `no_tote` never described a problem with tonight's run — and it became self-inflicted on
+the same day, because Change Vendor by receipt now clears the tote deliberately and would have
+raised a fresh flag every time.
+
+⚠⚠ **It is dropped in `app/api/catalogue/end-of-day/route.ts`, NOT in `checkLot`.** The **Tote Check
+tab and Locking Check still show it** — those are the screens where not knowing a lot's tote
+actually matters. Never remove `no_tote` from the shared `lib/tote-check.ts`; that would silently
+blind all three.
+
+The page's `CHECK_META` entry, its row renderer case and its "not ignorable" clause went with it.
+`duplicate_barcode` remains the only check the server refuses to let anyone ignore.
 
 ---
 ## ⚠⚠ The edit lock is the CATALOGUED tick, not "Added to BC" (2026-09-02)

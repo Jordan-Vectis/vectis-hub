@@ -139,9 +139,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Same verification as the Tote Check tab — shared checkLot(), so this
-    //    page can never disagree with it. no_tote is a real (amber) check now
-    //    the sheet is receipt-keyed: a tote-less lot still goes on the sheet,
-    //    it just can't be verified against the BC tote data.
+    //    page can never disagree with it, EXCEPT that no_tote is dropped below.
     const bcTotes = ready.length
       ? await prisma.warehouseTote.findMany({
           where:  { toteNo: { in: toteLookupVariants(ready) } },
@@ -152,6 +150,15 @@ export async function GET(req: NextRequest) {
     for (const l of ready) {
       const { issues, tote } = checkLot(l, toteMap)
       for (const issue of issues) {
+        // ⚠ A lot with no tote is NOT flagged here (2026-09-04, Jordan: "remove the
+        // flag for empty totes it doesnt matter as we do everything of receipt
+        // anyway"). The sheet is keyed on RECEIPT, so a tote-less lot goes on it and
+        // imports perfectly well — the flag never described a problem with tonight's
+        // run. It also became self-inflicted the same day: Change Vendor by receipt
+        // now clears the tote deliberately, which would have raised a fresh one every
+        // time. ⚠ Dropped HERE, not in checkLot — the Tote Check tab and Locking
+        // Check still show it, and they are the screens where a missing tote matters.
+        if (issue === "no_tote") continue
         addCheck(issue, asCheckLot(l, {
           bcReceipt: tote?.receiptNo ?? "", bcVendor: tote?.vendorNo ?? "",
           bcVendorName: tote?.vendorName ?? "",

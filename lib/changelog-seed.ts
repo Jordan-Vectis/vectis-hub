@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2c720cec75b5d16b5991a56f7d9e36c80007821b","author":"Jordan Orange","date":"2026-09-04T11:15:30+01:00","subject":"Change Vendor by receipt: just clear the tote"},
   {"sha":"1c01c0f1b9b5c2c0d0fc0beb8ae7c50455179fe0","author":"Jordan Orange","date":"2026-09-04T09:51:20+01:00","subject":"chore: restore the memory page's line endings"},
   {"sha":"1329d0a623f9e625c4d5b68473882f96b528b81a","author":"Jordan Orange","date":"2026-09-04T09:49:01+01:00","subject":"Change Vendor by receipt: clear a tote that no longer belongs to it"},
   {"sha":"0e39438d18154c626f487d7380d8fe602132a2e7","author":"Jordan Orange","date":"2026-09-04T09:24:11+01:00","subject":"Name the Railway deployment after the work, not the changelog seed"},
