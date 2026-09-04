@@ -523,22 +523,19 @@ export async function lookupToteOrReceipt(query: string): Promise<{
 export async function setLotsVendorReceipt(
   auctionId: string,
   lotIds: string[],
-  // `tote` (optional) also rewrites the lot's tote — passed when a TOTE was the
-  // thing looked up, because then the tote is what's being asserted.
+  // `tote` given (a TOTE was looked up) sets the lot's tote.
   //
-  // ⚠⚠ With NO tote given but a receipt set, a tote left over from the lot's
-  // PREVIOUS receipt is now wrong, and leaving it does real damage (2026-09-04,
-  // Jordan: "when I change a vendor by receipt number it leaves the old tote
-  // number causing it to be flagged in the end of day"). End of Day reads the
-  // stale tote as receipt_mismatch + vendor_mismatch — both RED — and worse,
-  // 🔧 Fix what BC can prove corrects vendor/receipt back FROM that tote, which
-  // silently reverses the change that was just made. So a tote BC does not place
-  // on the new receipt is CLEARED.
+  // ⚠ NO tote given (a RECEIPT was looked up) CLEARS it. A receipt spans many
+  // totes, so there is no single answer, and the tote the lot is carrying belongs
+  // to wherever it used to be — End of Day then flags it (2026-09-04, Jordan:
+  // "when I change a vendor by receipt number it leaves the old tote number
+  // causing it to be flagged in the end of day, it should just clear the tote
+  // field"). Worse, 🔧 Fix what BC can prove corrects vendor/receipt back FROM
+  // that stale tote, silently reversing the change just made.
   //
-  // ⚠ A tote BC DOES place on the new receipt is KEPT. Typing a receipt says
-  // "the receipt is the truth"; it says nothing against a tote that already
-  // agrees with it, and clearing that would only trade a clean lot for an amber
-  // "No tote on the lot" — a batch usually has some already-correct lots in it.
+  // ⚠ It clears UNCONDITIONALLY — Jordan's call, asked for twice. A version that
+  // kept a tote BC still places on the new receipt was built and rejected as more
+  // than was asked for. Don't reintroduce it.
   input: { vendor: string; receipt: string; tote?: string },
   undoId?: string | null,
   /** Intermediate chunk of a chunked press — skip the page revalidation (see runInChunks). */
@@ -560,20 +557,6 @@ export async function setLotsVendorReceipt(
     })
     if (lots.length === 0) return { ok: false, error: "None of those lots are in this auction." }
 
-    // Which totes BC actually places on the receipt being set — only consulted
-    // when no tote was given (see the note on `input`).
-    // ⚠ An EMPTY answer clears NOTHING. BC's tote feed has had real gaps (a tote
-    // ticked Catalogued used to disappear from it altogether, which is why
-    // sync/totes-all exists), and "BC returned nothing" is not evidence that a
-    // tote is wrong. Same rule as reconcile-deleted: only a positive answer acts.
-    let receiptTotes: Set<string> | null = null
-    if (!tote && receipt) {
-      const rows = await prisma.warehouseTote.findMany({
-        where:  { receiptNo: { in: [receipt, receipt.toUpperCase(), receipt.toLowerCase()] } },
-        select: { toteNo: true },
-      })
-      if (rows.length > 0) receiptTotes = new Set(rows.map(r => norm(r.toteNo)))
-    }
 
     // ⚠ NO unique IDs minted here any more (2026-08-06) — a blank stays blank
     // until 🔗 BC Match imports BC's own ID by barcode. Existing IDs are still
@@ -586,11 +569,8 @@ export async function setLotsVendorReceipt(
       const data: Record<string, string | null> = {}
       if (vendor  && lot.vendor  !== vendor)  data.vendor  = vendor
       if (receipt && lot.receipt !== receipt) data.receipt = receipt
-      if (tote && lot.tote !== tote) {
-        data.tote = tote
-      } else if (receiptTotes && lot.tote && !receiptTotes.has(norm(lot.tote))) {
-        data.tote = null            // it belonged to the receipt this lot has just left
-      }
+      if (tote) { if (lot.tote !== tote) data.tote = tote }
+      else if (receipt && lot.tote) data.tote = null   // it belongs to where the lot used to be
       if (Object.keys(data).length === 0) continue
 
       const fields: Record<string, { before: unknown; after: unknown }> = {}

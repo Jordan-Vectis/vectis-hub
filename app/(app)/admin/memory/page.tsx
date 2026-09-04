@@ -2784,21 +2784,19 @@ Two faults, one symptom:
 ⚠ The action itself was always correct (it only writes fields that differ, logs via \`updateLotLogged\` with source \`vendor_change\`, and supports per-sale Undo). The bug was entirely in the caller — check the caller before suspecting \`setLotsVendorReceipt\`.
 
 
-### ⚠⚠ CHANGE VENDOR BY RECEIPT CLEARS A TOTE THAT NO LONGER FITS (2026-09-04)
+### ⚠⚠ CHANGE VENDOR BY RECEIPT CLEARS THE TOTE (2026-09-04)
 
 Jordan: "when I change a vendor by receipt number it leaves the old tote number causing it to be flagged in the end of day, it should just clear the tote field".
 
-Typing a RECEIPT moved vendor and receipt but left the old tote untouched — \`lookupToteOrReceipt\` returns a null tote in receipt mode (a receipt spans many totes), and the writer's truthiness guard meant a blank never reached the update. There was NO code path anywhere that wrote a null tote.
+Typing a RECEIPT moved vendor and receipt but left the old tote untouched — \`lookupToteOrReceipt\` returns a null tote in receipt mode (a receipt spans many totes), and the writer's truthiness guard meant a blank never reached the update. NO code path anywhere wrote a null tote.
 
-⚠⚠ IT IS NOT JUST NOISE. The stale tote makes End of Day show receipt_mismatch + vendor_mismatch, BOTH RED, and 🔧 Fix what BC can prove then corrects vendor/receipt back FROM that tote — silently reversing the change that was just made.
+⚠⚠ IT WAS NOT JUST NOISE. The stale tote made End of Day show receipt_mismatch + vendor_mismatch, both red, and 🔧 Fix what BC can prove then corrected vendor/receipt back FROM that tote — silently reversing the change just made.
 
-\`setLotsVendorReceipt\` now clears a tote BC does not place on the receipt being set. Done in the SERVER, so all three callers behave the same (Manage Lots, the End of Day intervention bar, End of Day's typed mass re-map) — none of them needed changing.
+Now: tote mode sets the tote (unchanged); receipt mode CLEARS it. Two lines in \`setLotsVendorReceipt\`, so all three callers behave the same without changing — Manage Lots, the End of Day intervention bar, End of Day's typed mass re-map.
 
-- ⚠⚠ A TOTE BC DOES PLACE ON THE NEW RECEIPT IS KEPT. Typing a receipt asserts the receipt; it says nothing against a tote that already agrees. MEASURED ON PRODUCTION 2026-09-04: of 4,476 active-sale lots holding both a tote and a receipt, 4,365 have a tote that matches and only 111 do not. A blanket clear would wipe thousands of correct totes across a ticked sale and trade a red flag for an amber No tote on the lot (no_tote, which is NOT ignorable). Never simplify this to an unconditional clear.
-- ⚠ AN EMPTY ANSWER FROM BC CLEARS NOTHING. No totes listed for that receipt = the tote is left alone. The tote feed has had real gaps (a tote ticked Catalogued used to vanish from it — the reason sync/totes-all exists), and silence is not evidence. Same rule as sync/reconcile-deleted. Measured: 0 lots in that state.
-- Tote mode is unchanged: an explicit tote is simply set.
-- Both confirm dialogs now say the tote will be cleared. Also in RULES.md.
-
+- ⚠⚠ IT CLEARS UNCONDITIONALLY, AND THAT IS THE POINT. A first version looked up BC and KEPT a tote still placed on the new receipt (measured: 4,365 of 4,476 active-sale lots have a tote matching their receipt, 111 do not). Jordan rejected it — "I just wanted it so if I pressed change vendor it cleared the tote field?" — his standing rule being MATCH THE COMPLEXITY OF THE SOLUTION TO THE SIMPLICITY OF THE REQUEST. Do not rebuild the clever one.
+- ⚠ The lot then shows under No tote on the lot (no_tote, amber, still on the sheet) instead of two red flags. Honest — nobody knows which tote it is in — and fixed by typing the right tote into the same box.
+- Both confirm dialogs say the tote will be cleared. Also in RULES.md.
 ## Added By + Date Added filters (2026-08-14)
 
 Every column now has a filter. **Added By** is a \`<select>\` built from the people who have actually added a lot to *that* sale — a dropdown beats free text for "what did Keiran do", and it can't be mistyped. **Date Added** is a native \`<input type="date">\` (with \`dark:[color-scheme:dark]\`, RULES rule 2). Both join the existing sessionStorage persistence and \`filtersActive\`.

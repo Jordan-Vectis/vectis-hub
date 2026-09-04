@@ -887,37 +887,32 @@ everywhere else (`updateLot`/wizard/Manage Lots, `deleteLot`, bulk actions, `tra
 
 ---
 
-## ⚠ Change Vendor by RECEIPT clears a tote that no longer fits (2026-09-04)
+## ⚠ Change Vendor by RECEIPT clears the tote (2026-09-04)
 
 Change Vendor (Manage Lots → Tools, and the End of Day → BC intervention bar) takes a tote OR a
-receipt. Typing a **receipt** used to move vendor and receipt and **leave the old tote in place**.
-Jordan: *"when I change a vendor by receipt number it leaves the old tote number causing it to be
-flagged in the end of day"*.
+receipt, and the vendor behind it is read from the BC tote data.
 
-That stale tote does more than add noise. End of Day reads it as **`receipt_mismatch` +
-`vendor_mismatch`, both red**, and **🔧 Fix what BC can prove** then corrects vendor/receipt back
-**from that tote** — silently reversing the change that was just made.
+- Type a **tote** → vendor, receipt **and tote** are all set from BC (2026-08-12).
+- Type a **receipt** → vendor and receipt are set, and the **tote is CLEARED**.
 
-`setLotsVendorReceipt` therefore clears a tote BC does not place on the receipt being set. Three
-deliberate limits, all in the server so every caller behaves the same (Manage Lots, the End of Day
-bar, and End of Day's typed mass re-map):
+A receipt covers several totes, so there is no single tote to set, and the one the lot is carrying
+belongs to wherever it used to be. Leaving it there made End of Day flag the lot — and worse,
+🔧 **Fix what BC can prove** then corrected vendor/receipt back **FROM that stale tote**, silently
+reversing the change that had just been made.
 
-- ⚠ **A tote BC DOES place on the new receipt is KEPT.** Typing a receipt asserts the receipt; it
-  says nothing against a tote that already agrees. Measured on production 2026-09-04: of 4,476
-  active-sale lots holding both, **4,365 have a tote that matches their receipt** and only **111
-  don't** — so blanket clearing would wipe thousands of correct totes and trade a red flag for an
-  amber *"No tote on the lot"*. Do not "simplify" this into an unconditional clear.
-- ⚠ **An empty answer from BC clears nothing.** If BC lists no totes at all for that receipt the
-  tote is left alone — the tote feed has had real gaps (a tote ticked Catalogued used to vanish
-  from it, which is why `sync/totes-all` exists), and silence is not evidence. Same rule as
-  `sync/reconcile-deleted`. Measured: 0 lots currently sit in that state.
-- Passing an explicit `tote` (tote mode) still just sets it, unchanged.
+⚠ **It clears unconditionally.** Jordan asked for exactly this, twice, the second time after being
+shown something cleverer: *"I just wanted it so if I pressed change vendor it cleared the tote
+field?"*. A version that kept a tote BC still places on the new receipt was built and **rejected as
+more than was asked for** — do not reintroduce it.
+
+⚠ The lot then appears on End of Day under **"No tote on the lot"** (`no_tote`, amber, still on the
+sheet) rather than the two red mismatch flags. That is the honest state — nobody knows which tote it
+is in — and it is set again by typing the right tote into the same box.
 
 Both confirm dialogs say the tote will be cleared. A field that empties itself without warning is
 how people stop trusting a tool.
 
 ---
-
 ## ⚠⚠ The edit lock is the CATALOGUED tick, not "Added to BC" (2026-09-02)
 
 `requireNotBCLocked` — the one gate, 28 call sites — reads **`CatalogueAuction.catalogued`**.

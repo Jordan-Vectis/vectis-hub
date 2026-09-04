@@ -202,7 +202,7 @@ export default function EndOfDayPage() {
       "Vendor and receipt are set from the BC data" +
       (lookup.kind === "tote"
         ? ", and the lot's tote is corrected too"
-        : ", and any tote that doesn't belong to that receipt in BC is cleared") +
+        : ", and the tote is cleared (a receipt covers several totes)") +
       ". Existing unique IDs are kept. Every change is logged and can be undone per sale from Manage Lots → Undo."
     )) return
     setApplying(true); setFixResult(null)
