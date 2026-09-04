@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"1329d0a623f9e625c4d5b68473882f96b528b81a","author":"Jordan Orange","date":"2026-09-04T09:49:01+01:00","subject":"Change Vendor by receipt: clear a tote that no longer belongs to it"},
   {"sha":"0e39438d18154c626f487d7380d8fe602132a2e7","author":"Jordan Orange","date":"2026-09-04T09:24:11+01:00","subject":"Name the Railway deployment after the work, not the changelog seed"},
   {"sha":"015780e8b3bedc118d5b704e8930957b95e885c2","author":"Jordan Orange","date":"2026-09-04T09:04:34+01:00","subject":"Merge staging into main: reserves on the tablet, BC lot-number top-up, app-wide fallback model"},
   {"sha":"ce966fb16637ff92dc4b71d1b3da2bbf475fee1f","author":"Jordan Orange","date":"2026-09-04T09:04:21+01:00","subject":"Refresh changelog seed"},

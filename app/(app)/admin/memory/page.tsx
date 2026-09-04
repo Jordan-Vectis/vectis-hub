@@ -2781,7 +2781,8 @@ Two faults, one symptom:
 1. **Manage Lots never passed \`tote\`.** \`setLotsVendorReceipt\` has taken an optional \`tote\` since the End of Day work, but Manage Lots deliberately did not send it ("so its behaviour is unchanged"). Typing a TOTE therefore moved receipt + vendor and left the lot on its old tote. It now sends the tote whenever \`vendorHit.kind === "tote"\`. ⚠ Do not "restore" the old scoping — Jordan asked for all three explicitly.
 2. **\`updated === 0\` was reported as success** — "✓ Changed 0 lots" reads as done. That is exactly what he saw when the ticked lots already had the right receipt and vendor and only the tote was wrong: nothing to change, so nothing changed, and the message said it worked. Zero updated is now an amber "Nothing changed — already on …".
 
-⚠ The action itself was always correct (it only writes fields that differ, logs via \`updateLotLogged\` with source \`vendor_change\`, and supports per-sale Undo). The bug was entirely in the caller — check the caller before suspecting \`setLotsVendorReceipt\`.
+⚠ The action itself was always correct (it only writes fields that differ, logs via \`updateLotLogged\` with source \`vendor_change\`, and supports per-sale Undo). The bug was entirely in the caller — check the caller before suspecting \`setLotsVendorReceipt\`.
+
 
 ### ⚠⚠ CHANGE VENDOR BY RECEIPT CLEARS A TOTE THAT NO LONGER FITS (2026-09-04)
 
