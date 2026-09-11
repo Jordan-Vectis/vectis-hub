@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5485382f81279770d43b4a6af01db27fa58d0999","author":"Jordan Orange","date":"2026-09-11T12:47:47+01:00","subject":"Add Lot wizard (desktop): 50/50 split, long text cut to 3 lines, panel display-only"},
   {"sha":"d0ad6bf3c60b68ba66c3c340ab983be54d74c7f6","author":"Jordan Orange","date":"2026-09-11T12:28:11+01:00","subject":"Add Lot wizard: desktop layout — wider steps, bigger boxes, \"This lot so far\" panel"},
   {"sha":"f243f16d40fd27483cb75cfbbe72072a60f9c273","author":"Jordan Orange","date":"2026-09-11T12:15:12+01:00","subject":"Reports: the ✕ on Time Away deletes again (\"Not found\" on every row)"},
   {"sha":"dc90996dca7a947cd473ab48a34be7474038a8d3","author":"Jordan Orange","date":"2026-09-11T12:05:01+01:00","subject":"Website Search: its own home card under Cataloguing & AI"},

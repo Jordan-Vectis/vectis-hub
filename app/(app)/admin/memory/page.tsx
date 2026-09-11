@@ -4407,7 +4407,7 @@ name: Opening Message
 description: Copy and paste this at the start of every new Claude Code session to set expectations
 type: opening_message
 originSessionId: 30e4bce3-8e7b-41dd-9dea-f40497af1528
-modified: 2026-09-09T12:30:00.000Z
+modified: 2026-09-11T13:00:00.000Z
 ---
 # Opening Message — paste this at the start of every session
 
@@ -4841,6 +4841,27 @@ Core sync rules (full detail on the reference card):
 - Same-amount tie: ROOM on Saleroom = favour Vectis (default at lot start); \`!\` on Vectis = favour Saleroom. The \`!\` is the ONLY \`!\` button and only drops the Vectis bidder.
 - Fair Warning after 15s inactivity (both, manual). Sell 20s after FW (both, manual): Vectis HAMMER then NEXT LOT; Saleroom SELL then NEXT.
 - Undo: **auto-detected in Scenario 1 only** (the rig clicks Undo when the Vectis amount drops below the last seen, until matched — card rule 6 updated 2026-08-04); manual on the shadow views and for clerk mistakes. Saleroom buttons have NO exclamation marks.
+
+---
+
+## Recent work (2026-09-10/11) — ON PRODUCTION (merged to main 2026-09-11, main = staging)
+
+- **🚦 Status Centre + 🔔 admin bell** (/admin/status): "is it us or a supplier?" — 15 read-only checks, the loop runs on production only, the bell rings after 2 bad checks in a row. The MIGRATIONS array now lives in lib/migrations.ts.
+- **📝 Hub Feedback surveys** (/admin/feedback): named, written answers; audience chosen per survey; "Fill it out later" is a temporary top-bar button, never a re-popup.
+- **🔎 Website Search replaced Description Finder** (deleted): ABC + BC + Hub lots in one search with photos, hammer prices, vectis.co.uk links and filters. A button in tablet cataloguing AND its own home card (Cataloguing & AI → /tools/website-search — I reversed my own "one button only"). Forgiving: punctuation, accents, capitals and plurals don't matter, and a misspelt word also searches the real spelling (the SearchWord spelling list, built in the background). Three ticks, each with an ⓘ: Exact phrase · Exact words (off by default) · Exact numbers (ON — "37" never finds 373). One "Estimate around £" box (the lot's low–high estimate covers the figure). Three across on a desktop, foldaway filter sidebar.
+- **⚠⚠ Never fold or rewrite the descriptions at search time.** translate() over the ABC table took "halo" from 3.3 s to 36 s and every search timed out on staging. Anything cleverer goes on the TYPED words or into the small indexed spelling list.
+- **The website's HTML is out of the BC descriptions** (p tags, nbsp, bullets…): stored clean from now on, old rows cleaned by the spelling-list build, and cleaned on the way out everywhere.
+- **🔍 Lens checks our own lots properly** — the ABC archive plus the website's FULL BC descriptions, with photos and links. The headline price comes from lots with the SAME catalogue number when there are two or more (Hornby R3514: £260–£300, not the £100 its neighbours made); Kämmer & Reinhardt 102 went from 0 matches to the £43,000 "Walter". Group lots: a quantity ("5 x", "x five") only counts in the first 70 characters — later it is one pack's contents.
+- **Light/dark switch** top right in tablet cataloguing and in Website Search. The tablet screens were dark-ONLY and are now light-first with dark variants — new styling there needs both.
+- **Add Lot wizard on a desktop** — the new desk: variant (a mouse AND 1,280px+; never plain xl:, a 12.9" iPad Pro is 1,366px wide): a 50/50 split, bigger boxes, and a DISPLAY-ONLY "This lot so far" panel (a clickable version was removed within the hour — "they will click it by accident"). The iPads are untouched.
+- **Reports → Time Away ✕ deletes again.** Every row carried a per-day slice id ("{id}-0") so a break past 17:00 could show on both days, and Delete sent that — so every delete said "Not found".
+- **Data map** — the 10 tables it was missing are described.
+
+⚠ **Working-style notes from this session:**
+- The Bash tool loses backslashes in heredoc/inline scripts — it silently broke a regex escaper and a CSS check. Write scripts with the Write tool, or build a backslash with String.fromCharCode(92).
+- "tsc | head" reports head's exit code, so a chain printed "TSC OK" over real type errors (the build stopped it). Check tsc's OWN exit code before committing.
+- Measure any search change on production (read-only) before pushing — the one that timed out was the one change not measured first.
+- I decide fast and reverse fast. When I reverse something, change RULES.md and the memory the same day — never leave the old rule standing.
 
 ---
 
