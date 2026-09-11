@@ -142,6 +142,30 @@ function Tick({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   )
 }
 
+/** A tick with a small ⓘ beside it that opens a plain-English explanation underneath — tapped, not
+ *  hovered, because this is used on iPads (Jordan, 2026-09-11: "add a little i next to it and the
+ *  phrase match explaining the difference"). */
+function TickInfo({ on, onClick, label, info }: { on: boolean; onClick: () => void; label: string; info: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <div className="flex items-stretch gap-2">
+        <div className="min-w-0 flex-1"><Tick on={on} onClick={onClick}>{label}</Tick></div>
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`What does “${label}” do?`}
+          title={`What does “${label}” do?`} style={{ touchAction: "manipulation" }}
+          className={`flex min-h-[44px] w-11 flex-shrink-0 items-center justify-center rounded-lg border ${open ? "border-[#2AB4A6] text-[#2AB4A6]" : "border-gray-300 dark:border-gray-700 text-gray-500"}`}>
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-xs font-bold italic">i</span>
+        </button>
+      </div>
+      {open && (
+        <p className="mt-1.5 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/30 px-3 py-2 text-xs leading-relaxed text-gray-700 dark:text-gray-300">
+          {info}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── The detail view ─────────────────────────────────────────────────────────────
 
 function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
@@ -393,8 +417,19 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
           <input id="ws-without" value={f.without} onChange={e => set("without", e.target.value)} placeholder="e.g. reproduction damaged" className={input} /></div>
       </div>
       <div className="space-y-2">
-        <Tick on={f.phrase} onClick={() => set("phrase", !f.phrase)}>Match the exact phrase, not just the words</Tick>
-        <Tick on={f.whole} onClick={() => set("whole", !f.whole)}>Whole numbers only — “37” won&apos;t find 373 or 3714</Tick>
+        <TickInfo on={f.phrase} onClick={() => set("phrase", !f.phrase)} label="Exact phrase"
+          info={<>
+            <b>On:</b> the words must appear together, in the order you typed them — “Hornby Class 37” finds
+            “Hornby Class 37 locomotive” but not “Class 37 by Hornby”.{" "}
+            <b>Off:</b> each word just has to be somewhere in the description, in any order.
+          </>} />
+        <TickInfo on={f.whole} onClick={() => set("whole", !f.whole)} label="Exact numbers"
+          info={<>
+            <b>On:</b> a number must match on its own — “37” finds Class 37, 37/5 and No.37, but not 373, 3714
+            or 37417. Letters can still touch it, so “3514” finds R3514.{" "}
+            <b>Off:</b> a number is found anywhere, even inside a longer one.
+            Words aren&apos;t affected either way — “bear” still finds “bears”.
+          </>} />
         <Tick on={f.photo} onClick={() => set("photo", !f.photo)}>Only lots with a photo</Tick>
       </div>
       <p className="text-xs leading-relaxed text-gray-500">
@@ -507,7 +542,7 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
                 {/* Say when numbers were matched whole — a Class 373 that doesn't appear must never be a mystery. */}
                 {results && !busy && searched.current?.whole && /\d/.test(searched.current.q) && (
                   <p className="mb-2 text-xs text-gray-500">
-                    Numbers are matched whole — “37” won&apos;t find 373 or 3714. Untick “Whole numbers only” in the filters to include them.
+                    Exact numbers is on — “37” won&apos;t find 373 or 3714. Untick “Exact numbers” in the filters to include them.
                   </p>
                 )}
 

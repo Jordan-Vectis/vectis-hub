@@ -1280,7 +1280,8 @@ It **replaced Description Finder**, which is gone — page, route, home card and
 - **Whole numbers** (Jordan, 2026-09-11 — *"Class 37"* was bringing up every Class 373): a word that
   starts or ends with a digit may not have more digits glued on at that end — "37" finds Class 37,
   37/5 and No.37, never 373, 3714 or 37417; letters may touch, so "3514" still finds R3514. A tick in
-  the filters, **on by default** (his choice: a toggle rather than typing quotes), and the page says so
+  the filters — **"Exact numbers"**, with an ⓘ beside it and beside "Exact phrase" explaining each
+  (tapped, not hovered — iPads) — **on by default** (his choice: a toggle rather than typing quotes), and the page says so
   under the results. The ILIKE stays as the cheap first pass and a `~*` pattern confirms the edges —
   measured no slower (class 37: 2.4 s, 13,414 lots → 3,406). ID fields stay a plain "contains".
 - ⚠⚠ **Never fold or rewrite the DESCRIPTIONS at search time.** Measured on production 2026-09-10:
