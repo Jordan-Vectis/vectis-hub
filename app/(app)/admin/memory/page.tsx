@@ -19,7 +19,7 @@ const ENTRIES: Entry[] = [
     filename: "reference_wizard_desktop.md",
     content: `---
 name: wizard-desktop-layout
-description: Add Lot wizard desktop-only layout (2026-09-11) — the desk: Tailwind variant (mouse AND at least 1280px, never plain xl:), wider steps, taller text boxes, and the "This lot so far" panel that jumps BACK only. Read before styling anything desktop-only.
+description: Add Lot wizard desktop-only layout (2026-09-11) — the desk: Tailwind variant (mouse AND at least 1280px, never plain xl:), a 50/50 split with taller text boxes, and the display-only "This lot so far" panel. Read before styling anything desktop-only.
 metadata:
   type: reference
 ---
@@ -29,8 +29,9 @@ metadata:
 Jordan: "we never optimized it to be used on a desktop and some people do — I don't want you to change the layout too much ... the text boxes are so small". Offered four ideas; he chose bigger boxes and the "This lot so far" panel (not keyboard shortcuts, not drag/paste photos).
 
 - desk: variant in app/globals.css: @media (pointer: fine) and (min-width: 1280px). Never plain xl: for "desktop" — a 12.9" iPad Pro in landscape is 1,366px wide, and the tablets must not change.
-- lot-wizard-tab.tsx: every step container and banner is max-w-lg desk:max-w-3xl (they stay the same width so the banners line up with the step); inputs desk:text-base; the Key Points and manual description boxes are much taller on a desktop.
-- "This lot so far" (hidden desk:block, sticky, beside the form inside the scrolling step area — never a sibling above it, see the min-h-0 rule): vendor/tote/receipt, barcode, key points (or description), category/brand, estimate, condition, parcel, photos. Finished steps are buttons that call jumpBack(n) — BACKWARDS ONLY, forward is always Next, so the duplicate-barcode, category and estimate checks cannot be skipped. goBack() calls jumpBack(step - 1), so the two cannot drift.
+- lot-wizard-tab.tsx: on a desktop the screen splits 50/50 (Jordan, same day: "it should be more 50/50 split between the 2 boxes") — every step container and banner is max-w-lg desk:max-w-none, filling the left half, and the panel fills the right; inputs desk:text-base; the Key Points and manual description boxes are much taller.
+- Every value in the panel is cut to 3 lines with "..." (line-clamp-3, full text on hover) so a long description never makes the page scroll. No "block" class beside line-clamp — it overrides the clamp's display and the clamp silently stops working (that is exactly what happened first time).
+- "This lot so far" (hidden desk:block, sticky, beside the form inside the scrolling step area — never a sibling above it, see the min-h-0 rule): vendor/tote/receipt, barcode, key points (or description), category/brand, estimate, condition, parcel, photos. DISPLAY ONLY — nothing in it is clickable (Jordan: "it's more likely they will click it by accident, it just needs to be there for show"); the current step is highlighted, and moving between steps is Back and Next only. Don't make it clickable again.
 - The same wizard serves the desktop Auction Manager page, so it benefits there too.
 - Step 7 parcel buttons' inline hex colours became theme classes (they missed the tablet light mode).`,
   },

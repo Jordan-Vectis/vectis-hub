@@ -128,9 +128,12 @@ Much of this app is used on shared tablets, standing up.
 - **Desktop-only styling uses `desk:`** (`app/globals.css`: a mouse or trackpad AND ≥1,280px) —
   never plain `xl:` for "desktop": a 12.9" iPad Pro in landscape is 1,366px wide, and the tablets
   must not change. First used on the Add Lot wizard (2026-09-11, Jordan: "the text boxes are so
-  small" on a desktop): steps widen from 512px to ~770px, taller text boxes, and a **"This lot so
-  far"** panel beside the form whose finished steps jump BACK (`jumpBack` — never forward, so
-  Next's checks can't be skipped).
+  small" on a desktop): the screen splits **50/50** — the step and its banners fill the left half,
+  a **"This lot so far"** panel the right — with taller text boxes. ⚠ The panel is **display only**
+  — nothing in it is clickable (Jordan: *"more likely they will click it by accident"*); moving
+  between steps is Back and Next. Every value is cut to 3 lines with "…" so a long description
+  never makes the page scroll (⚠ no `block` class beside
+  `line-clamp` — it overrides the clamp's display and the clamp silently stops working).
 
 ### 6. ⚠ The DESCRIPTION COPIER's layout is frozen — nothing above the lot card
 **Scope: the Description Copier (`/tools/auction-ai` → Description Copier) and nothing else.**
