@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+/* Desktop-only styling (2026-09-11): a mouse or trackpad AND a wide screen. Never plain `xl:` for
+   "desktop" — a 12.9" iPad Pro held sideways is 1,366px wide, and the tablets must not change. */
+@custom-variant desk (@media (pointer: fine) and (min-width: 1280px));
 
 :root {
   --background: #ffffff;

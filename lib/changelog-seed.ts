@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f243f16d40fd27483cb75cfbbe72072a60f9c273","author":"Jordan Orange","date":"2026-09-11T12:15:12+01:00","subject":"Reports: the ✕ on Time Away deletes again (\"Not found\" on every row)"},
   {"sha":"dc90996dca7a947cd473ab48a34be7474038a8d3","author":"Jordan Orange","date":"2026-09-11T12:05:01+01:00","subject":"Website Search: its own home card under Cataloguing & AI"},
   {"sha":"c50204e760cd8428a18a783209c4078b57659229","author":"Jordan Orange","date":"2026-09-11T10:59:28+01:00","subject":"Website Search: \"Exact words\" tick, and \"Estimate around £\" instead of from/to"},
   {"sha":"7f61d7c1b69b87040d13119289110e7cfc38b1d0","author":"Jordan Orange","date":"2026-09-11T10:46:50+01:00","subject":"Website Search: \"Exact phrase\" and \"Exact numbers\" ticks with an ⓘ explaining each"},

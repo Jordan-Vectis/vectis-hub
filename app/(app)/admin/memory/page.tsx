@@ -16,6 +16,25 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reference_wizard_desktop.md",
+    content: `---
+name: wizard-desktop-layout
+description: Add Lot wizard desktop-only layout (2026-09-11) — the desk: Tailwind variant (mouse AND at least 1280px, never plain xl:), wider steps, taller text boxes, and the "This lot so far" panel that jumps BACK only. Read before styling anything desktop-only.
+metadata:
+  type: reference
+---
+
+# Add Lot wizard — desktop layout (2026-09-11)
+
+Jordan: "we never optimized it to be used on a desktop and some people do — I don't want you to change the layout too much ... the text boxes are so small". Offered four ideas; he chose bigger boxes and the "This lot so far" panel (not keyboard shortcuts, not drag/paste photos).
+
+- desk: variant in app/globals.css: @media (pointer: fine) and (min-width: 1280px). Never plain xl: for "desktop" — a 12.9" iPad Pro in landscape is 1,366px wide, and the tablets must not change.
+- lot-wizard-tab.tsx: every step container and banner is max-w-lg desk:max-w-3xl (they stay the same width so the banners line up with the step); inputs desk:text-base; the Key Points and manual description boxes are much taller on a desktop.
+- "This lot so far" (hidden desk:block, sticky, beside the form inside the scrolling step area — never a sibling above it, see the min-h-0 rule): vendor/tote/receipt, barcode, key points (or description), category/brand, estimate, condition, parcel, photos. Finished steps are buttons that call jumpBack(n) — BACKWARDS ONLY, forward is always Next, so the duplicate-barcode, category and estimate checks cannot be skipped. goBack() calls jumpBack(step - 1), so the two cannot drift.
+- The same wizard serves the desktop Auction Manager page, so it benefits there too.
+- Step 7 parcel buttons' inline hex colours became theme classes (they missed the tablet light mode).`,
+  },
+  {
     filename: "reference_tablet_light_mode.md",
     content: `---
 name: tablet-light-mode

@@ -1144,7 +1144,7 @@ export default function LotWizardTab({
   const boxWordings = useConditionWordings()
   const inpFocus    = tablet
     ? "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 text-base text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
-    : "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
+    : "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6] desk:py-2.5 desk:text-base"
   const lbl = tablet
     ? "text-sm text-gray-600 dark:text-gray-400 uppercase tracking-wider"
     : "text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider"
@@ -1300,6 +1300,13 @@ export default function LotWizardTab({
   }
 
   function goBack() {
+    jumpBack(step - 1)
+  }
+
+  /** Back to any step already done — the ← Back button, and "This lot so far" on a desktop.
+   *  ⚠ BACKWARDS ONLY: forward is always through Next, so its checks (the duplicate barcode, the
+   *  category and estimate warnings) can never be skipped by jumping. */
+  function jumpBack(to: number) {
     setValidErr("")
     setCategoryWarning(null)
     setEstimateWarning(false)
@@ -1307,7 +1314,7 @@ export default function LotWizardTab({
     setDupeWarning(null)
     setDupeCheckError(null)
     setStep1LengthWarning(false)
-    if (step > 1) setStep(step - 1)
+    if (to >= 1 && to < step) setStep(to)
   }
 
   function nextBarcodeNumber() {
@@ -1943,8 +1950,13 @@ export default function LotWizardTab({
           overflow is simply unreachable, which is exactly what Jordan hit on a phone. With
           `min-h-0` it can shrink and the scrollbar does its job. Never remove it. */}
       <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Desktop only (desk: = a mouse AND a wide screen — Jordan, 2026-09-11): the step and its
+            banners in a wider column, with "This lot so far" beside it. On a tablet these two
+            wrappers do nothing at all. */}
+        <div className="desk:flex desk:items-start desk:gap-8">
+        <div className="min-w-0 desk:w-full desk:max-w-3xl">
         {step === 1 && (
-          <div className="max-w-lg space-y-4">
+          <div className="max-w-lg desk:max-w-3xl space-y-4">
             <div className="flex items-start justify-between gap-3">
               <p className="text-xs text-gray-600 dark:text-gray-500">Type or scan the tote — the vendor &amp; receipt fill in automatically. Press <span className="font-semibold" style={{ color: CAT_ACCENT }}>Start cataloguing</span> to lock them in for the batch (they&apos;re remembered next time too).</p>
               {/* One button to empty all three boxes — the tablet cataloguers change
@@ -2214,7 +2226,7 @@ export default function LotWizardTab({
         )}
 
         {step === 2 && (
-          <div className="max-w-lg space-y-4">
+          <div className="max-w-lg desk:max-w-3xl space-y-4">
             <p className="text-xs text-gray-600 dark:text-gray-500">Scan the internal barcode or type it manually.</p>
             {/* The tote / vendor / receipt strip that used to sit here has moved above the step
                 indicator, so it shows on every step rather than only this one. */}
@@ -2334,7 +2346,7 @@ export default function LotWizardTab({
         )}
 
         {step === 3 && (
-          <div className="max-w-lg space-y-4">
+          <div className="max-w-lg desk:max-w-3xl space-y-4">
             {/* ⚠ Hidden for a cataloguer set to write their own descriptions: there is no choice
                 to make, and the box being tickable is exactly how hand-written lots ended up
                 inside the AI's scope. They get the description field and nothing else. */}
@@ -2354,14 +2366,14 @@ export default function LotWizardTab({
                 <label className={`${lbl} block mb-1`}>Description <span className="text-gray-500">(typed manually — will not be sent to AI)</span></label>
                 <textarea value={manualDesc} onChange={e => setManualDesc(e.target.value)} rows={7}
                   placeholder="Type the full description for this lot…"
-                  className={`${inpFocus} resize-none`} autoFocus />
+                  className={`${inpFocus} resize-none desk:min-h-[20rem]`} autoFocus />
               </div>
             ) : (
               <div>
                 <label className={`${lbl} block mb-1`}>Key Points <span className="text-gray-600">(optional)</span></label>
                 <textarea value={keyPoints} onChange={e => setKeyPoints(e.target.value)} rows={6}
                   placeholder="Describe any key points about this lot…"
-                  className={`${inpFocus} resize-none`} autoFocus />
+                  className={`${inpFocus} resize-none desk:min-h-[18rem]`} autoFocus />
               </div>
             )}
             {misspelled.length > 0 && (
@@ -2375,7 +2387,7 @@ export default function LotWizardTab({
         )}
 
         {step === 4 && (
-          <div className="max-w-lg space-y-5">
+          <div className="max-w-lg desk:max-w-3xl space-y-5">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className={lbl}>Main Category</label>
@@ -2457,7 +2469,7 @@ export default function LotWizardTab({
         )}
 
         {step === 5 && (
-          <div className="max-w-lg space-y-4">
+          <div className="max-w-lg desk:max-w-3xl space-y-4">
             <div className="flex gap-6">
               <div className="flex-1 space-y-3">
                 <div>
@@ -2521,7 +2533,7 @@ export default function LotWizardTab({
         )}
 
         {step === 6 && (
-          <div className="max-w-lg space-y-5">
+          <div className="max-w-lg desk:max-w-3xl space-y-5">
             <div>
               <label className={`${lbl} block mb-2`}>Condition</label>
               <div className="flex flex-wrap gap-2">
@@ -2587,18 +2599,15 @@ export default function LotWizardTab({
         )}
 
         {step === 7 && (
-          <div className="max-w-lg space-y-4">
+          <div className="max-w-lg desk:max-w-3xl space-y-4">
             <div>
               <label className={`${lbl} block mb-2`}>Parcel Size <span className="text-red-500">*</span></label>
               <div className="flex flex-wrap gap-2">
                 {PARCEL_OPTIONS.map(opt => (
                   <button key={opt} type="button" onClick={() => setParcel(v => v === opt ? "" : opt)}
-                    className="px-4 py-2 rounded text-sm font-medium transition-colors"
-                    style={{
-                      background: parcel === opt ? CAT_ACCENT : "#2C2C2E",
-                      color: parcel === opt ? "#1C1C1E" : "#d1d5db",
-                      border: `1px solid ${parcel === opt ? CAT_ACCENT : "#374151"}`,
-                    }}>
+                    className={`px-4 py-2 rounded text-sm font-medium transition-colors border ${
+                      parcel === opt ? "" : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700"}`}
+                    style={parcel === opt ? { background: CAT_ACCENT, color: "#1C1C1E", borderColor: CAT_ACCENT } : undefined}>
                     {opt}
                   </button>
                 ))}
@@ -2619,7 +2628,7 @@ export default function LotWizardTab({
         )}
 
         {step === 8 && (
-          <div className="max-w-lg space-y-4">
+          <div className="max-w-lg desk:max-w-3xl space-y-4">
             <p className="text-xs text-gray-600 dark:text-gray-500">Add photos to this lot. You can skip this and add them later.</p>
             <input
               ref={photoInputRef}
@@ -2668,13 +2677,13 @@ export default function LotWizardTab({
           "scroll". They still appear on EVERY step, and they still live inside this scrolling
           area (never as a sibling above it, which would steal height from a fixed-height column
           and be unreachable). Do not move them back up.
-          ⚠ `max-w-lg` on each, matching every step's own container — Jordan, same day: "why does it
+          ⚠ `max-w-lg desk:max-w-3xl` on each, matching every step's own container — Jordan, same day: "why does it
           need to span the entire screen". A short status box stretched to 1,900px puts its dismiss
           ✕ a foot away from the sentence it dismisses and lines up with nothing on the page. The
           full-width rule in RULES.md is about DATA (tables, plans, comparisons); this is a label
           beside a form. */}
       {staleDeploy && (
-        <div className="mt-4 max-w-lg rounded-xl border border-amber-500 bg-amber-500/10 px-4 py-3">
+        <div className="mt-4 max-w-lg desk:max-w-3xl rounded-xl border border-amber-500 bg-amber-500/10 px-4 py-3">
           <p className="text-sm font-bold text-amber-700 dark:text-amber-300">The app has been updated</p>
           <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
             This lot was <strong>not saved</strong>. This page is the old version and cannot save until it is reloaded.
@@ -2700,7 +2709,7 @@ export default function LotWizardTab({
           the lot; it means the next visit would offer older numbers. Worth one line rather than the
           silence that made this hard to pin down in the first place. */}
       {rememberFailed && !staleDeploy && !hidden.remember && (
-        <div className="mt-4 max-w-lg flex items-start gap-2 rounded-xl border border-amber-500/60 bg-amber-500/10 px-4 py-2.5">
+        <div className="mt-4 max-w-lg desk:max-w-3xl flex items-start gap-2 rounded-xl border border-amber-500/60 bg-amber-500/10 px-4 py-2.5">
           <p className="text-sm text-amber-700 dark:text-amber-300 flex-1">
             Your lot saved. The tote and vendor could not be remembered for next time, so check them when you come back.
           </p>
@@ -2719,7 +2728,7 @@ export default function LotWizardTab({
           || (receiptTyped && !!toteInfo?.receiptNo && receipt.trim().toUpperCase() !== toteInfo.receiptNo.toUpperCase())
         const flagged = overridden || restoredFromLast || !!toteMeta?.catalogued || toteMeta?.source === "item" || toteIgnored
         return (
-          <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 max-w-lg rounded-xl border px-4 ${tablet ? "py-3" : "py-2.5"} ${
+          <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 max-w-lg desk:max-w-3xl rounded-xl border px-4 ${tablet ? "py-3" : "py-2.5"} ${
             flagged ? "border-amber-500/60 bg-amber-500/10" : "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E]"}`}>
             {/* ⚠ ON THE LEFT, AND IT STAYS THERE (Jordan, 2026-09-09: "people keep pressing it on
                 accident"). It used to sit at the right-hand end of this row — directly under the
@@ -2770,6 +2779,57 @@ export default function LotWizardTab({
           </div>
         )
       })()}
+        </div>
+
+        {/* ── This lot so far — DESKTOP ONLY (Jordan, 2026-09-11) ─────────────────────────────
+            Uses the empty right-hand side: everything entered so far, filled in as you go. A
+            finished step can be clicked to go back to it (jumpBack — backwards only, so Next's
+            checks are never skipped). Hidden on the tablets, where there is no room for it. */}
+        {(() => {
+          const soFar: { n: number; label: string; value: string }[] = [
+            { n: 1, label: STEP_LABELS[0], value: [vendorHint || toteInfo?.vendorName, [vendor, tote, receipt].filter(Boolean).join(" · ")].filter(Boolean).join("\n") },
+            { n: 2, label: STEP_LABELS[1], value: barcode },
+            { n: 3, label: aiExcluded ? "Description" : STEP_LABELS[2], value: aiExcluded ? manualDesc : keyPoints },
+            { n: 4, label: STEP_LABELS[3], value: [mainCat && (subCat ? `${mainCat} › ${subCat}` : mainCat), brand].filter(Boolean).join("\n") },
+            { n: 5, label: STEP_LABELS[4], value: estLow || estHigh ? `£${estLow || "?"}–£${estHigh || "?"}` : "" },
+            { n: 6, label: STEP_LABELS[5], value: buildCondition() },
+            { n: 7, label: STEP_LABELS[6], value: parcel },
+            { n: 8, label: STEP_LABELS[7], value: photoFiles.length ? `${photoFiles.length} photo${photoFiles.length === 1 ? "" : "s"}` : "" },
+          ]
+          return (
+            <aside className="hidden desk:block desk:sticky desk:top-0 w-80 flex-shrink-0 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] p-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">This lot so far</h3>
+              <ol className="space-y-0.5">
+                {soFar.map(row => {
+                  const body = (
+                    <>
+                      <span className="block text-[11px] uppercase tracking-wider text-gray-500">{row.n}. {row.label}</span>
+                      <span className={`block whitespace-pre-line break-words line-clamp-4 text-sm ${row.value ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-600"}`}>
+                        {row.value || (row.n > step ? "not yet" : "—")}
+                      </span>
+                    </>
+                  )
+                  return (
+                    <li key={row.n}>
+                      {row.n < step ? (
+                        <button type="button" onClick={() => jumpBack(row.n)} title={`Go back to step ${row.n}`}
+                          className="w-full rounded-lg px-2 py-1.5 text-left hover:bg-black/5 dark:hover:bg-white/5">
+                          {body}
+                        </button>
+                      ) : (
+                        <div className={`rounded-lg px-2 py-1.5 ${row.n === step ? "bg-[#2AB4A6]/10 ring-1 ring-[#2AB4A6]/40" : ""}`}>{body}</div>
+                      )}
+                    </li>
+                  )
+                })}
+              </ol>
+              <p className="mt-3 text-[11px] leading-relaxed text-gray-500">
+                Click a finished step to go back to it. Going forward is always through Next, so no check is skipped.
+              </p>
+            </aside>
+          )
+        })()}
+        </div>
       </div>
 
     </div>

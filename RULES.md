@@ -125,6 +125,12 @@ Much of this app is used on shared tablets, standing up.
   with a ~16px thumb; on a tablet they read as simply broken.
 - **A drag inside a scrolling panel needs `touch-action: none`**, or the panel scrolls instead and
   the control feels dead.
+- **Desktop-only styling uses `desk:`** (`app/globals.css`: a mouse or trackpad AND ≥1,280px) —
+  never plain `xl:` for "desktop": a 12.9" iPad Pro in landscape is 1,366px wide, and the tablets
+  must not change. First used on the Add Lot wizard (2026-09-11, Jordan: "the text boxes are so
+  small" on a desktop): steps widen from 512px to ~770px, taller text boxes, and a **"This lot so
+  far"** panel beside the form whose finished steps jump BACK (`jumpBack` — never forward, so
+  Next's checks can't be skipped).
 
 ### 6. ⚠ The DESCRIPTION COPIER's layout is frozen — nothing above the lot card
 **Scope: the Description Copier (`/tools/auction-ai` → Description Copier) and nothing else.**
