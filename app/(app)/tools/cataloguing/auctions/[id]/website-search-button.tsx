@@ -42,6 +42,8 @@ const SORTS = [
 type Filters = {
   q: string
   phrase: boolean
+  /** Numbers match whole — "37" never finds 373 (Jordan, 2026-09-11). On by default. */
+  whole: boolean
   without: string
   src: Record<SearchSource, boolean>
   sale: string
@@ -59,7 +61,7 @@ type Filters = {
 }
 
 const EMPTY: Filters = {
-  q: "", phrase: false, without: "", src: { bc: true, abc: true, hub: true }, sale: "", cat: "", sub: "",
+  q: "", phrase: false, whole: true, without: "", src: { bc: true, abc: true, hub: true }, sale: "", cat: "", sub: "",
   hmin: "", hmax: "", emin: "", emax: "", yfrom: "", yto: "", status: "", photo: false, order: "newest",
 }
 
@@ -83,6 +85,7 @@ function buildParams(f: Filters, page: number): string {
   const p = new URLSearchParams()
   if (f.q.trim()) p.set("q", f.q.trim())
   if (f.phrase) p.set("phrase", "1")
+  p.set("whole", f.whole ? "1" : "0")
   if (f.without.trim()) p.set("without", f.without.trim())
   p.set("src", SOURCES.filter(s => f.src[s.key]).map(s => s.key).join(","))
   for (const k of ["sale", "cat", "sub", "hmin", "hmax", "emin", "emax", "yfrom", "yto", "status"] as const) {
@@ -98,6 +101,7 @@ function buildParams(f: Filters, page: number): string {
 function filterCount(f: Filters): number {
   let n = 0
   if (f.phrase) n++
+  if (!f.whole) n++          // on is the default, so only "off" counts as a filter
   if (f.without.trim()) n++
   if (SOURCES.some(s => !f.src[s.key])) n++
   for (const k of ["sale", "cat", "sub", "hmin", "hmax", "emin", "emax", "yfrom", "yto", "status"] as const) if (String(f[k]).trim()) n++
@@ -386,6 +390,7 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
       </div>
       <div className="space-y-2">
         <Tick on={f.phrase} onClick={() => set("phrase", !f.phrase)}>Match the exact phrase, not just the words</Tick>
+        <Tick on={f.whole} onClick={() => set("whole", !f.whole)}>Whole numbers only — “37” won&apos;t find 373 or 3714</Tick>
         <Tick on={f.photo} onClick={() => set("photo", !f.photo)}>Only lots with a photo</Tick>
       </div>
       <p className="text-xs leading-relaxed text-gray-500">
@@ -481,6 +486,13 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
                 </p>
 
                 {notes.map(n => <p key={n} className="mb-2 rounded-lg border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">{n}</p>)}
+
+                {/* Say when numbers were matched whole — a Class 373 that doesn't appear must never be a mystery. */}
+                {results && !busy && searched.current?.whole && /\d/.test(searched.current.q) && (
+                  <p className="mb-2 text-xs text-gray-500">
+                    Numbers are matched whole — “37” won&apos;t find 373 or 3714. Untick “Whole numbers only” in the filters to include them.
+                  </p>
+                )}
 
                 {/* Say what the smarter matching did, so a lot found by a corrected spelling is never a mystery. */}
                 {corrections.length > 0 && !busy && (
