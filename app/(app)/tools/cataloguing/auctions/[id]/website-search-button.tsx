@@ -42,8 +42,10 @@ const SORTS = [
 type Filters = {
   q: string
   phrase: boolean
-  /** Numbers match whole — "37" never finds 373 (Jordan, 2026-09-11). On by default. */
+  /** Exact numbers — "37" never finds 373 (Jordan, 2026-09-11). On by default. */
   whole: boolean
+  /** Exact words — "bus" never finds business (Jordan, 2026-09-11). Off by default. */
+  words: boolean
   without: string
   src: Record<SearchSource, boolean>
   sale: string
@@ -51,8 +53,8 @@ type Filters = {
   sub: string
   hmin: string
   hmax: string
-  emin: string
-  emax: string
+  /** "Estimate around £" — lots whose low–high estimate covers this figure. */
+  est: string
   yfrom: string
   yto: string
   status: "" | "sold" | "unsold"
@@ -61,8 +63,8 @@ type Filters = {
 }
 
 const EMPTY: Filters = {
-  q: "", phrase: false, whole: true, without: "", src: { bc: true, abc: true, hub: true }, sale: "", cat: "", sub: "",
-  hmin: "", hmax: "", emin: "", emax: "", yfrom: "", yto: "", status: "", photo: false, order: "newest",
+  q: "", phrase: false, whole: true, words: false, without: "", src: { bc: true, abc: true, hub: true }, sale: "", cat: "", sub: "",
+  hmin: "", hmax: "", est: "", yfrom: "", yto: "", status: "", photo: false, order: "newest",
 }
 
 const THIS_YEAR = new Date().getFullYear()
@@ -86,9 +88,10 @@ function buildParams(f: Filters, page: number): string {
   if (f.q.trim()) p.set("q", f.q.trim())
   if (f.phrase) p.set("phrase", "1")
   p.set("whole", f.whole ? "1" : "0")
+  if (f.words) p.set("words", "1")
   if (f.without.trim()) p.set("without", f.without.trim())
   p.set("src", SOURCES.filter(s => f.src[s.key]).map(s => s.key).join(","))
-  for (const k of ["sale", "cat", "sub", "hmin", "hmax", "emin", "emax", "yfrom", "yto", "status"] as const) {
+  for (const k of ["sale", "cat", "sub", "hmin", "hmax", "est", "yfrom", "yto", "status"] as const) {
     if (String(f[k]).trim()) p.set(k, String(f[k]).trim())
   }
   if (f.photo) p.set("photo", "1")
@@ -102,9 +105,10 @@ function filterCount(f: Filters): number {
   let n = 0
   if (f.phrase) n++
   if (!f.whole) n++          // on is the default, so only "off" counts as a filter
+  if (f.words) n++
   if (f.without.trim()) n++
   if (SOURCES.some(s => !f.src[s.key])) n++
-  for (const k of ["sale", "cat", "sub", "hmin", "hmax", "emin", "emax", "yfrom", "yto", "status"] as const) if (String(f[k]).trim()) n++
+  for (const k of ["sale", "cat", "sub", "hmin", "hmax", "est", "yfrom", "yto", "status"] as const) if (String(f[k]).trim()) n++
   if (f.photo) n++
   return n
 }
@@ -151,18 +155,43 @@ function TickInfo({ on, onClick, label, info }: { on: boolean; onClick: () => vo
     <div>
       <div className="flex items-stretch gap-2">
         <div className="min-w-0 flex-1"><Tick on={on} onClick={onClick}>{label}</Tick></div>
-        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`What does “${label}” do?`}
-          title={`What does “${label}” do?`} style={{ touchAction: "manipulation" }}
-          className={`flex min-h-[44px] w-11 flex-shrink-0 items-center justify-center rounded-lg border ${open ? "border-[#2AB4A6] text-[#2AB4A6]" : "border-gray-300 dark:border-gray-700 text-gray-500"}`}>
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-xs font-bold italic">i</span>
-        </button>
+        <InfoButton open={open} onClick={() => setOpen(o => !o)} what={label} />
       </div>
-      {open && (
-        <p className="mt-1.5 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/30 px-3 py-2 text-xs leading-relaxed text-gray-700 dark:text-gray-300">
-          {info}
-        </p>
-      )}
+      {open && <InfoText>{info}</InfoText>}
     </div>
+  )
+}
+
+/** The same ⓘ for a box you type into — the "Estimate around £" filter. */
+function InfoField({ id, text, info, children }: { id: string; text: string; info: React.ReactNode; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <label className={label} htmlFor={id}>{text}</label>
+      <div className="flex items-stretch gap-2">
+        <div className="min-w-0 flex-1">{children}</div>
+        <InfoButton open={open} onClick={() => setOpen(o => !o)} what={text} />
+      </div>
+      {open && <InfoText>{info}</InfoText>}
+    </div>
+  )
+}
+
+function InfoButton({ open, onClick, what }: { open: boolean; onClick: () => void; what: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-expanded={open} aria-label={`What does “${what}” do?`}
+      title={`What does “${what}” do?`} style={{ touchAction: "manipulation" }}
+      className={`flex min-h-[44px] w-11 flex-shrink-0 items-center justify-center rounded-lg border ${open ? "border-[#2AB4A6] text-[#2AB4A6]" : "border-gray-300 dark:border-gray-700 text-gray-500"}`}>
+      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-xs font-bold italic">i</span>
+    </button>
+  )
+}
+
+function InfoText({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-1.5 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/30 px-3 py-2 text-xs leading-relaxed text-gray-700 dark:text-gray-300">
+      {children}
+    </p>
   )
 }
 
@@ -397,10 +426,16 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
           <input id="ws-hmin" value={f.hmin} onChange={e => set("hmin", e.target.value)} inputMode="numeric" placeholder="0" className={input} /></div>
         <div><label className={label} htmlFor="ws-hmax">Hammer to £</label>
           <input id="ws-hmax" value={f.hmax} onChange={e => set("hmax", e.target.value)} inputMode="numeric" placeholder="Any" className={input} /></div>
-        <div><label className={label} htmlFor="ws-emin">Estimate from £</label>
-          <input id="ws-emin" value={f.emin} onChange={e => set("emin", e.target.value)} inputMode="numeric" placeholder="0" className={input} /></div>
-        <div><label className={label} htmlFor="ws-emax">Estimate to £</label>
-          <input id="ws-emax" value={f.emax} onChange={e => set("emax", e.target.value)} inputMode="numeric" placeholder="Any" className={input} /></div>
+        <div className="col-span-2">
+          <InfoField id="ws-est" text="Estimate around £"
+            info={<>
+              Shows lots whose estimate <b>covers</b> this figure. Type <b>100</b> and a lot estimated £80–£120 is
+              shown, and so is £100–£150 — but not £150–£200 or £40–£60. Leave it empty for any estimate.
+              Hub lots use the cataloguer&apos;s estimate, or the AI&apos;s if there isn&apos;t one.
+            </>}>
+            <input id="ws-est" value={f.est} onChange={e => set("est", e.target.value)} inputMode="numeric" placeholder="Any" className={input} />
+          </InfoField>
+        </div>
         <div className="col-span-2"><label className={label} htmlFor="ws-status">Result</label>
           <select id="ws-status" value={f.status} onChange={e => set("status", e.target.value as Filters["status"])} className={input}>
             <option value="">Sold, unsold and not sold yet</option>
@@ -423,12 +458,19 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
             “Hornby Class 37 locomotive” but not “Class 37 by Hornby”.{" "}
             <b>Off:</b> each word just has to be somewhere in the description, in any order.
           </>} />
+        <TickInfo on={f.words} onClick={() => set("words", !f.words)} label="Exact words"
+          info={<>
+            <b>On:</b> each word must match on its own — “bus” finds “bus” and “buses” but not “business” or
+            “omnibus”, and “car” won&apos;t find “carriage”.{" "}
+            <b>Off:</b> a word is found inside longer words too — handy when “loco” should find “locomotive”.
+            Numbers have their own tick below.
+          </>} />
         <TickInfo on={f.whole} onClick={() => set("whole", !f.whole)} label="Exact numbers"
           info={<>
             <b>On:</b> a number must match on its own — “37” finds Class 37, 37/5 and No.37, but not 373, 3714
             or 37417. Letters can still touch it, so “3514” finds R3514.{" "}
             <b>Off:</b> a number is found anywhere, even inside a longer one.
-            Words aren&apos;t affected either way — “bear” still finds “bears”.
+            Words have their own tick above.
           </>} />
         <Tick on={f.photo} onClick={() => set("photo", !f.photo)}>Only lots with a photo</Tick>
       </div>
@@ -543,6 +585,11 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
                 {results && !busy && searched.current?.whole && /\d/.test(searched.current.q) && (
                   <p className="mb-2 text-xs text-gray-500">
                     Exact numbers is on — “37” won&apos;t find 373 or 3714. Untick “Exact numbers” in the filters to include them.
+                  </p>
+                )}
+                {results && !busy && searched.current?.words && /\p{L}/u.test(searched.current.q) && (
+                  <p className="mb-2 text-xs text-gray-500">
+                    Exact words is on — “bus” won&apos;t find “business”. Untick “Exact words” in the filters to include longer words.
                   </p>
                 )}
 

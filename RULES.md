@@ -1284,6 +1284,10 @@ It **replaced Description Finder**, which is gone — page, route, home card and
   (tapped, not hovered — iPads) — **on by default** (his choice: a toggle rather than typing quotes), and the page says so
   under the results. The ILIKE stays as the cheap first pass and a `~*` pattern confirms the edges —
   measured no slower (class 37: 2.4 s, 13,414 lots → 3,406). ID fields stay a plain "contains".
+- **Exact words** (same day) — **off by default**: a word may not sit inside a longer word, though
+  its own plural still counts ("bus" finds buses, never business or omnibus). Off, "loco" finding
+  "locomotive" is usually wanted. One `edgePattern()` in the route: Exact words governs LETTER edges,
+  Exact numbers DIGIT edges. Three ticks, each with an ⓘ: Exact phrase · Exact words · Exact numbers.
 - ⚠⚠ **Never fold or rewrite the DESCRIPTIONS at search time.** Measured on production 2026-09-10:
   `translate()` over ArchiveLot took **36 s** for "halo" against **3.3 s** for a plain ILIKE, and every
   search timed out on staging. Matching stays a plain ILIKE on the stored text; anything cleverer is an

@@ -105,17 +105,25 @@ const ORDERS: Record<string, Prisma.Sql> = {
 /** A LIKE pattern for one word — %, _ and \ in what they typed are matched literally. */
 const likeParam = (word: string) => "%" + word.replace(/[\\%_]/g, m => "\\" + m) + "%"
 
-/** WHOLE NUMBERS (Jordan, 2026-09-11 — "Class 37" was bringing up every Class 373): a word that
- *  starts or ends with a digit may not have more digits glued on at that end. "37" finds Class 37,
- *  37/5 and No.37, never 373, 3714 or 37417; letters may still touch it, so "3514" finds R3514.
- *  Returns a case-insensitive POSIX pattern, or null when the word has no digit at either end.
+/** The two "exact" ticks in the panel's filters (Jordan, 2026-09-11). Each governs its own kind of edge. */
+type Exact = { numbers: boolean; words: boolean }
+
+/** EXACT NUMBERS ("Class 37" was bringing up every Class 373) — ON by default: a word that starts or
+ *  ends with a digit may not have more digits glued on at that end. "37" finds Class 37, 37/5 and
+ *  No.37, never 373, 3714 or 37417; letters may still touch it, so "3514" finds R3514.
+ *  EXACT WORDS — OFF by default: a word that starts or ends with a letter may not sit inside a longer
+ *  word at that end, though its own plural still counts. "bus" finds bus and buses, never business or
+ *  omnibus; "car" never carriage. Off, "loco" finding "locomotive" is usually what's wanted.
+ *  Returns a case-insensitive POSIX pattern, or null when neither rule touches this word.
  *  ⚠ The ILIKE stays as the cheap first pass and the pattern only confirms the edges — measured on
  *  production, no slower (class 37: 2.4 s, 13,414 lots → 3,406). */
-function wholeNumberPattern(word: string): string | null {
-  const starts = /^\d/.test(word), ends = /\d$/.test(word)
-  if (!starts && !ends) return null
-  const escaped = word.replace(/[\\^$.|?*+()[\]{}]/g, m => "\\" + m)
-  return (starts ? "(^|[^0-9])" : "") + escaped + (ends ? "($|[^0-9])" : "")
+function edgePattern(word: string, exact: Exact): string | null {
+  const first = word.charAt(0), last = word.charAt(word.length - 1)
+  const digit = (c: string) => /\d/.test(c), letter = (c: string) => /\p{L}/u.test(c)
+  const before = digit(first) && exact.numbers ? "(^|[^0-9])" : letter(first) && exact.words ? "(^|[^[:alnum:]])" : ""
+  const after = digit(last) && exact.numbers ? "($|[^0-9])" : letter(last) && exact.words ? "(s|es)?($|[^[:alnum:]])" : ""
+  if (!before && !after) return null
+  return before + word.replace(/[\\^$.|?*+()[\]{}]/g, m => "\\" + m) + after
 }
 
 /** Every word group must appear in the lot's description — any one of its spellings will do (the
@@ -124,10 +132,10 @@ function wholeNumberPattern(word: string): string | null {
  *  "contains", so part of a barcode still finds it.
  *  ⚠ Measured 2026-09-10: gluing description + IDs + sale name into one string per row made every
  *  search take ~6 s; the description alone is ~2.4 s. Sale names have their own filter. */
-function textConds(desc: Prisma.Sql, ids: Prisma.Sql, groups: string[][], without: string[], idLike: boolean, whole: boolean): Prisma.Sql[] {
+function textConds(desc: Prisma.Sql, ids: Prisma.Sql, groups: string[][], without: string[], idLike: boolean, exact: Exact): Prisma.Sql[] {
   const inDesc = (word: string) => {
     const like = Prisma.sql`${desc} ILIKE ${likeParam(word)}`
-    const edges = whole ? wholeNumberPattern(word) : null
+    const edges = edgePattern(word, exact)
     return edges ? Prisma.sql`(${like} AND ${desc} ~* ${edges})` : like
   }
   const hit = (word: string) => (idLike ? Prisma.sql`(${inDesc(word)} OR ${ids} ILIKE ${likeParam(word)})` : inDesc(word))
@@ -169,13 +177,16 @@ export async function GET(req: NextRequest) {
     // The phrase as typed, and with its accents folded.
     const phrase = exact && phraseText.length >= 2 ? uniq([phraseText, foldText(phraseText)]) : null
     const without = uniq(tokens(sp.get("without") ?? "", MAX_WORDS).flatMap(t => [t.word, t.raw]))
-    // Whole numbers is ON unless the panel's tick says otherwise ("37" ≠ 373).
-    const whole = sp.get("whole") !== "0"
+    // Exact numbers is ON unless the panel's tick says otherwise ("37" ≠ 373); exact words is OFF
+    // unless ticked ("bus" ≠ business).
+    const matchRules: Exact = { numbers: sp.get("whole") !== "0", words: sp.get("words") === "1" }
     const sale = (sp.get("sale") ?? "").trim().slice(0, 100)
     const cat = (sp.get("cat") ?? "").trim().slice(0, 100)
     const sub = (sp.get("sub") ?? "").trim().slice(0, 100)
     const hmin = num(sp.get("hmin")), hmax = num(sp.get("hmax"))
-    const emin = num(sp.get("emin")), emax = num(sp.get("emax"))
+    // ONE figure, not from/to (Jordan, 2026-09-11: a from/to pair "sorta doesn't make sense" against a
+    // low–high estimate) — a lot is shown when its estimate COVERS it.
+    const est = num(sp.get("est"))
     const yfrom = year(sp.get("yfrom")), yto = year(sp.get("yto"))
     const status = sp.get("status") === "sold" ? "sold" : sp.get("status") === "unsold" ? "unsold" : ""
     const photoOnly = sp.get("photo") === "1"
@@ -217,7 +228,7 @@ export async function GET(req: NextRequest) {
 
     const branches: Prisma.Sql[] = []
     if (useAbc) {
-      const tc = textConds(Prisma.sql`a."description"`, Prisma.sql`coalesce(a."lotId", '')`, groups, without, idLike, whole)
+      const tc = textConds(Prisma.sql`a."description"`, Prisma.sql`coalesce(a."lotId", '')`, groups, without, idLike, matchRules)
       branches.push(Prisma.sql`
         SELECT 'abc'::text AS source, a."id", a."lotId" AS ident, a."auctionId"::text AS sale_code, a."saleTitle" AS sale_name,
                a."auctionDate"::date AS sale_date, a."lot" AS lot, a."description" AS description,
@@ -228,7 +239,7 @@ export async function GET(req: NextRequest) {
         WHERE ${and(tc)}`)
     }
     if (useBc) {
-      const tc = textConds(Prisma.sql`COALESCE(b."description", w."description")`, Prisma.sql`(w."uniqueId" || ' ' || coalesce(w."barcode", ''))`, groups, without, idLike, whole)
+      const tc = textConds(Prisma.sql`COALESCE(b."description", w."description")`, Prisma.sql`(w."uniqueId" || ' ' || coalesce(w."barcode", ''))`, groups, without, idLike, matchRules)
       const lotNo = Prisma.sql`NULLIF(regexp_replace(COALESCE(NULLIF(w."currentLotNo", '0'), w."lotNo"), '[^0-9]', '', 'g'), '')::int`
       // Same "has been through a sale that has happened" rule as Databases → BC Database.
       const base = Prisma.sql`w."auctionCode" IS NOT NULL AND w."auctionDate" IS NOT NULL AND w."auctionDate" <= to_char(now(), 'YYYY-MM-DD') AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL`
@@ -243,7 +254,7 @@ export async function GET(req: NextRequest) {
         WHERE ${base} AND ${and(tc)}`)
     }
     if (useHub) {
-      const tc = textConds(Prisma.sql`l."description"`, Prisma.sql`(coalesce(l."barcode", '') || ' ' || coalesce(l."receiptUniqueId", ''))`, groups, without, idLike, whole)
+      const tc = textConds(Prisma.sql`l."description"`, Prisma.sql`(coalesce(l."barcode", '') || ' ' || coalesce(l."receiptUniqueId", ''))`, groups, without, idLike, matchRules)
       branches.push(Prisma.sql`
         SELECT 'hub'::text AS source, l."id", COALESCE(l."barcode", l."receiptUniqueId") AS ident, a."code" AS sale_code, a."name" AS sale_name,
                a."auctionDate"::date AS sale_date, NULL::int AS lot, l."description" AS description,
@@ -262,8 +273,8 @@ export async function GET(req: NextRequest) {
     if (yto != null) outer.push(Prisma.sql`u.sale_date < make_date(${yto + 1}::int, 1, 1)`)
     if (hmin != null) outer.push(Prisma.sql`u.hammer >= ${hmin}`)
     if (hmax != null) outer.push(Prisma.sql`u.hammer <= ${hmax}`)
-    if (emin != null) outer.push(Prisma.sql`u.est_high >= ${emin}`)
-    if (emax != null) outer.push(Prisma.sql`u.est_low <= ${emax}`)
+    // "Estimate around £100": low ≤ 100 ≤ high. A lot with only one side of an estimate uses it for both.
+    if (est != null) outer.push(Prisma.sql`COALESCE(u.est_low, u.est_high) <= ${est} AND COALESCE(u.est_high, u.est_low) >= ${est}`)
     if (status === "sold") outer.push(Prisma.sql`u.hammer > 0`)
     if (status === "unsold") outer.push(Prisma.sql`u.hammer IS NULL`)
     if (sale) outer.push(Prisma.sql`(u.sale_name ILIKE ${likeParam(sale)} OR u.sale_code ILIKE ${likeParam(sale)})`)
