@@ -232,6 +232,10 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
   const [open, setOpen] = useState(false)
   const [f, setF] = useState<Filters>(EMPTY)
   const [showFilters, setShowFilters] = useState(true)
+  /** The desktop/landscape filter sidebar — open by default, folded to a slim strip so the results
+   *  get the whole width (Jordan, 2026-09-11). Separate from showFilters, which is the portrait fold
+   *  that closes itself after a search; this one only moves when someone presses it. */
+  const [sidebar, setSidebar] = useState(true)
   const [results, setResults] = useState<SearchResult[] | null>(null)
   const [counts, setCounts] = useState<SearchResponse["counts"]>(null)
   const [notes, setNotes] = useState<string[]>([])
@@ -444,12 +448,25 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
 
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
               {/* Filters — beside the results on a landscape iPad, above them in portrait (folded away after a search). */}
-              <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 lg:w-[22rem] lg:overflow-y-auto lg:border-b-0 lg:border-r">
+              <div className={`flex-shrink-0 border-b border-gray-200 dark:border-gray-800 lg:overflow-y-auto lg:border-b-0 lg:border-r ${sidebar ? "lg:w-[22rem]" : "lg:w-14"}`}>
                 <button type="button" onClick={() => setShowFilters(s => !s)} style={{ touchAction: "manipulation" }}
                   className="flex min-h-[44px] w-full items-center justify-between px-4 text-sm text-gray-700 dark:text-gray-300 lg:hidden">
                   <span>Filters{active ? ` (${active} set)` : ""}</span><span>{showFilters ? "▲ Hide" : "▼ Show"}</span>
                 </button>
-                <div className={`${showFilters ? "block" : "hidden"} max-h-[45vh] overflow-y-auto px-4 pb-4 lg:block lg:max-h-none lg:py-4`}>
+                {/* Desktop/landscape: fold the sidebar to a slim strip and back. */}
+                {sidebar ? (
+                  <button type="button" onClick={() => setSidebar(false)} style={{ touchAction: "manipulation" }} title="Hide the filters"
+                    className="hidden min-h-[44px] w-full items-center justify-between px-4 text-sm text-gray-700 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 lg:flex">
+                    <span>Filters{active ? ` (${active} set)` : ""}</span><span>◀ Hide</span>
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => setSidebar(true)} style={{ touchAction: "manipulation" }} title="Show the filters"
+                    className="hidden w-full flex-col items-center gap-2 py-4 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 lg:flex">
+                    <span>▶</span>
+                    <span className="[writing-mode:vertical-rl]">Filters{active ? ` (${active} set)` : ""}</span>
+                  </button>
+                )}
+                <div className={`${showFilters ? "block" : "hidden"} max-h-[45vh] overflow-y-auto px-4 pb-4 ${sidebar ? "lg:block" : "lg:hidden"} lg:max-h-none lg:pt-1 lg:pb-4`}>
                   {filtersPanel}
                 </div>
               </div>
@@ -520,25 +537,27 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
                 )}
 
                 {results && results.length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  // Three across at most on a desktop, so the photos and text can be bigger (Jordan,
+                  // 2026-09-11) — four across made both too small to read. Two on a tablet.
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {results.map(r => (
                       <button key={`${r.source}-${r.id}`} type="button" onClick={() => setDetail(r)} style={{ touchAction: "manipulation" }}
-                        className="flex gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] p-3 text-left hover:border-gray-400 dark:hover:border-gray-600">
+                        className="flex gap-3 xl:gap-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] p-3 text-left hover:border-gray-400 dark:hover:border-gray-600">
                         {r.photo ? (
-                          <img src={r.photo} alt="" loading="lazy" className="h-24 w-24 flex-shrink-0 rounded-lg bg-black object-cover" />
+                          <img src={r.photo} alt="" loading="lazy" className="h-24 w-24 xl:h-36 xl:w-36 flex-shrink-0 rounded-lg bg-black object-cover" />
                         ) : (
-                          <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-lg bg-gray-50 dark:bg-[#141416] text-xs text-gray-600">No photo</div>
+                          <div className="flex h-24 w-24 xl:h-36 xl:w-36 flex-shrink-0 items-center justify-center rounded-lg bg-gray-50 dark:bg-[#141416] text-xs text-gray-600">No photo</div>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
                             <SourceBadge s={r.source} />
-                            <span className={`text-base font-bold ${r.hammer != null ? "text-gray-900 dark:text-white" : "text-gray-500 text-sm font-medium"}`}>{result(r)}</span>
+                            <span className={`font-bold ${r.hammer != null ? "text-base xl:text-lg text-gray-900 dark:text-white" : "text-gray-500 text-sm font-medium"}`}>{result(r)}</span>
                           </div>
-                          <p className="mt-1 line-clamp-3 text-sm text-gray-800 dark:text-gray-200">{r.description}</p>
-                          <p className="mt-1 truncate text-xs text-gray-500">
+                          <p className="mt-1 line-clamp-3 xl:line-clamp-4 text-sm xl:text-base text-gray-800 dark:text-gray-200">{r.description}</p>
+                          <p className="mt-1 truncate text-xs xl:text-sm text-gray-500">
                             {[fmtDay(r.saleDate), r.saleName, r.lot != null ? `Lot ${r.lot}` : null].filter(Boolean).join(" · ")}
                           </p>
-                          {estimate(r) && <p className="text-xs text-gray-500">Estimate {estimate(r)}</p>}
+                          {estimate(r) && <p className="text-xs xl:text-sm text-gray-500">Estimate {estimate(r)}</p>}
                         </div>
                       </button>
                     ))}

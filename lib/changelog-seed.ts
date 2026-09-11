@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7793fc46283c31637302249a43e477d5dbf8c74e","author":"Jordan Orange","date":"2026-09-11T10:27:30+01:00","subject":"Website Search: whole numbers — \"Class 37\" no longer brings up Class 373"},
   {"sha":"9f5175cf77fa535dc217785357af4094724dcbc1","author":"Jordan Orange","date":"2026-09-11T09:30:22+01:00","subject":"Tablet cataloguing: light/dark switch top right, and on Website Search"},
   {"sha":"71a546b06e275b6a2883920dedae09f30f3df8f2","author":"Jordan Orange","date":"2026-09-11T09:11:49+01:00","subject":"Data map: describe the 10 tables it was missing"},
   {"sha":"aeb96689942dc44fa9635f2837a99834f6046414","author":"Jordan Orange","date":"2026-09-10T17:27:54+01:00","subject":"Lens checks our own lots properly: ABC archive + full BC descriptions, photos and links"},
