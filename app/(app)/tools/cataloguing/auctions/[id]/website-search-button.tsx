@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { SearchResponse, SearchResult, SearchSource } from "@/app/api/website-search/route"
 import { useCategoryMap } from "@/lib/use-category-map"
+import ThemeToggle from "@/components/theme-toggle"
 
 // 🔎 Website Search — the tablet cataloguing screen's research tool, just left of Lens
 // (Jordan, 2026-09-10: "the ultimate search bar to help them research. Our own website's
@@ -23,9 +24,9 @@ import { useCategoryMap } from "@/lib/use-category-map"
 const ACCENT = "#2AB4A6"
 
 const SOURCES: { key: SearchSource; label: string; long: string; cls: string }[] = [
-  { key: "bc",  label: "BC",  long: "sold through Business Central",       cls: "bg-violet-500/20 text-violet-200 border-violet-400/50" },
-  { key: "abc", label: "ABC", long: "sold through ABC, 1999–2023",          cls: "bg-amber-500/20 text-amber-200 border-amber-400/50" },
-  { key: "hub", label: "Hub", long: "catalogued in the Hub, not sold yet", cls: "bg-sky-500/20 text-sky-200 border-sky-400/50" },
+  { key: "bc",  label: "BC",  long: "sold through Business Central",       cls: "bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-200 border-violet-300 dark:border-violet-400/50" },
+  { key: "abc", label: "ABC", long: "sold through ABC, 1999–2023",          cls: "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-400/50" },
+  { key: "hub", label: "Hub", long: "catalogued in the Hub, not sold yet", cls: "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-200 border-sky-300 dark:border-sky-400/50" },
 ]
 const SOURCE = Object.fromEntries(SOURCES.map(s => [s.key, s])) as Record<SearchSource, (typeof SOURCES)[number]>
 
@@ -120,8 +121,8 @@ async function copyText(text: string): Promise<boolean> {
 
 // ── Small pieces ────────────────────────────────────────────────────────────────
 
-const input = "w-full min-h-[44px] rounded-lg border border-gray-700 bg-[#1C1C1E] px-3 text-base text-white placeholder-gray-500 focus:outline-none focus:border-[#2AB4A6] [color-scheme:dark]"
-const label = "block text-xs uppercase tracking-wider text-gray-400 mb-1"
+const input = "w-full min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E] px-3 text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-[#2AB4A6] [color-scheme:light] dark:[color-scheme:dark]"
+const label = "block text-xs uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1"
 
 function SourceBadge({ s }: { s: SearchSource }) {
   return <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${SOURCE[s].cls}`}>{SOURCE[s].label}</span>
@@ -130,8 +131,8 @@ function SourceBadge({ s }: { s: SearchSource }) {
 function Tick({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={on} style={{ touchAction: "manipulation" }}
-      className={`min-h-[44px] w-full flex items-center gap-3 rounded-lg border px-3 text-left text-sm transition-colors ${on ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-white" : "border-gray-700 text-gray-300 hover:border-gray-500"}`}>
-      <span className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border ${on ? "border-[#2AB4A6] bg-[#2AB4A6] text-black" : "border-gray-500"}`}>{on ? "✓" : ""}</span>
+      className={`min-h-[44px] w-full flex items-center gap-3 rounded-lg border px-3 text-left text-sm transition-colors ${on ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-gray-900 dark:text-white" : "border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"}`}>
+      <span className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border ${on ? "border-[#2AB4A6] bg-[#2AB4A6] text-black" : "border-gray-400 dark:border-gray-500"}`}>{on ? "✓" : ""}</span>
       <span className="flex-1">{children}</span>
     </button>
   )
@@ -160,11 +161,11 @@ function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
     setTimeout(() => setCopied(null), 2000)
   }
   return (
-    <div className="absolute inset-0 z-10 flex flex-col bg-[#0D0D0F]">
-      <div className="flex-shrink-0 flex items-center gap-3 border-b border-gray-800 bg-[#1C1C1E] px-4 py-3">
+    <div className="absolute inset-0 z-10 flex flex-col bg-gray-100 dark:bg-[#0D0D0F]">
+      <div className="flex-shrink-0 flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] px-4 py-3">
         <button type="button" onClick={onBack} style={{ touchAction: "manipulation", color: ACCENT }} className="min-h-[44px] px-3 -ml-2 text-base font-medium">← Results</button>
         <SourceBadge s={r.source} />
-        <span className="min-w-0 flex-1 truncate text-sm text-gray-400">{SOURCE[r.source].long}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-600 dark:text-gray-400">{SOURCE[r.source].long}</span>
       </div>
       <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" }}>
         <div className="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -174,7 +175,7 @@ function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
                 <img src={big} alt="" className="w-full max-h-[60vh] object-contain rounded-xl bg-black" />
               </a>
             ) : (
-              <div className="flex h-64 items-center justify-center rounded-xl bg-[#1C1C1E] text-gray-500">No photo for this lot</div>
+              <div className="flex h-64 items-center justify-center rounded-xl bg-white dark:bg-[#1C1C1E] text-gray-500">No photo for this lot</div>
             )}
             {pics.length > 1 && (
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -198,17 +199,17 @@ function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
                 <a href={r.link} target="_blank" rel="noreferrer" style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
                   className="min-h-[44px] inline-flex items-center rounded-lg px-4 text-sm font-medium">Open on vectis.co.uk ↗</a>
               ) : (
-                <span className="min-h-[44px] inline-flex items-center rounded-lg border border-gray-800 px-4 text-sm text-gray-500">
+                <span className="min-h-[44px] inline-flex items-center rounded-lg border border-gray-200 dark:border-gray-800 px-4 text-sm text-gray-500">
                   {r.source === "hub" ? "Not on the website yet" : "No website link recorded"}
                 </span>
               )}
             </div>
-            <p className="whitespace-pre-wrap text-base leading-relaxed text-gray-100 select-text">{r.description}</p>
-            <dl className="divide-y divide-gray-800 rounded-xl border border-gray-800">
+            <p className="whitespace-pre-wrap text-base leading-relaxed text-gray-900 dark:text-gray-100 select-text">{r.description}</p>
+            <dl className="divide-y divide-gray-200 dark:divide-gray-800 rounded-xl border border-gray-200 dark:border-gray-800">
               {rows.filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="grid grid-cols-[8rem_1fr] gap-3 px-3 py-2 text-sm">
-                  <dt className="text-gray-400">{k}</dt>
-                  <dd className="break-words text-gray-100">{v}</dd>
+                  <dt className="text-gray-600 dark:text-gray-400">{k}</dt>
+                  <dd className="break-words text-gray-900 dark:text-gray-100">{v}</dd>
                 </div>
               ))}
             </dl>
@@ -396,7 +397,7 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
         <button type="submit" disabled={!!busy} style={{ background: ACCENT, touchAction: "manipulation" }}
           className="min-h-[44px] flex-1 rounded-lg px-4 text-sm font-semibold text-black disabled:opacity-50">Search</button>
         <button type="button" onClick={() => setF(prev => ({ ...EMPTY, q: prev.q, order: prev.order }))} style={{ touchAction: "manipulation" }}
-          className="min-h-[44px] rounded-lg border border-gray-700 px-4 text-sm text-gray-300 hover:border-gray-500">Clear filters</button>
+          className="min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 px-4 text-sm text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500">Clear filters</button>
       </div>
     </div>
   )
@@ -407,38 +408,40 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
         type="button"
         onClick={() => { setMounted(true); setOpen(true); setTimeout(() => qRef.current?.focus(), 50) }}
         style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
-        className={`flex-shrink-0 rounded-lg font-medium hover:bg-white/5 transition-colors ${tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"}`}
+        className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"}`}
       >
         🔎 Website Search
       </button>
 
       {mounted && (
-        <div className={`fixed inset-0 z-50 flex flex-col bg-[#0D0D0F] text-gray-100 ${open ? "" : "hidden"}`} role="dialog" aria-modal="true" aria-label="Website Search">
+        <div className={`fixed inset-0 z-50 flex flex-col bg-gray-100 dark:bg-[#0D0D0F] text-gray-900 dark:text-gray-100 ${open ? "" : "hidden"}`} role="dialog" aria-modal="true" aria-label="Website Search">
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             {/* Header: the search box is always on screen. */}
-            <div className="flex-shrink-0 border-b border-gray-800 bg-[#1C1C1E] px-4 py-3">
+            <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] px-4 py-3">
               <div className="flex items-center gap-2">
                 <h2 className="hidden text-lg font-bold sm:block" style={{ color: ACCENT }}>🔎 Website Search</h2>
                 <input ref={qRef} value={f.q} onChange={e => set("q", e.target.value)} enterKeyHint="search" autoComplete="off"
                   placeholder="Search every lot — e.g. Dinky 105, Steiff Teddy, Corgi Batmobile, F073116" aria-label="Search words"
-                  className="min-h-[48px] min-w-0 flex-1 rounded-lg border border-gray-700 bg-[#141416] px-4 text-base text-white placeholder-gray-500 focus:outline-none focus:border-[#2AB4A6]" />
+                  className="min-h-[48px] min-w-0 flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#141416] px-4 text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-[#2AB4A6]" />
                 {busy ? (
                   <button type="button" onClick={stop} style={{ touchAction: "manipulation" }}
-                    className="min-h-[48px] flex-shrink-0 rounded-lg border border-gray-600 px-4 text-sm font-semibold text-gray-200">■ Stop</button>
+                    className="min-h-[48px] flex-shrink-0 rounded-lg border border-gray-300 dark:border-gray-600 px-4 text-sm font-semibold text-gray-800 dark:text-gray-200">■ Stop</button>
                 ) : (
                   <button type="submit" style={{ background: ACCENT, touchAction: "manipulation" }}
                     className="min-h-[48px] flex-shrink-0 rounded-lg px-5 text-sm font-semibold text-black">Search</button>
                 )}
+                {/* Light/dark (Jordan, 2026-09-11) — this panel covers the tablet header's switch. */}
+                <ThemeToggle size="lg" />
                 <button type="button" onClick={() => setOpen(false)} aria-label="Close Website Search" style={{ touchAction: "manipulation" }}
-                  className="min-h-[48px] flex-shrink-0 rounded-lg border border-gray-700 px-4 text-sm text-gray-300">✕ Close</button>
+                  className="min-h-[48px] flex-shrink-0 rounded-lg border border-gray-300 dark:border-gray-700 px-4 text-sm text-gray-700 dark:text-gray-300">✕ Close</button>
               </div>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
               {/* Filters — beside the results on a landscape iPad, above them in portrait (folded away after a search). */}
-              <div className="flex-shrink-0 border-b border-gray-800 lg:w-[22rem] lg:overflow-y-auto lg:border-b-0 lg:border-r">
+              <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 lg:w-[22rem] lg:overflow-y-auto lg:border-b-0 lg:border-r">
                 <button type="button" onClick={() => setShowFilters(s => !s)} style={{ touchAction: "manipulation" }}
-                  className="flex min-h-[44px] w-full items-center justify-between px-4 text-sm text-gray-300 lg:hidden">
+                  className="flex min-h-[44px] w-full items-center justify-between px-4 text-sm text-gray-700 dark:text-gray-300 lg:hidden">
                   <span>Filters{active ? ` (${active} set)` : ""}</span><span>{showFilters ? "▲ Hide" : "▼ Show"}</span>
                 </button>
                 <div className={`${showFilters ? "block" : "hidden"} max-h-[45vh] overflow-y-auto px-4 pb-4 lg:block lg:max-h-none lg:py-4`}>
@@ -449,22 +452,22 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
               {/* Results */}
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" style={{ WebkitOverflowScrolling: "touch" }}>
                 <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <div className="min-w-0 flex-1 text-sm text-gray-300" aria-live="polite">
+                  <div className="min-w-0 flex-1 text-sm text-gray-700 dark:text-gray-300" aria-live="polite">
                     {busy ? (
                       <span style={{ color: ACCENT }}>{busy.more ? "Loading more" : "Searching every lot"}… {secs} s</span>
                     ) : error ? (
-                      <span className="text-red-400">{error}</span>
+                      <span className="text-red-600 dark:text-red-400">{error}</span>
                     ) : stopped ? (
-                      <span className="text-gray-400">Stopped.{results ? " The last results are still shown." : ""}</span>
+                      <span className="text-gray-600 dark:text-gray-400">Stopped.{results ? " The last results are still shown." : ""}</span>
                     ) : total != null && results ? (
                       <span>
-                        <b className="text-white">{total.toLocaleString("en-GB")}</b> {total === 1 ? "lot" : "lots"}
-                        {counts && <span className="text-gray-400"> — BC {counts.bc.toLocaleString("en-GB")} · ABC {counts.abc.toLocaleString("en-GB")} · Hub {counts.hub.toLocaleString("en-GB")}</span>}
+                        <b className="text-gray-900 dark:text-white">{total.toLocaleString("en-GB")}</b> {total === 1 ? "lot" : "lots"}
+                        {counts && <span className="text-gray-600 dark:text-gray-400"> — BC {counts.bc.toLocaleString("en-GB")} · ABC {counts.abc.toLocaleString("en-GB")} · Hub {counts.hub.toLocaleString("en-GB")}</span>}
                         {results.length < total && <span className="text-gray-500"> · showing {results.length.toLocaleString("en-GB")}</span>}
                       </span>
                     ) : null}
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-gray-400">
+                  <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                     <span className="flex-shrink-0">Sort</span>
                     <select value={f.order} onChange={e => reSort(e.target.value)} className={`${input} w-auto`} aria-label="Sort the results">
                       {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -477,14 +480,14 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
                   {SOURCES.map(s => <span key={s.key} className="inline-flex items-center gap-1.5"><SourceBadge s={s.key} /> {s.long}</span>)}
                 </p>
 
-                {notes.map(n => <p key={n} className="mb-2 rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">{n}</p>)}
+                {notes.map(n => <p key={n} className="mb-2 rounded-lg border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">{n}</p>)}
 
                 {/* Say what the smarter matching did, so a lot found by a corrected spelling is never a mystery. */}
                 {corrections.length > 0 && !busy && (
-                  <p className="mb-2 text-sm text-gray-400">
+                  <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
                     Also searched for{" "}
                     {corrections.map((c, i) => (
-                      <span key={c.typed}>{i ? " · " : ""}<b className="text-gray-100">{c.also.join(" / ")}</b> (you typed “{c.typed}”)</span>
+                      <span key={c.typed}>{i ? " · " : ""}<b className="text-gray-900 dark:text-gray-100">{c.also.join(" / ")}</b> (you typed “{c.typed}”)</span>
                     ))}
                   </p>
                 )}
@@ -493,33 +496,33 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
                 )}
 
                 {results === null && !busy && !error && (
-                  <div className="mx-auto max-w-xl py-12 text-center text-gray-400">
-                    <p className="text-base text-gray-200">Search every lot we&apos;ve sold since 1999, and every lot catalogued in the Hub.</p>
+                  <div className="mx-auto max-w-xl py-12 text-center text-gray-600 dark:text-gray-400">
+                    <p className="text-base text-gray-800 dark:text-gray-200">Search every lot we&apos;ve sold since 1999, and every lot catalogued in the Hub.</p>
                     <p className="mt-2 text-sm">Photos, hammer prices, the full description and the link to the lot on vectis.co.uk. Tap a lot for the details and to copy its description.</p>
                     <p className="mt-4 text-xs text-gray-500">Searches the Hub&apos;s copy of the website — it&apos;s as up to date as the last BC lots collection.</p>
                   </div>
                 )}
 
                 {results && results.length === 0 && !busy && (
-                  <p className="py-10 text-center text-gray-400">Nothing matches. Try fewer words, or loosen a filter.</p>
+                  <p className="py-10 text-center text-gray-600 dark:text-gray-400">Nothing matches. Try fewer words, or loosen a filter.</p>
                 )}
 
                 {results && results.length > 0 && (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                     {results.map(r => (
                       <button key={`${r.source}-${r.id}`} type="button" onClick={() => setDetail(r)} style={{ touchAction: "manipulation" }}
-                        className="flex gap-3 rounded-xl border border-gray-800 bg-[#1C1C1E] p-3 text-left hover:border-gray-600">
+                        className="flex gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] p-3 text-left hover:border-gray-400 dark:hover:border-gray-600">
                         {r.photo ? (
                           <img src={r.photo} alt="" loading="lazy" className="h-24 w-24 flex-shrink-0 rounded-lg bg-black object-cover" />
                         ) : (
-                          <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-lg bg-[#141416] text-xs text-gray-600">No photo</div>
+                          <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-lg bg-gray-50 dark:bg-[#141416] text-xs text-gray-600">No photo</div>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
                             <SourceBadge s={r.source} />
-                            <span className={`text-base font-bold ${r.hammer != null ? "text-white" : "text-gray-500 text-sm font-medium"}`}>{result(r)}</span>
+                            <span className={`text-base font-bold ${r.hammer != null ? "text-gray-900 dark:text-white" : "text-gray-500 text-sm font-medium"}`}>{result(r)}</span>
                           </div>
-                          <p className="mt-1 line-clamp-3 text-sm text-gray-200">{r.description}</p>
+                          <p className="mt-1 line-clamp-3 text-sm text-gray-800 dark:text-gray-200">{r.description}</p>
                           <p className="mt-1 truncate text-xs text-gray-500">
                             {[fmtDay(r.saleDate), r.saleName, r.lot != null ? `Lot ${r.lot}` : null].filter(Boolean).join(" · ")}
                           </p>

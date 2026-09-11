@@ -23,9 +23,10 @@ export default async function TabletAuctionsPage() {
   const archived = auctions.filter(a => a.complete || a.finished)
 
   function badge(a: typeof auctions[number]) {
-    if (a.complete)  return { label: "Complete",  cls: "bg-green-900/50 text-green-300" }
-    if (a.finished)  return { label: "Finished",  cls: "bg-yellow-900/50 text-yellow-300" }
-    if (a.locked)    return { label: "Locked",    cls: "bg-blue-900/50 text-blue-300" }
+    // Light-first with dark: variants, like the tablet screen it opens (light/dark switch, 2026-09-11).
+    if (a.complete)  return { label: "Complete",  cls: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300" }
+    if (a.finished)  return { label: "Finished",  cls: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300" }
+    if (a.locked)    return { label: "Locked",    cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300" }
     return null
   }
 
@@ -34,7 +35,7 @@ export default async function TabletAuctionsPage() {
     return (
       <Link
         href={`/tools/cataloguing/tablet/auctions/${a.id}`}
-        className="block bg-[#1C1C1E] border border-gray-700 rounded-2xl p-6 active:scale-[0.98] transition-transform"
+        className="block bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl p-6 active:scale-[0.98] transition-transform"
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <span className="font-mono font-bold text-[#2AB4A6] text-2xl leading-none">{a.code}</span>
@@ -42,8 +43,8 @@ export default async function TabletAuctionsPage() {
             <span className={`text-sm px-3 py-1 rounded-full font-medium ${b.cls}`}>{b.label}</span>
           )}
         </div>
-        <p className="text-white font-semibold text-lg mb-3 leading-snug">{a.name}</p>
-        <div className="flex items-center gap-4 text-base text-gray-400">
+        <p className="text-gray-900 dark:text-white font-semibold text-lg mb-3 leading-snug">{a.name}</p>
+        <div className="flex items-center gap-4 text-base text-gray-600 dark:text-gray-400">
           <span>🏷 {a._count.lots} lot{a._count.lots !== 1 ? "s" : ""}</span>
           {a.auctionDate && (
             <span>📅 {new Date(a.auctionDate).toLocaleDateString("en-GB")}</span>
@@ -58,8 +59,8 @@ export default async function TabletAuctionsPage() {
     <div className="p-5 max-w-2xl mx-auto">
       {/* Header */}
       <div className="mb-7">
-        <h1 className="text-3xl font-bold text-white">Tablet Cataloguing</h1>
-        <p className="text-base text-gray-400 mt-1">Select an auction to catalogue lots</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Tablet Cataloguing</h1>
+        <p className="text-base text-gray-600 dark:text-gray-400 mt-1">Select an auction to catalogue lots</p>
       </div>
 
       {auctions.length === 0 ? (

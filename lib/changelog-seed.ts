@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-10, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-11, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"71a546b06e275b6a2883920dedae09f30f3df8f2","author":"Jordan Orange","date":"2026-09-11T09:11:49+01:00","subject":"Data map: describe the 10 tables it was missing"},
   {"sha":"aeb96689942dc44fa9635f2837a99834f6046414","author":"Jordan Orange","date":"2026-09-10T17:27:54+01:00","subject":"Lens checks our own lots properly: ABC archive + full BC descriptions, photos and links"},
   {"sha":"3e5e1ef9ebf6e41812eaf06f029141873dfe17d1","author":"Jordan Orange","date":"2026-09-10T17:11:06+01:00","subject":"Website Search: fix the time-outs — plain matching again, accents via the spelling list"},
   {"sha":"d43064203ca69cc70879281bedea33dcaafd4074","author":"Jordan Orange","date":"2026-09-10T16:52:34+01:00","subject":"Website Search: forgiving matching, spelling help, and BC descriptions without HTML"},

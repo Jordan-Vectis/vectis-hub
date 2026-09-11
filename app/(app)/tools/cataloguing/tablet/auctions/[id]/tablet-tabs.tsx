@@ -18,6 +18,7 @@ import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "../../../auctions/[id]/photo-only-tab"
 import ReviewTab from "../../../auctions/[id]/review-tab"
 import AnnouncementBanner from "@/components/announcement-banner"
+import ThemeToggle from "@/components/theme-toggle"
 import { identityWarning } from "@/lib/lot-identity"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,18 +66,18 @@ const STATUSES   = ["ENTERED", "REVIEWED", "PUBLISHED", "SOLD", "UNSOLD", "WITHD
 const PARCEL_OPTIONS = ["Small", "Medium", "Large", "Contact", "Collection Only"]
 
 const STATUS_STYLES: Record<string, string> = {
-  ENTERED:   "bg-gray-700 text-gray-300",
-  REVIEWED:  "bg-blue-900/50 text-blue-300",
-  PUBLISHED: "bg-green-900/50 text-green-300",
-  SOLD:      "bg-emerald-900/50 text-emerald-300",
-  UNSOLD:    "bg-red-900/50 text-red-300",
-  WITHDRAWN: "bg-orange-900/50 text-orange-300",
+  ENTERED:   "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300",
+  REVIEWED:  "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300",
+  PUBLISHED: "bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300",
+  SOLD:      "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300",
+  UNSOLD:    "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300",
+  WITHDRAWN: "bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300",
 }
 
 const ACCENT = "#2AB4A6"
 
-const inp = "w-full rounded-xl border border-gray-700 bg-[#2C2C2E] px-4 py-3.5 text-base text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
-const lbl = "block text-sm font-semibold uppercase tracking-wider text-gray-400 mb-2"
+const inp = "w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-4 py-3.5 text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+const lbl = "block text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-2"
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
 
   return (
     <div
-      className="flex flex-col bg-[#141416]"
+      className="flex flex-col bg-gray-50 dark:bg-[#141416]"
       style={{
         position: "fixed",
         inset: 0,
@@ -115,7 +116,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
       </div>
 
       {/* Header bar */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-4 border-b border-gray-800 bg-[#1C1C1E]">
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
         <button
           onClick={() => router.push("/tools/cataloguing/tablet/auctions")}
           className="text-[#2AB4A6] text-lg font-medium p-2 -ml-2"
@@ -125,16 +126,20 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
         </button>
         <div className="min-w-0 flex-1">
           <span className="font-mono font-bold text-[#2AB4A6] text-lg">{auction.code}</span>
-          <span className="text-gray-400 text-base ml-2 truncate">{auction.name}</span>
+          <span className="text-gray-600 dark:text-gray-400 text-base ml-2 truncate">{auction.name}</span>
         </div>
         <WebsiteSearchButton tablet />
         <LensButton tablet />
         <CataloguingGuideButton tablet currentTab={tab} />
         <span className="text-sm text-gray-500 flex-shrink-0">{lots.length} lots</span>
+        {/* Light/dark, top right (Jordan, 2026-09-11) — this overlay covers the Hub's top bar and
+            its switch. The same saved setting, so both always agree. ⚠ Everything on this screen
+            is light-first with dark: variants since that day — new styling here needs both. */}
+        <ThemeToggle size="lg" />
       </div>
 
       {/* Tab bar */}
-      <div className="flex-shrink-0 flex border-b border-gray-700 bg-[#1C1C1E]">
+      <div className="flex-shrink-0 flex border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E]">
         {([
           { id: "manage",    label: `Lots (${lots.length})` },
           { id: "add-lot",   label: "Add Lot" },
@@ -188,7 +193,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
         <div className={tab === "add-lot" ? "h-full min-h-0" : "hidden"}>
           <div className="p-4 h-full min-h-0">
             {bcLocked ? (
-              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-950/40 border border-orange-700/50 text-orange-300 text-sm max-w-lg">
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-50 dark:bg-orange-950/40 border border-orange-300 dark:border-orange-700/50 text-orange-700 dark:text-orange-300 text-sm max-w-lg">
                 <span className="text-lg">🔒</span>
                 <span>This auction is locked. Contact the system administrators to add lots to this auction.</span>
               </div>
@@ -222,7 +227,9 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
 
         {/* Review */}
         {tab === "review" && (
-          <div className="p-4 dark">
+          <div className="p-4">
+            {/* Follows the light/dark switch like the rest of this screen — it was forced "dark"
+                while this screen was dark-only, so it didn't clash. */}
             <ReviewTab auctionId={auction.id} />
           </div>
         )}
@@ -301,7 +308,7 @@ function TabletManageLots({
     return (
       <div className="flex flex-col items-center justify-center h-full py-20 text-center px-6">
         <span className="text-5xl mb-4">📦</span>
-        <p className="text-gray-400 font-medium">No lots yet</p>
+        <p className="text-gray-600 dark:text-gray-400 font-medium">No lots yet</p>
         <p className="text-gray-600 text-sm mt-1">Use Add Lot or Photo Only to get started</p>
       </div>
     )
@@ -314,7 +321,7 @@ function TabletManageLots({
         value={search}
         onChange={e => setSearch(e.target.value)}
         placeholder="Search lots…"
-        className="w-full rounded-xl border border-gray-700 bg-[#2C2C2E] px-4 py-3 text-base text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+        className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-4 py-3 text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
       />
 
       {/* Sort chips */}
@@ -329,7 +336,7 @@ function TabletManageLots({
             className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${
               sortKey === opt.key
                 ? "bg-[#2AB4A6] text-[#1C1C1E] border-[#2AB4A6]"
-                : "bg-[#2C2C2E] text-gray-400 border-gray-700 active:bg-[#3C3C3E]"
+                : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 active:bg-gray-200 dark:active:bg-[#3C3C3E]"
             }`}
           >
             {opt.label}
@@ -348,7 +355,7 @@ function TabletManageLots({
             value={cataloguer}
             onChange={e => setCataloguer(e.target.value)}
             style={{ touchAction: "manipulation" }}
-            className="flex-1 rounded-xl border border-gray-700 bg-[#2C2C2E] px-3 py-2.5 text-sm font-semibold text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+            className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-3 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
           >
             <option value="">All cataloguers</option>
             {cataloguers.map(c => <option key={c} value={c}>{c}</option>)}
@@ -358,7 +365,7 @@ function TabletManageLots({
               type="button"
               style={{ touchAction: "manipulation" }}
               onClick={() => setCataloguer("")}
-              className="px-3 py-2.5 rounded-xl text-sm font-semibold border border-gray-700 bg-[#2C2C2E] text-gray-400 active:bg-[#3C3C3E] shrink-0"
+              className="px-3 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400 active:bg-gray-200 dark:active:bg-[#3C3C3E] shrink-0"
             >
               ✕
             </button>
@@ -370,11 +377,11 @@ function TabletManageLots({
       {filtered.map(lot => (
         <div
           key={lot.id}
-          className="bg-[#1C1C1E] border border-gray-700 rounded-2xl overflow-hidden"
+          className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl overflow-hidden"
         >
           {/* Tap area */}
           <button
-            className="w-full text-left px-4 pt-4 pb-3 active:bg-[#2C2C2E] transition-colors"
+            className="w-full text-left px-4 pt-4 pb-3 active:bg-gray-100 dark:active:bg-[#2C2C2E] transition-colors"
             style={{ touchAction: "manipulation" }}
             onClick={() => onEdit(lot.id)}
           >
@@ -382,16 +389,16 @@ function TabletManageLots({
               <span className="font-mono font-bold text-[#2AB4A6] text-xl leading-none">
                 {lot.barcode || "—"}
               </span>
-              <span className={`ml-auto text-sm px-3 py-1 rounded-full font-medium flex-shrink-0 ${STATUS_STYLES[lot.status] ?? "bg-gray-700 text-gray-300"}`}>
+              <span className={`ml-auto text-sm px-3 py-1 rounded-full font-medium flex-shrink-0 ${STATUS_STYLES[lot.status] ?? "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"}`}>
                 {lot.status}
               </span>
             </div>
 
-            <p className="text-white font-medium text-base leading-snug mb-2">
+            <p className="text-gray-900 dark:text-white font-medium text-base leading-snug mb-2">
               {lot.title || <span className="text-gray-600 italic">Uncatalogued</span>}
             </p>
 
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-gray-400">
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-gray-600 dark:text-gray-400">
               {lot.barcode && <span className="font-mono">{lot.barcode}</span>}
               {lot.vendor  && <span>Vendor: {lot.vendor}</span>}
               {lot.tote    && <span>Tote: {lot.tote}</span>}
@@ -408,9 +415,9 @@ function TabletManageLots({
 
             {/* Key points */}
             {lot.keyPoints?.trim() && (
-              <div className="mt-2.5 pt-2.5 border-t border-gray-800">
+              <div className="mt-2.5 pt-2.5 border-t border-gray-200 dark:border-gray-800">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1">Key Points</p>
-                <p className="text-sm text-gray-400 leading-relaxed whitespace-pre-line">{lot.keyPoints.trim()}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-line">{lot.keyPoints.trim()}</p>
               </div>
             )}
           </button>
@@ -580,7 +587,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
   return (
     <div ref={scrollRef} className="pb-8">
       {/* Sticky nav bar: Back · counter · Prev · Next */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 bg-[#141416] border-b border-gray-800">
+      <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-800">
         <button
           onClick={onDone}
           style={{ touchAction: "manipulation" }}
@@ -596,7 +603,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
           onClick={() => prevLot && navigate(prevLot.id, "prev")}
           disabled={!prevLot}
           style={{ touchAction: "manipulation" }}
-          className="px-4 py-2.5 rounded-xl border border-gray-700 text-gray-300 text-sm font-semibold disabled:opacity-25 active:bg-[#2C2C2E] flex-shrink-0"
+          className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold disabled:opacity-25 active:bg-gray-100 dark:active:bg-[#2C2C2E] flex-shrink-0"
         >
           ← Prev
         </button>
@@ -604,8 +611,8 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
           type="button"
           onClick={() => nextLot && navigate(nextLot.id, "next")}
           disabled={!nextLot}
-          style={{ touchAction: "manipulation", background: nextLot ? ACCENT : "#2C2C2E", color: nextLot ? "#1C1C1E" : "#6b7280" }}
-          className="px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-25 flex-shrink-0"
+          style={{ touchAction: "manipulation", ...(nextLot ? { background: ACCENT, color: "#1C1C1E" } : {}) }}
+          className={`px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-25 flex-shrink-0 ${nextLot ? "" : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-500"}`}
         >
           Next →
         </button>
@@ -646,7 +653,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
           <input name="vendor" value={vendorVal} onChange={e => setVendorVal(e.target.value)}
             onFocus={e => e.target.select()} maxLength={7} autoCapitalize="characters" className={inp} />
           {identityWarning("vendor", vendorVal) && (
-            <p className="text-sm text-amber-400 mt-1">⚠ {identityWarning("vendor", vendorVal)}</p>
+            <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">⚠ {identityWarning("vendor", vendorVal)}</p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -655,7 +662,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
             <input name="tote" value={toteVal} onChange={e => setToteVal(e.target.value)}
               onFocus={e => e.target.select()} maxLength={7} autoCapitalize="characters" className={`${inp} font-mono`} />
             {identityWarning("tote", toteVal) && (
-              <p className="text-sm text-amber-400 mt-1">⚠ {identityWarning("tote", toteVal)}</p>
+              <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">⚠ {identityWarning("tote", toteVal)}</p>
             )}
           </div>
           <div>
@@ -663,7 +670,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
             <input name="receipt" value={receiptVal} onChange={e => setReceiptVal(e.target.value)}
               onFocus={e => e.target.select()} maxLength={7} autoCapitalize="characters" className={inp} />
             {identityWarning("receipt", receiptVal) && (
-              <p className="text-sm text-amber-400 mt-1">⚠ {identityWarning("receipt", receiptVal)}</p>
+              <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">⚠ {identityWarning("receipt", receiptVal)}</p>
             )}
           </div>
         </div>
@@ -685,14 +692,14 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
             onClick={() => setAiExcluded(v => !v)}
             style={{ touchAction: "manipulation" }}
             className={`w-full flex items-center gap-3 rounded-xl border px-4 py-4 text-left transition-colors ${
-              aiExcluded ? "border-amber-500 bg-amber-500/15" : "border-gray-700 bg-[#2C2C2E]"
+              aiExcluded ? "border-amber-500 bg-amber-100 dark:bg-amber-500/15" : "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E]"
             }`}
           >
             <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border-2 text-sm font-bold ${
-              aiExcluded ? "border-amber-500 bg-amber-500 text-[#1C1C1E]" : "border-gray-600 text-transparent"
+              aiExcluded ? "border-amber-500 bg-amber-500 text-[#1C1C1E]" : "border-gray-300 dark:border-gray-600 text-transparent"
             }`}>✓</span>
             <span className="min-w-0">
-              <span className={`block text-base font-semibold ${aiExcluded ? "text-amber-400" : "text-gray-300"}`}>
+              <span className={`block text-base font-semibold ${aiExcluded ? "text-amber-600 dark:text-amber-400" : "text-gray-700 dark:text-gray-300"}`}>
                 Exclude from AI
               </span>
               <span className="block text-sm text-gray-500">
@@ -795,7 +802,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
           )}
 
           {/* Optional separate box / packaging condition */}
-          <div className="mt-3 pt-3 border-t border-gray-800">
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
             <label className="flex items-center gap-2 cursor-pointer select-none" style={{ touchAction: "manipulation" }}>
               <input type="checkbox" checked={boxOn} onChange={e => setBoxOn(e.target.checked)} className="w-5 h-5 accent-[#2AB4A6]" />
               <span className={lbl} style={{ margin: 0 }}>Separate box / packaging condition</span>
@@ -836,11 +843,11 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
                 key={opt}
                 type="button"
                 onClick={() => setParcel(v => v === opt ? "" : opt)}
-                className="px-4 py-3 rounded-xl text-sm font-medium transition-colors"
+                className={`px-4 py-3 rounded-xl text-sm font-medium transition-colors border ${
+                  parcel === opt ? "" : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700"
+                }`}
                 style={{ touchAction: "manipulation",
-                  background: parcel === opt ? ACCENT : "#2C2C2E",
-                  color: parcel === opt ? "#1C1C1E" : "#d1d5db",
-                  border: `1px solid ${parcel === opt ? ACCENT : "#374151"}`,
+                  ...(parcel === opt ? { background: ACCENT, color: "#1C1C1E", borderColor: ACCENT } : {}),
                 }}
               >
                 {opt}
@@ -872,7 +879,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
       </form>
 
       {/* Photos — at bottom so they don't push the form fields down */}
-      <div className="bg-[#1C1C1E] border border-gray-700 rounded-2xl p-4 mt-5">
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl p-4 mt-5">
         <p className={lbl}>Photos {imageKeys.length > 0 && <span className="text-[#2AB4A6]">({imageKeys.length})</span>}</p>
         <input
           ref={photoRef}
@@ -887,7 +894,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
           onClick={() => photoRef.current?.click()}
           disabled={uploadingPhoto}
           style={{ touchAction: "manipulation" }}
-          className="w-full py-4 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-400 hover:text-[#2AB4A6] transition-colors flex items-center justify-center gap-2 mb-3 disabled:opacity-50"
+          className="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-[#2AB4A6] text-gray-600 dark:text-gray-400 hover:text-[#2AB4A6] transition-colors flex items-center justify-center gap-2 mb-3 disabled:opacity-50"
         >
           <span className="text-2xl">📷</span>
           <span className="font-medium">{uploadingPhoto ? "Uploading…" : "Take / add photo"}</span>
@@ -901,10 +908,10 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
                   <img
                     src={signedUrls[key]}
                     alt={`Photo ${i + 1}`}
-                    className="w-full h-full object-cover rounded-xl border border-gray-700"
+                    className="w-full h-full object-cover rounded-xl border border-gray-300 dark:border-gray-700"
                   />
                 ) : (
-                  <div className="w-full h-full rounded-xl border border-gray-700 bg-[#2C2C2E] flex items-center justify-center">
+                  <div className="w-full h-full rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] flex items-center justify-center">
                     <span className="text-gray-600 text-sm">Loading…</span>
                   </div>
                 )}

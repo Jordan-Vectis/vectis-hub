@@ -98,6 +98,12 @@ in dark first**, and remember that `dark:` must be the *lighter* value, not the 
   renders "No file chosen" in black and vanishes on the dark theme. Use the shared **`.file-input`**
   class (`app/globals.css`). The same trap applies to `<select>`, `<input type="date">` and
   `datetime-local` — always look at them on the dark theme before shipping.
+- ⚠ **The tablet cataloguing screen has its own light/dark switch** (Jordan, 2026-09-11: *"in the top
+  right corner can we have a dark/light mode toggle this needs to be on the website search as well"*)
+  — `ThemeToggle size="lg"` top-right in its header and in the Website Search panel, because both
+  cover the top bar. Same saved setting as the top bar's switch (per device). That screen, Website
+  Search, Lens and the Guide were **dark-ONLY** until then (hard-coded `#1C1C1E`, no `dark:` at all)
+  and are now light-first with `dark:` variants — **new styling there needs both**, like everywhere else.
 
 ### 3. If a symbol or colour means something, there must be a key
 Icons and colour coding are not self-explanatory.

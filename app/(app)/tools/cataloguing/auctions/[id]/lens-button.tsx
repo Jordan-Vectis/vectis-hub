@@ -43,16 +43,16 @@ type Result = {
 
 // The same colours as Website Search beside it, so a BC or ABC lot reads the same in both.
 const SOURCE_BADGE: Record<"bc" | "abc", { label: string; cls: string }> = {
-  bc:  { label: "BC",  cls: "bg-violet-500/20 text-violet-200 border-violet-400/50" },
-  abc: { label: "ABC", cls: "bg-amber-500/20 text-amber-200 border-amber-400/50" },
+  bc:  { label: "BC",  cls: "bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-200 border-violet-300 dark:border-violet-400/50" },
+  abc: { label: "ABC", cls: "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-400/50" },
 }
 
 const gbp = (n: number) => "£" + n.toLocaleString("en-GB", { maximumFractionDigits: 0 })
 
 const CONFIDENCE: Record<string, { label: string; cls: string }> = {
-  high:   { label: "High confidence",   cls: "text-emerald-400 border-emerald-700/60 bg-emerald-950/30" },
-  medium: { label: "Medium confidence", cls: "text-amber-400 border-amber-700/60 bg-amber-950/30" },
-  low:    { label: "Low confidence",    cls: "text-red-400 border-red-700/60 bg-red-950/30" },
+  high:   { label: "High confidence",   cls: "text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700/60 bg-emerald-50 dark:bg-emerald-950/30" },
+  medium: { label: "Medium confidence", cls: "text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30" },
+  low:    { label: "Low confidence",    cls: "text-red-600 dark:text-red-400 border-red-300 dark:border-red-700/60 bg-red-50 dark:bg-red-950/30" },
 }
 
 const fmtDate = (d: string | null) =>
@@ -64,26 +64,26 @@ function ComparableRow({ c, muted = false }: { c: Comparable; muted?: boolean })
   const badge = c.source ? SOURCE_BADGE[c.source] : null
   const body = (
     <>
-      <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-gray-800 bg-black/40">
+      <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-black/40">
         {c.photo
           ? <img src={c.photo} alt="" loading="lazy" className="h-full w-full object-cover" />
           : <div className="flex h-full items-center justify-center text-[10px] text-gray-600">No photo</div>}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className={`font-bold tabular-nums ${muted ? "text-gray-400" : "text-white"}`}>{gbp(c.hammerPrice)}</span>
+          <span className={`font-bold tabular-nums ${muted ? "text-gray-600 dark:text-gray-400" : "text-gray-900 dark:text-white"}`}>{gbp(c.hammerPrice)}</span>
           {badge && <span className={`rounded border px-1.5 py-px text-[10px] font-semibold ${badge.cls}`}>{badge.label}</span>}
-          {c.exact && <span className="rounded border border-emerald-500/50 bg-emerald-500/15 px-1.5 py-px text-[10px] font-semibold text-emerald-300">Same No.</span>}
+          {c.exact && <span className="rounded border border-emerald-400 dark:border-emerald-500/50 bg-emerald-100 dark:bg-emerald-500/15 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Same No.</span>}
           <span className="text-gray-500">{[fmtDate(c.auctionDate), c.auctionName].filter(Boolean).join(" · ")}</span>
         </div>
-        <p className={`mt-0.5 line-clamp-2 ${muted ? "text-gray-500" : "text-gray-400"}`}>{c.description}</p>
+        <p className={`mt-0.5 line-clamp-2 ${muted ? "text-gray-500" : "text-gray-600 dark:text-gray-400"}`}>{c.description}</p>
       </div>
       {c.link && <span className="flex-shrink-0 self-center text-sm" style={{ color: ACCENT }}>↗</span>}
     </>
   )
-  const cls = "flex items-start gap-3 rounded-lg px-1 py-1.5 text-xs border-b border-gray-800/60 last:border-0"
+  const cls = "flex items-start gap-3 rounded-lg px-1 py-1.5 text-xs border-b border-gray-200 dark:border-gray-800/60 last:border-0"
   return c.link ? (
-    <a href={c.link} target="_blank" rel="noopener noreferrer" style={{ touchAction: "manipulation" }} className={`${cls} hover:bg-white/5`}>
+    <a href={c.link} target="_blank" rel="noopener noreferrer" style={{ touchAction: "manipulation" }} className={`${cls} hover:bg-black/5 dark:hover:bg-white/5`}>
       {body}
     </a>
   ) : (
@@ -237,7 +237,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
         type="button"
         onClick={() => setOpen(true)}
         style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
-        className={`flex-shrink-0 rounded-lg font-medium hover:bg-white/5 transition-colors ${
+        className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${
           tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"
         }`}
       >
@@ -250,15 +250,15 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
           onClick={() => { setOpen(false); reset() }}
         >
           <div
-            className="bg-[#1C1C1E] border border-gray-700 rounded-2xl w-full max-w-3xl my-4"
+            className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl w-full max-w-3xl my-4"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-800">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
               <h2 className="text-lg font-bold flex-1" style={{ color: ACCENT }}>🔍 Lens</h2>
               <button
                 onClick={() => { setOpen(false); reset() }}
-                className="text-gray-400 hover:text-white text-2xl leading-none px-2"
+                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-2xl leading-none px-2"
                 style={{ touchAction: "manipulation" }}
               >
                 ×
@@ -268,9 +268,9 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
             <div className="p-5 space-y-4">
               {/* Shown every time it's opened — this is new and we want people
                   telling us what's wrong with it rather than quietly distrusting it. */}
-              <div className="rounded-xl border border-amber-700/50 bg-amber-950/25 px-4 py-3">
-                <p className="text-sm font-semibold text-amber-300">🧪 Experimental — still being built</p>
-                <p className="text-xs text-amber-200/80 mt-1">
+              <div className="rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/25 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">🧪 Experimental — still being built</p>
+                <p className="text-xs text-amber-800 dark:text-amber-200/80 mt-1">
                   This is a work in progress, so please double-check anything it tells you before using it.
                   If you spot something wrong, or you can think of a way it&apos;d be more useful, come and
                   tell <b>Jack</b> or <b>Jordan</b> — we&apos;re actively improving it and your feedback shapes
@@ -278,7 +278,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                 </p>
               </div>
 
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Photograph the item — markings, base or box work best — or paste a picture in. You&apos;ll
                 get what it looks like it is, and what we&apos;ve sold the same thing for.
                 <span className="text-gray-500"> It&apos;s a second opinion, not a valuation — nothing is saved to the lot.</span>
@@ -302,14 +302,14 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                   onClick={() => libraryRef.current?.click()}
                   disabled={busy}
                   style={{ touchAction: "manipulation" }}
-                  className="flex-1 rounded-xl py-3.5 text-base font-medium text-gray-200 border border-gray-700 hover:bg-white/5 disabled:opacity-50"
+                  className="flex-1 rounded-xl py-3.5 text-base font-medium text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
                 >
                   🖼 Choose / paste
                 </button>
               </div>
 
               {preview && (
-                <img src={preview} alt="" className="w-full max-h-48 object-contain rounded-xl border border-gray-800" />
+                <img src={preview} alt="" className="w-full max-h-48 object-contain rounded-xl border border-gray-200 dark:border-gray-800" />
               )}
 
               {/* Optional note — they're holding the item, so what they can see beats
@@ -319,7 +319,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                 onChange={e => setNote(e.target.value)}
                 rows={2}
                 placeholder="Anything to add? e.g. “base says Dinky Toys 741” or “which variant is this?” (optional)"
-                className="w-full rounded-xl bg-black/30 border border-gray-700 px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-500"
+                className="w-full rounded-xl bg-gray-50 dark:bg-black/30 border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
               />
 
               <button
@@ -327,29 +327,29 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                 disabled={busy || !file}
                 style={{ touchAction: "manipulation", background: file && !busy ? ACCENT : undefined }}
                 className={`w-full rounded-xl py-4 text-base font-bold disabled:opacity-40 ${
-                  file && !busy ? "text-black" : "text-gray-400 border border-gray-700"
+                  file && !busy ? "text-black" : "text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700"
                 }`}
               >
                 {busy ? "Looking…" : file ? "🔍 Identify it" : "Add a picture first"}
               </button>
 
               {error && (
-                <div className="rounded-xl border border-red-800/60 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+                <div className="rounded-xl border border-red-300 dark:border-red-800/60 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                   {error}
                 </div>
               )}
 
               {/* ── What it is ── */}
               {id && (
-                <div className="rounded-xl border border-gray-700 bg-black/20 p-4 space-y-2">
+                <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-black/20 p-4 space-y-2">
                   {id.identified ? (
                     <>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-base font-bold text-white">
+                          <div className="text-base font-bold text-gray-900 dark:text-white">
                             {[id.maker, id.model].filter(Boolean).join(" ") || "Unnamed item"}
                           </div>
-                          <div className="text-sm text-gray-400 mt-0.5">
+                          <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
                             {[
                               id.catalogueNumber ? `No. ${id.catalogueNumber}` : null,
                               id.year,
@@ -365,7 +365,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                             <button
                               onClick={() => copyText(descText, "desc")}
                               style={{ touchAction: "manipulation" }}
-                              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-600 text-gray-200 hover:bg-white/5 transition-colors whitespace-nowrap"
+                              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
                             >
                               {copied === "desc" ? "✓ Copied" : "📋 Copy"}
                             </button>
@@ -384,7 +384,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                               href={s.uri}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="block text-xs text-blue-400 hover:underline truncate"
+                              className="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate"
                             >
                               🔗 {s.title}
                             </a>
@@ -393,7 +393,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                       )}
                     </>
                   ) : (
-                    <p className="text-sm text-amber-400">
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
                       Couldn&apos;t identify it from that photo{id.reasoning ? ` — ${id.reasoning}` : ""}. Try the base,
                       the markings or the box.
                     </p>
@@ -406,21 +406,21 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                   told never to overrule them. So anything pasted from here becomes
                   fact downstream, which is exactly why this says check it first. */}
               {id?.keyPoints && (
-                <div className="rounded-xl border border-gray-700 bg-black/20 p-4">
+                <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-black/20 p-4">
                   <div className="flex items-center justify-between gap-3 mb-2">
-                    <h3 className="text-sm font-bold text-gray-200">Suggested key points</h3>
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Suggested key points</h3>
                     <button
                       onClick={() => copyText(id.keyPoints!, "kp")}
                       style={{ touchAction: "manipulation" }}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-600 text-gray-200 hover:bg-white/5 transition-colors whitespace-nowrap"
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
                     >
                       {copied === "kp" ? "✓ Copied" : "📋 Copy"}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-200 bg-black/30 rounded-lg px-3 py-2 border border-gray-800">
+                  <p className="text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-black/30 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-800">
                     {id.keyPoints}
                   </p>
-                  <p className="text-[11px] text-amber-300/80 mt-2">
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300/80 mt-2">
                     ⚠ Read it before you paste — key points are taken as fact when the descriptions
                     are written, so anything wrong here carries straight through.
                   </p>
@@ -429,9 +429,9 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
 
               {/* ── What we've made on them ── */}
               {result && (
-                <div className="rounded-xl border border-gray-700 bg-black/20 p-4">
+                <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-black/20 p-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <h3 className="text-sm font-bold text-gray-200">What we&apos;ve sold them for</h3>
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">What we&apos;ve sold them for</h3>
                     {summary && (
                       <span className="text-sm font-bold" style={{ color: ACCENT }}>
                         {summary.low === summary.high ? gbp(summary.low) : `${gbp(summary.low)} – ${gbp(summary.high)}`}
@@ -450,7 +450,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                       Reinhardt 102 "Walter" made £43,000, while the similar dolls around it that
                       set the range made £80–£140. */}
                   {result.summaryBasis === "all" && sameNo.length === 1 && id?.catalogueNumber && (
-                    <p className="text-xs text-emerald-300 mt-1">
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
                       Only one sale with the same number ({id.catalogueNumber}): <b>{gbp(sameNo[0].hammerPrice)}</b>
                       {sameNo[0].auctionDate ? `, ${fmtDate(sameNo[0].auctionDate)}` : ""}
                       {summary ? " — the range above is from similar lots." : ""}
@@ -491,7 +491,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                       type="button"
                       onClick={openInSearch}
                       style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
-                      className="mt-3 w-full min-h-[44px] rounded-xl px-3 text-sm font-semibold hover:bg-white/5"
+                      className="mt-3 w-full min-h-[44px] rounded-xl px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/5"
                     >
                       🔎 See every match in Website Search — “{result.searchText}”
                     </button>

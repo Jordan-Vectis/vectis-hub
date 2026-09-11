@@ -29,14 +29,14 @@ function Step({ emoji, n, title, children }: { emoji: string; n: number; title: 
   return (
     <div className="flex gap-3">
       <div className="flex-shrink-0 flex flex-col items-center">
-        <div className="w-10 h-10 rounded-full bg-black/40 border border-gray-700 flex items-center justify-center text-lg">
+        <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-black/40 border border-gray-300 dark:border-gray-700 flex items-center justify-center text-lg">
           {emoji}
         </div>
         <div className="text-[10px] font-mono mt-1 text-gray-600">{n}/8</div>
       </div>
       <div className="min-w-0 flex-1 pb-4">
-        <h4 className="font-semibold text-white text-sm mb-1.5">{title}</h4>
-        <div className="space-y-1.5 text-sm text-gray-300 leading-relaxed">{children}</div>
+        <h4 className="font-semibold text-gray-900 dark:text-white text-sm mb-1.5">{title}</h4>
+        <div className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{children}</div>
       </div>
     </div>
   )
@@ -45,9 +45,9 @@ function Step({ emoji, n, title, children }: { emoji: string; n: number; title: 
 /** A coloured callout that mirrors a real on-screen message. */
 function Callout({ tone, title, children }: { tone: "red" | "amber" | "teal"; title: string; children: React.ReactNode }) {
   const styles = {
-    red:   "border-red-600/50 bg-red-950/30 text-red-300",
-    amber: "border-amber-600/50 bg-amber-950/30 text-amber-300",
-    teal:  "border-[#2AB4A6]/40 bg-[#2AB4A6]/10 text-[#7ad9cf]",
+    red:   "border-red-300 dark:border-red-600/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300",
+    amber: "border-amber-300 dark:border-amber-600/50 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300",
+    teal:  "border-[#2AB4A6]/40 bg-[#2AB4A6]/10 text-teal-700 dark:text-[#7ad9cf]",
   }[tone]
   return (
     <div className={`rounded-lg border px-3 py-2 ${styles}`}>
@@ -58,7 +58,7 @@ function Callout({ tone, title, children }: { tone: "red" | "amber" | "teal"; ti
 }
 
 function Req() {
-  return <span className="text-red-400 font-medium">Must be filled in.</span>
+  return <span className="text-red-600 dark:text-red-400 font-medium">Must be filled in.</span>
 }
 
 function Tip({ children }: { children: React.ReactNode }) {
@@ -87,7 +87,7 @@ export default function CataloguingGuideButton({
         type="button"
         onClick={show}
         style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
-        className={`flex-shrink-0 rounded-lg font-medium hover:bg-white/5 transition-colors ${
+        className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${
           tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"
         }`}
       >
@@ -101,18 +101,18 @@ export default function CataloguingGuideButton({
         >
           <div
             onClick={e => e.stopPropagation()}
-            className="bg-[#1C1C1E] border border-gray-700 rounded-2xl max-w-3xl w-full my-8 shadow-2xl"
+            className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl max-w-3xl w-full my-8 shadow-2xl"
           >
             {/* Header */}
-            <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-gray-700">
+            <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-gray-300 dark:border-gray-700">
               <div>
-                <h2 className="text-lg font-bold text-white">Guide — how to use this screen</h2>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Guide — how to use this screen</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Pick a tab below to see how it works.</p>
               </div>
               <button
                 onClick={() => setOpen(false)}
                 style={{ touchAction: "manipulation" }}
-                className="text-gray-500 hover:text-white text-xl leading-none px-2"
+                className="text-gray-500 hover:text-gray-900 dark:hover:text-white text-xl leading-none px-2"
                 aria-label="Close"
               >
                 ✕
@@ -120,7 +120,7 @@ export default function CataloguingGuideButton({
             </div>
 
             {/* Section picker — mirrors the real tab bar */}
-            <div className="flex border-b border-gray-700 bg-[#161618]">
+            <div className="flex border-b border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#161618]">
               {TABS.map(t => (
                 <button
                   key={t.id}
@@ -129,7 +129,7 @@ export default function CataloguingGuideButton({
                   className={`flex-1 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors ${
                     tab === t.id
                       ? "border-[#2AB4A6] text-[#2AB4A6]"
-                      : "border-transparent text-gray-500 hover:text-gray-300"
+                      : "border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-300"
                   }`}
                 >
                   <span className="mr-1.5">{t.emoji}</span>
@@ -142,26 +142,26 @@ export default function CataloguingGuideButton({
               {/* ── 📋 LOTS ─────────────────────────────────────────────── */}
               {tab === "manage" && (
                 <div className="space-y-4">
-                  <p className="text-sm text-gray-300 leading-relaxed">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                     <span className="text-lg mr-1">📋</span>
                     Everything already added to this sale. The number on the tab is how many there are.
                   </p>
 
-                  <div className="space-y-2.5 text-sm text-gray-300 leading-relaxed">
+                  <div className="space-y-2.5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                     <p>
-                      🔎 <strong className="text-white">Search</strong> finds a lot by its{" "}
-                      <strong className="text-white">barcode, title, vendor or tote</strong>. Scanning a
+                      🔎 <strong className="text-gray-900 dark:text-white">Search</strong> finds a lot by its{" "}
+                      <strong className="text-gray-900 dark:text-white">barcode, title, vendor or tote</strong>. Scanning a
                       barcode into the box is the quickest way to find one item.
                     </p>
                     <p>
-                      🧑 <strong className="text-white">All cataloguers</strong>{" "}
+                      🧑 <strong className="text-gray-900 dark:text-white">All cataloguers</strong>{" "}
                       narrows it down to one person&apos;s lots, and you can sort by{" "}
-                      <strong className="text-white">lot order, newest or oldest</strong>.
+                      <strong className="text-gray-900 dark:text-white">lot order, newest or oldest</strong>.
                     </p>
                     <p>
-                      👆 <strong className="text-white">Tap any lot to open it</strong>{" "}
+                      👆 <strong className="text-gray-900 dark:text-white">Tap any lot to open it</strong>{" "}
                       and change anything — title, barcode, vendor, receipt, description, category, condition,
-                      estimate, photos. There&apos;s a <strong className="text-white">Delete</strong> button
+                      estimate, photos. There&apos;s a <strong className="text-gray-900 dark:text-white">Delete</strong> button
                       in there too.
                     </p>
                   </div>
@@ -181,11 +181,11 @@ export default function CataloguingGuideButton({
               {/* ── ➕ ADD LOT ──────────────────────────────────────────── */}
               {tab === "add-lot" && (
                 <div className="space-y-4">
-                  <div className="rounded-xl bg-black/30 border border-gray-800 px-4 py-3 space-y-1.5 text-sm text-gray-300">
+                  <div className="rounded-xl bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-800 px-4 py-3 space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
                     <p>
                       <span className="text-lg mr-1">➕</span>
-                      One lot at a time, over <strong className="text-white">8 steps</strong>. Use{" "}
-                      <strong className="text-white">Next</strong> and <strong className="text-white">Back</strong> —
+                      One lot at a time, over <strong className="text-gray-900 dark:text-white">8 steps</strong>. Use{" "}
+                      <strong className="text-gray-900 dark:text-white">Next</strong> and <strong className="text-gray-900 dark:text-white">Back</strong> —
                       you can go back and change anything.
                     </p>
                     <p>
@@ -197,7 +197,7 @@ export default function CataloguingGuideButton({
                   <div className="pt-1">
                     <Step emoji="📦" n={1} title="Vendor & Tote">
                       <p>
-                        Type or scan the <strong className="text-white">tote number</strong> — the vendor
+                        Type or scan the <strong className="text-gray-900 dark:text-white">tote number</strong> — the vendor
                         and receipt fill themselves in.
                       </p>
                       <p>
@@ -212,7 +212,7 @@ export default function CataloguingGuideButton({
                     <Step emoji="🏷️" n={2} title="Barcode">
                       <p>Scan or type the barcode on the item&apos;s label. <Req /></p>
                       <p>
-                        <strong className="text-white">⊕ Next Barcode Number</strong> fills in the next
+                        <strong className="text-gray-900 dark:text-white">⊕ Next Barcode Number</strong> fills in the next
                         one in sequence.
                       </p>
                       <div className="space-y-2 pt-1">
@@ -240,7 +240,7 @@ export default function CataloguingGuideButton({
                       </Callout>
                       <p className="pt-1">
                         Want to write it yourself? Tick{" "}
-                        <strong className="text-amber-300">Exclude from AI</strong> and type the full
+                        <strong className="text-amber-700 dark:text-amber-300">Exclude from AI</strong> and type the full
                         description.
                       </p>
                       <Tip>Optional. If a word looks misspelled you&apos;ll get a nudge to check it.</Tip>
@@ -248,17 +248,17 @@ export default function CataloguingGuideButton({
 
                     <Step emoji="🗂️" n={4} title="Categories">
                       <p>
-                        Pick a <strong className="text-white">Main</strong> and{" "}
-                        <strong className="text-white">Sub Category</strong>, plus the brand if you know
+                        Pick a <strong className="text-gray-900 dark:text-white">Main</strong> and{" "}
+                        <strong className="text-gray-900 dark:text-white">Sub Category</strong>, plus the brand if you know
                         it. Start typing and pick from the list.
                       </p>
                       <p>
-                        <strong className="text-white">Use the list.</strong>{" "}
+                        <strong className="text-gray-900 dark:text-white">Use the list.</strong>{" "}
                         Type something that isn&apos;t on it and you&apos;ll be warned it won&apos;t match up in Business Central. If only
                         the capitals differ there&apos;s a one-tap fix.
                       </p>
                       <p>
-                        📌 <strong className="text-white">Pin</strong> keeps that category for the next lot
+                        📌 <strong className="text-gray-900 dark:text-white">Pin</strong> keeps that category for the next lot
                         — handy when a whole tote is the same sort of thing.
                       </p>
                       <Tip>Optional, but fill it in if you can.</Tip>
@@ -266,8 +266,8 @@ export default function CataloguingGuideButton({
 
                     <Step emoji="💷" n={5} title="Estimate">
                       <p>
-                        A <strong className="text-white">Low</strong> and a{" "}
-                        <strong className="text-white">High</strong>. Tap a common value or type your own.{" "}
+                        A <strong className="text-gray-900 dark:text-white">Low</strong> and a{" "}
+                        <strong className="text-gray-900 dark:text-white">High</strong>. Tap a common value or type your own.{" "}
                         <Req />
                       </p>
                       <Tip>
@@ -279,12 +279,12 @@ export default function CataloguingGuideButton({
                     <Step emoji="✨" n={6} title="Condition">
                       <p>Tap the condition. Tap it again to unpick it.</p>
                       <p>
-                        <strong className="text-white">Condition To</strong>{" "}
+                        <strong className="text-gray-900 dark:text-white">Condition To</strong>{" "}
                         is for a range — Good, then Excellent, gives &ldquo;Good to Excellent&rdquo;. Leave it for a single condition.
                       </p>
                       <p>
                         📦 If the box or packaging is a different condition to the item, tick{" "}
-                        <strong className="text-white">Add a separate box / packaging condition</strong>.
+                        <strong className="text-gray-900 dark:text-white">Add a separate box / packaging condition</strong>.
                       </p>
                       <Tip>Optional.</Tip>
                     </Step>
@@ -314,22 +314,22 @@ export default function CataloguingGuideButton({
               {/* ── 📷 PHOTO ONLY ───────────────────────────────────────── */}
               {tab === "photo-only" && (
                 <div className="space-y-4">
-                  <p className="text-sm text-gray-300 leading-relaxed">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                     <span className="text-lg mr-1">📷</span>
-                    For when you want the <strong className="text-white">photos done now</strong> and the
+                    For when you want the <strong className="text-gray-900 dark:text-white">photos done now</strong> and the
                     details filled in later. Scan, snap, save — no description, no estimate, no categories.
                   </p>
 
-                  <div className="space-y-2.5 text-sm text-gray-300 leading-relaxed">
+                  <div className="space-y-2.5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                     <p>
-                      1️⃣ <strong className="text-white">Scan the lot barcode</strong> (or type it). You can
+                      1️⃣ <strong className="text-gray-900 dark:text-white">Scan the lot barcode</strong> (or type it). You can
                       scan the tote too, and pin it so it stays for the next one.
                     </p>
                     <p>
-                      2️⃣ <strong className="text-white">Take your photos</strong> of the item.
+                      2️⃣ <strong className="text-gray-900 dark:text-white">Take your photos</strong> of the item.
                     </p>
                     <p>
-                      3️⃣ <strong className="text-white">Save.</strong> The lot is created with just the
+                      3️⃣ <strong className="text-gray-900 dark:text-white">Save.</strong> The lot is created with just the
                       barcode and the photos.
                     </p>
                   </div>
@@ -346,28 +346,28 @@ export default function CataloguingGuideButton({
               {/* ── 🔍 REVIEW ───────────────────────────────────────────── */}
               {tab === "review" && (
                 <div className="space-y-4">
-                  <p className="text-sm text-gray-300 leading-relaxed">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                     <span className="text-lg mr-1">🔍</span>
                     A checking screen — it hunts out lots that look like they need another look, so
                     problems get caught before the sale goes out.
                   </p>
 
-                  <div className="space-y-2.5 text-sm text-gray-300 leading-relaxed">
+                  <div className="space-y-2.5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                     <p>A lot gets picked out when:</p>
-                    <ul className="list-disc pl-5 space-y-1 text-gray-400">
-                      <li>it has <strong className="text-white">no description</strong> or{" "}
-                        <strong className="text-white">no photos</strong>;</li>
-                      <li>something in the <strong className="text-white">key points didn&apos;t make it
+                    <ul className="list-disc pl-5 space-y-1 text-gray-600 dark:text-gray-400">
+                      <li>it has <strong className="text-gray-900 dark:text-white">no description</strong> or{" "}
+                        <strong className="text-gray-900 dark:text-white">no photos</strong>;</li>
+                      <li>something in the <strong className="text-gray-900 dark:text-white">key points didn&apos;t make it
                         into the description</strong> — the wording is highlighted so you can see what&apos;s
                         missing;</li>
-                      <li>somebody has <strong className="text-white">flagged it</strong>.</li>
+                      <li>somebody has <strong className="text-gray-900 dark:text-white">flagged it</strong>.</li>
                     </ul>
                     <p className="pt-1">
                       ✏️ Fix the wording right there and press{" "}
-                      <strong className="text-white">Save description</strong>.
+                      <strong className="text-gray-900 dark:text-white">Save description</strong>.
                     </p>
                     <p>
-                      🚩 <strong className="text-white">Flag an error</strong>{" "}
+                      🚩 <strong className="text-gray-900 dark:text-white">Flag an error</strong>{" "}
                       leaves a note on a lot for someone else to pick up. The filters at the top show only flagged lots, or only one
                       cataloguer&apos;s.
                     </p>
@@ -377,7 +377,7 @@ export default function CataloguingGuideButton({
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-700">
+            <div className="px-6 py-4 border-t border-gray-300 dark:border-gray-700">
               <button
                 onClick={() => setOpen(false)}
                 style={{ background: ACCENT, color: "#1C1C1E", touchAction: "manipulation" }}

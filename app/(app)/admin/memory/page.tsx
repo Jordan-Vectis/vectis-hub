@@ -16,6 +16,24 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reference_tablet_light_mode.md",
+    content: `---
+name: tablet-light-mode
+description: Tablet cataloguing light/dark switch (2026-09-11) — a top-right switch in the tablet header and the Website Search panel; the tablet screen, Website Search, Lens and the Guide converted from dark-ONLY to light-first with dark variants. Read before styling anything on the tablet screen.
+metadata:
+  type: reference
+---
+
+# Tablet light/dark switch — 2026-09-11
+
+Jordan: "in the top right corner can we have a dark/light mode toggle this needs to be on the website search as well".
+
+- components/theme-toggle.tsx is the Hub's ONE switch (the html "dark" class plus localStorage "theme", applied before paint by app/layout.tsx). size="lg" is a 44px button with a word ("Light" / "Dark"), used top-right in the tablet header (after the lot count) and in the Website Search panel header beside Close — both cover the Hub top bar. A MutationObserver keeps every copy's label in step.
+- The tablet screen (tablet-tabs.tsx), website-search-button.tsx, lens-button.tsx and cataloguing-guide.tsx were DARK-ONLY (hard-coded #1C1C1E etc., no dark: classes at all), so a switch alone changed nothing. Converted to light-first with dark: variants: bg-[#1C1C1E] became bg-white dark:bg-[#1C1C1E], border-gray-700 became border-gray-300 dark:border-gray-700, text-white became text-gray-900 dark:text-white (never on solid coloured buttons), tinted amber/red/emerald panels got -50/-100 fills with -700/-800 text. Inline hex styles (Next and parcel buttons) became classes.
+- The Add Lot wizard, Photo Only and Review already had dark: variants; Review's forced "dark" wrapper was removed. The tablet sale list page was converted too.
+- New styling on these screens needs BOTH light and dark classes. It is a per-DEVICE setting — a shared iPad keeps whatever the last person chose.`,
+  },
+  {
     filename: "reference_website_search.md",
     content: `---
 name: website-search-tablet
