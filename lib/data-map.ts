@@ -88,6 +88,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "CataloguePhotoSession", what: "A Photo Only session: the barcode label photo, the item photos taken with it, and who took them." },
       { model: "CatalogueBulkUndo", personal: "staff", what: "One bulk change made on Manage Lots, kept in full so it can be undone." },
       { model: "CatalogueLotEvent", personal: "staff", what: "The Lot Change Log: every lot created, edited, photographed or deleted — old value, new value, which tool did it, and who." },
+      { model: "CatalogueLastBatch", personal: "staff", what: "The tote, vendor and receipt each cataloguer was last using, kept per sale, so coming back to a sale picks up that sale's batch and never one from another sale." },
       { model: "EodCheckDismissal", what: "End of Day warnings someone has ticked as “ignore”, so the panels show live problems only." },
       { model: "CatalogueBcCorrection", what: "The ticks on the BC Corrections list. The list itself is worked out live from the BC tote data — these rows only remember what has been dealt with." },
       { model: "SavedAiFlag", what: "A snapshot of an AI-flagged lot exactly as it was when someone saved it off to look at later." },
@@ -138,11 +139,24 @@ export const DATA_MAP: DataMapArea[] = [
     tables: [
       { model: "WarehouseItem", personal: "customer", what: "BC's items as last synced: barcode, unique ID, receipt, vendor number, name and email, tote, location, lot number, estimates, hammer price and who catalogued it." },
       { model: "WarehouseTote", personal: "customer", what: "BC's receipt totes as last synced — tote number to receipt to vendor. What every tote check compares against." },
+      { model: "WarehouseReceiptTote", personal: "customer", what: "BC's receipt totes with every row kept — a tote number re-used on more than one receipt appears once for each, with the vendor number and name — so the Lot Wizard can ask which receipt is meant instead of guessing. Tote Check, End of Day and the other tote checks still read WarehouseTote." },
+      { model: "BcVendor", personal: "customer", what: "BC's auction vendors with their names and addresses, for BC Reports → Vendor Locations — the only place the Hub holds a vendor's address. BC's own country is kept exactly as given (usually blank); a country the Hub worked out, by AI or by hand, sits in separate columns and is always shown as worked out." },
       { model: "WarehouseSyncLog", what: "Each sync run: what it pulled, how far it got, and any error." },
       { model: "BCCatalogueDay", what: "A day's BC cataloguing figures and when they were fetched." },
       { model: "BCCatalogueEntry", personal: "staff", what: "How many items each person catalogued in BC on a given day." },
       { model: "BCPackingDay", what: "A day's BC packing figures and when they were fetched." },
       { model: "BCPackingEntry", personal: "staff", what: "How many lots each packer handled on a given day, per document." },
+    ],
+  },
+  {
+    area: "Past sales (the ABC and BC Databases)",
+    blurb: "Every lot Vectis has sold, kept for research and sold prices. Descriptions, estimates, hammer prices and photos only — no buyer or vendor details. The photos themselves live in Cloudflare R2.",
+    tables: [
+      { model: "ArchiveLot", what: "The ABC Database: every lot sold before Business Central, 1999 to 2023, imported from the old system's export — sale, lot number, description, estimates and hammer price, plus the website's LotID, link and photo where the website pull matched it. The pull only fills in blanks; it never adds or overwrites a lot." },
+      { model: "ArchiveSale", what: "Each sale as the website lists it — its own sale number, the old system's AuctionID, title, date, lot count and whether it has finished — so the website pull knows which sales it can read." },
+      { model: "ArchiveImport", personal: "staff", what: "One upload of the old system's spreadsheet into the ABC Database: the file, how far through it the import has got, the rows added, skipped and unreadable, and who started it." },
+      { model: "ArchiveJob", personal: "staff", what: "The two long-running website jobs behind both databases — reading lots from vectis.co.uk and copying their photos into R2 — with how far each has got, any error and who started it, so a stopped job carries on from where it was." },
+      { model: "BcLotWeb", what: "The BC Database's website half: the full description, link and photo for each Business Central lot, keyed on BC's unique ID — BC itself only holds a 250-character short description. Collected on an office machine and loaded in, because the website won't answer the Hub's server; the lot's figures stay on WarehouseItem." },
     ],
   },
   {
@@ -250,6 +264,8 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "DocumentFolder", what: "A folder in the Admin document store, and its parent." },
       { model: "DocumentFile", personal: "staff", what: "A file in the document store: name, size, type, and who uploaded it." },
       { model: "InvoiceFile", personal: "staff", what: "A file in the invoice store: name, size, type, and who uploaded it." },
+      { model: "ScreenRecording", personal: "staff", what: "A recording from IT Tools → Screen Recorder: its title, length, size and who recorded it. The video is in R2 and shows whatever was on that screen, which can include customer or staff details." },
+      { model: "ScreenCapture", personal: "staff", what: "A screenshot from IT Tools → Screenshots: its title, size and who took it. The marked-up image is in R2 and, like a recording, shows whatever was on screen." },
     ],
   },
   {
