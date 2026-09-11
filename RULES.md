@@ -1258,6 +1258,10 @@ The **🔎 Website Search** button in the tablet cataloguing screen's header, ju
 (Jordan: *"the ultimate search bar to help them research. Our own website's search bar is rubbish"*).
 It **replaced Description Finder**, which is gone — page, route, home card and app key
 (`DESCRIPTION_FINDER`). Don't bring it back as a separate tool.
+**Also its own home card since 2026-09-11** — Cataloguing & AI → `/tools/website-search` (Jordan,
+reversing his own "one button only": *"can we have website search as its own home page tab as well
+under cataloguing"*). It is the SAME component in `standalone` mode (no Close, no second theme switch —
+the Hub top bar is there), gated on Cataloguing like the route, a refusal logged to the Access Log.
 
 - ONE search over three sources, sorted as one list (`/api/website-search`):
   **ABC** (`ArchiveLot`, 1999–2023) · **BC** (`WarehouseItem` ⟕ `BcLotWeb` — lots through a past sale,

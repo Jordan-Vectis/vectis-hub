@@ -83,6 +83,21 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     appKey:             "CATALOGUING",
   },
   {
+    // 🔎 The same search as the button in tablet cataloguing, as a page of its own (Jordan,
+    // 2026-09-11). Gated on Cataloguing, exactly like the search itself.
+    key:                "WEBSITE_SEARCH",
+    href:               "/tools/website-search",
+    defaultLabel:       "Website Search",
+    defaultDescription: "Search every lot we've sold or catalogued — ABC, BC and the Hub — with photos, hammer prices and the vectis.co.uk link.",
+    icon:               "🔎",
+    border:             "border-cyan-500",
+    iconBg:             "text-cyan-400",
+    btnBg:              "bg-cyan-600 hover:bg-cyan-500",
+    glow:               "hover:shadow-cyan-900/40",
+    group:              "CATALOGUING_AI",
+    appKey:             "CATALOGUING",
+  },
+  {
     key:                "MANAGER_PORTAL",
     href:               "/tools/manager-portal",
     defaultLabel:       "Manager Portal",
@@ -161,7 +176,8 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     appKey:             "SALE_STATISTICS",
   },
   // Description Finder was removed 2026-09-10 (Jordan): its search is now part of 🔎 Website Search
-  // in the tablet cataloguing screen, which adds photos, hammer prices and the website link.
+  // (the tablet cataloguing button, and its own WEBSITE_SEARCH card since 2026-09-11), which adds
+  // photos, hammer prices and the website link.
   {
     key:                "BC_WAREHOUSE",
     href:               "/tools/bc-warehouse",

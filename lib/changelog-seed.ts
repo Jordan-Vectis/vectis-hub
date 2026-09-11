@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c50204e760cd8428a18a783209c4078b57659229","author":"Jordan Orange","date":"2026-09-11T10:59:28+01:00","subject":"Website Search: \"Exact words\" tick, and \"Estimate around £\" instead of from/to"},
   {"sha":"7f61d7c1b69b87040d13119289110e7cfc38b1d0","author":"Jordan Orange","date":"2026-09-11T10:46:50+01:00","subject":"Website Search: \"Exact phrase\" and \"Exact numbers\" ticks with an ⓘ explaining each"},
   {"sha":"0a8504247de0cce27ed2e174685305fbf17dcd96","author":"Jordan Orange","date":"2026-09-11T10:38:10+01:00","subject":"Website Search: three across on desktop with bigger photos and text, and a foldaway filter sidebar"},
   {"sha":"7793fc46283c31637302249a43e477d5dbf8c74e","author":"Jordan Orange","date":"2026-09-11T10:27:30+01:00","subject":"Website Search: whole numbers — \"Class 37\" no longer brings up Class 373"},

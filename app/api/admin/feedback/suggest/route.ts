@@ -45,7 +45,7 @@ const MAX_FOCUS_CHARS = 500
 // list just makes the model circle whichever tool it read about most.
 
 /** The Hub cards a cataloguer actually works in. ⚠ Card keys, not labels — labels are editable. */
-const CARD_KEYS = ["CATALOGUING", "AUCTION_AI", "PHOTO_PREP"]
+const CARD_KEYS = ["CATALOGUING", "WEBSITE_SEARCH", "AUCTION_AI", "PHOTO_PREP"]
 
 /** ⚠ Hand-written, so it is the part that can go stale. It exists because the lot wizard — the
  *  screen cataloguers spend their day in — is what they CALL it, and neither list uses that name. */

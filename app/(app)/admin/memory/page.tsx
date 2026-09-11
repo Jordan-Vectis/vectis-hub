@@ -48,7 +48,7 @@ Jordan: "the ultimate search bar to help them research. Our own website's search
 
 It REPLACED Description Finder (Jack, 2026-07-13) at Jordan's request - page, API route, home card and the DESCRIPTION_FINDER app key are all deleted. Description Finder only text-searched Hub lots and BC's SHORT description, with no photos, prices or links. Don't bring it back as a separate tool.
 
-His decisions: ABC + BC + Hub lots; as many filters as sensible; tapping a result shows the big photo, full description, the vectis.co.uk link and Copy description; ONE button, in the tablet cataloguing screen only.
+His decisions: ABC + BC + Hub lots; as many filters as sensible; tapping a result shows the big photo, full description, the vectis.co.uk link and Copy description; the button in the tablet cataloguing screen AND, since 2026-09-11, its own home card (Cataloguing & AI -> /tools/website-search; the same component in standalone mode, gated on Cataloguing) - he reversed his earlier "one button only".
 
 How it works:
 - ABC = ArchiveLot (1999-2023); BC = WarehouseItem joined to BcLotWeb (lots through a PAST sale, the same rule as Databases -> BC Database); Hub = CatalogueLot NOT yet through a BC sale (otherwise a double of its BC row). One UNION ALL, one global sort, 30 a page.

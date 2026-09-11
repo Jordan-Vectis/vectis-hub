@@ -279,7 +279,9 @@ function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
 
 // ── The button and the panel ────────────────────────────────────────────────────
 
-export default function WebsiteSearchButton({ tablet = false }: { tablet?: boolean }) {
+/** `standalone` = the page of its own behind the home card (/tools/website-search, 2026-09-11): no button,
+ *  the panel always showing and filling the Hub's content area. Otherwise it's the tablet header button. */
+export default function WebsiteSearchButton({ tablet = false, standalone = false }: { tablet?: boolean; standalone?: boolean }) {
   const categoryMap = useCategoryMap()
   const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
@@ -305,8 +307,10 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
   const searched = useRef<Filters | null>(null)
   const ctl = useRef<AbortController | null>(null)
   const qRef = useRef<HTMLInputElement>(null)
+  // On its own page the panel is always showing.
+  const shown = standalone || open
 
-  const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setF(prev => ({ ...prev, [k]: v }))
+  const set =<K extends keyof Filters>(k: K, v: Filters[K]) => setF(prev => ({ ...prev, [k]: v }))
 
   // A number that moves while it searches (RULES.md 7b), so a slow search never looks stuck.
   useEffect(() => {
@@ -316,15 +320,15 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
   }, [busy])
 
   useEffect(() => {
-    if (!open) return
+    if (!shown) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
       if (detail) setDetail(null)
-      else setOpen(false)
+      else if (!standalone) setOpen(false)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, detail])
+  }, [shown, detail, standalone])
 
   // Lens beside it hands a search over ("See every match in Website Search"): open with that
   // search, everything else back to the defaults, and run it straight away.
@@ -490,17 +494,22 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
 
   return (
     <>
-      <button
+      {!standalone && <button
         type="button"
         onClick={() => { setMounted(true); setOpen(true); setTimeout(() => qRef.current?.focus(), 50) }}
         style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
         className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"}`}
       >
         🔎 Website Search
-      </button>
+      </button>}
 
-      {mounted && (
-        <div className={`fixed inset-0 z-50 flex flex-col bg-gray-100 dark:bg-[#0D0D0F] text-gray-900 dark:text-gray-100 ${open ? "" : "hidden"}`} role="dialog" aria-modal="true" aria-label="Website Search">
+      {/* On its own page it fills the Hub's content area under the top bar; from the tablet button it
+          covers the screen. ⚠ "relative" either way — the detail view is absolute inset-0 inside it. */}
+      {(mounted || standalone) && (
+        <div className={standalone
+            ? "relative flex h-full min-h-0 flex-col bg-gray-100 dark:bg-[#0D0D0F] text-gray-900 dark:text-gray-100"
+            : `fixed inset-0 z-50 flex flex-col bg-gray-100 dark:bg-[#0D0D0F] text-gray-900 dark:text-gray-100 ${open ? "" : "hidden"}`}
+          role={standalone ? undefined : "dialog"} aria-modal={standalone ? undefined : true} aria-label="Website Search">
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             {/* Header: the search box is always on screen. */}
             <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] px-4 py-3">
@@ -516,10 +525,15 @@ export default function WebsiteSearchButton({ tablet = false }: { tablet?: boole
                   <button type="submit" style={{ background: ACCENT, touchAction: "manipulation" }}
                     className="min-h-[48px] flex-shrink-0 rounded-lg px-5 text-sm font-semibold text-black">Search</button>
                 )}
-                {/* Light/dark (Jordan, 2026-09-11) — this panel covers the tablet header's switch. */}
-                <ThemeToggle size="lg" />
-                <button type="button" onClick={() => setOpen(false)} aria-label="Close Website Search" style={{ touchAction: "manipulation" }}
-                  className="min-h-[48px] flex-shrink-0 rounded-lg border border-gray-300 dark:border-gray-700 px-4 text-sm text-gray-700 dark:text-gray-300">✕ Close</button>
+                {/* Light/dark (Jordan, 2026-09-11) — this panel covers the tablet header's switch. On its
+                    own page the Hub's top bar (and its switch) is still there, so neither is needed. */}
+                {!standalone && (
+                  <>
+                    <ThemeToggle size="lg" />
+                    <button type="button" onClick={() => setOpen(false)} aria-label="Close Website Search" style={{ touchAction: "manipulation" }}
+                      className="min-h-[48px] flex-shrink-0 rounded-lg border border-gray-300 dark:border-gray-700 px-4 text-sm text-gray-700 dark:text-gray-300">✕ Close</button>
+                  </>
+                )}
               </div>
             </div>
 
