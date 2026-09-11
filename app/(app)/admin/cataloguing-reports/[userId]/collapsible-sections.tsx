@@ -385,7 +385,11 @@ export type SerialLotLog = {
 }
 
 export type SerialIdleLog = {
+  /** This ROW — one working day's slice of a break ("{logId}-{n}"). For React keys only. */
   id: string
+  /** The IdleLog row it came from — what Delete must send. ⚠ Sending `id` returned "Not found" for
+   *  EVERY row once breaks were split by working day (Jordan, 2026-09-11). */
+  logId: string
   idleStartedAt: string
   idleDurationMs: number
   reason: string
@@ -576,17 +580,23 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
     })
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this away-time entry? This cannot be undone.")) return
-    setDeleting(id)
+  async function handleDelete(log: SerialIdleLog) {
+    // A break that ran past 17:00 shows as one row per working day, but it is ONE entry — deleting
+    // it takes every part, so say so rather than surprise anyone.
+    const parts = logs.filter(l => l.logId === log.logId).length
+    const msg = parts > 1
+      ? `Delete this away-time entry? It carries on over ${parts} working days, so all ${parts} parts will go. This cannot be undone.`
+      : "Delete this away-time entry? This cannot be undone."
+    if (!confirm(msg)) return
+    setDeleting(log.logId)
     try {
-      const res = await fetch(`/api/catalogue/idle-log/${id}`, { method: "DELETE" })
+      const res = await fetch(`/api/catalogue/idle-log/${encodeURIComponent(log.logId)}`, { method: "DELETE" })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         alert(body.error ?? "Failed to delete entry.")
         return
       }
-      setLogs(prev => prev.filter(l => l.id !== id))
+      setLogs(prev => prev.filter(l => l.logId !== log.logId))
     } catch {
       alert("Network error — please try again.")
     } finally {
@@ -725,12 +735,12 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                       </td>
                       <td className="px-3 py-3 text-right">
                         <button
-                          onClick={() => handleDelete(log.id)}
-                          disabled={deleting === log.id}
+                          onClick={() => handleDelete(log)}
+                          disabled={deleting === log.logId}
                           className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors disabled:opacity-50"
                           title="Delete entry"
                         >
-                          {deleting === log.id ? "…" : "✕"}
+                          {deleting === log.logId ? "…" : "✕"}
                         </button>
                       </td>
                     </tr>

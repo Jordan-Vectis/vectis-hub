@@ -190,7 +190,7 @@ export default async function ReportsUserPage({
   // so every day gets its real slice and the from–to times make sense. Same-day
   // gaps yield a single, unchanged segment; segment ms always sum to the original.
   type IdleSeg = {
-    key: string; startedAt: Date; durationMs: number; dayKey: string
+    key: string; logId: string; startedAt: Date; durationMs: number; dayKey: string
     reason: string; toteNumbers: string | null; notes: string | null
     auction: { code: string; name: string }
   }
@@ -199,7 +199,8 @@ export default async function ReportsUserPage({
     toteNumbers: string | null; notes: string | null; auction: { code: string; name: string }
   }): IdleSeg[] =>
     splitIdleByWorkingDay(l.idleStartedAt.getTime(), l.idleDurationMs).map((seg, i) => ({
-      key: `${l.id}-${i}`, startedAt: new Date(seg.startMs), durationMs: seg.ms,
+      // ⚠ `key` is this slice (React only); `logId` is the real row — Delete needs that one.
+      key: `${l.id}-${i}`, logId: l.id, startedAt: new Date(seg.startMs), durationMs: seg.ms,
       dayKey: ukDayKey(new Date(seg.startMs)),
       reason: l.reason, toteNumbers: l.toteNumbers, notes: l.notes, auction: l.auction,
     }))
@@ -651,6 +652,7 @@ export default async function ReportsUserPage({
           <CollapsibleIdleTable
             logs={incIdleSegs.map(s => ({
               id:             s.key,
+              logId:          s.logId,
               idleStartedAt:  s.startedAt.toISOString(),
               idleDurationMs: s.durationMs,
               reason:         s.reason,
