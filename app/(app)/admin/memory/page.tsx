@@ -4846,6 +4846,24 @@ Core sync rules (full detail on the reference card):
 
 ---
 
+## Recent work (2026-09-14) — ON PRODUCTION (merged to main 2026-09-14, a6577674 — main = staging)
+
+- **⚠⚠ Background BC work signs in as ME only.** getBCTokenAny() — the timed BC copy, its reconcile, the report caches and the crons — now uses only the BC sign-in of my Hub login jordan.orange (BACKGROUND_BC_USERNAME in lib/bc.ts), with NO fallback to anyone else; the Status Centre's Business Central light tests the same sign-in. Why: "BC data copy → Location changes" had failed with a 403 on every run since Fri 11 Sept ~20:00 while every other part worked — the old code borrowed an ARBITRARY stored sign-in, and most staff's BC permissions may not cover the change log. If my sign-in lapses, ALL background BC work stops and the light names me: press the BC button in the top bar while logged in as jordan.orange. If Location changes still gets a 403 with my sign-in, my own BC account lacks change-log permission — that's a BC admin job.
+- **Auto Pipeline results table** now reads Batch → Key Points → Double Check, the order the stages actually run.
+- **Submissions: Delete works for anyone with the CRM app.** The list showed the button to CRM-app users, but the delete action only allowed the ADMIN/COLLECTIONS roles, so it silently did nothing for everyone else. It now checks the page's exact rule and says why when it refuses.
+- **The photo request link takes VIDEOS.** A Record a Video button, and Choose from Gallery accepts videos; uploads go straight to R2 with a live percentage. The key's file extension is the ONLY thing that marks a video (lib/media.ts — Item.imageUrls holds both). The submission page and the cataloguer valuation page play them in a pop-up with an "Open the video file" link, because iPhone HEVC .mov may not play in Chrome. A refused upload now shows Failed — it used to show a green tick whatever storage answered.
+- **⚠ The photo request link is PUBLIC again.** Since Jack's 9 July customer-site gate, /submit/[code] had been asking customers to sign in. I chose "photo link only": a regex in auth.config.ts opens exactly one segment after /submit/, and the /submit web form, the valuation link /value/[code] and the rest of the customer site stay behind the login (RULES.md updated). Proved logged-out on production: a fake photo code gets the not-found page (no login), /submit and /value still redirect to login, /first-aid still opens.
+- **IT emails light — not fixed, mine to check:** production has never received an email through Outlook → Power Automate → Make.com (no email-made jobs, no replies). Make.com's scenario history will show which link isn't delivering.
+- **Open task (chip, not started):** BC Reports → Cataloguing caches a day as "nobody catalogued" whenever BC refuses or times out, and never asks BC about that day again.
+
+⚠ **Working-style notes from this session:**
+- Claude Code's auto-mode safety check blocks reading the PRODUCTION database from this PC even after I say yes, and won't let Claude add a permission rule for it. Claude asks me to switch the permission mode off Auto — never retries or routes round it. A logged-out curl of a public URL still works for proving what the site does.
+- When a page shows a button under one rule, its server action must check the SAME rule — the Delete bug was a role list in the action and an app grant on the page.
+- A lock that looks like a bug can be someone's deliberate decision: the /submit gate was Jack's, written into RULES.md as "discuss first". Check git log and RULES.md before reopening anything.
+- After a merge to main, changelog:seed can't fold into the already-pushed merge commit — discard the regenerated file; the next work push files it. Never make a seed-only commit (Railway names the deployment after it).
+
+---
+
 ## Recent work (2026-09-10/11) — ON PRODUCTION (merged to main 2026-09-11, main = staging)
 
 - **🚦 Status Centre + 🔔 admin bell** (/admin/status): "is it us or a supplier?" — 15 read-only checks, the loop runs on production only, the bell rings after 2 bad checks in a row. The MIGRATIONS array now lives in lib/migrations.ts.
