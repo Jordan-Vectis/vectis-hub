@@ -5753,8 +5753,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                 <tr className="bg-gray-100 dark:bg-[#1a1a1c] border-b border-gray-200 dark:border-gray-700">
                   <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium w-32">Lot</th>
                   <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">⚡ Batch</th>
-                  <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">🔎 Double Check</th>
                   <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">✓ Key Points</th>
+                  <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">🔎 Double Check</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -5804,8 +5804,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                         {lot.cataloguerFlag && <span className="ml-1.5" title="AI flagged a possible cataloguer mistake — expand to see">⚠️</span>}
                       </td>
                       <td className="px-3 py-2">{batchCell}</td>
-                      <td className="px-3 py-2">{dcCell}</td>
                       <td className="px-3 py-2">{kpCell}</td>
+                      <td className="px-3 py-2">{dcCell}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         <button onClick={e => { e.stopPropagation(); rerunLot(lot) }} disabled={running || upgrading}
                           className="text-xs text-[#C8A96E] hover:text-[#d4b87a] disabled:opacity-30 transition-colors mr-3"

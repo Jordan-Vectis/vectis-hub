@@ -3,6 +3,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { r2 } from "@/lib/r2"
 import { prisma } from "@/lib/prisma"
+import { mediaContentType, mediaFileName } from "@/lib/media"
 
 const CLOSED_STATUSES = ["COMPLETED", "DECLINED"]
 
@@ -12,12 +13,12 @@ export async function POST(
 ) {
   try {
     const { token } = await params
-    const { itemId, filename, contentType: rawContentType } = await req.json()
+    const { itemId, filename: rawFilename, contentType: rawContentType } = await req.json()
+    const filename = String(rawFilename ?? "")
 
-    // Accept any image type — some older devices send blank or non-standard content types
-    const contentType = (rawContentType && rawContentType.startsWith("image/"))
-      ? rawContentType
-      : "image/jpeg"
+    // Photos AND videos (2026-09-14). Any image or video type is kept; a blank or non-standard type
+    // (some older devices) is worked out from the file name, falling back to JPEG as it always did.
+    const contentType = mediaContentType(rawContentType, filename)
 
     const submission = await prisma.submission.findUnique({
       where:   { photoUploadToken: token },
@@ -31,8 +32,9 @@ export async function POST(
       return NextResponse.json({ error: "Invalid item" }, { status: 400 })
     }
 
-    const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const key  = `submission-photos/${token}/${Date.now()}-${safe}`
+    // ⚠ The name always ends in an extension — it is the only way the Hub can later tell a video
+    // from a photo (lib/media.ts).
+    const key = `submission-photos/${token}/${Date.now()}-${mediaFileName(filename, contentType)}`
 
     const url = await getSignedUrl(
       r2,
@@ -44,7 +46,8 @@ export async function POST(
       { expiresIn: 3600 }
     )
 
-    return NextResponse.json({ url, key })
+    // ⚠ The upload must send exactly this type — it is part of the signed URL.
+    return NextResponse.json({ url, key, contentType })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Error" }, { status: 500 })
   }

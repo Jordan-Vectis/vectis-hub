@@ -13,7 +13,18 @@ export default function DeleteSubmissionButton({ id, reference }: { id: string; 
     e.stopPropagation()
     if (!confirm(`Delete submission ${reference}? This cannot be undone.`)) return
     startTransition(async () => {
-      await deleteSubmission(id)
+      // ⚠ Always say when it didn't work — this button used to do nothing at all when the delete was
+      // refused (2026-09-14).
+      try {
+        const res = await deleteSubmission(id)
+        if (!res.ok) {
+          alert(`Couldn't delete ${reference}: ${res.error}`)
+          return
+        }
+      } catch {
+        alert(`Couldn't delete ${reference} — refresh the page and try again.`)
+        return
+      }
       router.refresh()
     })
   }

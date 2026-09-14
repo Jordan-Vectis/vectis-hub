@@ -369,7 +369,7 @@ const APPS: App[] = [
     dependsOn: [
       "Business Central OData API — Receipt_Lines_Excel, Auction_Receipt_Lines_Excel, ChangeLogEntries, Receipt_Totes_Excel",
       "PostgreSQL — WarehouseItem, WarehouseTote, WarehouseSyncLog tables",
-      "BCToken — per-user OAuth token (getBCTokenAny() used for sync/cron)",
+      "BCToken — per-user OAuth token. Sync/cron use ONE person's: Jordan Orange's (getBCTokenAny, BACKGROUND_BC_USERNAME in lib/bc.ts)",
     ],
     rules: [
       "DO NOT change the design or behaviour of the Location History tab. It was accidentally replaced in an earlier rewrite and manually restored.",
@@ -380,7 +380,7 @@ const APPS: App[] = [
       "Auction_Lines_Excel is item-level (one row per lot) — never use $top alone to get auction names.",
       "BC fetch timeouts: 45 s total, 30 s per page. Page size: 500 ($top=500, Prefer: odata.maxpagesize=500).",
       "BC token refresh buffer: 60 seconds before expiry.",
-      "getBCTokenAny() picks any valid non-expired token — no specific user needs to be logged into BC for sync/cron.",
+      "Sync/cron sign in to BC as Jordan Orange only (getBCTokenAny) — never anyone else's sign-in, because most staff's BC permissions don't cover everything the copy reads. If that sign-in lapses, the Status Centre's Business Central light goes red and says who must sign in again.",
       "WarehouseItem.uniqueId is the primary key — matches CatalogueLot.receiptUniqueId.",
       "Sync stale threshold: 15 minutes. Show warning if last sync > 15 min ago.",
     ],
@@ -442,12 +442,12 @@ const APPS: App[] = [
     dependsOn: [
       "Business Central OData API — Auction_Receipt_Lines_Excel, ShipmentRequestAPI, CollectionList",
       "PostgreSQL — BCCatalogueDay, BCPackingDay, BCCatalogueEntry, BCPackingEntry tables",
-      "BCToken — getBCTokenAny() for system-level fetches",
+      "BCToken — system-level (cron) fetches use Jordan Orange's BC sign-in via getBCTokenAny()",
     ],
     rules: [
       "BC fetch timeouts: 45 s total, 30 s per page. Page size 500.",
       "Token refresh buffer: 60 seconds before expiry.",
-      "getBCTokenAny() used — no specific user needs to be logged into BC.",
+      "getBCTokenAny() uses Jordan Orange's BC sign-in and nobody else's — it must stay signed in (the Status Centre's Business Central light says when it isn't).",
       "Do not use CatalogueAuction for names in BC report views — use BC source data directly.",
       "$apply=groupby is NOT supported by BC OData.",
     ],
@@ -495,7 +495,7 @@ const APPS: App[] = [
         label: "How it works",
         items: [
           "Enter any BC endpoint path (e.g. Auction_Lines_Excel, Receipt_Lines_Excel).",
-          "Server authenticates with BC using getBCTokenAny() and fetches a sample of records.",
+          "Server authenticates with BC using the viewer's own BC sign-in (getBCToken) and fetches a sample of records.",
           "Results shown as a structured table with all field names and values.",
           "Base BC URL: https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environment}/ODataV4/Company('Vectis')/",
         ],
@@ -503,7 +503,7 @@ const APPS: App[] = [
     ],
     dependsOn: [
       "Business Central OData API",
-      "BCToken — getBCTokenAny(), no specific user needed",
+      "BCToken — the viewer's own BC sign-in (getBCToken); they need to have pressed the BC button in the top bar",
     ],
     rules: [
       "Requires BC_WAREHOUSE app permission — not visible to general users.",
@@ -567,14 +567,14 @@ const APPS: App[] = [
         items: [
           "Filter by status, channel, department, name/reference search.",
           "Row shows: first 8 chars of reference, contact name, channel, item count, department, status badge, date.",
-          "Delete available to ADMIN and COLLECTIONS roles only.",
+          "Delete available to anyone granted the CRM app (admins always) plus the COLLECTIONS role — the button and the server action use the same rule.",
         ],
       },
       {
         label: "Data models",
         items: [
           "Submission: reference, channel, status, notes, followUpCount, lastFollowUpAt, contactId, departmentId, cataloguerId, createdById.",
-          "Item (SubmissionItem): name, description, imageUrls[], submissionId.",
+          "Item (SubmissionItem): name, description, imageUrls[] (R2 keys of the customer's photos AND videos — the file extension tells them apart, lib/media.ts), submissionId.",
           "Valuation: estimatedValue, comments, itemId (unique — one valuation per item), cataloguerId.",
           "ContactLog: method, notes, outcome, isFollowUp, submissionId, userId.",
           "Logistics: type (SENT_IN/COLLECTION), arrived (boolean), arrivedAt, collection address fields, submissionId (unique).",
@@ -588,7 +588,7 @@ const APPS: App[] = [
       "Status flow: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED/DECLINED → FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED.",
       "Logistics types: SENT_IN or COLLECTION.",
       "Contact channels: EMAIL, WEB_FORM, PHONE, WALK_IN.",
-      "ADMIN and COLLECTIONS can create/delete submissions. CATALOGUER can only add valuations.",
+      "Anyone signed in can create a submission; deleting needs the CRM app (or the COLLECTIONS role). CATALOGUER can only add valuations.",
     ],
   },
 

@@ -141,7 +141,7 @@ Design decisions worth keeping:
 - That first run found a real bug: gemini-2.5-flash-preview-04-17 (retired by Google) was the built-in default for 8 tools AND the browser-side starting model of BC Marketing, Lot History and Lotting Up, so those screens failed on production unless someone picked another model. It is now on RETIRED_MODELS and the defaults are gemini-3-flash-preview.
 - Database: 25 pooled connections each hold a plain BEGIN while reading the read-only settings, so a transaction-mode pooler has to hand each a different server connection; plus 3 direct connections (pooler stripped), Prisma latency, and saves refused in createLot / saveLastLotFields. Red on even one read-only connection.
 - Gemini / Claude: model lists only, so no quota is spent. Refusals are only seen on paths through lib/ai-provider.ts and withGeminiRetry — the batch run, KP/DC and the pipeline call Google directly and aren't counted.
-- Business Central: there is no company account. The check renews a person's sign-in IN MEMORY (never saved) when nobody holds a live key — about 4 Microsoft sign-in log entries an hour overnight for that person. Helpers getBCTokenForStatus / bcODataUrl in lib/bc.ts.
+- Business Central: there is no company account. Since 2026-09-14 the background BC work AND this check use ONE person's sign-in — Jordan's Hub login (BACKGROUND_BC_USERNAME in lib/bc.ts), with no fallback to anyone else. The check renews it IN MEMORY (never saved) when it has no live key — about 4 Microsoft sign-in log entries an hour overnight on that account. It probes the tote list only, so a permission refused on ONE table (the change log, 403 from 11 Sept) shows only on the BC data copy light. Helpers getBCTokenForStatus / bcODataUrl in lib/bc.ts.
 - The website's 202-with-nothing to Railway is expected and never red; that light is how fresh the office collection is. The Bidpath live-bid feed is checked from the viewer's own browser.
 - Staging/sandbox databases are production branches with stale timestamps, so checks test the environment first and return "off".
 
@@ -1383,7 +1383,7 @@ WARNING: the server action was always correct — it writes only fields that dif
   {
     filename: "first_aid_public.md",
     content: `---
-name: Facilities -> First Aid (the ONE public page)
+name: Facilities -> First Aid (a public page, exact match)
 purpose: The public /first-aid page and its Hub app. The only route outside the login gate besides /login, /setup and the API relays - and the exact constraints that make that safe. Read before touching auth.config.ts publicPaths or anything under /first-aid.
 last_updated: 2026-08-11
 ---
@@ -3578,7 +3578,9 @@ last_updated: 2026-07-02
 
 # BC OAuth connect — per-user token + BC Warehouse banner (2026-07-02, STAGING)
 
-BC sign-in is PER-USER: a BCToken row per userId. getBCToken() = the current user's own token (auto-refreshed via its refresh token); getBCTokenAny() = any valid token in the DB (warehouse sync + cron use). The BC Warehouse background sync piggybacks on ANY token, but the live-query tabs — Location History, Collections Due, Unsold Items (and the sale-checklist auction-name backfill) — query BC as the CURRENT user and fail if they have never signed in.
+BC sign-in is PER-USER: a BCToken row per userId. getBCToken() = the current user's own token (auto-refreshed via its refresh token). The live-query tabs — Location History, Collections Due, Unsold Items (and the sale-checklist auction-name backfill) — query BC as the CURRENT user and fail if they have never signed in.
+
+⚠⚠ Background BC work = ONE person's sign-in, Jordan's (2026-09-14). getBCTokenAny() — every warehouse sync stage, the 12-hourly and 05:00 crons, the report caches — uses ONLY the BCToken of the Hub login named by BACKGROUND_BC_USERNAME in lib/bc.ts, with NO fallback to anyone else. Jordan: "make it only use my login as most other people might not have permission". It used to take an ARBITRARY stored sign-in (findFirst with no order, which drifts), and from Fri 11 Sept ~20:00 BC answered 403 to the change-log read (BC data copy → Location changes) on every run while every other part worked — the pattern of a borrowed sign-in without change-log permission (not confirmed from the database). If that sign-in lapses, all background BC work stops and the Status Centre's Business Central light goes red naming who must press the BC button. getBCTokenForStatus() tests the same person — keep them in step. Never go back to "any token".
 
 ## The problem this fixed
 The only "Sign in with Microsoft" prompt lived in BC Reports — which a user with only BC_WAREHOUSE access cannot open (its layout redirects them to /hub) — and /api/bc/callback hardcoded every redirect back to /tools/bc-reports. So a warehouse-only user could NEVER connect.
@@ -4253,7 +4255,7 @@ Customer submission pipeline. Statuses: PENDING_ASSIGNMENT → PENDING_VALUATION
 - Submissions list has List | Board views (?view=board). Board = kanban column-per-status; status filter hidden there.
 - Photo zoom: components/zoomable-lightbox.tsx (wheel/pinch/double-click zoom, drag-pan) used by submission PhotoViewer and /value/[token].
 - New submission form (/submissions/new): each item has "Add photos" — uploads to R2 via /api/upload-url immediately; keys passed as item_N_imageKey form fields on submit.
-- Customer photo request link: Submission.photoUploadToken (String? @unique). Collections/admin see "Photo Request Link" sidebar card. Link /submit/[token] — public step-by-step wizard (Take a Photo / Choose from Gallery), no size limits, accepts any image type. Both public pages show Vectis logo.
+- Customer photo request link: Submission.photoUploadToken (String? @unique). Collections/admin see "Photo Request Link" sidebar card. Link /submit/[token] — public step-by-step wizard (Take a Photo / Record a Video / Choose from Gallery), no size limits, accepts any image OR VIDEO type. Videos since 2026-09-14: uploaded straight to R2 with a live percentage; the key always ends in an extension, which is the ONLY way the Hub tells a video from a photo (lib/media.ts — Item.imageUrls holds both); the submission page and the cataloguer valuation page play them in a pop-up (components/video-modal.tsx) that also offers the file itself, because iPhone HEVC .mov may not play in Chrome. A refused upload now shows Failed — the old fetch showed a green tick whatever the storage answered. Both public pages show Vectis logo.
 - External cataloguer valuation link: Submission.valuationToken (String? @unique). Collections/admin see "Valuation Request Link" sidebar card — generate link, copy, or "Send email" (opens Outlook 365 web compose; body "Hello, Please can you give me a valuation using the following link: {link}"). Recipient dropdown = CATALOGUERS ONLY (role CATALOGUER w/ email) or type custom. Also a "Sent to" note dropdown of cataloguers → persists Submission.valuationSentTo (display-only) via setValuationSentTo. Public page /value/[token] shows items + photos (presigned GET URLs), per-item estimate + notes, overall comments. Saves to Item.externalEstimate/externalNotes + Submission.valuationNotes/valuationSubmittedAt. Server action: generateValuationToken. API: POST /api/public/submission/[token]/save-valuation.
 
 ### Follow-ups (/follow-ups)
@@ -4673,7 +4675,7 @@ DO NOT change the design or behaviour of the Location History tab in \`/tools/bc
 
 ### Facilities — First Aid + Site Plan (NEW 2026-08-11/12)
 
-**First Aid** (\`/tools/first-aid\`, app key \`FIRST_AID\`): emergency steps, first aiders, kit/defib/eyewash locations, and the accident book (statutory BI 510 layout — part 4 employer-only, in the Hub). **Its public page is \`/first-aid\`** — the ONE route outside the login gate, so anyone on site can use it without an account. ⚠ Everything shown there is world-readable; accident reports are readable ONLY in the Hub.
+**First Aid** (\`/tools/first-aid\`, app key \`FIRST_AID\`): emergency steps, first aiders, kit/defib/eyewash locations, and the accident book (statutory BI 510 layout — part 4 employer-only, in the Hub). **Its public page is \`/first-aid\`** — outside the login gate (exact match), so anyone on site can use it without an account; the only other page outside it is the customer photo request link /submit/<code> (reopened 2026-09-14 — the 9 July customer-site gate had been asking customers to sign in). ⚠ Everything shown there is world-readable; accident reports are readable ONLY in the Hub.
 
 **Site Plan** (\`/tools/site-plan\`, app key \`SITE_PLAN\`): the building drawing, uploaded once, that any app pins equipment onto. First Aid pins its kits; fire equipment etc. can follow without a second copy. Pins are PERCENTAGES of the image; images only, never PDFs.
 
@@ -4685,7 +4687,7 @@ Password-gated Socket.IO clerk interface. Phases: login → auction select → c
 
 ### Submissions (/submissions)
 Customer submission pipeline. Statuses: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED/DECLINED/FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED. Channels: Email, Web Form, Phone, Walk-in. Filter by status/channel/department/search. **List view + Board (kanban) view toggle** (\`?view=board\`). Detail page is a **two-column dashboard** with a **status dropdown** (assign/Accept/Decline removed) and a **needs-follow-up tickbox** (flag). Department/cataloguer assignment removed. Photo lightboxes zoom+pan (\`components/zoomable-lightbox.tsx\`).
-**Customer photo upload (\`/submit/[token]\`):** public, no login, step-by-step wizard, take-photo option, no size limits/max compatibility (older customers), Vectis branding. Link never expires (only closes on COMPLETED/DECLINED). \`Submission.photoUploadToken\`.
+**Customer photo upload (\`/submit/[token]\`):** public, no login, step-by-step wizard, take-photo AND record-video options (videos since 2026-09-14), no size limits/max compatibility (older customers), Vectis branding. Link never expires (only closes on COMPLETED/DECLINED). \`Submission.photoUploadToken\`.
 **Cataloguer valuation (\`/value/[token]\`):** public, no login, Vectis branding — a cataloguer values items individually with comments. Generated via a "Valuation Request Link" card that pre-fills an Outlook-web email (business, not desktop) to a chosen cataloguer + a display-only "Sent to" note. \`Submission.valuationToken/valuationNotes/valuationSubmittedAt/valuationSentTo\`, \`Item.externalEstimate/externalNotes\`.
 
 ### Follow-ups (/follow-ups)
@@ -5039,7 +5041,7 @@ Fixed a real data-integrity bug + reworked the cataloguing **lot wizard** openin
 
 ## Recent work (2026-08-11/12) — Facilities, First Aid, Site Plan — ON PRODUCTION (main = 17563e59)
 
-- **New Facilities home-page section.** **First Aid** (\`/tools/first-aid\`) — emergency steps, first aiders, kit/defib locations, and the accident book. Its **public page \`/first-aid\` is the ONE route outside the login gate**, so agency staff, contractors and visitors can use it with no account. Exact-match allowlist entry (never a prefix), top-level route, no public GET, one write-only report endpoint. ⚠ Everything on that page is world-readable.
+- **New Facilities home-page section.** **First Aid** (\`/tools/first-aid\`) — emergency steps, first aiders, kit/defib locations, and the accident book. Its **public page \`/first-aid\` is outside the login gate** (exact match), so agency staff, contractors and visitors can use it with no account. The only other page outside the gate is the customer photo request link /submit/<code> (reopened 2026-09-14). Exact-match allowlist entry (never a prefix), top-level route, no public GET, one write-only report endpoint. ⚠ Everything on that page is world-readable.
 - The report follows the **statutory accident book (BI 510)** — parts 1–3 public, **part 4 employer-only inside the Hub** (date reported, recorded by, RIDDOR, notes). ⚠ **NOT certified legally compliant** — sign-off is for Vectis's H&S people.
 - **Green throughout, not red** — first aid signage is green/white (ISO 7010); red means fire equipment.
 - **Site Plan** (\`/tools/site-plan\`) — the building drawing, uploaded once, that any app pins equipment onto. First Aid pins its kits; fire equipment can follow without a second copy. Pins are percentages of the image; images only, never PDFs.
@@ -5429,7 +5431,7 @@ Access to an app area is decided by hasAppAccess(role, allowedApps, appKey) in l
 
 TRAP (bug fixed 2026-06-17): the 4 cataloguing auction pages hard-coded if (!["ADMIN","CATALOGUER"].includes(role)) redirect("/submissions"). A Manager (custom role) granted the Cataloguing app saw the hub card and passed the layout, but the page-level role list bounced them to /submissions ("the CRM"). Fix: removed those redundant page gates — the layout's hasAppAccess is the single gate. Never gate app pages with hard-coded role-string lists; roles are free-form, so a role list locks out custom roles that were granted the app.
 
-Server actions/API routes have no layout, so they must self-check the grant. lib/actions/catalogue.ts requireCataloguer() was broadened too (ADMIN/CATALOGUER, or any role with CATALOGUING in allowedApps), else a Manager could view cataloguing but got "Access denied" creating/editing lots. Audit 2026-06-17: all other role !== "ADMIN" gates are legitimately admin-only (Admin pages, Accounts, Job Board, role-defaults, backups, devices); follow-ups excluding CATALOGUER is intentional.
+Server actions/API routes have no layout, so they must self-check the grant. lib/actions/catalogue.ts requireCataloguer() was broadened too (ADMIN/CATALOGUER, or any role with CATALOGUING in allowedApps), else a Manager could view cataloguing but got "Access denied" creating/editing lots. Audit 2026-06-17: all other role !== "ADMIN" gates are legitimately admin-only (Admin pages, Accounts, Job Board, role-defaults, backups, devices); follow-ups excluding CATALOGUER is intentional. Missed by that audit, fixed 2026-09-14: deleteSubmission allowed only the ADMIN/COLLECTIONS roles while /submissions shows Delete to anyone granted the CRM app, so the button silently did nothing for them — the action now checks the page's exact rule and returns {ok,error}. When a page shows a button under one rule, its action must check the SAME rule.
 
 Admin-only cards vs grantable apps (2026-07-15): a card in APP_CARD_DEFS with NO appKey is admin-only — the hub renders it only for ADMIN and it gets NO tick box on the permissions page, because /admin/users/[id] and Roles & Defaults build their list from ALL_APPS filtered by an appKey→group map derived from the cards. So "an app is missing from permissions" almost always means "that card has no appKey", not a rendering bug. To make one grantable: add the key to AppKey + ALL_APPS in lib/apps.ts, set appKey on the card, switch its page + API gates to hasAppAccess. Done for Admin Centre 2026-07-15 (appKey ADMIN_CENTRE; card key stays LOT_LOOKUP). Still deliberately admin-only with no toggle: Admin (role-driven) and Job Board. Note BC_API_VIEWER is a card that shares BC_WAREHOUSE's appKey — card key and appKey need not match.`,
   },
@@ -5631,7 +5633,7 @@ type: reference
 - [Access Log + /hub Bounce](reference_access_log.md) — /admin/access-log; 3 failure shapes
 - [Auction Manager ⭐ favourites](reference_auction_favourites.md) — per user, not a status
 - [Departments — sale access](reference_departments.md) — no department = sees everything (deliberate)
-- [Facilities → Site Plan + First Aid](reference_first_aid_public.md) — /first-aid is the ONE public page; exact-match allowlist; pins as percentages
+- [Facilities → Site Plan + First Aid](reference_first_aid_public.md) — /first-aid public by EXACT match (the customer photo link /submit/<code> is the only other public page, 2026-09-14); pins as percentages
 - [Facilities → Induction](reference_induction.md) — slides + signed forms on a tablet; signer has no account
 - [App Access Control](reference_app_access_control.md) — hasAppAccess + per-app layouts, not role lists; "app missing from permissions" = card has no appKey
 - [Data & Compliance page](reference_compliance_page.md) — /admin/compliance, a static data-protection note; keep its lists in step when an integration changes

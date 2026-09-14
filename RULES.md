@@ -47,8 +47,15 @@ the staff **Hub login**, same as the internal Hub. A logged-out visitor to any o
   until the customer site is launched. If/when it goes live to customers, that's a deliberate reversal
   to discuss, not a silent edit.
 - Applies to **both** staging and production (no env flag).
+- ⚠ **Exception — the customer PHOTO REQUEST LINK `/submit/<code>` is public again (Jordan, 2026-09-14).**
+  Staff send it to customers, and this gate had been asking them to sign in since 2026-07-09. It is
+  matched by a regex in `auth.config.ts` that allows exactly ONE path segment after `/submit/`, so
+  `/submit` itself (the customer site's web form) stays gated — and the valuation link `/value/<code>`
+  stays behind the login **by his choice** (it shows the customer's name and photos). The page checks
+  its code server-side (404 for a wrong one) and uploads through `/api/public`, which was already
+  public. ⚠ Never widen it to a `startsWith("/submit")` prefix, and don't open `/value` without asking.
 
-## Public First Aid page — the ONE deliberate exception (2026-08-11)
+## Public First Aid page — a deliberate exception (2026-08-11)
 
 `/first-aid` (Facilities → First Aid) is reachable **without logging in**, on purpose: anyone on
 site — agency staff, contractors, visitors, none of whom have a Hub account — must be able to find
@@ -866,7 +873,7 @@ If this tab genuinely needs to change, discuss it first and update this rule.
 - Token refresh buffer: **60 seconds** before expiry.
 - Per-page fetch timeout: **30 seconds**. Full fetch timeout: **45 seconds**.
 - Batch size: **500 items per page** (`$top=500`).
-- `getBCTokenAny()` picks any valid non-expired token for system/cron use (no user context needed).
+- `getBCTokenAny()` is the ONE background BC sign-in for system/cron use: the Hub user `BACKGROUND_BC_USERNAME` (Jordan's login) in `lib/bc.ts`, and **nobody else's** — Jordan's decision 2026-09-14, after the old "any stored token" pick (arbitrary, and it drifted) got a 403 on the change log on every run from 11 Sept while every other part of the copy worked. No fallback: if that sign-in lapses, the Status Centre's Business Central light goes red and names who must press the BC button. `getBCTokenForStatus()` must test the same person — keep the two in step.
 - `WarehouseItem.uniqueId` is the primary key for matching against `CatalogueLot.receiptUniqueId`.
 
 ### BC Field Name Reference — Auction/Sale Identifiers

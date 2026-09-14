@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
+import { hasAppAccess } from "@/lib/apps"
 import { SubmissionChannel, SubmissionStatus } from "@/app/generated/prisma/enums"
 
 async function findOrCreateContact(name: string, email: string | null, phone: string | null) {
@@ -225,14 +226,31 @@ export async function deleteSubmissionNote(noteId: string, submissionId: string)
   revalidatePath(`/submissions/${submissionId}`)
 }
 
-export async function deleteSubmission(submissionId: string) {
+export async function deleteSubmission(submissionId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth()
-  if (!session) throw new Error("Unauthorised")
-  if (session.user.role !== "ADMIN" && session.user.role !== "COLLECTIONS") {
-    throw new Error("Unauthorised")
+  if (!session) return { ok: false, error: "You're not signed in." }
+
+  // ⚠ The SAME rule as the Delete button on /submissions: anyone granted the CRM app (admins always)
+  // plus the legacy COLLECTIONS role. This used to allow only the ADMIN and COLLECTIONS roles, so
+  // anyone else granted the CRM app saw the button and pressing it did nothing (2026-09-14).
+  // RETURNS its failure rather than throwing — production hides a thrown message.
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true, allowedApps: true } })
+  if (!user || !(user.role === "COLLECTIONS" || hasAppAccess(user.role, user.allowedApps, "CRM"))) {
+    return { ok: false, error: "You don't have permission to delete submissions." }
   }
 
-  await prisma.submission.delete({ where: { id: submissionId } })
+  try {
+    await prisma.submission.delete({ where: { id: submissionId } })
+  } catch (e) {
+    const code = (e as { code?: string } | null)?.code
+    return {
+      ok: false,
+      error: code === "P2025"
+        ? "It has already been deleted — refresh the page."
+        : "The database refused the delete — try again, and tell IT if it keeps happening.",
+    }
+  }
 
   revalidatePath("/submissions")
+  return { ok: true }
 }
