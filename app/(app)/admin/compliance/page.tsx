@@ -12,7 +12,7 @@ export const metadata = { title: "Data & Compliance" }
 
 const STORES: { name: string; what: string }[] = [
   { name: "Neon (PostgreSQL)", what: "The main database — customer contacts & submissions, bidder registrations, staff accounts, catalogue lots, activity/monitoring logs, the accounting/reconciliation records, and a copy of the Business Central extension source code (vendor code — no personal data)." },
-  { name: "Cloudflare R2", what: "File storage — lot photos, uploaded documents, invoices, and the nightly database backups." },
+  { name: "Cloudflare R2", what: "File storage — lot photos, the photos and videos customers send through a submission's photo request link, uploaded documents, invoices, and the nightly database backups." },
   { name: "Railway", what: "Hosting — runs the app servers (production and staging). The database itself is on Neon, not Railway." },
   { name: "Induction signatures (Facilities → Induction)", what: "Signed induction and building-access forms. Each record holds a typed name, company, job title and (optionally) start date, a DRAWN SIGNATURE image, the wording the person agreed to, which points they ticked, any question they wrote, and which member of staff was signed in when it was taken. ⚠ The people signing are often NOT Hub users and may not be employees yet — new starters, agency staff and contractors from other Hambleton Group companies — so this holds personal data about people who have no account and no other footprint in the app. Readable only inside the Hub, under the Induction app permission; only an admin can delete a record. Keep for as long as the personnel file requires and no longer." },
   { name: "Accident reports (First Aid)", what: "Sent from the PUBLIC /first-aid page by anyone on site, with no login. Follows the statutory accident book (BI 510): the injured person's name, job and address, the same for whoever reported it, when and where it happened, how it happened and what the injury was — so it routinely contains health information about a named person. An employer-only section (date reported, who recorded it, whether it is RIDDOR-reportable) is added inside the Hub and never appears publicly. Kept for three years. A salted HASH of the sender's IP address is kept purely to rate-limit the form; the address itself is never stored. Readable only inside the Hub, under the First Aid app permission." },
@@ -151,7 +151,7 @@ export default async function CompliancePage() {
 
       <Section title="What personal data it holds">
         <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-          <li><strong>Customers:</strong> contacts (names, addresses, phone, email), submissions, buyer/seller details, and uploaded documents.</li>
+          <li><strong>Customers:</strong> contacts (names, addresses, phone, email), submissions, the photos and videos they send through a photo request link (a video can show someone&apos;s home or record voices), buyer/seller details, and uploaded documents.</li>
           <li><strong>Bidders:</strong> registration details tied to auctions.</li>
           <li><strong>Staff:</strong> accounts (name, email, username, hashed password, role) <em>and</em> monitoring data (see the next section).</li>
           <li><strong>Financial:</strong> bank/card statement reconciliation records in the Accounts tool.</li>

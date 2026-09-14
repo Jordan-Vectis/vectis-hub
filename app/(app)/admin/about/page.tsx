@@ -567,14 +567,14 @@ const APPS: App[] = [
         items: [
           "Filter by status, channel, department, name/reference search.",
           "Row shows: first 8 chars of reference, contact name, channel, item count, department, status badge, date.",
-          "Delete available to ADMIN and COLLECTIONS roles only.",
+          "Delete available to anyone granted the CRM app (admins always) plus the COLLECTIONS role — the button and the server action use the same rule.",
         ],
       },
       {
         label: "Data models",
         items: [
           "Submission: reference, channel, status, notes, followUpCount, lastFollowUpAt, contactId, departmentId, cataloguerId, createdById.",
-          "Item (SubmissionItem): name, description, imageUrls[], submissionId.",
+          "Item (SubmissionItem): name, description, imageUrls[] (R2 keys of the customer's photos AND videos — the file extension tells them apart, lib/media.ts), submissionId.",
           "Valuation: estimatedValue, comments, itemId (unique — one valuation per item), cataloguerId.",
           "ContactLog: method, notes, outcome, isFollowUp, submissionId, userId.",
           "Logistics: type (SENT_IN/COLLECTION), arrived (boolean), arrivedAt, collection address fields, submissionId (unique).",
@@ -588,7 +588,7 @@ const APPS: App[] = [
       "Status flow: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED/DECLINED → FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED.",
       "Logistics types: SENT_IN or COLLECTION.",
       "Contact channels: EMAIL, WEB_FORM, PHONE, WALK_IN.",
-      "ADMIN and COLLECTIONS can create/delete submissions. CATALOGUER can only add valuations.",
+      "Anyone signed in can create a submission; deleting needs the CRM app (or the COLLECTIONS role). CATALOGUER can only add valuations.",
     ],
   },
 

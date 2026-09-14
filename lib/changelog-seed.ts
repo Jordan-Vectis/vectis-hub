@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"d3e6077e4307d736273c72eb5feebb39240643cb","author":"Jordan Orange","date":"2026-09-14T10:22:40+01:00","subject":"Auto Pipeline: results table shows Key Points before Double Check"},
   {"sha":"f5af8b0cad129080f14bb332dba9ff90aef7a9bd","author":"Jordan Orange","date":"2026-09-14T10:06:07+01:00","subject":"Background BC work signs in with Jordan's login only"},
   {"sha":"70c02dbbaf2b5b344b192543480703f68c8336f9","author":"Jordan Orange","date":"2026-09-11T17:02:50+01:00","subject":"Memory: 2026-09-10/11 work in the opening message"},
   {"sha":"5485382f81279770d43b4a6af01db27fa58d0999","author":"Jordan Orange","date":"2026-09-11T12:47:47+01:00","subject":"Add Lot wizard (desktop): 50/50 split, long text cut to 3 lines, panel display-only"},

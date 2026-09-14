@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react"
 import ZoomableLightbox from "@/components/zoomable-lightbox"
+import { VideoModal, VideoThumb } from "@/components/video-modal"
+import { isVideoKey } from "@/lib/media"
 
 export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
   const [signedUrls, setSignedUrls] = useState<string[]>([])
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [video, setVideo] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
     if (imageUrls.length === 0) return
@@ -32,7 +35,10 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
       ) : (
         <div className="flex flex-wrap gap-2">
           {signedUrls.map((url, i) => (
-            isImage(imageUrls[i]) ? (
+            // Customer videos from the photo request link (2026-09-14) — the extension says which.
+            isVideoKey(imageUrls[i]) ? (
+              <VideoThumb key={i} url={url} title={fileName(imageUrls[i])} onClick={() => setVideo({ url, name: fileName(imageUrls[i]) })} />
+            ) : isImage(imageUrls[i]) ? (
               <img
                 key={i}
                 src={url}
@@ -61,6 +67,9 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
 
       {lightbox && (
         <ZoomableLightbox src={lightbox} onClose={() => setLightbox(null)} />
+      )}
+      {video && (
+        <VideoModal url={video.url} name={video.name} onClose={() => setVideo(null)} />
       )}
     </div>
   )

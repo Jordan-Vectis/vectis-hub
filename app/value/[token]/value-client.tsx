@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 import ZoomableLightbox from "@/components/zoomable-lightbox"
+import { VideoModal, VideoThumb } from "@/components/video-modal"
+import { isVideoUrl } from "@/lib/media"
 
 type Item = {
   id: string
@@ -38,6 +40,7 @@ export default function ValueClient({
   const [done, setDone] = useState(alreadySubmitted)
   const [error, setError] = useState("")
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [videoSrc, setVideoSrc] = useState<string | null>(null)
 
   function updateDraft(itemId: string, field: keyof ItemDraft, value: string) {
     setDrafts(d => ({ ...d, [itemId]: { ...d[itemId], [field]: value } }))
@@ -104,23 +107,27 @@ export default function ValueClient({
                 </div>
               </div>
 
-              {/* Photos */}
+              {/* Photos — and customer videos from the photo request link (2026-09-14) */}
               {item.signedPhotoUrls.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {item.signedPhotoUrls.map((url, pi) => (
-                    <button
-                      key={pi}
-                      onClick={() => setLightboxSrc(url)}
-                      className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors flex-shrink-0"
-                    >
-                      <img src={url} alt="" className="w-full h-full object-cover" />
-                    </button>
+                    isVideoUrl(url) ? (
+                      <VideoThumb key={pi} url={url} onClick={() => setVideoSrc(url)} />
+                    ) : (
+                      <button
+                        key={pi}
+                        onClick={() => setLightboxSrc(url)}
+                        className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors flex-shrink-0"
+                      >
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    )
                   ))}
                 </div>
               )}
 
               {item.signedPhotoUrls.length === 0 && (
-                <p className="text-sm text-gray-400 italic mb-4">No photos provided</p>
+                <p className="text-sm text-gray-400 italic mb-4">No photos or videos provided</p>
               )}
 
               {/* Estimate */}
@@ -187,6 +194,9 @@ export default function ValueClient({
       {/* Lightbox */}
       {lightboxSrc && (
         <ZoomableLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      )}
+      {videoSrc && (
+        <VideoModal url={videoSrc} onClose={() => setVideoSrc(null)} />
       )}
     </>
   )
