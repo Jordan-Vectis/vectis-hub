@@ -49,20 +49,42 @@ async function refreshBCToken(userId: string, refreshToken: string): Promise<str
   }
 }
 
-/** For cron jobs / system use — picks any valid token from the DB without requiring a session */
-export async function getBCTokenAny(): Promise<string | null> {
-  // Try a non-expired token first
-  const valid = await prisma.bCToken.findFirst({
-    where: { expiresAt: { gt: new Date(Date.now() + 60_000) } },
-  })
-  if (valid) return valid.accessToken
+/**
+ * Background BC work — the timed BC copy and its reconcile, the report caches, the cron jobs — signs
+ * in as this ONE person: the Hub user with this username (compared case-insensitively).
+ *
+ * ⚠⚠ Never go back to "any stored sign-in". There is no company BC account, and most staff's BC
+ * permissions don't cover everything the copy reads. Until 2026-09-14 this took an ARBITRARY stored
+ * sign-in (findFirst with no order, which drifts after every UPDATE); from Fri 11 Sept ~20:00 BC
+ * answered 403 to every read of the change log (the "Location changes" part of the copy) while every
+ * other part of the same run worked — the pattern of a sign-in without change-log permission.
+ * Jordan: "make it only use my login as most other people might not have permission". There is
+ * deliberately NO fallback to anyone else: if this sign-in lapses, the Status Centre's Business
+ * Central light goes red and names who must sign in, rather than the copy quietly running as
+ * someone whose permissions don't cover it. getBCTokenForStatus() tests the same person.
+ */
+export const BACKGROUND_BC_USERNAME = "jordan.orange"
 
-  // Try refreshing any token that has a refresh token
-  const any = await prisma.bCToken.findFirst({
-    where: { refreshToken: { not: "" } },
+/** The Hub user whose BC sign-in background work uses (BACKGROUND_BC_USERNAME), or null. */
+export async function getBackgroundBCUser(): Promise<{ id: string; name: string } | null> {
+  return prisma.user.findFirst({
+    where:  { username: { equals: BACKGROUND_BC_USERNAME, mode: "insensitive" } },
+    select: { id: true, name: true },
   })
-  if (!any) return null
-  return refreshBCToken(any.userId, any.refreshToken)
+}
+
+/** For cron jobs / system use — BACKGROUND_BC_USERNAME's sign-in, and nobody else's. */
+export async function getBCTokenAny(): Promise<string | null> {
+  const record = await prisma.bCToken.findFirst({
+    where: { user: { username: { equals: BACKGROUND_BC_USERNAME, mode: "insensitive" } } },
+  })
+  if (!record) return null
+
+  // Token still valid (with 60s buffer)
+  if (record.expiresAt.getTime() > Date.now() + 60_000) return record.accessToken
+
+  if (!record.refreshToken) return null
+  return refreshBCToken(record.userId, record.refreshToken)
 }
 
 export async function getBCToken(): Promise<string | null> {
@@ -421,17 +443,17 @@ export function pickBcContents(row: Record<string, unknown>): { value: string | 
 
 // ── Status Centre (🚦 /admin/status, 2026-09-10) ─────────────────────────────────────────────
 //
-// The Business Central light has to say WHOSE sign-in the background work is borrowing — there is
-// NO company-wide BC account, so "BC is fine" means little unless a person can be named — and a
-// status check must never write to the database. getBCTokenAny() can do neither, and is left alone
-// because every sync stage relies on it:
+// The Business Central light has to say WHOSE sign-in the background work uses — there is NO
+// company-wide BC account, so "BC is fine" means little unless a person can be named — and a status
+// check must never write to the database. getBCTokenAny() can do neither, and is left alone because
+// every sync stage relies on it:
 //   • it returns a bare string, so nothing can say whose key it was;
-//   • its refresh branch is findFirst with NO orderBy — Postgres's physical row order moves after
-//     every UPDATE, so the pick is arbitrary and drifts — and it tries that ONE row only;
 //   • refreshBCToken throws Microsoft's reason away (`if (!res.ok) return null`), so an expired
 //     app key, a withdrawn sign-in and a database fault all read as "not connected";
 //   • it WRITES the renewed key back. On a read-only database day (2026-09-09) that write fails,
 //     refreshBCToken returns null, and BC looks down when the fault is the database.
+// ⚠ Both use the SAME one person's sign-in (BACKGROUND_BC_USERNAME, 2026-09-14) — keep them in
+// step, or the light can be green on a sign-in the background work never uses.
 
 /** One stored sign-in Microsoft would not renew. Never carries message text — only a short code. */
 export interface BCRenewFailure {
@@ -445,13 +467,20 @@ export interface BCRenewFailure {
 }
 
 export type BCStatusToken =
-  | { ok: true; token: string; userId: string; renewed: boolean; failures: BCRenewFailure[] }
-  | { ok: false; reason: "no-sign-ins" | "none-renewable" | "not-configured" | "renewals-failed"; failures: BCRenewFailure[] }
+  | { ok: true; token: string; userId: string; name: string; renewed: boolean; renewable: boolean }
+  | {
+      ok: false
+      reason: "no-user" | "no-sign-in" | "none-renewable" | "not-configured" | "renewal-failed"
+      userId: string | null
+      name: string | null
+      /** Only when reason is "renewal-failed" — Microsoft's short code, never its message. */
+      failure?: BCRenewFailure
+    }
 
 // Entra error codes that mean the Hub's own app registration is at fault, not the person:
 // 7000222 secret expired · 7000215 wrong secret · 7000218 secret missing · 700016 app not in tenant ·
 // 90002 / 900023 tenant not found or malformed · 7000112 app disabled · 70011 the scope the Hub asks
-// for is invalid. Any of these would refuse every person alike, so trying the next one only adds calls.
+// for is invalid. Any of these would refuse every person alike — the fix is the Hub's, not the person's.
 const APP_KEY_CODES = new Set([7000222, 7000215, 7000218, 700016, 90002, 900023, 7000112, 70011])
 
 async function renewForStatus(
@@ -495,54 +524,41 @@ async function renewForStatus(
  * For the Status Centre ONLY: a BC key the way getBCTokenAny gets one, but it says whose it is and
  * NEVER writes to the database.
  *
- * 1. A key still valid for over a minute — what getBCTokenAny tries first, so no Microsoft call at
- *    all. The one expiring LAST (the most recently renewed) is taken, so the pick is stable and
- *    nameable rather than arbitrary.
- * 2. Otherwise renew one IN MEMORY, most recently renewed person first. A refused sign-in falls
- *    through to the next person (up to `maxTries`); an app-key refusal, an unreachable Microsoft
- *    or a 429 stops at once, because every other person would fail the same way and trying them
- *    all would only hammer the sign-in service.
+ * 1. That one person's key while it is still valid for over a minute — what getBCTokenAny tries
+ *    first, so no Microsoft call at all.
+ * 2. Otherwise renew it IN MEMORY. Only that person is ever tried, exactly as getBCTokenAny does
+ *    (BACKGROUND_BC_USERNAME), so the light tests the sign-in the background work really uses.
  *
  * ⚠ The renewed key is deliberately NOT saved. Microsoft does not withdraw a refresh token when it
  * is redeemed (it stays valid until its own expiry), so the stored key keeps working for the Hub's
  * real renewals, and a database refusing writes can't be mistaken for BC being down. The price is
- * one free sign-in call per check whenever nobody holds a live key (overnight).
+ * one free sign-in call per check whenever that person holds no live key (overnight).
  */
-export async function getBCTokenForStatus(
-  opts: { maxTries?: number; timeoutMs?: number } = {},
-): Promise<BCStatusToken> {
-  const maxTries  = Math.max(1, opts.maxTries ?? 3)
+export async function getBCTokenForStatus(opts: { timeoutMs?: number } = {}): Promise<BCStatusToken> {
   const timeoutMs = Math.min(15_000, opts.timeoutMs ?? 8_000)
 
-  const valid = await prisma.bCToken.findFirst({
-    where:   { expiresAt: { gt: new Date(Date.now() + 60_000) } },
-    orderBy: { expiresAt: "desc" },
-    select:  { userId: true, accessToken: true },
-  })
-  if (valid?.accessToken) return { ok: true, token: valid.accessToken, userId: valid.userId, renewed: false, failures: [] }
+  const user = await getBackgroundBCUser()
+  if (!user) return { ok: false, reason: "no-user", userId: null, name: null }
+  const base = { userId: user.id, name: user.name }
 
-  const rows = await prisma.bCToken.findMany({
-    where:   { refreshToken: { not: "" } },
-    orderBy: { updatedAt: "desc" },
-    take:    maxTries,
-    select:  { userId: true, refreshToken: true },
+  const row = await prisma.bCToken.findUnique({
+    where:  { userId: user.id },
+    select: { accessToken: true, refreshToken: true, expiresAt: true },
   })
-  if (!rows.length) {
-    const stored = await prisma.bCToken.count()
-    return { ok: false, reason: stored ? "none-renewable" : "no-sign-ins", failures: [] }
+  if (!row) return { ok: false, reason: "no-sign-in", ...base }
+
+  const renewable = !!row.refreshToken
+  if (row.accessToken && row.expiresAt.getTime() > Date.now() + 60_000) {
+    return { ok: true, token: row.accessToken, renewed: false, renewable, ...base }
   }
+  if (!renewable) return { ok: false, reason: "none-renewable", ...base }
 
   const tenant = process.env.BC_TENANT_ID, clientId = process.env.BC_CLIENT_ID, clientSecret = process.env.BC_CLIENT_SECRET
-  if (!tenant || !clientId || !clientSecret) return { ok: false, reason: "not-configured", failures: [] }
+  if (!tenant || !clientId || !clientSecret) return { ok: false, reason: "not-configured", ...base }
 
-  const failures: BCRenewFailure[] = []
-  for (const row of rows) {
-    const r = await renewForStatus(tenant, clientId, clientSecret, row.refreshToken, timeoutMs)
-    if (r.ok) return { ok: true, token: r.token, userId: row.userId, renewed: true, failures }
-    failures.push({ userId: row.userId, kind: r.kind, code: r.code })
-    if (r.kind !== "refused") break
-  }
-  return { ok: false, reason: "renewals-failed", failures }
+  const r = await renewForStatus(tenant, clientId, clientSecret, row.refreshToken, timeoutMs)
+  if (r.ok) return { ok: true, token: r.token, renewed: true, renewable: true, ...base }
+  return { ok: false, reason: "renewal-failed", failure: { userId: user.id, kind: r.kind, code: r.code }, ...base }
 }
 
 /** The ODataV4 address of one web service, e.g. bcODataUrl("Totes_Excel") — for a caller that needs

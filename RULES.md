@@ -866,7 +866,7 @@ If this tab genuinely needs to change, discuss it first and update this rule.
 - Token refresh buffer: **60 seconds** before expiry.
 - Per-page fetch timeout: **30 seconds**. Full fetch timeout: **45 seconds**.
 - Batch size: **500 items per page** (`$top=500`).
-- `getBCTokenAny()` picks any valid non-expired token for system/cron use (no user context needed).
+- `getBCTokenAny()` is the ONE background BC sign-in for system/cron use: the Hub user `BACKGROUND_BC_USERNAME` (Jordan's login) in `lib/bc.ts`, and **nobody else's** — Jordan's decision 2026-09-14, after the old "any stored token" pick (arbitrary, and it drifted) got a 403 on the change log on every run from 11 Sept while every other part of the copy worked. No fallback: if that sign-in lapses, the Status Centre's Business Central light goes red and names who must press the BC button. `getBCTokenForStatus()` must test the same person — keep the two in step.
 - `WarehouseItem.uniqueId` is the primary key for matching against `CatalogueLot.receiptUniqueId`.
 
 ### BC Field Name Reference — Auction/Sale Identifiers
