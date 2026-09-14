@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a6577674b9856881a6260b8f0d28c931a54f4312","author":"Jordan Orange","date":"2026-09-14T12:14:32+01:00","subject":"Merge staging into main: BC background login, pipeline column order, submissions delete + videos, public photo link"},
+  {"sha":"16513a9e89483a9a69b9af7393fa1245d42e2c6d","author":"Jordan Orange","date":"2026-09-14T12:05:09+01:00","subject":"Photo request link opens without a login again"},
   {"sha":"79bc05e3b6c1c6aa472d4a332bd9c1f7f2f3a548","author":"Jordan Orange","date":"2026-09-14T11:49:58+01:00","subject":"Submissions: delete works for anyone with the CRM app; photo link takes videos"},
   {"sha":"d3e6077e4307d736273c72eb5feebb39240643cb","author":"Jordan Orange","date":"2026-09-14T10:22:40+01:00","subject":"Auto Pipeline: results table shows Key Points before Double Check"},
   {"sha":"f5af8b0cad129080f14bb332dba9ff90aef7a9bd","author":"Jordan Orange","date":"2026-09-14T10:06:07+01:00","subject":"Background BC work signs in with Jordan's login only"},
