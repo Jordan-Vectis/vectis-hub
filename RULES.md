@@ -47,8 +47,15 @@ the staff **Hub login**, same as the internal Hub. A logged-out visitor to any o
   until the customer site is launched. If/when it goes live to customers, that's a deliberate reversal
   to discuss, not a silent edit.
 - Applies to **both** staging and production (no env flag).
+- ⚠ **Exception — the customer PHOTO REQUEST LINK `/submit/<code>` is public again (Jordan, 2026-09-14).**
+  Staff send it to customers, and this gate had been asking them to sign in since 2026-07-09. It is
+  matched by a regex in `auth.config.ts` that allows exactly ONE path segment after `/submit/`, so
+  `/submit` itself (the customer site's web form) stays gated — and the valuation link `/value/<code>`
+  stays behind the login **by his choice** (it shows the customer's name and photos). The page checks
+  its code server-side (404 for a wrong one) and uploads through `/api/public`, which was already
+  public. ⚠ Never widen it to a `startsWith("/submit")` prefix, and don't open `/value` without asking.
 
-## Public First Aid page — the ONE deliberate exception (2026-08-11)
+## Public First Aid page — a deliberate exception (2026-08-11)
 
 `/first-aid` (Facilities → First Aid) is reachable **without logging in**, on purpose: anyone on
 site — agency staff, contractors, visitors, none of whom have a Hub account — must be able to find

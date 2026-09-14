@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"79bc05e3b6c1c6aa472d4a332bd9c1f7f2f3a548","author":"Jordan Orange","date":"2026-09-14T11:49:58+01:00","subject":"Submissions: delete works for anyone with the CRM app; photo link takes videos"},
   {"sha":"d3e6077e4307d736273c72eb5feebb39240643cb","author":"Jordan Orange","date":"2026-09-14T10:22:40+01:00","subject":"Auto Pipeline: results table shows Key Points before Double Check"},
   {"sha":"f5af8b0cad129080f14bb332dba9ff90aef7a9bd","author":"Jordan Orange","date":"2026-09-14T10:06:07+01:00","subject":"Background BC work signs in with Jordan's login only"},
   {"sha":"70c02dbbaf2b5b344b192543480703f68c8336f9","author":"Jordan Orange","date":"2026-09-11T17:02:50+01:00","subject":"Memory: 2026-09-10/11 work in the opening message"},

@@ -36,6 +36,14 @@ export const authConfig: NextAuthConfig = {
       const bare = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname
       if (publicExact.includes(bare)) return true
 
+      // Submissions → the customer PHOTO REQUEST LINK, /submit/<code>. Jordan, 2026-09-14: staff send
+      // it to customers, who were being asked to sign in — the 2026-07-09 gate above had swept it up
+      // with the customer site. ⚠ Exactly ONE segment after /submit/: /submit itself (the customer
+      // site's web form) stays gated, and so does the valuation link /value/<code>, by his choice.
+      // The page checks its code server-side (404 for a wrong one) and uploads through /api/public,
+      // which was already public. See RULES.md → "Public site is login-gated".
+      if (/^\/submit\/[A-Za-z0-9_-]+\/?$/.test(pathname)) return true
+
       if (!isLoggedIn) return false
       if (isLoggedIn && pathname === "/login") {
         return Response.redirect(new URL("/submissions", nextUrl))

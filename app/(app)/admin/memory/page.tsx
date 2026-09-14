@@ -1383,7 +1383,7 @@ WARNING: the server action was always correct — it writes only fields that dif
   {
     filename: "first_aid_public.md",
     content: `---
-name: Facilities -> First Aid (the ONE public page)
+name: Facilities -> First Aid (a public page, exact match)
 purpose: The public /first-aid page and its Hub app. The only route outside the login gate besides /login, /setup and the API relays - and the exact constraints that make that safe. Read before touching auth.config.ts publicPaths or anything under /first-aid.
 last_updated: 2026-08-11
 ---
@@ -4675,7 +4675,7 @@ DO NOT change the design or behaviour of the Location History tab in \`/tools/bc
 
 ### Facilities — First Aid + Site Plan (NEW 2026-08-11/12)
 
-**First Aid** (\`/tools/first-aid\`, app key \`FIRST_AID\`): emergency steps, first aiders, kit/defib/eyewash locations, and the accident book (statutory BI 510 layout — part 4 employer-only, in the Hub). **Its public page is \`/first-aid\`** — the ONE route outside the login gate, so anyone on site can use it without an account. ⚠ Everything shown there is world-readable; accident reports are readable ONLY in the Hub.
+**First Aid** (\`/tools/first-aid\`, app key \`FIRST_AID\`): emergency steps, first aiders, kit/defib/eyewash locations, and the accident book (statutory BI 510 layout — part 4 employer-only, in the Hub). **Its public page is \`/first-aid\`** — outside the login gate (exact match), so anyone on site can use it without an account; the only other page outside it is the customer photo request link /submit/<code> (reopened 2026-09-14 — the 9 July customer-site gate had been asking customers to sign in). ⚠ Everything shown there is world-readable; accident reports are readable ONLY in the Hub.
 
 **Site Plan** (\`/tools/site-plan\`, app key \`SITE_PLAN\`): the building drawing, uploaded once, that any app pins equipment onto. First Aid pins its kits; fire equipment etc. can follow without a second copy. Pins are PERCENTAGES of the image; images only, never PDFs.
 
@@ -5041,7 +5041,7 @@ Fixed a real data-integrity bug + reworked the cataloguing **lot wizard** openin
 
 ## Recent work (2026-08-11/12) — Facilities, First Aid, Site Plan — ON PRODUCTION (main = 17563e59)
 
-- **New Facilities home-page section.** **First Aid** (\`/tools/first-aid\`) — emergency steps, first aiders, kit/defib locations, and the accident book. Its **public page \`/first-aid\` is the ONE route outside the login gate**, so agency staff, contractors and visitors can use it with no account. Exact-match allowlist entry (never a prefix), top-level route, no public GET, one write-only report endpoint. ⚠ Everything on that page is world-readable.
+- **New Facilities home-page section.** **First Aid** (\`/tools/first-aid\`) — emergency steps, first aiders, kit/defib locations, and the accident book. Its **public page \`/first-aid\` is outside the login gate** (exact match), so agency staff, contractors and visitors can use it with no account. The only other page outside the gate is the customer photo request link /submit/<code> (reopened 2026-09-14). Exact-match allowlist entry (never a prefix), top-level route, no public GET, one write-only report endpoint. ⚠ Everything on that page is world-readable.
 - The report follows the **statutory accident book (BI 510)** — parts 1–3 public, **part 4 employer-only inside the Hub** (date reported, recorded by, RIDDOR, notes). ⚠ **NOT certified legally compliant** — sign-off is for Vectis's H&S people.
 - **Green throughout, not red** — first aid signage is green/white (ISO 7010); red means fire equipment.
 - **Site Plan** (\`/tools/site-plan\`) — the building drawing, uploaded once, that any app pins equipment onto. First Aid pins its kits; fire equipment can follow without a second copy. Pins are percentages of the image; images only, never PDFs.
@@ -5633,7 +5633,7 @@ type: reference
 - [Access Log + /hub Bounce](reference_access_log.md) — /admin/access-log; 3 failure shapes
 - [Auction Manager ⭐ favourites](reference_auction_favourites.md) — per user, not a status
 - [Departments — sale access](reference_departments.md) — no department = sees everything (deliberate)
-- [Facilities → Site Plan + First Aid](reference_first_aid_public.md) — /first-aid is the ONE public page; exact-match allowlist; pins as percentages
+- [Facilities → Site Plan + First Aid](reference_first_aid_public.md) — /first-aid public by EXACT match (the customer photo link /submit/<code> is the only other public page, 2026-09-14); pins as percentages
 - [Facilities → Induction](reference_induction.md) — slides + signed forms on a tablet; signer has no account
 - [App Access Control](reference_app_access_control.md) — hasAppAccess + per-app layouts, not role lists; "app missing from permissions" = card has no appKey
 - [Data & Compliance page](reference_compliance_page.md) — /admin/compliance, a static data-protection note; keep its lists in step when an integration changes
