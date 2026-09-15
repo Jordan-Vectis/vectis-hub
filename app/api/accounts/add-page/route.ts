@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
+import { uploadBufferToR2, getSignedViewUrl } from "@/lib/r2"
 
 export const maxDuration = 60
 
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     // Adding a page means the AI should read it again.
     await prisma.accountingDocument.update({ where: { id: docId }, data: { images, aiRun: false } })
 
-    const signed = await Promise.all(images.map((k) => getSignedImageUrl(k)))
+    const signed = await Promise.all(images.map((k) => getSignedViewUrl(k)))
     return NextResponse.json({ id: docId, images: signed })
   } catch (e: any) {
     console.error("accounts/add-page error:", e)

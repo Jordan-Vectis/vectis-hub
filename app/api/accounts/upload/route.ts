@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
+import { uploadBufferToR2, getSignedViewUrl } from "@/lib/r2"
 import { cleanCardholder } from "@/lib/accounting"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       data: { monthId, cardholder, source: "SCAN", images: [key], vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", aiRun: false },
     })
 
-    return NextResponse.json({ id: doc.id, images: [await getSignedImageUrl(key)] })
+    return NextResponse.json({ id: doc.id, images: [await getSignedViewUrl(key)] })
   } catch (e: any) {
     console.error("accounts/upload error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

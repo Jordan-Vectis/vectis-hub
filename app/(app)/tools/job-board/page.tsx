@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { getSignedImageUrl } from "@/lib/r2"
+import { getSignedViewUrl } from "@/lib/r2"
 import { cleanEmailHtml, htmlToText } from "@/lib/email-html"
 import BoardClient from "./board-client"
 
@@ -31,7 +31,7 @@ export default async function JobBoardPage() {
   const urlById = new Map<string, string>()
   await Promise.all(
     allAttachments.map(async (a) => {
-      try { urlById.set(a.id, await getSignedImageUrl(a.r2Key)) } catch { /* skip broken keys */ }
+      try { urlById.set(a.id, await getSignedViewUrl(a.r2Key)) } catch { /* skip broken keys */ }
     })
   )
   const toImage = (a: { id: string; filename: string }) => ({ id: a.id, filename: a.filename, url: urlById.get(a.id) ?? "" })

@@ -1,31 +1,47 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { isVideoKey } from "@/lib/media"
+import { isVideoKey, needsJpegCopy } from "@/lib/media"
 
 type Item = { id: string; name: string }
+type Kind = "photo" | "video" | "file"
 type UploadFile = {
   file: File
   preview: string
-  isVideo: boolean
+  kind: Kind
   key: string | null
   uploading: boolean
-  progress: number   // 0–100, from the upload itself — a video can take minutes on mobile data
+  progress: number    // 0–100, from the upload itself — a video can take minutes on mobile data
   error?: string
+  noPreview?: boolean // this device can't draw it (a camera RAW, say) — it still uploads fine
 }
 type Step = "intro" | number | "send" | "done"
 
-/** "3 photos and 1 video" */
-function describe(photos: number, videos: number): string {
+/** What a picked file is. Customers send all sorts (2026-09-15) — photos in any format, videos, the odd PDF. */
+function kindOf(file: File): Kind {
+  const name = file.name || ""
+  if (file.type.startsWith("video/") || isVideoKey(name)) return "video"
+  if (file.type.startsWith("image/") || needsJpegCopy(name) || /\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(name)) return "photo"
+  return "file"
+}
+
+/** "3 photos, 1 video and 1 file" */
+function describe(photos: number, videos: number, files: number): string {
   const parts: string[] = []
   if (photos) parts.push(`${photos} photo${photos !== 1 ? "s" : ""}`)
   if (videos) parts.push(`${videos} video${videos !== 1 ? "s" : ""}`)
-  return parts.join(" and ")
+  if (files)  parts.push(`${files} file${files !== 1 ? "s" : ""}`)
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts.join("")
 }
 
 function countReady(list: UploadFile[]) {
   const ready = list.filter(u => u.key)
-  return { photos: ready.filter(u => !u.isVideo).length, videos: ready.filter(u => u.isVideo).length, total: ready.length }
+  return {
+    photos: ready.filter(u => u.kind === "photo").length,
+    videos: ready.filter(u => u.kind === "video").length,
+    files:  ready.filter(u => u.kind === "file").length,
+    total:  ready.length,
+  }
 }
 
 /** PUT straight to storage with a real percentage. ⚠ A refused upload REJECTS — the old fetch
@@ -61,11 +77,15 @@ export default function UploadClient({ token, items }: { token: string; items: I
     setUploads(u => ({ ...u, [itemId]: fn(u[itemId] ?? []) }))
   }
 
+  function patchFile(itemId: string, preview: string, p: Partial<UploadFile>) {
+    setItemUploads(itemId, prev => prev.map(x => x.preview === preview ? { ...x, ...p } : x))
+  }
+
   async function handleFiles(itemId: string, files: FileList) {
     const newFiles: UploadFile[] = Array.from(files).map(file => ({
       file,
       preview: URL.createObjectURL(file),
-      isVideo: file.type.startsWith("video/") || isVideoKey(file.name || ""),
+      kind: kindOf(file),
       key: null,
       uploading: true,
       progress: 0,
@@ -73,10 +93,8 @@ export default function UploadClient({ token, items }: { token: string; items: I
     setItemUploads(itemId, prev => [...prev, ...newFiles])
 
     for (const uf of newFiles) {
-      const patch = (p: Partial<UploadFile>) =>
-        setItemUploads(itemId, prev => prev.map(x => x.preview === uf.preview ? { ...x, ...p } : x))
       try {
-        const name = uf.file.name || (uf.isVideo ? "video.mp4" : "photo.jpg")
+        const name = uf.file.name || (uf.kind === "video" ? "video.mp4" : uf.kind === "photo" ? "photo.jpg" : "file")
         const res = await fetch(`/api/public/submission/${token}/upload-url`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -86,10 +104,10 @@ export default function UploadClient({ token, items }: { token: string; items: I
         if (!url) throw new Error(error ?? "Upload failed")
 
         // ⚠ Send the type the server signed, not the file's own — a mismatch is refused.
-        await putWithProgress(url, uf.file, contentType || uf.file.type || "image/jpeg", pct => patch({ progress: pct }))
-        patch({ key, uploading: false, progress: 100 })
+        await putWithProgress(url, uf.file, contentType || uf.file.type || "image/jpeg", pct => patchFile(itemId, uf.preview, { progress: pct }))
+        patchFile(itemId, uf.preview, { key, uploading: false, progress: 100 })
       } catch {
-        patch({ uploading: false, error: "Failed — please try again" })
+        patchFile(itemId, uf.preview, { uploading: false, error: "Failed — please try again" })
       }
     }
   }
@@ -140,7 +158,7 @@ export default function UploadClient({ token, items }: { token: string; items: I
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">Thank you!</h2>
           <p className="text-gray-600 text-base leading-relaxed mb-2">
-            We have received your {describe(totals.photos, totals.videos)}.
+            We have received your {describe(totals.photos, totals.videos, totals.files)}.
           </p>
           <p className="text-gray-500 text-base leading-relaxed">
             We will be in touch soon.
@@ -175,13 +193,13 @@ export default function UploadClient({ token, items }: { token: string; items: I
             <div className="flex items-start gap-3">
               <span className="text-xl flex-shrink-0">🎥</span>
               <p className="text-gray-600 text-sm leading-relaxed">
-                You can send short videos too.
+                You can send short videos too — and a PDF, if you have one.
               </p>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-xl flex-shrink-0">🔒</span>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Your photos and videos are sent securely and only seen by the Vectis team.
+                Everything you send goes securely and is only seen by the Vectis team.
               </p>
             </div>
           </div>
@@ -264,7 +282,7 @@ export default function UploadClient({ token, items }: { token: string; items: I
             <input
               ref={el => { galleryRefs.current[item.id] = el }}
               type="file"
-              accept="image/*,video/*"
+              accept="image/*,video/*,application/pdf"
               multiple
               className="hidden"
               onChange={e => { if (e.target.files?.length) handleFiles(item.id, e.target.files); e.target.value = "" }}
@@ -277,18 +295,24 @@ export default function UploadClient({ token, items }: { token: string; items: I
               <p className="text-sm font-semibold text-gray-600 mb-2">
                 {ready.total === 0
                   ? (isUploading ? "Uploading…" : "Nothing added yet")
-                  : `${describe(ready.photos, ready.videos)} added${isUploading ? " — still uploading…" : " — ready ✓"}`}
+                  : `${describe(ready.photos, ready.videos, ready.files)} added${isUploading ? " — still uploading…" : " — ready ✓"}`}
               </p>
               <div className="flex flex-wrap gap-2">
                 {itemUploads.map((u, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-gray-100 bg-gray-900">
-                    {u.isVideo ? (
+                    {u.kind === "video" ? (
                       <>
                         <video src={`${u.preview}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-cover" />
                         <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] font-bold px-1 rounded">🎥 Video</span>
                       </>
+                    ) : u.kind === "file" || u.noPreview ? (
+                      // A PDF, or a photo this phone can't draw (a camera RAW) — it still sends fine.
+                      <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gray-100 text-gray-600 p-1">
+                        <span className="text-2xl">{u.kind === "file" ? "📄" : "📷"}</span>
+                        <span className="text-[9px] leading-tight text-center break-all line-clamp-2">{u.file.name || (u.kind === "file" ? "File" : "Photo")}</span>
+                      </span>
                     ) : (
-                      <img src={u.preview} alt="" className="w-full h-full object-cover" />
+                      <img src={u.preview} alt="" onError={() => patchFile(item.id, u.preview, { noPreview: true })} className="w-full h-full object-cover" />
                     )}
                     {u.uploading && (
                       <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1">
@@ -365,7 +389,7 @@ export default function UploadClient({ token, items }: { token: string; items: I
               <div key={item.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                 <span className="text-gray-800 font-medium text-sm">{items.length > 1 ? `Item ${i + 1}` : "Your item"}</span>
                 <span className={`text-sm font-semibold ${c.total > 0 ? "text-green-600" : "text-gray-400"}`}>
-                  {c.total > 0 ? `${describe(c.photos, c.videos)} ✓` : "Nothing added"}
+                  {c.total > 0 ? `${describe(c.photos, c.videos, c.files)} ✓` : "Nothing added"}
                 </span>
               </div>
             )
@@ -382,7 +406,7 @@ export default function UploadClient({ token, items }: { token: string; items: I
         {totals.total > 0 && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <p className="text-green-800 text-sm font-semibold">
-              {describe(totals.photos, totals.videos)} ready to send
+              {describe(totals.photos, totals.videos, totals.files)} ready to send
             </p>
           </div>
         )}

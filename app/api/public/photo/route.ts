@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { r2 } from "@/lib/r2"
 import { GetObjectCommand } from "@aws-sdk/client-s3"
+import { needsJpegCopy } from "@/lib/media"
+import { ensureJpegCopy } from "@/lib/media-convert"
 
 // Public (no auth) proxy for lot photos — only serves lot-photos/ keys
 export async function GET(req: NextRequest) {
@@ -16,9 +18,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // iPhone HEIC, scanner TIFF and camera RAW: send the JPEG copy instead — most browsers can't show
+    // the original, and anyone may open the public pages on any device (lib/media-convert.ts).
+    let servedKey = key
+    if (needsJpegCopy(key)) {
+      try { servedKey = await ensureJpegCopy(key) } catch { /* can't convert — send the original, as before */ }
+    }
     const obj = await r2.send(new GetObjectCommand({
       Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
-      Key: key,
+      Key: servedKey,
     }))
 
     const body = obj.Body as ReadableStream | null

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { convertInBackground } from "@/lib/media-convert"
 
 const CLOSED_STATUSES = ["COMPLETED", "DECLINED"]
 
@@ -31,6 +32,10 @@ export async function POST(
       where: { id: itemId },
       data:  { imageUrls: [...item.imageUrls, ...validKeys] },
     })
+
+    // Photos a browser can't show (iPhone HEIC, TIFF, camera RAW) and videos it may not play — make
+    // their copies now, in the background, so staff opening the submission don't wait.
+    convertInBackground(validKeys)
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {

@@ -418,8 +418,6 @@ export default function WebsiteSearchButton({ tablet = false, standalone = false
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <div className="col-span-2"><label className={label} htmlFor="ws-sale">Sale — name or code</label>
-          <input id="ws-sale" value={f.sale} onChange={e => set("sale", e.target.value)} placeholder="e.g. F111 or Teddy Bear" className={input} /></div>
         <div><label className={label} htmlFor="ws-yfrom">From year</label>
           <select id="ws-yfrom" value={f.yfrom} onChange={e => set("yfrom", e.target.value)} className={input}>
             <option value="">Any</option>{YEARS.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
@@ -478,6 +476,9 @@ export default function WebsiteSearchButton({ tablet = false, standalone = false
           </>} />
         <Tick on={f.photo} onClick={() => set("photo", !f.photo)}>Only lots with a photo</Tick>
       </div>
+      {/* The sale filter is the LAST filter on every device (Jordan, 2026-09-15). */}
+      <div><label className={label} htmlFor="ws-sale">Sale — name or code</label>
+        <input id="ws-sale" value={f.sale} onChange={e => set("sale", e.target.value)} placeholder="e.g. F111 or Teddy Bear" className={input} /></div>
       <p className="text-xs leading-relaxed text-gray-500">
         Hammer and sold/unsold leave out Hub lots (not sold yet); a category leaves out ABC lots (they have none).
         Every word you type must appear in the lot&apos;s description (or its ID). Accents, capitals and punctuation
@@ -498,9 +499,10 @@ export default function WebsiteSearchButton({ tablet = false, standalone = false
         type="button"
         onClick={() => { setMounted(true); setOpen(true); setTimeout(() => qRef.current?.focus(), 50) }}
         style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
-        className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"}`}
+        className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${tablet ? "min-h-[44px] px-3 sm:px-4 py-2 text-sm" : "px-3 py-1 text-xs"}`}
       >
-        🔎 Website Search
+        {/* Short on a phone, where the three tools share one row (2026-09-15) */}
+        🔎 <span className="sm:hidden">Search</span><span className="hidden sm:inline">Website Search</span>
       </button>}
 
       {/* On its own page it fills the Hub's content area under the top bar; from the tablet button it

@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react"
 
 // Customer videos from a Submission's photo request link (2026-09-14). A small tile that shows the
-// video's first frame with a play badge, and a pop-up player. ⚠ iPhones record HEVC .mov by default,
-// which Chrome on Windows may not play — so the pop-up always offers the file itself as well.
+// video's first frame with a play badge, and a pop-up player. A video browsers can't play gets a
+// converted copy in the background (lib/video-convert.ts, 2026-09-15); until it's ready, and for any
+// that can't be converted, the pop-up offers the file itself as well.
 
-/** A 5rem square tile with the first frame and a ▶ badge. */
-export function VideoThumb({ url, title, onClick }: { url: string; title?: string; onClick: () => void }) {
+/** A 5rem square tile with the first frame, a ▶ badge and an optional status badge. */
+export function VideoThumb({ url, title, badge, onClick }: { url: string; title?: string; badge?: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -21,12 +22,16 @@ export function VideoThumb({ url, title, onClick }: { url: string; title?: strin
         <span className="w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center text-sm">▶</span>
       </span>
       <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-semibold px-1 rounded">Video</span>
+      {badge && (
+        <span className="absolute top-1 right-1 bg-amber-500 text-black text-[9px] font-bold px-1 rounded">{badge}</span>
+      )}
     </button>
   )
 }
 
-/** Full-screen player. Click outside the video or press Esc to close. */
-export function VideoModal({ url, name, onClose }: { url: string; name?: string; onClose: () => void }) {
+/** Full-screen player. Click outside the video or press Esc to close. `note` explains a video that
+ *  is still being converted, or couldn't be. */
+export function VideoModal({ url, name, note, onClose }: { url: string; name?: string; note?: string; onClose: () => void }) {
   const [cantPlay, setCantPlay] = useState(false)
 
   useEffect(() => {
@@ -46,10 +51,10 @@ export function VideoModal({ url, name, onClose }: { url: string; name?: string;
           onError={() => setCantPlay(true)}
           className="max-h-[75vh] max-w-full rounded-lg bg-black"
         />
-        {cantPlay && (
+        {note && <p className="text-amber-300 text-sm text-center max-w-lg">{note}</p>}
+        {cantPlay && !note && (
           <p className="text-amber-300 text-sm text-center max-w-lg">
-            This browser can&apos;t play this video&apos;s format — iPhone videos often need Safari or the Photos app.
-            Open the file below instead.
+            This browser can&apos;t play this video&apos;s format. Open the file below instead.
           </p>
         )}
         <div className="flex flex-wrap items-center justify-center gap-3">

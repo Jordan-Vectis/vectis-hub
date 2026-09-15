@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, HeadObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import { isVideoKey, jpegCopyKey, mediaViewUrl, needsJpegCopy, videoCopyKey } from "@/lib/media"
 
 export const r2 = new S3Client({
   region: "auto",
@@ -62,6 +63,22 @@ export async function getSignedImageUrl(key: string, expiresIn = 3600): Promise<
     Key: key,
   })
   return getSignedUrl(r2, command, { expiresIn })
+}
+
+/** A link a browser can SHOW or PLAY. An image it can't display by itself (iPhone HEIC, scanner TIFF,
+ *  camera RAW) goes to its JPEG copy — or, when there isn't one yet, to /api/media/view, which makes
+ *  it on first load; a video goes to its converted copy when one exists (lib/media-convert.ts,
+ *  lib/video-convert.ts). For the original file itself — downloads, exports — use getSignedImageUrl. */
+export async function getSignedViewUrl(key: string, expiresIn = 3600): Promise<string> {
+  if (needsJpegCopy(key)) {
+    const copy = jpegCopyKey(key)
+    return (await objectExistsInR2(copy)) ? getSignedImageUrl(copy, expiresIn) : mediaViewUrl(key)
+  }
+  if (isVideoKey(key)) {
+    const copy = videoCopyKey(key)
+    if (await objectExistsInR2(copy)) return getSignedImageUrl(copy, expiresIn)
+  }
+  return getSignedImageUrl(key, expiresIn)
 }
 
 // Does an object exist in THIS environment's bucket? Used by the Accounts

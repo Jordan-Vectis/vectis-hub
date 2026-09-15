@@ -88,10 +88,11 @@ export default function CataloguingGuideButton({
         onClick={show}
         style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
         className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${
-          tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"
+          tablet ? "min-h-[44px] px-3 sm:px-4 py-2 text-sm" : "px-3 py-1 text-xs"
         }`}
       >
-        ❓ Guide / Help
+        {/* Short on a phone, where the three tools share one row (2026-09-15) */}
+        ❓ <span className="sm:hidden">Help</span><span className="hidden sm:inline">Guide / Help</span>
       </button>
 
       {open && (

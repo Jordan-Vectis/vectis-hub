@@ -115,22 +115,27 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
         <AnnouncementBanner />
       </div>
 
-      {/* Header bar */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+      {/* Header bar. ⚠ On a phone it is TWO rows — the sale, the lot count and the light/dark switch
+          on top, the three tools on a full-width row underneath — or it all overlaps (Jordan,
+          2026-09-15). From `sm` up it's the one row it always was. */}
+      <div className="flex-shrink-0 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
         <button
           onClick={() => router.push("/tools/cataloguing/tablet/auctions")}
-          className="text-[#2AB4A6] text-lg font-medium p-2 -ml-2"
+          aria-label="Back to the sales"
+          className="text-[#2AB4A6] text-lg font-medium min-w-[44px] min-h-[44px] -ml-2 flex items-center justify-center"
           style={{ touchAction: "manipulation" }}
         >
           ←
         </button>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 truncate">
           <span className="font-mono font-bold text-[#2AB4A6] text-lg">{auction.code}</span>
-          <span className="text-gray-600 dark:text-gray-400 text-base ml-2 truncate">{auction.name}</span>
+          <span className="text-gray-600 dark:text-gray-400 text-base ml-2">{auction.name}</span>
         </div>
-        <WebsiteSearchButton tablet />
-        <LensButton tablet />
-        <CataloguingGuideButton tablet currentTab={tab} />
+        <div className="order-last flex w-full items-center gap-2 sm:order-none sm:w-auto">
+          <WebsiteSearchButton tablet />
+          <LensButton tablet />
+          <CataloguingGuideButton tablet currentTab={tab} />
+        </div>
         <span className="text-sm text-gray-500 flex-shrink-0">{lots.length} lots</span>
         {/* Light/dark, top right (Jordan, 2026-09-11) — this overlay covers the Hub's top bar and
             its switch. The same saved setting, so both always agree. ⚠ Everything on this screen
@@ -150,7 +155,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
             key={t.id}
             onClick={() => { setTab(t.id); setEditingLotId(null) }}
             style={{ touchAction: "manipulation" }}
-            className={`flex-1 py-5 text-base font-semibold border-b-2 transition-colors ${
+            className={`flex-1 px-1 py-4 sm:py-5 text-sm sm:text-base leading-tight font-semibold border-b-2 transition-colors ${
               tab === t.id
                 ? "border-[#2AB4A6] text-[#2AB4A6]"
                 : "border-transparent text-gray-500"
