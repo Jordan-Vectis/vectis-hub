@@ -455,6 +455,15 @@ F126 478/498, F127 480/492, F134 194/252, F138 84/102.
 - \`CatalogueLot.addedToBC\` (per-lot) is a different field and is untouched — it still drives
   Manage Lots' BC column and the "Mark added to BC" bulk action.
 
+## The other two ticks went the same way (2026-09-15)
+
+Jordan: *"remove the photography tick as it's redundant now we have the counter, and change the ran through AI to also be a counter as the system checks if something has been ran through AI"*.
+
+- **Photography column REMOVED** from the Auction Manager table — "Lots with photos" (556/583) already says it. The \`photography\` tick itself still exists (Auction Settings, the sale-header badge, the Photography list, export, the overview PDF's "Photo" flag) — only the table column went.
+- **"Ran through AI" is now measured**: \`AiCount\` = lots with \`aiUpgraded\` (set by every AI apply path — batch, pipeline, runs/apply, upgrade) over the lots **eligible** for AI. ⚠ Lots with \`aiExcluded\` (hand-written) come off BOTH sides (numerator is \`aiUpgraded AND NOT aiExcluded\`), because they were never meant to go through and a sale with seven of them must still be able to read as done; the tooltip names how many were left out. Two \`groupBy\`s on the list page beside the photo one. Green = all, grey = none yet, amber in between; "—" when every lot is excluded.
+- Status filters became **All / Not all lots photographed** and **All / Not all lots ran through AI**, count-based like In BC (a sale with no eligible lots is never "all done").
+- The \`aiRan\` tick survives untouched everywhere else (Auction Settings, badge, export, PDF) — same treatment as \`addedToBC\` before it: a note, not what the table reads.
+
 Related: [[reference_admin_centre]], [[reference_end_of_day_bc]], [[reference_manage_lots_bulk_undo]].
 `,
   },

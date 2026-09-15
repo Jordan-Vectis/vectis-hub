@@ -21,8 +21,12 @@ export type AuctionRow = {
   /** Lots whose BARCODE is in the synced BC data. Replaced the manual "Added to BC" tick —
    *  it is measured, not asserted. Reflects the last Data Sync, not BC live. */
   lotsInBC: number
-  photography: boolean
-  aiRan: boolean
+  /** Lots the AI has written a description for (`aiUpgraded`, set by every apply path) —
+   *  measured, like the photo and BC counts; it replaced the manual "Ran through AI" tick
+   *  (2026-09-15). The manual Photography tick went the same day: "Lots with photos" says it. */
+  lotsRanThroughAi: number
+  /** Lots deliberately excluded from AI (written by hand) — not expected to ever be run. */
+  lotsAiExcluded: number
   complete: boolean
   notes: string | null
   /** Starred by the person looking at the page — ⚠ per user, not a property of the sale. */
@@ -35,11 +39,14 @@ const STATUS_FILTERS = [
   { value: "!catalogued",  label: "Not catalogued" },
   { value: "inBC",         label: "All lots in BC" },
   { value: "!inBC",        label: "Not all lots in BC" },
-  { value: "photography",  label: "Photographed" },
-  { value: "!photography", label: "Not photographed" },
-  { value: "aiRan",        label: "Ran through AI" },
-  { value: "!aiRan",       label: "Not ran through AI" },
+  { value: "photos",       label: "All lots photographed" },
+  { value: "!photos",      label: "Not all lots photographed" },
+  { value: "ai",           label: "All lots ran through AI" },
+  { value: "!ai",          label: "Not all lots ran through AI" },
 ] as const
+
+/** Lots the AI is expected to write — the excluded ones are left out on both sides. */
+const aiEligible = (row: AuctionRow) => Math.max(0, row.lots - row.lotsAiExcluded)
 
 function matches(row: AuctionRow, search: string, type: string, status: string): boolean {
   if (search) {
@@ -50,11 +57,12 @@ function matches(row: AuctionRow, search: string, type: string, status: string):
   if (status !== "ALL") {
     const negate = status.startsWith("!")
     const key = negate ? status.slice(1) : status
-    // "In BC" is a count, not a flag — a sale counts as done only when EVERY lot is there,
-    // and a sale with no lots is not "all in BC" (nothing has happened to it yet).
-    const val = key === "inBC"
-      ? row.lots > 0 && row.lotsInBC >= row.lots
-      : !!row[key as keyof AuctionRow]
+    // The counted columns are counts, not flags — a sale counts as done only when EVERY lot is
+    // there, and a sale with no lots is not "all done" (nothing has happened to it yet).
+    const val = key === "inBC"   ? row.lots > 0 && row.lotsInBC >= row.lots
+              : key === "photos" ? row.lots > 0 && row.lotsWithPhotos >= row.lots
+              : key === "ai"     ? aiEligible(row) > 0 && row.lotsRanThroughAi >= aiEligible(row)
+              : !!row[key as keyof AuctionRow]
     if (negate ? val : !val) return false
   }
   return true
@@ -95,6 +103,30 @@ function BcCount({ inBC, lots }: { inBC: number; lots: number }) {
   )
 }
 
+/** "540/547" — how many of a sale's lots the AI has written. Same shape as the other two counts.
+ *  Lots excluded from AI come off the total, so a sale whose hand-written lots were never meant
+ *  to go through can still read as done — the tooltip says how many were left out. */
+function AiCount({ ran, excluded, lots }: { ran: number; excluded: number; lots: number }) {
+  const eligible = Math.max(0, lots - excluded)
+  if (lots === 0) return <span className="text-gray-600" title="No lots on this sale yet">—</span>
+  if (eligible === 0) return <span className="text-gray-600" title="Every lot on this sale is excluded from AI">—</span>
+  const done = ran >= eligible
+  const left = eligible - ran
+  const note = excluded ? ` (${excluded} excluded from AI, not counted)` : ""
+  return (
+    <span
+      className={done ? "text-green-600 dark:text-green-400 font-medium" : ran === 0 ? "text-gray-500" : "text-amber-600 dark:text-amber-400"}
+      title={done
+        ? `Every lot has been through the AI${note}`
+        : ran === 0
+          ? `No lot has been through the AI yet${note}`
+          : `${left} lot${left === 1 ? "" : "s"} not been through the AI${note}`}
+    >
+      {ran}/{eligible}
+    </span>
+  )
+}
+
 /** The star. Sized for a finger, not a mouse — this list is used on the shared iPads. */
 function FavouriteStar({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
@@ -131,8 +163,7 @@ function AuctionTable({ rows, isFav, onToggleFav }: {
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots with photos</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Marked catalogued — this also locks the sale for everyone except admins">Catalogued 🔒</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Lots whose barcode was found in BC, as at the last Data Sync">In BC</th>
-          <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Photography</th>
-          <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Ran through AI</th>
+          <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Lots the AI has written a description for; lots excluded from AI are left out of the total">Ran through AI</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
           <th className="px-4 py-3"></th>
         </tr>
@@ -173,13 +204,8 @@ function AuctionTable({ rows, isFav, onToggleFav }: {
             </td>
             {/* Measured, not ticked — see BcCount. */}
             <td className="px-4 py-3 text-center"><BcCount inBC={auction.lotsInBC} lots={auction.lots} /></td>
-            {(["photography", "aiRan"] as const).map(f => (
-              <td key={f} className="px-4 py-3 text-center">
-                {auction[f]
-                  ? <span className="text-green-400 font-bold">✓</span>
-                  : <span className="text-gray-600">—</span>}
-              </td>
-            ))}
+            {/* Measured too — see AiCount. */}
+            <td className="px-4 py-3 text-center"><AiCount ran={auction.lotsRanThroughAi} excluded={auction.lotsAiExcluded} lots={auction.lots} /></td>
             <td className="px-4 py-3 text-center">
               <CompleteToggle id={auction.id} complete={auction.complete} />
             </td>
