@@ -42,6 +42,27 @@ export default async function AuctionsPage() {
   })
   const withPhotos = new Map(photoCounts.map(g => [g.auctionId, g._count._all]))
 
+  // ── How many of each sale's lots have been through the AI ─────────────────────
+  // Measured, like the photo and BC counts — it replaced the manual "Ran through AI" tick on this
+  // table (Jordan, 2026-09-15: "the system checks if something has been ran through AI").
+  // `aiUpgraded` is set by every AI apply path (batch/pipeline/upgrade), so it is the record.
+  // ⚠ Lots EXCLUDED from AI (written by hand) are left out of the denominator: they were never
+  // meant to go through, so a sale with seven of them must still be able to read as done.
+  const [aiCounts, excludedCounts] = await Promise.all([
+    prisma.catalogueLot.groupBy({
+      by: ["auctionId"],
+      where: { auctionId: { in: auctions.map(a => a.id) }, aiUpgraded: true, aiExcluded: false },
+      _count: { _all: true },
+    }),
+    prisma.catalogueLot.groupBy({
+      by: ["auctionId"],
+      where: { auctionId: { in: auctions.map(a => a.id) }, aiExcluded: true },
+      _count: { _all: true },
+    }),
+  ])
+  const ranThroughAi = new Map(aiCounts.map(g => [g.auctionId, g._count._all]))
+  const aiExcluded   = new Map(excludedCounts.map(g => [g.auctionId, g._count._all]))
+
   // ── How many of each sale's lots are ACTUALLY in BC ──────────────────────────
   // ⚠⚠ BARCODE ONLY (RULES: never decide "is this in BC?" from receiptUniqueId — legacy
   // Hub-minted ids collide with BC's own numbering for other items). Matched against the
@@ -89,8 +110,8 @@ export default async function AuctionsPage() {
     lotsWithPhotos: withPhotos.get(a.id) ?? 0,
     catalogued: !!(a as any).catalogued,
     lotsInBC: inBC.get(a.id) ?? 0,
-    photography: !!(a as any).photography,
-    aiRan: !!(a as any).aiRan,
+    lotsRanThroughAi: ranThroughAi.get(a.id) ?? 0,
+    lotsAiExcluded: aiExcluded.get(a.id) ?? 0,
     complete: !!a.complete,
     notes: a.notes ?? null,
     favourite: favourites.has(a.id),

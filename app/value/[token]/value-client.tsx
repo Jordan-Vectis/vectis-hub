@@ -39,7 +39,8 @@ export default function ValueClient({
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(alreadySubmitted)
   const [error, setError] = useState("")
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  // The photo shown full screen, and the item's other photos so the viewer can step through them.
+  const [lightbox, setLightbox] = useState<{ src: string; list: string[] } | null>(null)
   const [videoSrc, setVideoSrc] = useState<string | null>(null)
 
   function updateDraft(itemId: string, field: keyof ItemDraft, value: string) {
@@ -116,7 +117,7 @@ export default function ValueClient({
                     ) : (
                       <button
                         key={pi}
-                        onClick={() => setLightboxSrc(url)}
+                        onClick={() => setLightbox({ src: url, list: item.signedPhotoUrls.filter(u => !isVideoUrl(u)) })}
                         className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors flex-shrink-0"
                       >
                         <img src={url} alt="" className="w-full h-full object-cover" />
@@ -192,8 +193,8 @@ export default function ValueClient({
       </div>
 
       {/* Lightbox */}
-      {lightboxSrc && (
-        <ZoomableLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      {lightbox && (
+        <ZoomableLightbox src={lightbox.src} images={lightbox.list} onClose={() => setLightbox(null)} />
       )}
       {videoSrc && (
         <VideoModal url={videoSrc} onClose={() => setVideoSrc(null)} />

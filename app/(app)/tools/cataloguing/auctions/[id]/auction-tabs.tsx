@@ -800,9 +800,8 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
           <span className="font-mono font-bold text-[#2AB4A6] flex-shrink-0">{auction.code}</span>
           <span className="text-gray-600 dark:text-gray-300 font-medium flex-shrink-0">{auction.name}</span>
           {auction.catalogued  && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300 flex-shrink-0">Catalogued</span>}
-          {auction.addedToBC   && <span className="text-xs px-2 py-0.5 rounded-full bg-orange-900/50 text-orange-300 flex-shrink-0">Added to BC</span>}
-          {auction.photography && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/50 text-purple-300 flex-shrink-0">Photography</span>}
-          {auction.aiRan       && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-300 flex-shrink-0">Ran through AI</span>}
+          {/* The Added to BC / Photography / Ran through AI badges went with their ticks (2026-09-15) —
+              a badge nobody can change would only ever show a stale value. Auction Manager counts them. */}
           {auction.complete    && <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-300 flex-shrink-0">Complete</span>}
           {published && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 flex-shrink-0">● Live on Site</span>}
         </div>
@@ -1233,10 +1232,10 @@ function SettingsTab({ auction, isAdmin, extraAccess, assignableUsers }: {
             // ⚠ Catalogued is the EDIT LOCK (2026-09-02) — say so on the tick itself, or it
             // reads as one more progress marker and someone locks a live sale by accident.
             ["catalogued",  "Catalogued 🔒", "Locks the sale: nobody but an admin can add, edit or delete its lots."],
-            ["addedToBC",   "Added to BC",   "A note only. The Auction Manager's In BC column is measured from the barcodes in the BC sync, not from this."],
-            ["photography", "Photography",   ""],
-            ["aiRan",       "Ran through AI", ""],
-            ["complete",    "Complete",      ""],
+            // ⚠ Added to BC, Photography and Ran through AI are NOT ticks any more (Jordan,
+            // 2026-09-15): the Auction Manager measures all three from the lots. updateAuction
+            // leaves those columns alone, so nothing here can wipe an old value.
+            ["complete",    "Complete",      "Moves the sale to the Completed list on Auction Manager."],
           ] as const).map(([f, label, hint]) => (
             <label key={f} className="flex items-center gap-2 cursor-pointer" title={hint || undefined}>
               <input type="checkbox" name={f} value="true"
@@ -1248,6 +1247,7 @@ function SettingsTab({ auction, isAdmin, extraAccess, assignableUsers }: {
         </div>
         <p className="text-xs text-amber-600 dark:text-amber-400/90 -mt-3">
           🔒 <strong>Catalogued</strong> locks the sale — only admins can change its lots after it is ticked.
+          Photos, BC and AI are counted from the lots on Auction Manager, so there is nothing to tick for them.
         </p>
 
         <div className="flex items-center gap-3 pt-2">

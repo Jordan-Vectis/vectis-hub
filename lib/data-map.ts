@@ -296,6 +296,8 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "JordanCarRecord", personal: "staff", what: "A service, MOT or repair record against one of those vehicles." },
       { model: "JordanDocFolder", what: "A folder in that user's personal document store." },
       { model: "JordanDocFile", personal: "staff", what: "A file in that personal store: name, size and type. The file itself is in R2." },
+      { model: "JordanMealProfile", personal: "staff", what: "One user's own body measurements, calorie and macro targets and food likes, for the personal meal planner." },
+      { model: "JordanMealPlan", personal: "staff", what: "A meal plan written for that profile: its recipes and its shopping list." },
       { model: "McocChampion", what: "A game roster entry for a personal hobby tool." },
       { model: "McocChampionProfile", what: "Reference notes for that game tool." },
       { model: "McocWarFight", what: "A saved fight layout in that game tool." },

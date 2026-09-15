@@ -244,7 +244,17 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
       )}
 
       {lightbox && (
-        <ZoomableLightbox src={lightbox} onClose={() => setLightbox(null)} />
+        // Every photo on this item, so the full-screen view can step through them (2026-09-15).
+        <ZoomableLightbox
+          src={lightbox}
+          images={(entries ?? []).flatMap(({ url }, i) => {
+            const key = imageUrls[i]
+            if (isVideoKey(key)) return []
+            if (needsJpegCopy(key)) return convState[i] === "failed" ? [] : [mediaViewUrl(key)]
+            return isImage(key) ? [url] : []
+          })}
+          onClose={() => setLightbox(null)}
+        />
       )}
       {video && (
         <VideoModal url={video.url} name={video.name} note={video.note} onClose={() => setVideo(null)} />

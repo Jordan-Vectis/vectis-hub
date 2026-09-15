@@ -61,6 +61,22 @@ export default async function SalesView() {
   }
   for (const [k, arr] of catMap) catMap.set(k, arr.sort((a, b) => b.count - a.count).slice(0, 3))
 
+  // "In BC" is MEASURED — lots whose BARCODE is in the synced BC data, the same query as the
+  // Auction Manager and the overview PDF. It replaced the "Added to BC" tick in the Completed
+  // table on 2026-09-15, when that tick came off Auction Settings. ⚠ Reflects the last Data
+  // Sync, not BC live. A failure leaves the column at 0 rather than taking the portal down.
+  let inBC = new Map<string, number>()
+  try {
+    const bcRows = await prisma.$queryRaw<{ auctionId: string; n: bigint }[]>`
+      SELECT l."auctionId" AS "auctionId", count(DISTINCT l.id) AS n
+      FROM "CatalogueLot" l
+      JOIN "WarehouseItem" w ON upper(w.barcode) = upper(l.barcode)
+      WHERE l."auctionId" = ANY(${auctions.map(a => a.id)}::text[])
+        AND l.barcode IS NOT NULL AND btrim(l.barcode) <> ''
+      GROUP BY l."auctionId"`
+    inBC = new Map(bcRows.map(r => [r.auctionId, Number(r.n)]))
+  } catch { /* the BC mirror is a convenience here */ }
+
   const rows: SaleRow[] = auctions.map(a => {
     const tim = timingMap.get(a.id)
     return {
@@ -71,7 +87,7 @@ export default async function SalesView() {
       auctionType: a.auctionType,
       hubLots:     a._count.lots,
       complete:    !!a.complete,
-      addedToBC:   !!a.addedToBC,
+      lotsInBC:    inBC.get(a.id) ?? 0,
       daily:       dailyMap.get(a.id) ?? [],
       avgDurationMs: tim?.avgMs ?? null,
       timedLots:   tim?.count ?? 0,

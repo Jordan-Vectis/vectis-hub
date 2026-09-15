@@ -16,7 +16,10 @@ export type LottingUpAuction = {
   code:        string
   name:        string
   auctionDate: string | null
-  addedToBC:   boolean
+  /** The edit lock — a catalogued sale takes lots only from an admin. ⚠ It used to send
+   *  addedToBC, which stopped being the lock on 2026-09-02 and stopped being a tick at all on
+   *  2026-09-15, so the page had been warning about the wrong thing. */
+  catalogued:  boolean
   lotCount:    number
 }
 
@@ -30,7 +33,7 @@ export async function GET() {
     const auctions = await prisma.catalogueAuction.findMany({
       where:   auctionWhere(access),
       select:  {
-        id: true, code: true, name: true, auctionDate: true, addedToBC: true,
+        id: true, code: true, name: true, auctionDate: true, catalogued: true,
         _count: { select: { lots: true } },
       },
       orderBy: { auctionDate: "desc" },
@@ -41,7 +44,7 @@ export async function GET() {
       code:        a.code,
       name:        a.name,
       auctionDate: a.auctionDate?.toISOString() ?? null,
-      addedToBC:   a.addedToBC,
+      catalogued:  a.catalogued,
       lotCount:    a._count.lots,
     }))
 

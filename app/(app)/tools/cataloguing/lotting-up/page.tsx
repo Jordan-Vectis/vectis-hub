@@ -370,9 +370,9 @@ function SaleTargetBar({ target, onChange }: {
         </div>
       </div>
 
-      {a?.addedToBC && (
+      {a?.catalogued && (
         <p className="text-xs text-amber-300 border-t border-gray-800 pt-2">
-          ⚠ {a.code.toUpperCase()} is marked <strong>Added to BC</strong> and is locked — only an admin can add lots to it.
+          ⚠ {a.code.toUpperCase()} is marked <strong>Catalogued 🔒</strong> and is locked — only an admin can add lots to it.
         </p>
       )}
     </div>

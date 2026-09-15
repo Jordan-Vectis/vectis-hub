@@ -2883,6 +2883,64 @@ model JordanDocFile {
   @@index([folderId])
 }
 
+// ─── JORDAN.SYS — meal planner (personal, /jordan) ───────────────────────────
+// One profile per person: their numbers (for the BMR), their targets and what
+// they like to eat. Plans hang off the profile. Every route behind isJordan().
+model JordanMealProfile {
+  id       String @id @default(cuid())
+  name     String // whose numbers these are — "Me", "Kate"
+  sex      String @default("male") // "male" | "female" — the BMR formula differs
+  age      Int?
+  // ⚠ Stored METRIC, entered in stone/pounds and feet/inches (Jordan's choice).
+  // Nullable: the targets can't be worked out until all four numbers are in,
+  // and a 0 must never be mistaken for "not filled in yet".
+  heightCm Float?
+  weightKg Float?
+  activity String @default("light") // sedentary | light | moderate | active | very
+
+  // Calories a day against maintenance: -500 = lose, 0 = maintain, +250 = gain.
+  goalDelta    Int  @default(-500)
+  // A daily target typed in by hand — wins over the calculation when set.
+  kcalOverride Int?
+  proteinPct   Int  @default(30)
+  carbsPct     Int  @default(40)
+  fatPct       Int  @default(30)
+  mealsPerDay  Int  @default(3)
+
+  likes    String @default("") @db.Text
+  dislikes String @default("") @db.Text // allergies and hates — the planner must never use these
+  notes    String @default("") @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plans JordanMealPlan[]
+}
+
+model JordanMealPlan {
+  id        String            @id @default(cuid())
+  profileId String
+  profile   JordanMealProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  title String @default("")
+  days  Int    @default(1)
+  // The targets the plan was written against, FROZEN — the profile can change afterwards
+  // and the plan must still explain itself.
+  targets  Json    @default("{}")
+  // { title, tips, days: [{ day, meals: [{ slot, name, prepMinutes, ingredients, method, kcal, protein, carbs, fat }] }] }
+  plan     Json    @default("{}")
+  // { groups: [{ name, items: [{ item, qty, done }] }] } — null until it has been made.
+  shopping Json?
+  brief    String  @default("") @db.Text // what was asked for this week, as typed
+  model    String  @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([createdAt])
+}
+
 // ─── Training → sign-off ─────────────────────────────────────────────────────
 // Signed at the end of a course, once every practice task has been passed.
 //
