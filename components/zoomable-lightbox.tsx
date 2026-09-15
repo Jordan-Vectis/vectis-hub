@@ -2,30 +2,65 @@
 
 import { useState, useRef, useEffect } from "react"
 
-// Full-screen image viewer with zoom + pan.
-// Desktop: scroll wheel to zoom, double-click to toggle zoom, drag to pan.
-// Touch: pinch to zoom, double-tap to toggle, one-finger drag to pan.
+// Full-screen image viewer with zoom + pan — and, when given the whole set in `images`, a way to step
+// through them without closing (Jordan, 2026-09-15).
+// Desktop: scroll wheel to zoom, double-click to toggle zoom, drag to pan; the ‹ › buttons or the ← →
+//          keys for the previous / next photo.
+// Touch:   pinch to zoom, double-tap to toggle, one-finger drag to pan; swipe left / right (when not
+//          zoomed in) for the next / previous photo.
 export default function ZoomableLightbox({
   src,
+  images,
   onClose,
 }: {
   src: string
+  /** Every photo in the set, in order, with `src` among them. Leave it out for a single photo. */
+  images?: string[]
   onClose: () => void
 }) {
+  const list = images && images.length > 1 && images.includes(src) ? images : null
+  // Follows the photo, not its position — if the set changes while open (a photo that couldn't be
+  // converted drops out), the one on screen stays on screen.
+  const [current, setCurrent] = useState(src)
+  const index = list ? Math.max(0, list.indexOf(current)) : 0
+  const shown = list ? list[index] : src
+
   const [scale, setScale] = useState(1)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const drag = useRef<{ x: number; y: number } | null>(null)
+  const swipe = useRef<{ x: number; y: number } | null>(null)
   const pinchDist = useRef<number | null>(null)
 
   const clamp = (s: number) => Math.min(Math.max(s, 1), 6)
   const reset = () => { setScale(1); setPos({ x: 0, y: 0 }) }
 
-  // Reset when the image changes
-  useEffect(() => { reset() }, [src])
+  /** Previous (-1) or next (+1), wrapping round at either end. */
+  const go = (step: number) => {
+    if (!list) return
+    setCurrent(list[(index + step + list.length) % list.length])
+  }
+  const goRef = useRef(go)
+  goRef.current = go
 
-  // ESC to close
+  // Back to fit-to-screen whenever the photo changes
+  useEffect(() => { reset() }, [shown])
+
+  // Fetch the photos either side, so the next one is already there when it's asked for.
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
+    if (!list) return
+    for (const u of [list[(index + 1) % list.length], list[(index - 1 + list.length) % list.length]]) {
+      const img = new Image()
+      img.src = u
+    }
+  }, [list, index])
+
+  // ESC to close, ← → to move between photos
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+      else if (e.key === "ArrowRight") goRef.current(1)
+      else if (e.key === "ArrowLeft") goRef.current(-1)
+    }
     window.addEventListener("keydown", h)
     return () => window.removeEventListener("keydown", h)
   }, [onClose])
@@ -52,9 +87,12 @@ export default function ZoomableLightbox({
     else setScale(2.5)
   }
 
-  // Pointer pan (mouse / pen / single touch)
+  // Pointer pan when zoomed in (mouse / pen / single touch); a swipe to change photo when not.
   function onPointerDown(e: React.PointerEvent) {
-    if (scale <= 1) return
+    if (scale <= 1) {
+      swipe.current = { x: e.clientX, y: e.clientY }
+      return
+    }
     drag.current = { x: e.clientX - pos.x, y: e.clientY - pos.y }
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }
@@ -62,11 +100,20 @@ export default function ZoomableLightbox({
     if (!drag.current) return
     setPos({ x: e.clientX - drag.current.x, y: e.clientY - drag.current.y })
   }
-  function onPointerUp() { drag.current = null }
+  function onPointerUp(e: React.PointerEvent) {
+    drag.current = null
+    const start = swipe.current
+    swipe.current = null
+    if (!start || scale > 1) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx < 0 ? 1 : -1)
+  }
 
   // Two-finger pinch zoom
   function onTouchMove(e: React.TouchEvent) {
     if (e.touches.length !== 2) return
+    swipe.current = null // a pinch is never a swipe
     const dx = e.touches[0].clientX - e.touches[1].clientX
     const dy = e.touches[0].clientY - e.touches[1].clientY
     const dist = Math.hypot(dx, dy)
@@ -78,6 +125,7 @@ export default function ZoomableLightbox({
   function onTouchEnd() { pinchDist.current = null }
 
   const btn = "w-9 h-9 flex items-center justify-center text-white text-xl rounded-full hover:bg-white/15 transition-colors"
+  const arrow = "absolute top-1/2 -translate-y-1/2 w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 text-white text-4xl leading-none transition-colors"
 
   return (
     <div
@@ -85,7 +133,7 @@ export default function ZoomableLightbox({
       onClick={onClose}
     >
       <img
-        src={src}
+        src={shown}
         alt=""
         draggable={false}
         onClick={(e) => e.stopPropagation()}
@@ -106,6 +154,19 @@ export default function ZoomableLightbox({
         }}
         className="object-contain rounded-lg"
       />
+
+      {list && (
+        <>
+          <button onClick={(e) => { e.stopPropagation(); go(-1) }} className={`${arrow} left-2 sm:left-4`} aria-label="Previous photo">‹</button>
+          <button onClick={(e) => { e.stopPropagation(); go(1) }} className={`${arrow} right-2 sm:right-4`} aria-label="Next photo">›</button>
+          <span
+            className="absolute top-5 left-1/2 -translate-x-1/2 bg-black/60 text-white text-sm rounded-full px-3 py-1 tabular-nums"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {index + 1} / {list.length}
+          </span>
+        </>
+      )}
 
       {/* Controls */}
       <div
