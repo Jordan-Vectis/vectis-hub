@@ -418,8 +418,6 @@ export default function WebsiteSearchButton({ tablet = false, standalone = false
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <div className="col-span-2"><label className={label} htmlFor="ws-sale">Sale — name or code</label>
-          <input id="ws-sale" value={f.sale} onChange={e => set("sale", e.target.value)} placeholder="e.g. F111 or Teddy Bear" className={input} /></div>
         <div><label className={label} htmlFor="ws-yfrom">From year</label>
           <select id="ws-yfrom" value={f.yfrom} onChange={e => set("yfrom", e.target.value)} className={input}>
             <option value="">Any</option>{YEARS.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
@@ -478,6 +476,9 @@ export default function WebsiteSearchButton({ tablet = false, standalone = false
           </>} />
         <Tick on={f.photo} onClick={() => set("photo", !f.photo)}>Only lots with a photo</Tick>
       </div>
+      {/* The sale filter is the LAST filter on every device (Jordan, 2026-09-15). */}
+      <div><label className={label} htmlFor="ws-sale">Sale — name or code</label>
+        <input id="ws-sale" value={f.sale} onChange={e => set("sale", e.target.value)} placeholder="e.g. F111 or Teddy Bear" className={input} /></div>
       <p className="text-xs leading-relaxed text-gray-500">
         Hammer and sold/unsold leave out Hub lots (not sold yet); a category leaves out ABC lots (they have none).
         Every word you type must appear in the lot&apos;s description (or its ID). Accents, capitals and punctuation
