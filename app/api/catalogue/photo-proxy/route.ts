@@ -3,6 +3,8 @@ import { auth } from "@/auth"
 import { isCronRequest } from "@/lib/cron-auth"
 import { r2 } from "@/lib/r2"
 import { GetObjectCommand } from "@aws-sdk/client-s3"
+import { needsJpegCopy } from "@/lib/media"
+import { ensureJpegCopy } from "@/lib/media-convert"
 
 // Streams a lot photo out of R2 behind the login.
 //
@@ -18,9 +20,17 @@ export async function GET(req: NextRequest) {
     const key = req.nextUrl.searchParams.get("key")
     if (!key) return new NextResponse("Missing key", { status: 400 })
 
+    // iPhone HEIC, scanner TIFF and camera RAW (an Induction slide image, say): a person's browser gets
+    // the JPEG copy, as most browsers can't show the original (lib/media-convert.ts). ⚠ Background jobs
+    // (no session) still get the ORIGINAL — the AI reads HEIC itself, and an overnight run must never
+    // queue behind conversions.
+    let servedKey = key
+    if (session && needsJpegCopy(key)) {
+      try { servedKey = await ensureJpegCopy(key) } catch { /* can't convert — send the original, as before */ }
+    }
     const obj = await r2.send(new GetObjectCommand({
       Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
-      Key: key,
+      Key: servedKey,
     }))
 
     const body = obj.Body as ReadableStream | null

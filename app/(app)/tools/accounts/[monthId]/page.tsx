@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { getSignedImageUrl } from "@/lib/r2"
+import { getSignedViewUrl } from "@/lib/r2"
 import { DEFAULT_CARDHOLDERS } from "@/lib/accounting"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import AccountsMonthClient from "./accounts-client"
@@ -33,7 +33,7 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
       id: d.id,
       cardholder: d.cardholder,
       source: d.source,
-      images: await Promise.all(keys.map((k) => getSignedImageUrl(k))),
+      images: await Promise.all(keys.map((k) => getSignedViewUrl(k))),
       supplier: d.supplier,
       item: d.item,
       website: d.website,

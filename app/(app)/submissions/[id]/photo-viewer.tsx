@@ -3,37 +3,50 @@
 import { useEffect, useState } from "react"
 import ZoomableLightbox from "@/components/zoomable-lightbox"
 import { VideoModal, VideoThumb } from "@/components/video-modal"
-import { heicViewUrl, isHeicKey, isVideoKey } from "@/lib/media"
+import { isVideoKey, mediaViewUrl, needsJpegCopy } from "@/lib/media"
+
+type VideoState = "ready" | "original" | "converting" | "failed"
+/** url = the signed original — or, for a video, the version a browser can play. */
+type Entry = { url: string; videoState?: VideoState }
+
+const VIDEO_NOTES: Partial<Record<VideoState, string>> = {
+  converting: "A copy that plays in every browser is being made — it'll be ready in a few minutes. Until then this is the original, which some browsers can't play.",
+  failed: "This video couldn't be converted to play here — open the file below to watch it.",
+}
 
 export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
-  const [signedUrls, setSignedUrls] = useState<string[]>([])
+  const [entries, setEntries] = useState<Entry[] | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
-  const [video, setVideo] = useState<{ url: string; name: string } | null>(null)
-  // iPhone photos (HEIC) are shown through /api/image/heic, which converts each to a JPEG the first
-  // time — a few seconds apiece, one at a time — so their tiles fill in one by one (2026-09-15).
-  const [heicState, setHeicState] = useState<Record<number, "ok" | "failed">>({})
+  const [video, setVideo] = useState<{ url: string; name: string; note?: string } | null>(null)
+  // Images a browser can't show by itself — iPhone HEIC, scanner TIFF, camera RAW — are shown through
+  // /api/media/view, which makes a JPEG copy the first time (a few seconds apiece, one at a time), so
+  // their tiles fill in one by one (2026-09-15).
+  const [convState, setConvState] = useState<Record<number, "ok" | "failed">>({})
 
   useEffect(() => {
     if (imageUrls.length === 0) return
     Promise.all(
-      imageUrls.map((key) =>
-        fetch(`/api/image?key=${encodeURIComponent(key)}`)
-          .then((r) => r.json())
-          .then((d) => d.url as string)
-      )
-    ).then(setSignedUrls)
+      imageUrls.map(async (key): Promise<Entry> => {
+        if (isVideoKey(key)) {
+          const d = await fetch(`/api/media/video?key=${encodeURIComponent(key)}`).then(r => r.json())
+          return { url: d.url as string, videoState: d.state as VideoState }
+        }
+        const d = await fetch(`/api/image?key=${encodeURIComponent(key)}`).then(r => r.json())
+        return { url: d.url as string }
+      })
+    ).then(setEntries)
   }, [imageUrls])
 
   if (imageUrls.length === 0) return null
 
-  const isImage = (key: string) => /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp)$/i.test(key)
+  const isImage = (key: string) => /\.(jpe?g|png|gif|webp|avif|bmp)$/i.test(key)
   // Keys look like "submissions/<timestamp>-<original name>" — recover a display name.
   const fileName = (key: string) => decodeURIComponent(key.split("/").pop() ?? key).replace(/^\d+-/, "")
 
-  const heicTotal  = imageUrls.filter(isHeicKey).length
-  const heicDone   = Object.keys(heicState).length
-  const heicFailed = Object.values(heicState).filter(s => s === "failed").length
-  const markHeic   = (i: number, s: "ok" | "failed") => setHeicState(prev => (prev[i] ? prev : { ...prev, [i]: s }))
+  const convTotal  = imageUrls.filter(needsJpegCopy).length
+  const convDone   = Object.keys(convState).length
+  const convFailed = Object.values(convState).filter(s => s === "failed").length
+  const markConv   = (i: number, s: "ok" | "failed") => setConvState(prev => (prev[i] ? prev : { ...prev, [i]: s }))
 
   const fileLink = (url: string, key: string, i: number, note = "") => (
     <a
@@ -55,26 +68,35 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
     <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
       <p className="text-xs text-gray-400 mb-2">
         Attachments ({imageUrls.length})
-        {heicTotal > 0 && heicDone < heicTotal && (
-          <span className="text-amber-500"> · converting iPhone photos so they can be shown — {heicDone} of {heicTotal} done</span>
+        {convTotal > 0 && convDone < convTotal && (
+          <span className="text-amber-500"> · converting photos so they can be shown — {convDone} of {convTotal} done</span>
         )}
-        {heicFailed > 0 && (
-          <span className="text-red-500"> · {heicFailed} couldn&apos;t be converted — open the file from its tile</span>
+        {convFailed > 0 && (
+          <span className="text-red-500"> · {convFailed} couldn&apos;t be converted — open the file from its tile</span>
         )}
       </p>
-      {signedUrls.length === 0 ? (
+      {!entries ? (
         <p className="text-xs text-gray-400">Loading...</p>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {signedUrls.map((url, i) => {
+          {entries.map(({ url, videoState }, i) => {
             const key = imageUrls[i]
-            // Customer videos from the photo request link (2026-09-14) — the extension says which.
+            // Customer videos (2026-09-14) — a converted copy when the original won't play (2026-09-15).
             if (isVideoKey(key)) {
-              return <VideoThumb key={i} url={url} title={fileName(key)} onClick={() => setVideo({ url, name: fileName(key) })} />
+              const note = videoState ? VIDEO_NOTES[videoState] : undefined
+              return (
+                <VideoThumb
+                  key={i}
+                  url={url}
+                  title={fileName(key)}
+                  badge={videoState === "converting" ? "Preparing" : videoState === "failed" ? "Original" : undefined}
+                  onClick={() => setVideo({ url, name: fileName(key), note })}
+                />
+              )
             }
-            if (isHeicKey(key)) {
-              if (heicState[i] === "failed") return fileLink(url, key, i, " (can't preview)")
-              const src = heicViewUrl(key)
+            if (needsJpegCopy(key)) {
+              if (convState[i] === "failed") return fileLink(url, key, i, " (can't preview)")
+              const src = mediaViewUrl(key)
               return (
                 <button
                   key={i}
@@ -86,14 +108,14 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
                   <img
                     src={src}
                     alt={`Photo ${i + 1}`}
-                    onLoad={() => markHeic(i, "ok")}
-                    onError={() => markHeic(i, "failed")}
+                    onLoad={() => markConv(i, "ok")}
+                    onError={() => markConv(i, "failed")}
                     className="w-full h-full object-cover"
                   />
-                  {!heicState[i] && (
+                  {!convState[i] && (
                     <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/40">
                       <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span className="text-[10px] font-semibold text-white">iPhone photo</span>
+                      <span className="text-[10px] font-semibold text-white">Converting</span>
                     </span>
                   )}
                 </button>
@@ -116,7 +138,7 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
         <ZoomableLightbox src={lightbox} onClose={() => setLightbox(null)} />
       )}
       {video && (
-        <VideoModal url={video.url} name={video.name} onClose={() => setVideo(null)} />
+        <VideoModal url={video.url} name={video.name} note={video.note} onClose={() => setVideo(null)} />
       )}
     </div>
   )

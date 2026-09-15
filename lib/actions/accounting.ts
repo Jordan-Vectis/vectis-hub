@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
-import { deleteObjectsFromR2, getObjectBuffer, uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
+import { deleteObjectsFromR2, getObjectBuffer, uploadBufferToR2, getSignedViewUrl } from "@/lib/r2"
 import { randomUUID } from "node:crypto"
 import {
   netFromGross, normaliseSupplier, cleanCardholder, isValidColumn, isValidVatCode,
@@ -210,7 +210,7 @@ export async function splitAccountingDocument(docId: string) {
   revalidatePath(`/tools/accounts/${doc.monthId}`)
   return {
     id: created.id, cardholder: created.cardholder, source: created.source,
-    images: newKeys.length ? [await getSignedImageUrl(newKeys[0])] : [],
+    images: newKeys.length ? [await getSignedViewUrl(newKeys[0])] : [],
     supplier: created.supplier, item: created.item, website: created.website,
     docDate: created.docDate ? created.docDate.toISOString().slice(0, 10) : "",
     vatCode: created.vatCode, gross: created.gross, vat: created.vat, net: created.net,

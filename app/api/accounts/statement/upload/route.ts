@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { prisma } from "@/lib/prisma"
-import { uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
+import { uploadBufferToR2, getSignedViewUrl } from "@/lib/r2"
 
 export const maxDuration = 60
 
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       id: stmt.id,
       label: stmt.label,
       cardholder: stmt.cardholder,
-      images: await Promise.all(stmt.images.map((k) => getSignedImageUrl(k))),
+      images: await Promise.all(stmt.images.map((k) => getSignedViewUrl(k))),
     })
   } catch (e: any) {
     console.error("statement/upload error:", e)

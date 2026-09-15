@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // iPhone HEIC photos are decoded with libheif compiled to WebAssembly (lib/heic.ts). Loaded from
-  // node_modules at run time rather than bundled — it is a large Emscripten build with the WASM inlined.
-  serverExternalPackages: ["heic-decode", "libheif-js"],
+  // Customers' odd file types (lib/media-convert.ts, lib/video-convert.ts): iPhone HEIC photos are
+  // decoded with libheif compiled to WebAssembly, and videos browsers can't play are converted by the
+  // ffmpeg binary ffmpeg-static downloads on install. Loaded from node_modules at run time rather than
+  // bundled — one is a large Emscripten build with the WASM inlined, the other finds its binary by path.
+  serverExternalPackages: ["heic-decode", "libheif-js", "ffmpeg-static"],
   experimental: {
     serverActions: {
       bodySizeLimit: "20mb",

@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { getSignedImageUrl } from "@/lib/r2"
+import { getSignedViewUrl } from "@/lib/r2"
 import { DEFAULT_CARDHOLDERS } from "@/lib/accounting"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import AccountsReconcile from "../reconcile-client"
@@ -64,7 +64,7 @@ export default async function ReconcilePage({ params }: { params: Promise<{ mont
     label: s.label,
     cardholder: s.cardholder ?? "",
     source: s.source,
-    images: await Promise.all(s.images.map((k) => getSignedImageUrl(k))),
+    images: await Promise.all(s.images.map((k) => getSignedViewUrl(k))),
     transactions: s.transactions.map((t) => ({
       id: t.id,
       postDate: t.postDate ? t.postDate.toISOString().slice(0, 10) : "",

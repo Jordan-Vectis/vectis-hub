@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { getSignedImageUrl } from "@/lib/r2"
-import { heicViewUrl, isHeicKey } from "@/lib/media"
+import { getSignedViewUrl } from "@/lib/r2"
 import ValueClient from "./value-client"
 
 export default async function ValuationPage({
@@ -28,8 +27,9 @@ export default async function ValuationPage({
   const itemsWithPhotos = await Promise.all(
     submission.items.map(async item => ({
       ...item,
-      // iPhone HEIC photos go through /api/image/heic, which hands back a JPEG copy (lib/heic.ts).
-      signedPhotoUrls: await Promise.all(item.imageUrls.map(key => isHeicKey(key) ? heicViewUrl(key) : getSignedImageUrl(key))),
+      // Photos a browser can't show by itself (iPhone HEIC, TIFF, camera RAW) and videos it can't play
+      // go through their converted copies (lib/media-convert.ts, lib/video-convert.ts).
+      signedPhotoUrls: await Promise.all(item.imageUrls.map(key => getSignedViewUrl(key))),
     }))
   )
 

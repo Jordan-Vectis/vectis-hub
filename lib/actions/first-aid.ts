@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
+import { needsJpegCopy } from "@/lib/media"
+import { normaliseImageUpload } from "@/lib/media-convert"
 
 // Everything a first aider or kit row holds is shown on the PUBLIC page, so every write here
 // needs the FIRST_AID app permission. Actions RETURN their error rather than throwing —
@@ -25,7 +27,7 @@ const s = (v: FormDataEntryValue | null, max: number) => String(v ?? "").trim().
 
 // Photos land under first-aid/, the prefix /api/public/photo is allowed to serve — anything
 // else would 404 on the public page.
-const PHOTO_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/heic", "image/heif"]
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/heic", "image/heif", "image/tiff"]
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024
 
 async function savePhoto(file: File | null, folder: string): Promise<string | undefined> {
@@ -33,13 +35,18 @@ async function savePhoto(file: File | null, folder: string): Promise<string | un
   // ⚠ These photos are served by the PUBLIC proxy, same origin as the Hub. An SVG or HTML file
   // picked here would execute for whoever opened it, so the type is checked on the way IN as
   // well as on the way out. accept="image/*" in the form lets SVG through — this does not.
-  if (!PHOTO_TYPES.includes((file.type || "").toLowerCase())) {
-    throw new Error("That file type is not allowed — use a JPEG, PNG, WEBP or HEIC photo.")
+  // A camera RAW often arrives with no type at all, so it's let in by its name — it is always
+  // re-encoded as a JPEG below, never stored as it came.
+  const type = (file.type || "").toLowerCase()
+  if (!PHOTO_TYPES.includes(type) && !needsJpegCopy(file.name)) {
+    throw new Error("That file type is not allowed — use a JPEG, PNG, WEBP, HEIC, TIFF or camera RAW photo.")
   }
   if (file.size > MAX_PHOTO_BYTES) throw new Error("That photo is too big — 8MB is the limit.")
-  const buf = Buffer.from(await file.arrayBuffer())
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-  return uploadBufferToR2(buf, `first-aid/${folder}/${Date.now()}-${safe}`, file.type)
+  // iPhone HEIC, TIFF and camera RAW become a JPEG here: the public page is opened on any device,
+  // and most browsers can't show those (lib/media-convert.ts).
+  const photo = await normaliseImageUpload(Buffer.from(await file.arrayBuffer()), file.name, type)
+  const safe = photo.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+  return uploadBufferToR2(photo.buf, `first-aid/${folder}/${Date.now()}-${safe}`, photo.type)
 }
 
 export async function saveFirstAider(fd: FormData): Promise<Res> {

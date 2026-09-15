@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
+import { needsJpegCopy } from "@/lib/media"
+import { normaliseImageUpload } from "@/lib/media-convert"
 import { isLiveBlock, isSlideLayout, isSlideGraphic } from "@/lib/induction"
 import { SEED_SLIDES, SEED_FORMS } from "@/lib/induction-seed"
 
@@ -109,18 +111,23 @@ export async function ensureInductionSeed(): Promise<void> {
 
 // ─── Slides ─────────────────────────────────────────────────────────────────
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/heic", "image/heif"]
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/heic", "image/heif", "image/tiff"]
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 async function saveSlideImage(file: File | null): Promise<string | undefined> {
   if (!file || file.size === 0) return undefined
-  if (!IMAGE_TYPES.includes((file.type || "").toLowerCase())) {
-    throw new Error("That file type is not allowed — use a JPEG, PNG, WEBP or HEIC image.")
+  // A camera RAW often arrives with no type at all, so it's let in by its name — it is always
+  // re-encoded as a JPEG below, never stored as it came.
+  const type = (file.type || "").toLowerCase()
+  if (!IMAGE_TYPES.includes(type) && !needsJpegCopy(file.name)) {
+    throw new Error("That file type is not allowed — use a JPEG, PNG, WEBP, HEIC, TIFF or camera RAW image.")
   }
   if (file.size > MAX_IMAGE_BYTES) throw new Error("That image is too big — 8MB is the limit.")
-  const buf  = Buffer.from(await file.arrayBuffer())
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-  return uploadBufferToR2(buf, `induction/slides/${Date.now()}-${safe}`, file.type)
+  // iPhone HEIC, TIFF and camera RAW become a JPEG here — the slides are shown on any browser, and
+  // most can't show those (lib/media-convert.ts).
+  const image = await normaliseImageUpload(Buffer.from(await file.arrayBuffer()), file.name, type)
+  const safe  = image.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+  return uploadBufferToR2(image.buf, `induction/slides/${Date.now()}-${safe}`, image.type)
 }
 
 export async function saveInductionSlide(fd: FormData): Promise<Res> {

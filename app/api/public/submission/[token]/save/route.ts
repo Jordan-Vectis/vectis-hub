@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { convertHeicsInBackground } from "@/lib/heic"
+import { convertInBackground } from "@/lib/media-convert"
 
 const CLOSED_STATUSES = ["COMPLETED", "DECLINED"]
 
@@ -33,9 +33,9 @@ export async function POST(
       data:  { imageUrls: [...item.imageUrls, ...validKeys] },
     })
 
-    // iPhone HEIC photos can't be shown by Chrome or Edge on Windows — make their JPEG copies now,
-    // in the background, so staff opening the submission don't wait (lib/heic.ts).
-    convertHeicsInBackground(validKeys)
+    // Photos a browser can't show (iPhone HEIC, TIFF, camera RAW) and videos it may not play — make
+    // their copies now, in the background, so staff opening the submission don't wait.
+    convertInBackground(validKeys)
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {

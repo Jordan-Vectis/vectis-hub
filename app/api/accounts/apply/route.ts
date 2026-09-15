@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { PDFDocument } from "pdf-lib"
 import { prisma } from "@/lib/prisma"
-import { getObjectBuffer, uploadBufferToR2, getSignedImageUrl, deleteObjectsFromR2 } from "@/lib/r2"
+import { getObjectBuffer, uploadBufferToR2, getSignedViewUrl, deleteObjectsFromR2 } from "@/lib/r2"
 import { isValidColumn, isValidVatCode, netFromGross, UNKNOWN_CARDHOLDER, resolveCardholderByLast4 } from "@/lib/accounting"
 import { randomUUID } from "node:crypto"
 
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       })
       extra.push({
         id: created.id, cardholder: created.cardholder, source: "SCAN",
-        images: [await getSignedImageUrl(imgs[0])],
+        images: [await getSignedViewUrl(imgs[0])],
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
         vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column,
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
       aiNotes: firstData.aiNotes, splitGroupId: firstSplitId,
       currency: firstData.currency, originalAmount: firstData.originalAmount, cardLast4: firstData.cardLast4,
       cardholder: effectiveCardholder ?? doc.cardholder,
-      images: [await getSignedImageUrl(primaryImages[0])],
+      images: [await getSignedViewUrl(primaryImages[0])],
       extra,
     })
   } catch (e: any) {

@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-14, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-15, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a8fc09ab457739f83eb034c78daa29911571c89a","author":"Jordan Orange","date":"2026-09-15T09:22:41+01:00","subject":"Submissions: iPhone HEIC photos show (converted once to a JPEG copy)"},
   {"sha":"c2e8f8c532b5cb6903fe40e46c42b5379f61c4d4","author":"Jordan Orange","date":"2026-09-14T17:00:47+01:00","subject":"Merge staging into main: 2026-09-14 opening message"},
   {"sha":"62a4c00c1b40523b2fb5360516c5b10ee19c61ff","author":"Jordan Orange","date":"2026-09-14T16:50:20+01:00","subject":"Memory: 2026-09-14 work in the opening message"},
   {"sha":"a6577674b9856881a6260b8f0d28c931a54f4312","author":"Jordan Orange","date":"2026-09-14T12:14:32+01:00","subject":"Merge staging into main: BC background login, pipeline column order, submissions delete + videos, public photo link"},
