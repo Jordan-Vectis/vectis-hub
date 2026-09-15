@@ -79,6 +79,9 @@ export const AI_TOOLS: AiTool[] = [
   // moved without disturbing the rest of the secret menu. claudeOk: writing is what Claude is
   // for, and the CV workshop is the one place here where prose quality is the whole point.
   { slot: "jordan_cv",              group: "Other",        label: "Jordan's secret menu (CV workshop)", default: "gemini-3-flash-preview", claudeOk: true },
+  // Writing a week of recipes to hit calorie and macro targets, then the shopping list. Its own
+  // slot so it can be moved to a stronger model without disturbing the chat.
+  { slot: "jordan_meals",           group: "Other",        label: "Jordan's secret menu (meal planner)", default: "gemini-3-flash-preview", claudeOk: true },
 ]
 
 const SLOT_DEFAULT: Record<string, string> = Object.fromEntries(AI_TOOLS.map((t) => [t.slot, t.default]))

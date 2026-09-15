@@ -84,8 +84,12 @@ export default function JordanMenu() {
               <span>07 &nbsp;DOCUMENTS <span className="opacity-50">— private file store, folders &amp; subfolders, drag to move</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
+            <Link href="/jordan/meals" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+              <span>08 &nbsp;MEAL PLANNER <span className="opacity-50">— BMR &amp; macro targets, AI meal plans, shopping list</span></span>
+              <span className="shrink-0 font-bold">[ OPEN ]</span>
+            </Link>
             <div className={`${row} opacity-40 select-none`}>
-              <span>08 &nbsp;????????????</span>
+              <span>09 &nbsp;????????????</span>
               <span className="shrink-0">[ LOCKED ]</span>
             </div>
 
