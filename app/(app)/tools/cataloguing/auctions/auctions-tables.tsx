@@ -160,8 +160,9 @@ function AuctionTable({ rows, isFav, onToggleFav }: {
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots</th>
-          <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots with photos</th>
+          {/* Catalogued before the counts (Jordan, 2026-09-15) — it's the lock, so it reads first. */}
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Marked catalogued — this also locks the sale for everyone except admins">Catalogued 🔒</th>
+          <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots with photos</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Lots whose barcode was found in BC, as at the last Data Sync">In BC</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400" title="Lots the AI has written a description for; lots excluded from AI are left out of the total">Ran through AI</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
@@ -196,12 +197,12 @@ function AuctionTable({ rows, isFav, onToggleFav }: {
               {auction.auctionType}
             </td>
             <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction.lots}</td>
-            <td className="px-4 py-3"><PhotoCount withPhotos={auction.lotsWithPhotos} lots={auction.lots} /></td>
             <td className="px-4 py-3 text-center">
               {auction.catalogued
                 ? <span className="text-green-400 font-bold" title="Marked catalogued — the sale is locked for everyone except admins">✓</span>
                 : <span className="text-gray-600">—</span>}
             </td>
+            <td className="px-4 py-3"><PhotoCount withPhotos={auction.lotsWithPhotos} lots={auction.lots} /></td>
             {/* Measured, not ticked — see BcCount. */}
             <td className="px-4 py-3 text-center"><BcCount inBC={auction.lotsInBC} lots={auction.lots} /></td>
             {/* Measured too — see AiCount. */}
