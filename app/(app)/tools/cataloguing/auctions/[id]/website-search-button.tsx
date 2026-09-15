@@ -498,9 +498,10 @@ export default function WebsiteSearchButton({ tablet = false, standalone = false
         type="button"
         onClick={() => { setMounted(true); setOpen(true); setTimeout(() => qRef.current?.focus(), 50) }}
         style={{ touchAction: "manipulation", color: ACCENT, border: `1px solid ${ACCENT}66` }}
-        className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${tablet ? "px-4 py-2 text-sm" : "px-3 py-1 text-xs"}`}
+        className={`flex-shrink-0 rounded-lg font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${tablet ? "min-h-[44px] px-3 sm:px-4 py-2 text-sm" : "px-3 py-1 text-xs"}`}
       >
-        🔎 Website Search
+        {/* Short on a phone, where the three tools share one row (2026-09-15) */}
+        🔎 <span className="sm:hidden">Search</span><span className="hidden sm:inline">Website Search</span>
       </button>}
 
       {/* On its own page it fills the Hub's content area under the top bar; from the tablet button it
