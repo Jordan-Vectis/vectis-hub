@@ -239,14 +239,15 @@ export async function updateAuction(id: string, formData: FormData) {
   const finished    = formData.get("finished")    === "true"
   const complete    = formData.get("complete")    === "true"
   const catalogued  = formData.get("catalogued")  === "true"
-  const addedToBC   = formData.get("addedToBC")   === "true"
-  const photography = formData.get("photography") === "true"
-  const aiRan       = formData.get("aiRan")       === "true"
+  // ⚠ addedToBC, photography and aiRan are deliberately NOT here (2026-09-15). Their ticks came off
+  // Auction Settings because the Auction Manager measures all three from the lots — and a tick that
+  // isn't on the form arrives as "absent", which this function would have saved as FALSE, silently
+  // wiping every sale's old value on its next Save. The columns stay as they were.
   // Review tab matching mode — only ever "strict" or "relaxed"
   const reviewKpMode = formData.get("reviewKpMode") === "relaxed" ? "relaxed" : "strict"
   await prisma.catalogueAuction.update({
     where: { id },
-    data: { code, name, auctionDate: auctionDate ? new Date(auctionDate) : null, auctionType: auctionType || "GENERAL", eventName: eventName || null, notes, locked, finished, complete, catalogued, addedToBC, photography, aiRan, reviewKpMode }
+    data: { code, name, auctionDate: auctionDate ? new Date(auctionDate) : null, auctionType: auctionType || "GENERAL", eventName: eventName || null, notes, locked, finished, complete, catalogued, reviewKpMode }
   })
   revalidatePath("/tools/cataloguing/auctions")
   revalidatePath(`/tools/cataloguing/auctions/${id}`)

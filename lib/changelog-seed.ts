@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"e600754139c41a5f663d25141ad220908569dcdc","author":"Jordan Orange","date":"2026-09-15T16:42:30+01:00","subject":"Auction Manager: drop the Photography tick, count lots ran through AI"},
   {"sha":"ec7b1c6ddc8471a59e76bbbd44a393114829d3a4","author":"Jordan Orange","date":"2026-09-15T15:01:39+01:00","subject":"JORDAN.SYS: 08 Meal Planner - BMR, macro targets, AI meal plans, shopping list"},
   {"sha":"43f35b965d5db1ec587e2cc927ceab31e050855c","author":"Jordan Orange","date":"2026-09-15T12:31:35+01:00","subject":"Photo viewer: step through the photos without closing it"},
   {"sha":"113f54bc7baeb9b555bb60291ba60a35e6e0ba41","author":"Jordan Orange","date":"2026-09-15T12:02:37+01:00","subject":"Merge staging into main: odd file types (HEIC/TIFF/RAW/video/PDF), Download all, tablet phone header, Website Search sale filter last"},

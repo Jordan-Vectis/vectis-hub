@@ -1132,8 +1132,15 @@ Why it moved: `addedToBC` had to stay a manual tick purely to drive the lock, an
 thing Jordan wanted replaced by a real check. Measured before the change — **all 39 sales had the
 two ticks set identically**, so nothing locked or unlocked on the day it shipped.
 
-- `addedToBC` still exists and is still tickable, but it is now **a note only**. Nothing reads it
-  for access, and the Auction Manager's column ignores it.
+- `addedToBC` still exists as a column, but **it is no longer tickable anywhere** (2026-09-15 —
+  Jordan: *"we just need the catalogued tick and the complete tick if the rest are worked off
+  counters anyway"*). The same day `photography` and `aiRan` lost their ticks too. All three columns
+  stay in the database untouched — `updateAuction` deliberately does not write them, because a
+  tick absent from the form would otherwise be saved as false and wipe every sale's old value —
+  but nothing in the UI sets or shows them any more: the Auction Manager, the sale header, the
+  Photography list, the Manager Portal and the overview PDF all read **measured counts** (barcodes
+  in the BC sync, lots with a photo, lots with `aiUpgraded`). Export still writes the old columns.
+  Never add a tick back "so it can be marked" — the count is the answer.
 - Auction Settings labels the Catalogued tick **"Catalogued 🔒"** with a line underneath saying what
   it does — a lock disguised as a progress marker is how someone freezes a live sale by accident.
 - The Review tab still bypasses the lock (see above), unchanged.

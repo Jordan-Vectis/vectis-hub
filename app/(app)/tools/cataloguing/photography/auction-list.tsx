@@ -12,8 +12,6 @@ export interface PhotographyAuctionRow {
   auctionDate: string | null
   auctionType: string
   complete: boolean
-  photography: boolean
-  addedToBC: boolean
   lots: number
   lotsWithPhotos: number
 }
@@ -58,16 +56,8 @@ function AuctionCard({ a, onStart, onView }: {
               ✓ All photographed
             </span>
           )}
-          {a.photography && !done && (
-            <span className="text-xs bg-purple-200 text-purple-800 dark:bg-purple-900/40 dark:text-purple-400 rounded-full px-2 py-0.5 whitespace-nowrap">
-              Marked photographed
-            </span>
-          )}
-          {a.addedToBC && (
-            <span className="text-xs bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400 rounded-full px-2 py-0.5 whitespace-nowrap">
-              In BC
-            </span>
-          )}
+          {/* "Marked photographed" and "In BC" badges went with their ticks (2026-09-15) — the photo
+              count above is the truth, and BC is measured on Auction Manager. */}
         </div>
       </div>
 

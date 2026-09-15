@@ -33,7 +33,7 @@ export default async function PhotographyPage() {
     orderBy: { auctionDate: { sort: "asc", nulls: "last" } },
     select: {
       id: true, code: true, name: true, auctionDate: true, auctionType: true,
-      complete: true, photography: true, addedToBC: true,
+      complete: true,
       lots: { select: { imageUrls: true } },
     },
   })
@@ -48,8 +48,6 @@ export default async function PhotographyPage() {
       auctionDate: a.auctionDate ? new Date(a.auctionDate).toISOString() : null,
       auctionType: a.auctionType,
       complete: a.complete,
-      photography: a.photography,
-      addedToBC: a.addedToBC,
       lots: total,
       lotsWithPhotos: withPhoto,
     }

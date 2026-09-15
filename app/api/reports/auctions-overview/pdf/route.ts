@@ -52,11 +52,10 @@ type AuctionData = {
   lotCount:    number
   complete:    boolean
   catalogued:  boolean
-  addedToBC:   boolean
   /** Lots whose BARCODE is in the synced BC data — measured, not the tick. */
   inBC:        number
-  photography: boolean
-  aiRan:       boolean
+  /** Lots with at least one photo — measured; the Photography tick went on 2026-09-15. */
+  withPhotos:  number
   firstLotAt:  Date | null
 }
 
@@ -134,6 +133,15 @@ export async function GET(req: NextRequest) {
       inBC = new Map(rows.map(r => [r.auctionId, Number(r.n)]))
     } catch { /* the BC mirror is a convenience — never fail the whole report for it */ }
 
+    // Photos are measured too (the "Photo" flag used to print off the Photography tick, which
+    // came off Auction Settings on 2026-09-15). Same grouped count the Auction Manager uses.
+    const photoCounts = await prisma.catalogueLot.groupBy({
+      by: ["auctionId"],
+      where: { auctionId: { in: rawAuctions.map(a => a.id) }, imageUrls: { isEmpty: false } },
+      _count: { _all: true },
+    })
+    const withPhotos = new Map(photoCounts.map(g => [g.auctionId, g._count._all]))
+
     const auctions: AuctionData[] = rawAuctions.map(a => ({
       id:          a.id,
       code:        a.code,
@@ -143,10 +151,8 @@ export async function GET(req: NextRequest) {
       lotCount:    a._count.lots,
       complete:    a.complete,
       catalogued:  !!(a as any).catalogued,
-      addedToBC:   !!(a as any).addedToBC,
       inBC:        inBC.get(a.id) ?? 0,
-      photography: !!(a as any).photography,
-      aiRan:       !!(a as any).aiRan,
+      withPhotos:  withPhotos.get(a.id) ?? 0,
       firstLotAt:  a.lots[0]?.createdAt ?? null,
     }))
 
@@ -530,7 +536,8 @@ function drawCompletedRow(
   const flags: string[] = []
   if (a.lotCount > 0 && a.inBC > 0) flags.push(a.inBC >= a.lotCount ? "BC" : `BC ${a.inBC}/${a.lotCount}`)
   if (a.catalogued)  flags.push("Cat")
-  if (a.photography) flags.push("Photo")
+  // "Photo" only when EVERY lot has one — a partial count here would overrun the flags column.
+  if (a.lotCount > 0 && a.withPhotos >= a.lotCount) flags.push("Photo")
   if (flags.length > 0) {
     // 7pt, not 7.5 — a partial sale reads "BC 84/102 · Cat · Photo" and has to fit the margin.
     page.drawText(safeAscii(flags.join(" · ")), { x: CC.flags.x, y: baseY, size: 7, font: fonts.helv, color: C.green })

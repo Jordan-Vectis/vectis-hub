@@ -13,7 +13,9 @@ export type SaleRow = {
   auctionType: string
   hubLots: number
   complete: boolean
-  addedToBC: boolean
+  /** Lots whose BARCODE is in the synced BC data — measured, like Auction Manager's In BC column.
+   *  Replaced the "Added to BC" tick here on 2026-09-15, when the tick came off Auction Settings. */
+  lotsInBC: number
   daily: number[]                 // chronological per-active-day lot counts
   avgDurationMs: number | null
   timedLots: number
@@ -329,7 +331,7 @@ function CompletedTable({ rows }: { rows: SaleRow[] }) {
       <thead>
         <tr className="border-b border-gray-200 dark:border-gray-800">
           {["Code", "Name", "Date", "Type"].map(h => <th key={h} className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400">{h}</th>)}
-          <th className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400">Added to BC</th>
+          <th className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400" title="Lots whose barcode was found in BC, as at the last Data Sync">In BC</th>
         </tr>
       </thead>
       <tbody>
@@ -341,7 +343,13 @@ function CompletedTable({ rows }: { rows: SaleRow[] }) {
             <td className="px-4 py-2.5 text-gray-800 dark:text-gray-100">{row.name}</td>
             <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.auctionDate ? fmtFullDate(row.auctionDate) : "—"}</td>
             <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 whitespace-nowrap"><span className="mr-1" title={auctionTypeLabel(row.auctionType)}>{auctionTypeEmoji(row.auctionType)}</span>{row.auctionType}</td>
-            <td className="px-4 py-2.5">{row.addedToBC ? <span className="text-green-600 dark:text-green-400 font-semibold">✓ Added</span> : <span className="text-gray-400 dark:text-gray-600">—</span>}</td>
+            <td className="px-4 py-2.5 whitespace-nowrap">
+              {row.hubLots === 0
+                ? <span className="text-gray-400 dark:text-gray-600">—</span>
+                : row.lotsInBC >= row.hubLots
+                  ? <span className="text-green-600 dark:text-green-400 font-semibold" title="Every lot's barcode was found in BC (as at the last Data Sync)">✓ {row.lotsInBC}/{row.hubLots}</span>
+                  : <span className={row.lotsInBC === 0 ? "text-gray-400 dark:text-gray-600" : "text-amber-600 dark:text-amber-400"} title={`${row.hubLots - row.lotsInBC} lots not found in BC as at the last Data Sync`}>{row.lotsInBC}/{row.hubLots}</span>}
+            </td>
           </tr>
         ))}
       </tbody>
