@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c2e8f8c532b5cb6903fe40e46c42b5379f61c4d4","author":"Jordan Orange","date":"2026-09-14T17:00:47+01:00","subject":"Merge staging into main: 2026-09-14 opening message"},
+  {"sha":"62a4c00c1b40523b2fb5360516c5b10ee19c61ff","author":"Jordan Orange","date":"2026-09-14T16:50:20+01:00","subject":"Memory: 2026-09-14 work in the opening message"},
   {"sha":"a6577674b9856881a6260b8f0d28c931a54f4312","author":"Jordan Orange","date":"2026-09-14T12:14:32+01:00","subject":"Merge staging into main: BC background login, pipeline column order, submissions delete + videos, public photo link"},
   {"sha":"16513a9e89483a9a69b9af7393fa1245d42e2c6d","author":"Jordan Orange","date":"2026-09-14T12:05:09+01:00","subject":"Photo request link opens without a login again"},
   {"sha":"79bc05e3b6c1c6aa472d4a332bd9c1f7f2f3a548","author":"Jordan Orange","date":"2026-09-14T11:49:58+01:00","subject":"Submissions: delete works for anyone with the CRM app; photo link takes videos"},

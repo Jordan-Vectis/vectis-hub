@@ -48,6 +48,17 @@ export function mediaContentType(rawType: string | null | undefined, filename: s
   return (ext && VIDEO_TYPE_FOR_EXT[ext]) || "image/jpeg"
 }
 
+/** An iPhone photo (HEIC/HEIF) — Chrome and Edge on Windows can't show one. */
+export function isHeicKey(key: string): boolean {
+  return /\.(heic|heif)$/i.test(key.split("?")[0])
+}
+
+/** Where a browser can load a HEIC as a JPEG: /api/image/heic converts it once (lib/heic.ts) and
+ *  redirects to the kept copy. Needs a signed-in user. */
+export function heicViewUrl(key: string): string {
+  return `/api/image/heic?key=${encodeURIComponent(key)}`
+}
+
 /** A key-safe file name that always ends in an extension, so a video can be recognised later. */
 export function mediaFileName(filename: string, contentType: string): string {
   const safe = (filename || "file").replace(/[^a-zA-Z0-9._-]/g, "_")

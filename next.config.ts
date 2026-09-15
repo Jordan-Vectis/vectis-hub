@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // iPhone HEIC photos are decoded with libheif compiled to WebAssembly (lib/heic.ts). Loaded from
+  // node_modules at run time rather than bundled — it is a large Emscripten build with the WASM inlined.
+  serverExternalPackages: ["heic-decode", "libheif-js"],
   experimental: {
     serverActions: {
       bodySizeLimit: "20mb",

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { convertHeicsInBackground } from "@/lib/heic"
 
 const CLOSED_STATUSES = ["COMPLETED", "DECLINED"]
 
@@ -31,6 +32,10 @@ export async function POST(
       where: { id: itemId },
       data:  { imageUrls: [...item.imageUrls, ...validKeys] },
     })
+
+    // iPhone HEIC photos can't be shown by Chrome or Edge on Windows — make their JPEG copies now,
+    // in the background, so staff opening the submission don't wait (lib/heic.ts).
+    convertHeicsInBackground(validKeys)
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {
