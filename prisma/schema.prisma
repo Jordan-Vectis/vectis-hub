@@ -2898,6 +2898,10 @@ model JordanMealProfile {
   weightKg Float?
   activity String @default("light") // sedentary | light | moderate | active | very
 
+  // What they're trying to do: lose | maintain | muscle | gain (GOAL_DEFS in lib/jordan-meals.ts).
+  // It decides the calorie gap on offer, the suggested macro split AND what the AI is told to
+  // cook — losing and building muscle are different food at the same calories.
+  goal         String @default("lose")
   // Calories a day against maintenance: -500 = lose, 0 = maintain, +250 = gain.
   goalDelta    Int  @default(-500)
   // A daily target typed in by hand — wins over the calculation when set.

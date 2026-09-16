@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
+import { GOAL_KEYS, deltaFor, goalDef } from "@/lib/jordan-meals"
 
 // /api/jordan/meals/profiles — one profile per person: their numbers, targets and likes.
 // Locked to jordan.orange; everyone else gets a 404, as if it didn't exist.
@@ -73,7 +74,16 @@ export async function PUT(req: NextRequest) {
     put("age", optNum(b.age, 10, 120))
     put("heightCm", optNum(b.heightCm, 100, 250))
     put("weightKg", optNum(b.weightKg, 30, 350))
-    put("goalDelta", int(b.goalDelta, -1000, 1000, -500))
+    // ⚠ The goal and the calorie gap are saved as a PAIR. A delta the goal doesn't offer is
+    // corrected to that goal's own default — "Build muscle" must never carry a deficit over
+    // from "Lose weight", whatever reaches the route.
+    if (b.goal !== undefined) {
+      const goal = GOAL_KEYS.includes(b.goal) ? b.goal : "lose"
+      data.goal = goal
+      data.goalDelta = deltaFor(goal, int(b.goalDelta, -1000, 1000, goalDef(goal).defaultDelta) ?? goalDef(goal).defaultDelta)
+    } else {
+      put("goalDelta", int(b.goalDelta, -1000, 1000, -500))
+    }
     put("kcalOverride", optNum(b.kcalOverride, 800, 6000))
     put("proteinPct", int(b.proteinPct, 0, 100, 30))
     put("carbsPct", int(b.carbsPct, 0, 100, 40))

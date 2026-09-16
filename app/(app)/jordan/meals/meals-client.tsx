@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import {
-  ACTIVITY, GOALS, MACRO_PRESETS, mealSlots,
+  ACTIVITY, GOAL_DEFS, MACRO_PRESETS, mealSlots,
   kgFromStone, cmFromFeet, stoneFromKg, feetFromCm,
+  goalDef, deltaFor, goalSummary, gbp, shoppingTotals,
   targets as workOut, dayTotals, shoppingText,
-  type Plan, type Shopping, type Targets,
+  type GoalKey, type Plan, type Shopping, type Targets,
 } from "@/lib/jordan-meals"
 
 // JORDAN.SYS → MEAL PLANNER. Private to /jordan (every route 404s for anyone else).
@@ -26,7 +27,7 @@ const label = "block text-[10px] tracking-widest opacity-60 mb-1"
 
 type Profile = {
   id: string; name: string; sex: string; age: number | null; heightCm: number | null; weightKg: number | null
-  activity: string; goalDelta: number; kcalOverride: number | null
+  activity: string; goal: string; goalDelta: number; kcalOverride: number | null
   proteinPct: number; carbsPct: number; fatPct: number; mealsPerDay: number
   likes: string; dislikes: string; notes: string; plans: number
 }
@@ -38,7 +39,7 @@ type SavedPlan = {
 /** The form holds what's typed, in the units Jordan types them in. */
 type Form = {
   sex: string; age: string; st: string; lb: string; ft: string; in: string
-  activity: string; goalDelta: number; kcalOverride: string
+  activity: string; goal: string; goalDelta: number; kcalOverride: string
   proteinPct: string; carbsPct: string; fatPct: string; mealsPerDay: number
   likes: string; dislikes: string; notes: string
 }
@@ -50,7 +51,8 @@ function formFrom(p: Profile): Form {
     sex: p.sex, age: p.age ? String(p.age) : "",
     st: w ? String(w.st) : "", lb: w ? String(w.lb) : "",
     ft: h ? String(h.ft) : "", in: h ? String(h.in) : "",
-    activity: p.activity, goalDelta: p.goalDelta, kcalOverride: p.kcalOverride ? String(p.kcalOverride) : "",
+    activity: p.activity, goal: goalDef(p.goal).key, goalDelta: deltaFor(p.goal, p.goalDelta),
+    kcalOverride: p.kcalOverride ? String(p.kcalOverride) : "",
     proteinPct: String(p.proteinPct), carbsPct: String(p.carbsPct), fatPct: String(p.fatPct),
     mealsPerDay: p.mealsPerDay, likes: p.likes, dislikes: p.dislikes, notes: p.notes,
   }
@@ -65,7 +67,8 @@ function numbersOf(f: Form) {
     sex: f.sex, age: n(f.age) || null,
     weightKg: st || lb ? Math.round(kgFromStone(st, lb) * 10) / 10 : null,
     heightCm: ft || inch ? Math.round(cmFromFeet(ft, inch) * 10) / 10 : null,
-    activity: f.activity, goalDelta: f.goalDelta, kcalOverride: n(f.kcalOverride) || null,
+    activity: f.activity, goal: f.goal, goalDelta: deltaFor(f.goal, f.goalDelta),
+    kcalOverride: n(f.kcalOverride) || null,
     proteinPct: n(f.proteinPct), carbsPct: n(f.carbsPct), fatPct: n(f.fatPct),
   }
 }
@@ -147,6 +150,18 @@ export default function MealsClient() {
   }
 
   function edit(patch: Partial<Form>) { setForm(f => (f ? { ...f, ...patch } : f)); setDirty(true) }
+
+  /** Picking a goal sets THREE things: the goal, a calorie gap that goal actually offers, and its
+   *  suggested macro split. The split changes on screen where you can see it (and change it back),
+   *  rather than the goal quietly meaning something different from the numbers underneath. */
+  function pickGoal(key: GoalKey) {
+    const g = goalDef(key)
+    setForm(f => f ? {
+      ...f, goal: key, goalDelta: deltaFor(key, f.goalDelta),
+      proteinPct: String(g.macros.protein), carbsPct: String(g.macros.carbs), fatPct: String(g.macros.fat),
+    } : f)
+    setDirty(true)
+  }
 
   async function newProfile() {
     const name = prompt("Whose numbers are these? (e.g. Me, Kate)")?.trim()
@@ -323,6 +338,21 @@ export default function MealsClient() {
                 </div>
               </div>
 
+              {/* The goal comes first and is a row of buttons, not a dropdown — it is the choice
+                  everything else hangs off, and it was invisible inside a select. */}
+              <div>
+                <span className={label}>GOAL — WHAT ARE YOU TRYING TO DO?</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+                  {GOAL_DEFS.map(g => (
+                    <button key={g.key} onClick={() => pickGoal(g.key)}
+                      className={`min-h-[44px] px-2 rounded border text-xs ${form.goal === g.key ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] opacity-60 mt-1">{goalDef(form.goal).blurb}</p>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-3">
                 <div>
                   <label className={label} htmlFor="m-act">ACTIVITY</label>
@@ -330,12 +360,14 @@ export default function MealsClient() {
                     {ACTIVITY.map(a => <option key={a.key} value={a.key}>{a.label} — {a.hint}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className={label} htmlFor="m-goal">GOAL</label>
-                  <select id="m-goal" className={input} value={form.goalDelta} onChange={e => edit({ goalDelta: Number(e.target.value) })}>
-                    {GOALS.map(g => <option key={g.delta} value={g.delta}>{g.label}</option>)}
-                  </select>
-                </div>
+                {goalDef(form.goal).rates.length > 0 && (
+                  <div>
+                    <label className={label} htmlFor="m-rate">HOW FAST</label>
+                    <select id="m-rate" className={input} value={form.goalDelta} onChange={e => edit({ goalDelta: Number(e.target.value) })}>
+                      {goalDef(form.goal).rates.map(r => <option key={r.delta} value={r.delta}>{r.label}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -358,6 +390,24 @@ export default function MealsClient() {
                 {n(form.proteinPct) + n(form.carbsPct) + n(form.fatPct) !== 100 && (
                   <p className="text-[11px] text-amber-400 mt-1">Adds up to {n(form.proteinPct) + n(form.carbsPct) + n(form.fatPct)}% — should be 100.</p>
                 )}
+                {/* Say where the split came from — picking a goal changed these boxes. */}
+                {(() => {
+                  const g = goalDef(form.goal)
+                  const same = n(form.proteinPct) === g.macros.protein && n(form.carbsPct) === g.macros.carbs && n(form.fatPct) === g.macros.fat
+                  return (
+                    <p className="text-[11px] opacity-60 mt-1 flex flex-wrap items-center gap-2">
+                      <span>
+                        {g.label} suggests <strong>{g.macros.protein}/{g.macros.carbs}/{g.macros.fat}</strong> — {g.macroWhy}.
+                        {same ? " That's what's set; change it if you want." : ""}
+                      </span>
+                      {!same && (
+                        <button className={btn} onClick={() => edit({ proteinPct: String(g.macros.protein), carbsPct: String(g.macros.carbs), fatPct: String(g.macros.fat) })}>
+                          USE IT
+                        </button>
+                      )}
+                    </p>
+                  )
+                })()}
               </div>
 
               <div className="grid md:grid-cols-2 gap-3">
@@ -403,7 +453,8 @@ export default function MealsClient() {
                   <div className="border border-[#33ff66] rounded-lg p-3 text-center">
                     <div className="text-[10px] tracking-widest opacity-60">DAILY TARGET{t.overridden ? " (BY HAND)" : ""}</div>
                     <div className="text-3xl font-bold">{t.kcal.toLocaleString()} <span className="text-sm font-normal opacity-60">kcal</span></div>
-                    {!t.overridden && t.kcal === t.bmr && t.tdee + (form.goalDelta) < t.bmr && (
+                    <div className="text-[11px] opacity-70 mt-1">{goalSummary(form.goal, form.goalDelta)}</div>
+                    {!t.overridden && t.kcal === t.bmr && t.tdee + deltaFor(form.goal, form.goalDelta) < t.bmr && (
                       <p className="text-[11px] text-amber-400 mt-1">Held at your BMR — the goal would take it lower than the body burns at rest.</p>
                     )}
                   </div>
@@ -452,7 +503,7 @@ export default function MealsClient() {
                 </button>
               )}
             </div>
-            {t && <p className="text-[11px] opacity-50">Written to hit {t.kcal.toLocaleString()} kcal · {t.protein} g protein a day, {form.mealsPerDay} meals a day{form.dislikes.trim() ? ", never using what's under dislikes" : ""}.</p>}
+            {t && <p className="text-[11px] opacity-50">Written for <strong>{goalDef(form.goal).label.toLowerCase()}</strong> — {t.kcal.toLocaleString()} kcal · {t.protein} g protein a day, {form.mealsPerDay} meals a day{form.dislikes.trim() ? ", never using what's under dislikes" : ""}.</p>}
           </div>
 
           {/* ── Plans ── */}
@@ -503,6 +554,10 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
   const shop = plan.shopping
   const ticked = shop ? shop.groups.reduce((a, g) => a + g.items.filter(i => i.done).length, 0) : 0
   const items  = shop ? shop.groups.reduce((a, g) => a + g.items.length, 0) : 0
+  // ⚠ An estimate, and shown as one. A list made before prices existed has priced = 0, and then
+  // nothing is shown at all — a confident "£0" would be worse than no figure.
+  const cost   = shop ? shoppingTotals(shop) : null
+  const hasCost = !!cost && cost.priced > 0
 
   function tick(gi: number, ii: number) {
     if (!shop) return
@@ -522,7 +577,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
       <button onClick={onToggle} className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left min-h-[44px]">
         <span className="font-bold">{open ? "▼" : "▶"} {plan.title}</span>
         <span className="text-xs opacity-60">{plan.days} day{plan.days === 1 ? "" : "s"} · {when(plan.createdAt)} · {tg.kcal?.toLocaleString()} kcal / {tg.protein} g protein a day</span>
-        {shop && <span className="text-xs opacity-60">· 🛒 {ticked}/{items} ticked</span>}
+        {shop && <span className="text-xs opacity-60">· 🛒 {ticked}/{items} ticked{hasCost ? ` · about ${gbp(cost!.total)}` : ""}</span>}
       </button>
 
       {open && (
@@ -589,28 +644,47 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                     <button className={`${btn} min-h-[44px]`} onClick={copy}>{copied ? "COPIED ✓" : "COPY AS TEXT"}</button>
                     <button className={`${btn} min-h-[44px]`} onClick={untickAll} disabled={!ticked}>UNTICK ALL</button>
                     <span className="text-xs opacity-60 ml-auto">{ticked} of {items} ticked</span>
+                    {hasCost && (
+                      <span className="text-xs border border-[#1f5c33] rounded px-2 py-1">
+                        ABOUT <strong>{gbp(cost!.total)}</strong>
+                        {ticked > 0 && <span className="opacity-60"> · {gbp(cost!.toGet)} still to get</span>}
+                      </span>
+                    )}
                   </>
                 )}
               </div>
-              {!shop && !shopBusy && <p className="text-xs opacity-50">Every ingredient across the {plan.days} day{plan.days === 1 ? "" : "s"}, combined and grouped by aisle. Ticks are saved, so it works on your phone in the shop.</p>}
+              {!shop && !shopBusy && <p className="text-xs opacity-50">Every ingredient across the {plan.days} day{plan.days === 1 ? "" : "s"}, combined and grouped by aisle, with an estimated price. Ticks are saved, so it works on your phone in the shop.</p>}
               {shop && (
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {shop.groups.map((g, gi) => (
+                  {shop.groups.map((g, gi) => {
+                    const groupCost = g.items.reduce((a, i) => a + i.price, 0)
+                    return (
                     <div key={gi} className="border border-[#1f5c33] rounded-lg p-3">
-                      <div className="text-[10px] tracking-widest opacity-60 mb-2">{g.name.toUpperCase()}</div>
+                      <div className="text-[10px] tracking-widest opacity-60 mb-2 flex items-center justify-between gap-2">
+                        <span>{g.name.toUpperCase()}</span>
+                        {groupCost > 0 && <span>{gbp(groupCost)}</span>}
+                      </div>
                       <ul className="space-y-1">
                         {g.items.map((it, ii) => (
                           <li key={ii}>
                             <button onClick={() => tick(gi, ii)} className="w-full min-h-[44px] flex items-center gap-3 text-left text-sm rounded px-2 hover:bg-[#0a2214]">
                               <span className={`w-5 h-5 shrink-0 rounded border flex items-center justify-center text-xs ${it.done ? "border-[#33ff66] bg-[#33ff66] text-black" : "border-[#1f5c33]"}`}>{it.done ? "✓" : ""}</span>
                               <span className={it.done ? "line-through opacity-50" : ""}>{it.qty ? <span className="opacity-60">{it.qty} </span> : null}{it.item}</span>
+                              {it.price > 0 && <span className={`ml-auto shrink-0 text-xs tabular-nums ${it.done ? "opacity-40" : "opacity-70"}`}>{gbp(it.price)}</span>}
                             </button>
                           </li>
                         ))}
                       </ul>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
+              )}
+              {shop && hasCost && (
+                <p className="text-[11px] opacity-50">
+                  Prices are the AI&apos;s estimate at mid-range supermarket own-brand prices, for the whole pack you&apos;d buy — a rough guide for budgeting, not real prices.
+                  {cost!.priced < cost!.items && ` ${cost!.items - cost!.priced} item${cost!.items - cost!.priced === 1 ? " has" : "s have"} no estimate, so the total is low.`}
+                </p>
               )}
             </div>
           )}

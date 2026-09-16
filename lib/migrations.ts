@@ -109,6 +109,7 @@ export const MIGRATIONS = [
     "heightCm"     DOUBLE PRECISION,
     "weightKg"     DOUBLE PRECISION,
     "activity"     TEXT NOT NULL DEFAULT 'light',
+    "goal"         TEXT NOT NULL DEFAULT 'lose',
     "goalDelta"    INTEGER NOT NULL DEFAULT -500,
     "kcalOverride" INTEGER,
     "proteinPct"   INTEGER NOT NULL DEFAULT 30,
@@ -138,6 +139,9 @@ export const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "JordanMealPlan_profileId_idx" ON "JordanMealPlan"("profileId")`,
   `CREATE INDEX IF NOT EXISTS "JordanMealPlan_createdAt_idx" ON "JordanMealPlan"("createdAt")`,
+  // Lose / maintain / build muscle / gain (2026-09-16). Also in the CREATE above, for a database
+  // that has never had these tables; this ALTER covers one that made them the day before.
+  `ALTER TABLE "JordanMealProfile" ADD COLUMN IF NOT EXISTS "goal" TEXT NOT NULL DEFAULT 'lose'`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "extraDetails" TEXT`,
   `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "appliedDesc" TEXT`,
   `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "favourite" BOOLEAN NOT NULL DEFAULT FALSE`,

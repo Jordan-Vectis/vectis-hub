@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       system: planSystemPrompt(),
       prompt: planUserPrompt({
         name: p.name, sex: p.sex, age: p.age, weightKg: p.weightKg, t, days,
+        goal: (p as any).goal, goalDelta: p.goalDelta,
         mealsPerDay: p.mealsPerDay, likes: p.likes, dislikes: p.dislikes, notes: p.notes,
         brief: String(brief ?? "").slice(0, 2000),
       }),
