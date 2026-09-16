@@ -88,8 +88,12 @@ export default function JordanMenu() {
               <span>08 &nbsp;MEAL PLANNER <span className="opacity-50">— BMR &amp; macro targets, AI meal plans, shopping list</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
+            <Link href="/jordan/gym" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+              <span>09 &nbsp;GYM <span className="opacity-50">— AI training programmes, log every set, weights that go up</span></span>
+              <span className="shrink-0 font-bold">[ OPEN ]</span>
+            </Link>
             <div className={`${row} opacity-40 select-none`}>
-              <span>09 &nbsp;????????????</span>
+              <span>10 &nbsp;????????????</span>
               <span className="shrink-0">[ LOCKED ]</span>
             </div>
 

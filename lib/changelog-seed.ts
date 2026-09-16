@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-15, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-16, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a51fcd7531eb3dba9111749e16556c795c6f6d46","author":"Jordan Orange","date":"2026-09-16T09:36:42+01:00","subject":"Meal planner: a real goal, and an estimated cost on the shopping list"},
   {"sha":"e3d4220b4510c21d21e5a6ead0916943e20b2dfa","author":"Jordan Orange","date":"2026-09-15T16:58:47+01:00","subject":"Merge staging into main: meal planner, Auction Manager counters, settings ticks, column order"},
   {"sha":"e3405d2fad1fa6256e48200292dc5540089a311f","author":"Jordan Orange","date":"2026-09-15T16:57:56+01:00","subject":"Auction Manager: Catalogued column before Lots with photos"},
   {"sha":"833d6a6e73500a7bf6df19e80b603c3f6a4bb994","author":"Jordan Orange","date":"2026-09-15T16:50:58+01:00","subject":"Auction Settings: only the Catalogued and Complete ticks remain"},
