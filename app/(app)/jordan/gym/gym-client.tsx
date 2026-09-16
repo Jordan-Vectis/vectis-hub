@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import Session from "./session"
-import { EXPERIENCE, goalLabel, weeklySets, type GoalKey, type LiftInfo, type Programme } from "@/lib/jordan-gym"
+import SwapPicker from "./swap-picker"
+import { EXPERIENCE, goalLabel, weeklySets, type GoalKey, type LiftInfo, type Programme, type SwapOption } from "@/lib/jordan-gym"
 
 // JORDAN.SYS → GYM. Four screens: TODAY (start or carry on), PROGRAMME (the AI-written block),
 // HISTORY (what's actually been lifted) and SETUP (days, kit, injuries).
@@ -281,18 +282,20 @@ export default function GymClient() {
                   <button className={`${btn} min-h-[44px]`} onClick={() => abortRef.current?.abort()}>STOP</button>
                 </div>
               ) : (
-                <button className={`${btnGo} min-h-[44px]`} onClick={makeProgramme} disabled={!!busy || !profile?.equipment?.trim()}>✨ WRITE IT</button>
+                <button className={`${btnGo} min-h-[44px]`} onClick={makeProgramme} disabled={!!busy}>✨ WRITE IT</button>
               )}
             </div>
             <p className="text-[11px] opacity-50">
-              {profile?.equipment?.trim()
-                ? <>Written for <strong>{person ? goalLabel(person.goal).toLowerCase() : "your goal"}</strong>, {profile?.daysPerWeek} days a week, {profile?.sessionMinutes} minutes a session — and from what you actually lifted last block. It never picks the weights: those come from your log.</>
-                : <>Fill in what the gym has on the SETUP tab first — a programme written for kit you haven&apos;t got is useless.</>}
+              Written for <strong>{person ? goalLabel(person.goal).toLowerCase() : "your goal"}</strong>, {profile?.daysPerWeek} days a week, {profile?.sessionMinutes} minutes a session — and from what you actually lifted last block. It never picks the weights: those come from your log.
+              {" "}{profile?.equipment?.trim()
+                ? "Using the kit you listed on SETUP."
+                : "It assumes a normal commercial gym — swap anything your gym hasn't got, below."}
             </p>
           </div>
 
           {programmes.map(p => (
             <ProgrammeCard key={p.id} p={p} lifts={lifts} live={p.id === current?.id}
+              onSwapped={next => setProgrammes(ps => ps.map(x => x.id === next.id ? next : x))}
               onEnd={() => endBlock(p.id)} onDelete={() => deleteProgramme(p.id)} />
           ))}
           {programmes.length === 0 && <p className="text-xs opacity-50">No programmes yet.</p>}
@@ -384,9 +387,11 @@ export default function GymClient() {
 
           <div className="grid md:grid-cols-3 gap-3">
             <div>
-              <label className={label} htmlFor="g-kit">WHAT THE GYM HAS — NOTHING ELSE IS USED</label>
+              {/* Optional on purpose — blank assumes a normal commercial gym, and anything it
+                  picks that yours hasn't got is two taps to swap. */}
+              <label className={label} htmlFor="g-kit">WHAT THE GYM HAS (OPTIONAL)</label>
               <textarea id="g-kit" rows={3} className={input} value={form.equipment} onChange={e => edit({ equipment: e.target.value })}
-                placeholder="barbell + plates to 25 kg, dumbbells to 45 kg in 2.5s, cable stack, leg press, lat pulldown, no safety bars…" />
+                placeholder="leave empty for a normal gym — only worth filling in if yours is unusual (no squat rack, dumbbells only to 30 kg, a machine nobody else has…)" />
             </div>
             <div>
               <label className={label} htmlFor="g-inj">INJURIES — NEVER PRESCRIBED</label>
@@ -423,11 +428,29 @@ export default function GymClient() {
   )
 }
 
-function ProgrammeCard({ p, lifts, live, onEnd, onDelete }: {
-  p: SavedProgramme; lifts: LiftInfo[]; live: boolean; onEnd: () => void; onDelete: () => void
+function ProgrammeCard({ p, lifts, live, onSwapped, onEnd, onDelete }: {
+  p: SavedProgramme; lifts: LiftInfo[]; live: boolean
+  onSwapped: (next: SavedProgramme) => void; onEnd: () => void; onDelete: () => void
 }) {
   const [open, setOpen] = useState(live)
+  const [swapping, setSwapping] = useState<{ day: string; slug: string; name: string } | null>(null)
+  const [swapErr, setSwapErr] = useState<string | null>(null)
   const volume = weeklySets(p.plan, lifts)
+
+  async function doSwap(option: SwapOption) {
+    if (!swapping) return
+    setSwapErr(null)
+    try {
+      const r = await fetch("/api/jordan/gym/swap", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ programmeId: p.id, dayName: swapping.day, slug: swapping.slug, option }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? "Couldn't swap it")
+      onSwapped(j.programme)
+      setSwapping(null)
+    } catch (e: any) { setSwapErr(e.message) }
+  }
   return (
     <div className={box}>
       <button onClick={() => setOpen(!open)} className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left min-h-[44px]">
@@ -451,7 +474,17 @@ function ProgrammeCard({ p, lifts, live, onEnd, onDelete }: {
                     <li key={i}>
                       <span className="font-bold">{e.name}</span>
                       <span className="opacity-60"> — {e.sets} × {e.repLow}–{e.repHigh} @ {e.rir} left, {Math.round(e.restSeconds / 60 * 10) / 10} min rest</span>
+                      {live && (
+                        <button onClick={() => { setSwapErr(null); setSwapping({ day: d.name, slug: e.slug, name: e.name }) }}
+                          className="ml-2 opacity-60 hover:opacity-100 underline" title="Something else instead">swap</button>
+                      )}
                       {e.note && <div className="opacity-50">{e.note}</div>}
+                      {swapping?.day === d.name && swapping?.slug === e.slug && (
+                        <div className="mt-2">
+                          {swapErr && <p className="text-xs text-red-300 mb-1">{swapErr}</p>}
+                          <SwapPicker slug={e.slug} name={e.name} onPick={doSwap} onClose={() => setSwapping(null)} />
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

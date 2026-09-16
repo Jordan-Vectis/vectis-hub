@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import SwapPicker from "./swap-picker"
 import { platesFor, type LiftInfo, type Suggestion } from "@/lib/jordan-gym"
 
 // JORDAN.SYS → GYM → the in-gym logger. Standing up, out of breath, one hand, often no signal.
@@ -71,6 +72,7 @@ export default function Session({
   const [finishing, setFinishing] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [swapping, setSwapping] = useState(false)
 
   const ex = plan[idx] ?? null
   const unsaved = sets.filter(s => !s.saved)
@@ -235,6 +237,32 @@ export default function Session({
     } catch (e: any) { setError(e.message); setFinishing(false) }
   }
 
+  /** Swap the exercise he's on, just for today — the machine is taken, or it's aggravating
+   *  something. ⚠ The sets, reps and rest are KEPT: a swap changes the movement, not the job it
+   *  is doing in this session. The programme itself is untouched (swap it there to make it stick).
+   *  Sets already logged against the old exercise stay logged against the old exercise. */
+  async function swapExercise(o: { slug: string; name: string; equipment: string; why: string }) {
+    if (!ex) return
+    setSwapping(false)
+    try {
+      const r = await fetch("/api/jordan/gym/swap", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: ex.slug,
+          create: { ...o, sets: ex.sets, repLow: ex.repLow, repHigh: ex.repHigh, rir: ex.rir },
+        }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? "Couldn't swap it")
+      const l: LiftInfo = j.lift
+      setPlan(p => p.map((row, i) => i !== idx ? row : {
+        ...row, slug: l.slug, liftId: l.id!, name: l.name, equipment: l.equipment,
+        perHand: l.perHand, bodyweight: l.bodyweight, incrementKg: l.incrementKg, main: l.main,
+        note: o.why || row.note, substitute: row.name, suggestion: j.suggestion,
+      }))
+    } catch (e: any) { setError(e.message) }
+  }
+
   /** A machine is taken, or it's an off-plan session — put any lift in front of him properly,
    *  with a real suggestion rather than an empty box. */
   async function addExercise(slug: string) {
@@ -317,7 +345,11 @@ export default function Session({
               {ex.perHand ? " · weight is PER HAND" : ""}
             </p>
             {ex.note && <p className="text-xs opacity-60 mt-1">{ex.note}</p>}
+            <button onClick={() => setSwapping(v => !v)} className={`${btn} min-h-[44px] mt-2`}>
+              {swapping ? "CLOSE" : "⇄ SWAP FOR TODAY"}
+            </button>
           </div>
+          {swapping && <SwapPicker slug={ex.slug} name={ex.name} onPick={swapExercise} onClose={() => setSwapping(false)} />}
 
           {/* The suggestion, and WHY. */}
           <div className="border border-[#1f5c33] rounded-lg p-3 space-y-1">

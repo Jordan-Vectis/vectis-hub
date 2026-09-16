@@ -25,6 +25,12 @@ export const GYM_GOALS: Record<GoalKey, string> = {
   gain: "GOAL: GAIN WEIGHT — a bigger surplus. As for building muscle, but lean harder on the heavy compounds; recovery is not the limiting factor here.",
 }
 
+// ⚠ Equipment is OPTIONAL and this is why (Jordan, 2026-09-16: "I'd rather it just try to use
+// common gym equipment"). Listing the kit was a form to fill in before the tool did anything, for
+// a thing that is the same in almost every commercial gym. Left blank, the AI is told to assume
+// this — and anything it picks that isn't there gets swapped in two taps instead.
+export const DEFAULT_GYM = "a normal commercial gym: a barbell and full plates (smallest pair 1.25 kg), dumbbells up to about 45 kg, an adjustable bench, a squat rack, a cable stack, and the usual machines — lat pulldown, seated row, leg press, leg curl, leg extension, chest press, pec deck. Do NOT use specialist kit (safety squat bar, trap bar, GHD, reverse hyper, sled, bands, chains) — if a movement needs one of those, choose another."
+
 export const EXPERIENCE = [
   { key: "beginner",     label: "Beginner — under 6 months" },
   { key: "novice",       label: "Novice — 6 months to 2 years" },
@@ -425,7 +431,9 @@ export function gymUserPrompt(input: {
     `PERSON: ${input.name} — ${input.sex}, ${input.age ?? "?"} years old, ${input.weightKg ? `${Math.round(input.weightKg)} kg` : "weight unknown"}, ${exp.toLowerCase()}.`,
     `${GYM_GOALS[input.goal]} ${cals}`.trim(),
     `TRAINING: ${input.daysPerWeek} day${input.daysPerWeek === 1 ? "" : "s"} a week, up to ${input.sessionMinutes} minutes a session.`,
-    input.equipment.trim()    ? `EQUIPMENT AVAILABLE — use nothing else: ${input.equipment.trim()}` : "",
+    input.equipment.trim()
+      ? `EQUIPMENT AVAILABLE — use nothing else: ${input.equipment.trim()}`
+      : `EQUIPMENT: assume ${DEFAULT_GYM}`,
     input.injuries.trim()     ? `INJURIES — NEVER PRESCRIBE THESE: ${input.injuries.trim()}` : "",
     input.preferences.trim()  ? `LIKES AND DISLIKES: ${input.preferences.trim()}` : "",
     input.slugs.length        ? `EXERCISE SLUGS TO USE: ${input.slugs.join(", ")}` : "",
@@ -433,6 +441,73 @@ export function gymUserPrompt(input: {
     input.brief.trim()        ? `THIS BLOCK SPECIFICALLY: ${input.brief.trim()}` : "",
   ]
   return lines.filter(Boolean).join("\n")
+}
+
+// ── Swapping an exercise ─────────────────────────────────────────────────────
+// The machine is taken, it aggravates something, or he just doesn't get on with it. Two ways:
+// the catalogue's own same-pattern movements (instant, no waiting, no AI), or ask the AI for
+// tailored ones with a reason. A swap must stay in the SAME movement pattern, or the day quietly
+// stops training what it was built to train.
+
+export type SwapOption = { slug: string; name: string; equipment: string; why: string }
+
+export function swapSystemPrompt(): string {
+  return `You suggest replacement exercises for one adult training in a commercial gym in the UK. British spelling, plain exercise names.
+
+RULES:
+1. Every suggestion must train the SAME movement pattern and the same muscles as the exercise being replaced. A swap that changes what the session trains is wrong.
+2. Never suggest anything that clashes with the injuries given, in any variation.
+3. Use only equipment that is available.
+4. Prefer the slugs listed. If a movement genuinely is not listed, write a slug in the same style (lower case, hyphens).
+5. "why" is ONE short line saying when you would pick it over the original — the kit it needs, what it is easier or harder on, what it demands less of. No sales talk.
+6. Give 4 to 6 options, best first.
+7. Answer with JSON only, exactly this shape: {"options":[{"slug":"dumbbell-bench-press","name":"Dumbbell bench press","equipment":"dumbbell","why":"Same pattern with a longer range; easier on the shoulder than a bar."}]}`
+}
+
+export function swapUserPrompt(input: {
+  name: string; pattern: string; equipment: string; injuries: string; preferences: string
+  slugs: string[]; history: string
+}): string {
+  return [
+    `REPLACING: ${input.name} — a ${input.pattern.replace("-", " ")} movement.`,
+    `EQUIPMENT AVAILABLE: ${input.equipment.trim() || DEFAULT_GYM}`,
+    input.injuries.trim()    ? `INJURIES — NEVER SUGGEST THESE: ${input.injuries.trim()}` : "",
+    input.preferences.trim() ? `LIKES AND DISLIKES: ${input.preferences.trim()}` : "",
+    input.history.trim()     ? `WHY IT IS BEING REPLACED: ${input.history.trim()}` : "",
+    input.slugs.length       ? `SLUGS TO PREFER: ${input.slugs.join(", ")}` : "",
+  ].filter(Boolean).join("\n")
+}
+
+export function normaliseSwap(raw: unknown): SwapOption[] {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  return arr(r.options).map(x => {
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>
+    const name = str(o.name, 80)
+    return {
+      slug: slugify(str(o.slug, 60) || name), name: name || str(o.slug, 60),
+      equipment: str(o.equipment, 30) || "barbell", why: str(o.why, 200),
+    }
+  }).filter(o => o.slug && o.name).slice(0, 8)
+}
+
+/** Swap one exercise for another inside a saved programme, in place. Returns null when the day
+ *  or the exercise isn't there any more, so the caller can say so rather than saving nothing. */
+export function applySwap(plan: Programme, dayName: string, slug: string, next: ProgrammeExercise): Programme | null {
+  let hit = false
+  const days = plan.days.map(d => {
+    if (d.name !== dayName) return d
+    return {
+      ...d,
+      exercises: d.exercises.map(e => {
+        if (e.slug !== slug || hit) return e
+        hit = true
+        // ⚠ Sets, reps, RIR and rest are KEPT from the original — a swap changes the movement,
+        // not the job it is doing in that session.
+        return { ...e, slug: next.slug, name: next.name, equipment: next.equipment, pattern: e.pattern, substitute: e.name, note: next.note || e.note }
+      }),
+    }
+  })
+  return hit ? { ...plan, days } : null
 }
 
 /** The plain-English performance summary the next programme is written from — and it is SAVED

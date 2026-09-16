@@ -28,9 +28,9 @@ export async function POST(req: NextRequest) {
 
     const profile = await getProfile()
     if (!profile) return NextResponse.json({ error: "Couldn't open the profile" }, { status: 500 })
-    if (!profile.equipment.trim()) {
-      return NextResponse.json({ error: "Fill in what the gym has first — a programme written for kit you haven't got is useless." }, { status: 400 })
-    }
+    // ⚠ Equipment is OPTIONAL (Jordan, 2026-09-16). Blank means "a normal commercial gym"
+    // (DEFAULT_GYM in lib/jordan-gym.ts), and anything it picks that isn't there gets swapped in
+    // two taps. Making him list the kit first was a form standing between him and the tool.
     const weeks = Math.max(1, Math.min(12, Math.round(Number(rawWeeks)) || 4))
     const person = personOf(profile)
     const t = profile.mealProfile ? mealTargets(profile.mealProfile) : null
