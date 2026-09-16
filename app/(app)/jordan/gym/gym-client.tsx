@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import Session from "./session"
 import SwapPicker from "./swap-picker"
-import { EXPERIENCE, goalLabel, weeklySets, type GoalKey, type LiftInfo, type Programme, type SwapOption } from "@/lib/jordan-gym"
+import { EXPERIENCE, goalLabel, missingMuscles, weeklySets, type GoalKey, type LiftInfo, type Programme, type SwapOption } from "@/lib/jordan-gym"
 
 // JORDAN.SYS → GYM. Four screens: TODAY (start or carry on), PROGRAMME (the AI-written block),
 // HISTORY (what's actually been lifted) and SETUP (days, kit, injuries).
@@ -435,7 +435,10 @@ function ProgrammeCard({ p, lifts, live, onSwapped, onEnd, onDelete }: {
   const [open, setOpen] = useState(live)
   const [swapping, setSwapping] = useState<{ day: string; slug: string; name: string } | null>(null)
   const [swapErr, setSwapErr] = useState<string | null>(null)
-  const volume = weeklySets(p.plan, lifts)
+  const volume  = weeklySets(p.plan, lifts)
+  const thin    = volume.filter(v => v.low)
+  const missing = missingMuscles(volume)
+  const asked   = Number((p.inputs as any)?.daysAsked) || 0
 
   async function doSwap(option: SwapOption) {
     if (!swapping) return
@@ -464,6 +467,11 @@ function ProgrammeCard({ p, lifts, live, onSwapped, onEnd, onDelete }: {
         <div className="px-4 pb-4 space-y-3 border-t border-[#1f5c33] pt-3">
           {p.plan.notes && <p className="text-xs opacity-70 border border-[#1f5c33] rounded px-3 py-2">💡 {p.plan.notes}</p>}
           {p.brief && <p className="text-xs opacity-60">Asked for: {p.brief}</p>}
+          {asked > 0 && asked !== p.plan.days.length && (
+            <p className="text-xs text-amber-400">
+              ⚠ You asked for {asked} days a week and it wrote {p.plan.days.length}. Write the block again if you want the {asked}.
+            </p>
+          )}
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {p.plan.days.map(d => (
@@ -492,10 +500,24 @@ function ProgrammeCard({ p, lifts, live, onSwapped, onEnd, onDelete }: {
             ))}
           </div>
 
+          {/* ⚠ Say when it's thin. Printing "ten to twenty is the range" under a programme that
+              gives a muscle six is the screen arguing with itself — and a thin block read as a
+              normal one is exactly "nothing happened looking like success". */}
           {volume.length > 0 && (
-            <p className="text-[11px] opacity-50">
-              Hard sets a week: {volume.map(v => `${v.muscle} ${v.sets}`).join(" · ")}. Ten to twenty a muscle is the range that grows it.
-            </p>
+            <div className="text-[11px] space-y-1">
+              <p className="opacity-50">
+                Hard sets a week: {volume.map(v => (
+                  <span key={v.muscle} className={v.low ? "text-amber-400" : ""}>{v.muscle} {v.sets} · </span>
+                ))}
+                <span>ten to twenty a muscle is the range that grows it. Sets count once for the muscle a lift actually trains, and a half where it only helps.</span>
+              </p>
+              {(thin.length > 0 || missing.length > 0) && (
+                <p className="text-amber-400">
+                  ⚠ Light on {[...thin.map(v => `${v.muscle} (${v.sets})`), ...missing.map(m => `${m} (nothing)`)].join(", ")}.
+                  {live ? " Swap an exercise, or write the block again — the AI is told to clear 10 a muscle." : ""}
+                </p>
+              )}
+            </div>
           )}
           {p.digest && (
             <details className="text-[11px] opacity-60">

@@ -83,6 +83,10 @@ export async function POST(req: NextRequest) {
           equipment: profile.equipment, injuries: profile.injuries,
           sessionMinutes: profile.sessionMinutes, experience: profile.experience,
           kcal: t?.kcal ?? null, goal: person.goal,
+          // ⚠ What was ASKED for, beside what came back — daysPerWeek above records what the AI
+          // actually wrote, so without this a four-day week quietly answered with three full-body
+          // sessions leaves no trace that anything was ignored.
+          daysAsked: profile.daysPerWeek,
         } as any,
         digest,
         brief: String(brief ?? "").slice(0, 2000),

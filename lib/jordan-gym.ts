@@ -19,7 +19,10 @@ export type { GoalKey }
 // surplus — see GYM_GOALS below.
 
 export const GYM_GOALS: Record<GoalKey, string> = {
-  lose: "GOAL: LOSE WEIGHT — training in a calorie deficit. The job is KEEPING muscle and strength, not adding it. Keep the heavy compound work (that is what preserves strength) and cut total volume by about a quarter against a normal block. Do not add sets or an extra day to burn more — recovery is the limit in a deficit.",
+  // ⚠ "Cut the volume" used to be the whole brief and it produced a programme of two-set
+  // accessories — 6 hard sets a week for chest, under the 10 the same screen calls the minimum.
+  // Cutting means one less EXERCISE, never three-set exercises shaved to two.
+  lose: "GOAL: LOSE WEIGHT — training in a calorie deficit. The job is KEEPING muscle and strength, not adding it. The heavy compound work stays exactly as it would be otherwise — that is what preserves strength. Trim the volume by dropping an accessory exercise or two, NOT by cutting every exercise down to two sets, and every muscle group still gets its 10 hard sets a week. Do not add sets or an extra day to burn more — recovery is the limit in a deficit.",
   maintain: "GOAL: MAINTAIN — steady training at maintenance calories. Normal volume, normal progression.",
   muscle: "GOAL: BUILD MUSCLE — eating in a small surplus. 10–20 hard sets per muscle group per week, every group trained TWICE a week, most work in the 6–12 rep range at 1–3 reps in reserve.",
   gain: "GOAL: GAIN WEIGHT — a bigger surplus. As for building muscle, but lean harder on the heavy compounds; recovery is not the limiting factor here.",
@@ -386,14 +389,37 @@ export function programmeOut(r: {
   }
 }
 
-/** Hard sets per muscle group across a week — 10 to 20 is the working range for growth. */
-export function weeklySets(plan: Programme, lifts: LiftInfo[]): { muscle: string; sets: number }[] {
+/** The groups a programme is judged on. Calves, core, forearms and the lower back get whatever
+ *  they get — nobody writes a block around them, and flagging them would cry wolf every time. */
+export const MAIN_MUSCLES = ["chest", "back", "shoulders", "quads", "hamstrings", "glutes", "biceps", "triceps"]
+
+/**
+ * Hard sets per muscle across a week. 10 to 20 is the working range for growth.
+ *
+ * ⚠ A set counts ONCE, for the muscle the exercise is actually training — the first in the
+ * lift's list — and a half for the ones it only helps. Counting every muscle a lift touches as a
+ * full hard set had a bench press putting 3 sets towards shoulders, so a programme with 6 real
+ * chest sets displayed 13 for shoulders and read as though it were well covered.
+ */
+export function weeklySets(plan: Programme, lifts: LiftInfo[]): { muscle: string; sets: number; low: boolean }[] {
   const byMuscle = new Map<string, number>()
   for (const d of plan.days) for (const e of d.exercises) {
-    const lift = matchLift(e.slug, lifts)
-    for (const m of lift?.muscles ?? []) byMuscle.set(m, (byMuscle.get(m) ?? 0) + e.sets)
+    const muscles = matchLift(e.slug, lifts)?.muscles ?? []
+    muscles.forEach((m, i) => byMuscle.set(m, (byMuscle.get(m) ?? 0) + (i === 0 ? e.sets : e.sets / 2)))
   }
-  return [...byMuscle.entries()].map(([muscle, sets]) => ({ muscle, sets })).sort((a, b) => b.sets - a.sets)
+  return [...byMuscle.entries()]
+    .map(([muscle, raw]) => {
+      const sets = Math.round(raw * 2) / 2
+      return { muscle, sets, low: MAIN_MUSCLES.includes(muscle) && sets < 10 }
+    })
+    .sort((a, b) => b.sets - a.sets)
+}
+
+/** The main groups a programme misses altogether — a muscle with no work at all never appears in
+ *  the count above, so "chest 6" is visible but "no chest at all" would not be. */
+export function missingMuscles(counted: { muscle: string }[]): string[] {
+  const have = new Set(counted.map(c => c.muscle))
+  return MAIN_MUSCLES.filter(m => !have.has(m))
 }
 
 // ── Prompts ──────────────────────────────────────────────────────────────────
@@ -406,13 +432,15 @@ RULES — every one of them matters:
 2. Use ONLY the equipment listed. If a movement needs something that is not there, choose another. Give every exercise a "substitute" for when the machine is taken — a real gym is busy.
 3. Use the exercise slugs from the list you are given. If a movement genuinely is not on the list, write a slug in the same style (lower case, hyphens) and give its full name — never reuse a listed slug for a different movement.
 4. NEVER include any movement named under injuries, in any variation. Put a pain-free alternative for that pattern instead and say why in its "note".
-5. It must FIT the session length. A compound working set with its rest is about 3–4 minutes, an accessory about 2. Put "estimatedMinutes" on every day and do not go over the limit given. Four to eight exercises a session, compounds first while he is fresh.
-6. Train each muscle group TWICE a week whenever three or more days are trained.
-7. Rep ranges: main compounds 5–8, secondary compounds 8–12, isolation 12–20. Reps in reserve 1–3 — never to failure on a compound, and never on the first exercise of a session.
-8. Rest: 150–180 s on compounds, 60–90 s on isolation.
-9. WHAT HE ACTUALLY DID OVERRULES WHAT LOOKS TIDY. Keep any exercise that is progressing — do not swap it for variety. Replace an exercise marked STALLED with a different movement in the SAME pattern. Drop an exercise he keeps skipping: a skipped exercise is a vote. If he missed sessions last block, do NOT add volume — hold it or cut it, and cut a day if he has never managed the days prescribed.
-10. "notes" is one or two plain lines on how to run the block. No motivational padding.
-11. Answer with JSON only, exactly this shape and nothing else:
+5. ⚠ WRITE EXACTLY THE NUMBER OF DAYS ASKED FOR — not fewer, not more — and use the split that goes with it: 2 days = full body twice; 3 days = full body three times OR push / pull / legs; 4 days = upper, lower, upper, lower; 5 days = push, pull, legs, upper, lower; 6 days = push, pull, legs twice. Do NOT answer a four-day week with three full-body sessions.
+6. ⚠⚠ VOLUME IS THE POINT AND IT IS CHECKED. Every muscle group — chest, back, shoulders, quads, hamstrings, glutes, biceps, triceps — must get AT LEAST 10 HARD SETS A WEEK, counting a set only towards the muscle the exercise actually trains (a bench press is chest, not shoulders). Twelve to sixteen is the target. COUNT THEM BEFORE YOU ANSWER, muscle by muscle, and add work until every one clears 10. Train each group twice a week whenever three or more days are trained.
+7. THREE SETS MINIMUM on any exercise that is there to build something. Two sets is for a finisher at the very end of a session, never for a main compound or the only exercise for a muscle. A programme of two-set exercises looks tidy and does nothing.
+8. It must FIT the session length. A compound working set with its rest is about 3–4 minutes, an accessory about 2. Put "estimatedMinutes" on every day and do not go over the limit given — but do not come in far UNDER it either: if the volume above does not fill the time, add work rather than handing back a short session. Five to eight exercises a session, compounds first while he is fresh.
+9. Rep ranges: main compounds 5–8, secondary compounds 8–12, isolation 12–20. Reps in reserve 1–3 — never to failure on a compound, and never on the first exercise of a session.
+10. Rest: 150–180 s on compounds, 60–90 s on isolation.
+11. WHAT HE ACTUALLY DID OVERRULES WHAT LOOKS TIDY. Keep any exercise that is progressing — do not swap it for variety. Replace an exercise marked STALLED with a different movement in the SAME pattern. Drop an exercise he keeps skipping: a skipped exercise is a vote. If he missed sessions last block, do NOT add volume — hold it, and cut a day only if he has never once managed the days prescribed.
+12. "notes" is one or two plain lines on how to run the block. No motivational padding.
+13. Answer with JSON only, exactly this shape and nothing else:
 {"title":"Upper/Lower — 4 days","notes":"one or two lines on how to run it","weeks":4,"days":[{"day":1,"name":"Upper A","estimatedMinutes":62,"exercises":[{"slug":"barbell-bench-press","name":"Barbell bench press","pattern":"horizontal-push","equipment":"barbell","sets":3,"repLow":6,"repHigh":8,"rir":2,"restSeconds":180,"note":"top set first, stop 2 short","substitute":"Dumbbell bench press"}]}]}`
 }
 
@@ -430,7 +458,7 @@ export function gymUserPrompt(input: {
   const lines = [
     `PERSON: ${input.name} — ${input.sex}, ${input.age ?? "?"} years old, ${input.weightKg ? `${Math.round(input.weightKg)} kg` : "weight unknown"}, ${exp.toLowerCase()}.`,
     `${GYM_GOALS[input.goal]} ${cals}`.trim(),
-    `TRAINING: ${input.daysPerWeek} day${input.daysPerWeek === 1 ? "" : "s"} a week, up to ${input.sessionMinutes} minutes a session.`,
+    `TRAINING: EXACTLY ${input.daysPerWeek} day${input.daysPerWeek === 1 ? "" : "s"} a week — write ${input.daysPerWeek} days, no fewer — and up to ${input.sessionMinutes} minutes a session (use most of that time).`,
     input.equipment.trim()
       ? `EQUIPMENT AVAILABLE — use nothing else: ${input.equipment.trim()}`
       : `EQUIPMENT: assume ${DEFAULT_GYM}`,
