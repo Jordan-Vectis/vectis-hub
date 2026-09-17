@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"1674ee3a077b77980bb53581fbeef16d6cacdedc","author":"Jordan Orange","date":"2026-09-16T16:58:11+01:00","subject":"Gym: make it write a real split, and stop flattering the volume count"},
   {"sha":"d9420ff8bec283d814bcd0dd5d6990b3214839bf","author":"Jordan Orange","date":"2026-09-16T16:39:05+01:00","subject":"Gym: equipment is optional, and every exercise can be swapped"},
   {"sha":"d31290f3d58281f04b6c2c602d263ab30a38f7a4","author":"Jordan Orange","date":"2026-09-16T16:24:25+01:00","subject":"JORDAN.SYS 09 · GYM — AI programmes, and a log that decides the weights"},
   {"sha":"a51fcd7531eb3dba9111749e16556c795c6f6d46","author":"Jordan Orange","date":"2026-09-16T09:36:42+01:00","subject":"Meal planner: a real goal, and an estimated cost on the shopping list"},

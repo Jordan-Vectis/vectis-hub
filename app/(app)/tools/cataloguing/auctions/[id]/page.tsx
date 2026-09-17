@@ -99,6 +99,24 @@ export default async function AuctionDetailPage({
     }
   }
 
+  // ── Which lots are ACTUALLY in BC ────────────────────────────────────────────
+  // Measured, not the old per-lot tick (Jordan, 2026-09-17: "change it to be automatic like the
+  // counter on the page before"). Same rule and same query as the Auction Manager's In BC column
+  // and End of Day: the lot's BARCODE found in the synced BC data (WarehouseItem).
+  // ⚠⚠ BARCODE ONLY — never receiptUniqueId (RULES: legacy Hub-minted ids collide with BC's own
+  // numbering for other items, so a uniqueId "match" can point at a different lot entirely).
+  // ⚠ It reflects the LAST DATA SYNC, not BC live; the column says so on hover.
+  // One query for the whole sale, upper-cased both sides — barcodes are stored as typed.
+  let inBC = new Set<string>()
+  try {
+    const rows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT DISTINCT l.id
+      FROM "CatalogueLot" l
+      JOIN "WarehouseItem" w ON upper(w.barcode) = upper(l.barcode)
+      WHERE l."auctionId" = ${auction.id}
+        AND l.barcode IS NOT NULL AND btrim(l.barcode) <> ''`
+    inBC = new Set(rows.map(r => r.id))
+  } catch { /* the BC mirror is a convenience — never take the sale page down for it */ }
 
   return (
     <div className="h-full flex flex-col min-h-0">
@@ -160,7 +178,9 @@ export default async function AuctionDetailPage({
           notes: l.notes,
           status: l.status,
           aiUpgraded: l.aiUpgraded,
-          addedToBC: l.addedToBC,
+          // Measured from the BC sync, not the old tick. `addedToBC` still exists on the row and
+          // keeps its history; nothing reads it for display any more.
+          inBC: inBC.has(l.id),
           aiExcluded: l.aiExcluded,
           createdByName: l.createdByName,
           createdAt: l.createdAt.toISOString(),

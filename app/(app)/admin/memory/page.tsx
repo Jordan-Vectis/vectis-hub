@@ -452,8 +452,9 @@ F126 478/498, F127 480/492, F134 194/252, F138 84/102.
   are, from the same barcode query. The date column was narrowed and the flags moved left to make
   room, the flags text dropped to 7pt, and the page footer now states that BC is counted from the
   last Data Sync. ⚠ Only the COMPLETED table has status flags — the active one has none.
-- \`CatalogueLot.addedToBC\` (per-lot) is a different field and is untouched — it still drives
-  Manage Lots' BC column and the "Mark added to BC" bulk action.
+- \`CatalogueLot.addedToBC\` (per-lot) was a different field and survived this change — it drove
+  Manage Lots' BC column and the "Mark added to BC" bulk action until **2026-09-17**, when it went
+  the same way (see below).
 
 ## The other two ticks went the same way (2026-09-15)
 
@@ -464,6 +465,7 @@ Jordan: *"remove the photography tick as it's redundant now we have the counter,
 - Status filters became **All / Not all lots photographed** and **All / Not all lots ran through AI**, count-based like In BC (a sale with no eligible lots is never "all done").
 - **Then the ticks themselves went (same day).** Jordan, on Auction Settings: *"we just need the catalogued tick and the complete tick if the rest are worked off counters anyway"*. \`addedToBC\`, \`photography\` and \`aiRan\` are no longer tickable anywhere; the columns stay in the DB. ⚠ \`updateAuction\` deliberately does NOT write them — an unticked/absent checkbox arrives as absent and the old code saved that as FALSE, so leaving them in \`data\` would have wiped every sale's old value on its next Save. Every display of the ticks was swapped or dropped so nothing shows a frozen value: sale-header badges dropped; Photography list's "Marked photographed"/"In BC" badges dropped; the Manager Portal Completed table's "Added to BC" column is now a measured **In BC** \`616/616\` (same barcode query); the overview PDF's "Photo" flag is measured (every lot has a photo). Export still writes the old columns. RULES.md updated.
 - **Bug found on the way:** Lotting Up's sale picker warned *"is marked Added to BC and is locked"* off \`addedToBC\` — wrong since the lock moved to Catalogued on 2026-09-02. It now reads \`catalogued\`.
+- **The PER-LOT tick went the same way (2026-09-17).** Jordan, on Manage Lots: *"change the added to BC column ... to be automatic like the counter on the page before and remove the button that adds them"*. The BC column on the sale page is now measured per lot — the lot's **barcode** found in \`WarehouseItem\`, one raw query in \`app/(app)/tools/cataloguing/auctions/[id]/page.tsx\`, passed to the table as \`inBC\` — and it is **not clickable**. The "📦 Mark added to BC" / "↺ Unmark added to BC" bulk button is gone, and so are the server actions behind it (\`toggleLotAddedToBC\`, \`bulkSetLotsAddedToBC\` — deleted, not left dead). The column filter reads "In BC / Not in BC". ⚠ \`CatalogueLot.addedToBC\` stays as a column and keeps its lot-log history; only the spreadsheet importer still writes it. Never add a way to set it by hand — the lot nobody remembered to tick was always the one that mattered.
 
 Related: [[reference_admin_centre]], [[reference_end_of_day_bc]], [[reference_manage_lots_bulk_undo]].
 `,
