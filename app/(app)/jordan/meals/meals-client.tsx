@@ -7,7 +7,7 @@ import {
   kgFromStone, cmFromFeet, stoneFromKg, feetFromCm,
   goalDef, deltaFor, goalSummary, gbp, shoppingTotals, chosenMeals,
   targets as workOut, dayTotals, shoppingText,
-  type GoalKey, type Plan, type Shopping, type Targets,
+  type GoalKey, type MealOption, type Plan, type Shopping, type Targets,
 } from "@/lib/jordan-meals"
 
 // JORDAN.SYS → MEAL PLANNER. Private to /jordan (every route 404s for anyone else).
@@ -562,7 +562,8 @@ export default function MealsClient() {
                   shopBusy={busy === `shop:${plan.id}`} secs={secs} anyBusy={!!busy}
                   onToggle={() => setOpenId(openId === plan.id ? null : plan.id)}
                   onShopping={() => makeShopping(plan)} onStop={stop}
-                  onTick={s => setShopping(plan, s)} onRename={() => renamePlan(plan)} onDelete={() => deletePlan(plan)} />
+                  onTick={s => setShopping(plan, s)} onRename={() => renamePlan(plan)} onDelete={() => deletePlan(plan)}
+                  onSwapped={next => setPlans(ps => ps.map(p => p.id === next.id ? next : p))} />
               ))}
             </div>
           )}
@@ -587,14 +588,48 @@ function toneFor(actual: number, target: number): string {
   return Math.abs(actual - target) / target <= 0.05 ? GREEN : "#ffc94d"
 }
 
-function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, onStop, onTick, onRename, onDelete }: {
+function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, onStop, onTick, onRename, onDelete, onSwapped }: {
   plan: SavedPlan; open: boolean; shopBusy: boolean; secs: number; anyBusy: boolean
   onToggle: () => void; onShopping: () => void; onStop: () => void
   onTick: (s: Shopping) => void; onRename: () => void; onDelete: () => void
+  onSwapped: (next: SavedPlan) => void
 }) {
   const [dayIdx, setDayIdx] = useState(0)
   const [view, setView] = useState<"meals" | "shopping">("meals")
   const [copied, setCopied] = useState(false)
+  // Swapping one meal for something else (2026-09-17).
+  const [swapping, setSwapping] = useState<{ day: number; i: number } | null>(null)
+  const [options, setOptions]   = useState<MealOption[]>([])
+  const [swapWhy, setSwapWhy]   = useState("")
+  const [swapBusy, setSwapBusy] = useState(false)
+  const [swapErr, setSwapErr]   = useState<string | null>(null)
+
+  async function askSwap(dayNo: number, i: number) {
+    setSwapBusy(true); setSwapErr(null)
+    try {
+      const r = await fetch("/api/jordan/meals/swap", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: plan.id, dayNo, index: i, why: swapWhy, model: getJordanModel() }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? "Couldn't find anything else")
+      setOptions(j.options ?? [])
+    } catch (e: any) { setSwapErr(e.message) } finally { setSwapBusy(false) }
+  }
+
+  async function useSwap(dayNo: number, i: number, meal: MealOption) {
+    setSwapBusy(true); setSwapErr(null)
+    try {
+      const r = await fetch("/api/jordan/meals/swap", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: plan.id, dayNo, index: i, meal }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error ?? "Couldn't swap it")
+      onSwapped(j.plan)
+      setSwapping(null); setOptions([]); setSwapWhy("")
+    } catch (e: any) { setSwapErr(e.message) } finally { setSwapBusy(false) }
+  }
   const tg = plan.targets
   const day = plan.plan.days[Math.min(dayIdx, plan.plan.days.length - 1)]
   const totals = day ? dayTotals(day) : null
@@ -658,9 +693,38 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {day.meals.map((m, i) => (
                   <div key={i} className="border border-[#1f5c33] rounded-lg p-3 space-y-2">
-                    <div className="text-[10px] tracking-widest opacity-60">{m.slot.toUpperCase()}{m.prepMinutes ? ` · ${m.prepMinutes} MIN` : ""}</div>
+                    <div className="text-[10px] tracking-widest opacity-60 flex items-center justify-between gap-2">
+                      <span>{m.slot.toUpperCase()}{m.prepMinutes ? ` · ${m.prepMinutes} MIN` : ""}</span>
+                      <button onClick={() => { setSwapErr(null); setOptions([]); setSwapping(swapping?.day === day.day && swapping?.i === i ? null : { day: day.day, i }) }}
+                        className="opacity-60 hover:opacity-100 underline tracking-normal" title="Something else instead">
+                        {swapping?.day === day.day && swapping?.i === i ? "close" : "swap"}
+                      </button>
+                    </div>
                     <div className="font-bold">{m.name}</div>
                     <div className="text-xs opacity-80">{m.kcal} kcal · P {m.protein} g · C {m.carbs} g · F {m.fat} g</div>
+                    {swapping?.day === day.day && swapping?.i === i && (
+                      <div className="border border-[#33ff66] rounded p-2 space-y-2">
+                        {swapErr && <p className="text-xs text-red-300">{swapErr}</p>}
+                        {options.length === 0 ? (
+                          <>
+                            <input value={swapWhy} onChange={e => setSwapWhy(e.target.value)}
+                              placeholder="why? don't fancy fish, no time, use up the mince…"
+                              className="w-full bg-black border border-[#1f5c33] rounded px-2 py-1.5 text-xs text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]" />
+                            <button className={`${btn} min-h-[44px] w-full`} onClick={() => askSwap(day.day, i)} disabled={swapBusy}>
+                              {swapBusy ? "THINKING…" : "✨ SHOW ME 3 OTHERS"}
+                            </button>
+                            <p className="text-[11px] opacity-50">Same slot, same calories and at least the same protein — so the day still adds up.</p>
+                          </>
+                        ) : options.map((o, oi) => (
+                          <button key={oi} onClick={() => useSwap(day.day, i, o)} disabled={swapBusy}
+                            className="w-full text-left min-h-[52px] px-2 py-2 rounded border border-[#1f5c33] hover:bg-[#0a2214]">
+                            <div className="text-sm font-bold">{o.name}</div>
+                            <div className="text-[11px] opacity-70">{o.kcal} kcal · P {o.protein} g{o.prepMinutes ? ` · ${o.prepMinutes} min` : ""}</div>
+                            {o.why && <div className="text-[11px] opacity-50">{o.why}</div>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <ul className="text-xs space-y-0.5">
                       {m.ingredients.map((ing, k) => <li key={k}>· {ing.qty ? <span className="opacity-60">{ing.qty} </span> : null}{ing.item}</li>)}
                     </ul>
@@ -701,6 +765,13 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                 )}
               </div>
               {!shop && !shopBusy && <p className="text-xs opacity-50">Every ingredient across the {plan.days} day{plan.days === 1 ? "" : "s"}, combined and grouped by aisle, with an estimated price. Ticks are saved, so it works on your phone in the shop.</p>}
+              {/* ⚠ A list that quietly buys for a meal he is no longer cooking is worse than no
+                  list. It is kept (the ticks are worth keeping) but it must say so. */}
+              {shop?.stale && (
+                <p className="text-xs text-amber-400 border border-amber-600 rounded px-3 py-2">
+                  ⚠ You&apos;ve swapped a meal since this list was made, so it&apos;s shopping for the old one. Remake it to match — your ticks come back on anything still on the list.
+                </p>
+              )}
               {shop && (
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {shop.groups.map((g, gi) => {

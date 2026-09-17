@@ -246,7 +246,10 @@ export type Plan = { title: string; tips: string; days: PlanDay[] }
  *  (an old list made before estimates existed, or an item it wouldn't guess at). */
 export type ShoppingItem = { item: string; qty: string; done: boolean; price: number }
 export type ShoppingGroup = { name: string; items: ShoppingItem[] }
-export type Shopping = { groups: ShoppingGroup[] }
+/** `stale` = a meal was swapped after this list was made, so it is buying for a plan that has
+ *  changed. ⚠ Kept INSIDE the JSON rather than as a column — no migration, and the flag can
+ *  never drift away from the list it describes. */
+export type Shopping = { groups: ShoppingGroup[]; stale?: boolean }
 
 const str = (v: unknown, max = 400) => String(v ?? "").trim().slice(0, max)
 const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0 }
@@ -258,31 +261,92 @@ const money = (v: unknown) => {
 }
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 
+/** One meal, coerced. Shared by the plan and by the swap options, so a swapped-in meal is held to
+ *  exactly the same shape as one the plan was born with. */
+export function normaliseMeal(m: unknown): Meal {
+  const mm = (m && typeof m === "object" ? m : {}) as Record<string, unknown>
+  return {
+    slot: str(mm.slot, 40) || "Meal",
+    name: str(mm.name, 120) || "Untitled",
+    prepMinutes: num(mm.prepMinutes),
+    ingredients: arr(mm.ingredients).map(x => {
+      const xx = (x && typeof x === "object" ? x : {}) as Record<string, unknown>
+      return typeof x === "string" ? { item: str(x, 120), qty: "" } : { item: str(xx.item, 120), qty: str(xx.qty, 40) }
+    }).filter(x => x.item),
+    method: arr(mm.method).map(s => str(s, 600)).filter(Boolean),
+    kcal: num(mm.kcal), protein: num(mm.protein), carbs: num(mm.carbs), fat: num(mm.fat),
+  }
+}
+
 /** Coerce whatever the model (or an old row) returned into a complete Plan — a missing array
  *  must become an empty one, never a crashed page. */
 export function normalisePlan(raw: unknown): Plan {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
   const days = arr(r.days).map((d, i) => {
     const dd = (d && typeof d === "object" ? d : {}) as Record<string, unknown>
-    return {
-      day: num(dd.day) || i + 1,
-      meals: arr(dd.meals).map(m => {
-        const mm = (m && typeof m === "object" ? m : {}) as Record<string, unknown>
-        return {
-          slot: str(mm.slot, 40) || "Meal",
-          name: str(mm.name, 120) || "Untitled",
-          prepMinutes: num(mm.prepMinutes),
-          ingredients: arr(mm.ingredients).map(x => {
-            const xx = (x && typeof x === "object" ? x : {}) as Record<string, unknown>
-            return typeof x === "string" ? { item: str(x, 120), qty: "" } : { item: str(xx.item, 120), qty: str(xx.qty, 40) }
-          }).filter(x => x.item),
-          method: arr(mm.method).map(s => str(s, 600)).filter(Boolean),
-          kcal: num(mm.kcal), protein: num(mm.protein), carbs: num(mm.carbs), fat: num(mm.fat),
-        }
-      }),
-    }
+    return { day: num(dd.day) || i + 1, meals: arr(dd.meals).map(normaliseMeal) }
   }).filter(d => d.meals.length)
   return { title: str(r.title, 120), tips: str(r.tips, 1000), days }
+}
+
+// ── Swapping one meal ────────────────────────────────────────────────────────
+// Jordan, 2026-09-17: "can I have like a substitute option where it will swap it for something
+// else?". ⚠ Three COMPLETE meals come back in one call, not names to expand later — picking one
+// applies instantly instead of making him wait twice.
+
+export function swapMealSystemPrompt(): string {
+  return `You suggest replacement meals for one adult in the UK. Real, cookable recipes from a normal UK supermarket, metric quantities, British spelling.
+
+RULES:
+1. Every option must be for the SAME meal of the day, and must land within about 10% of the calories given and NOT below the protein given. Those numbers are what the day is built on — a "lighter option" that misses them is no use.
+2. NEVER use a food listed under dislikes or allergies, in any form or hidden in anything.
+3. Make the three genuinely different from each other — a different protein or a different style, not three versions of the same dish. None of them may be the meal being replaced.
+4. Honest nutrition for the quantities written, worked out from the ingredients. One serving.
+5. Short numbered method, at most 8 steps.
+6. Give exactly 3 options.
+7. Answer with JSON only, exactly this shape: {"options":[{"slot":"Dinner","name":"...","prepMinutes":20,"why":"one short line on when you'd pick this one","ingredients":[{"item":"chicken breast","qty":"200 g"}],"method":["..."],"kcal":620,"protein":48,"carbs":55,"fat":18}]}`
+}
+
+export function swapMealUserPrompt(input: {
+  meal: Meal; dayNo: number; likes: string; dislikes: string; notes: string; why: string
+  goal?: string; otherMeals: string[]
+}): string {
+  return [
+    `REPLACING, on day ${input.dayNo}: ${input.meal.slot} — "${input.meal.name}" (${input.meal.kcal} kcal, protein ${input.meal.protein} g, carbs ${input.meal.carbs} g, fat ${input.meal.fat} g).`,
+    `THE REPLACEMENT MUST HIT: about ${input.meal.kcal} kcal and at least ${input.meal.protein} g protein, as a ${input.meal.slot.toLowerCase()}.`,
+    input.goal ? goalDef(input.goal).prompt.replace("%D%", "the planned") : "",
+    input.likes.trim()    ? `LIKES / USUAL FOODS: ${input.likes.trim()}` : "",
+    input.dislikes.trim() ? `DISLIKES AND ALLERGIES — NEVER USE: ${input.dislikes.trim()}` : "",
+    input.notes.trim()    ? `OTHER NOTES: ${input.notes.trim()}` : "",
+    input.why.trim()      ? `WHY IT IS BEING REPLACED: ${input.why.trim()}` : "",
+    input.otherMeals.length ? `ALREADY ON THE PLAN THIS WEEK — don't suggest these again: ${input.otherMeals.join("; ")}` : "",
+  ].filter(Boolean).join("\n")
+}
+
+export type MealOption = Meal & { why: string }
+
+export function normaliseMealOptions(raw: unknown): MealOption[] {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  return arr(r.options).map(o => {
+    const oo = (o && typeof o === "object" ? o : {}) as Record<string, unknown>
+    return { ...normaliseMeal(o), why: str(oo.why, 200) }
+  }).filter(o => o.name !== "Untitled" && o.ingredients.length).slice(0, 4)
+}
+
+/** Put a chosen meal into a saved plan. Returns null when that day or slot has gone, so the
+ *  caller can say so rather than saving nothing and reporting success. */
+export function applyMealSwap(plan: Plan, dayNo: number, index: number, meal: Meal): Plan | null {
+  const day = plan.days.find(d => d.day === dayNo)
+  if (!day || !day.meals[index]) return null
+  return {
+    ...plan,
+    days: plan.days.map(d => d.day !== dayNo ? d : {
+      ...d,
+      // ⚠ The SLOT is kept from the meal being replaced — the model is asked for the same one,
+      // but a plan whose dinner turns into a second breakfast reads as broken.
+      meals: d.meals.map((m, i) => i !== index ? m : { ...meal, slot: m.slot }),
+    }),
+  }
 }
 
 export function normaliseShopping(raw: unknown, keepDone?: Shopping | null): Shopping {
@@ -306,7 +370,7 @@ export function normaliseShopping(raw: unknown, keepDone?: Shopping | null): Sho
       }).filter(x => x.item),
     }
   }).filter(g => g.items.length)
-  return { groups }
+  return { groups, stale: r.stale === true }
 }
 
 /** A saved plan row in the shape the client works with. Lives here, not in a route file — Next
