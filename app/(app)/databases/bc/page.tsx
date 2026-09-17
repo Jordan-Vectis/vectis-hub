@@ -115,12 +115,28 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
   // ⚠ How far the collection has got, read off the lots themselves, so "where do I start next
   // time" is a fact rather than something to remember. Migration-safe — the column is new, and an
   // environment that has not run migrations simply shows nothing instead of breaking the page.
+  // ⚠⚠ THE COUNT IS READ ALONGSIDE THE MARKER, AND BOTH ARE SHOWN. `siteSaleId` arrived after the
+  // table and `writeBcSale` falls back cleanly without it, so every lot loaded before the column
+  // existed carries NULL — `max()` is then null although the database is full. The panel said
+  // "Nothing collected yet", the instructions it hands to Claude said "that is the whole range",
+  // and a year of sales was collected again for nothing (Jordan, 2026-09-17: "whats the point
+  // pulling in data we already have?"). A MISSING MARKER IS NOT AN EMPTY DATABASE — never write
+  // anything here that lets one imply the other.
   let collectedTo: number | null = null
+  let held = 0
   if (isAdmin) {
     try {
-      const r = await prisma.$queryRaw<{ m: number | null }[]>`SELECT max("siteSaleId") AS m FROM "BcLotWeb"`
+      const r = await prisma.$queryRaw<{ n: number; m: number | null }[]>`SELECT count(*)::int AS n, max("siteSaleId") AS m FROM "BcLotWeb"`
+      held = Number(r[0]?.n ?? 0)
       collectedTo = r[0]?.m != null ? Number(r[0].m) : null
-    } catch { collectedTo = null }
+    } catch {
+      // No siteSaleId column here yet — the count still answers "is there anything at all?".
+      try {
+        const r = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM "BcLotWeb"`
+        held = Number(r[0]?.n ?? 0)
+      } catch { held = 0 }
+      collectedTo = null
+    }
   }
   const collect = { from: collectedTo ? collectedTo + 1 : BC_FIRST_SITE_SALE, to: Math.max(BC_LAST_SITE_SALE, collectedTo ?? 0) + 60 }
   // ⚠ EVERY filter travels with a page change and with a sort. Page 2 quietly reverting to
@@ -179,7 +195,7 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
         {isAdmin && (
           <BcTools
             jobs={<ArchiveSite scope="bc" />}
-            load={<BcCollect defaultFrom={collect.from} defaultTo={collect.to} collectedTo={collectedTo} />}
+            load={<BcCollect defaultFrom={collect.from} defaultTo={collect.to} collectedTo={collectedTo} held={held} />}
             exportPanel={
     <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#141416] p-4">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">⬇ Export &amp; handover — for a backup, or a future website</h3>

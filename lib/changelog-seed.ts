@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"daf782e2ec6c9e70f4b25c58ef57012947ed8f79","author":"Jordan Orange","date":"2026-09-17T10:53:43+01:00","subject":"Meal planner: plan for two, one recipe cooked once and split"},
   {"sha":"e1c6b6e4c7025a0155f2bf2f432adecb4b78bae0","author":"Jordan Orange","date":"2026-09-17T10:42:30+01:00","subject":"Meal planner: swap a meal you don't fancy for something else"},
   {"sha":"418bd777ce4ec18e18573c6e3930d9edb234f05d","author":"Jordan Orange","date":"2026-09-17T10:35:08+01:00","subject":"Meal planner: tick the meals you have, and write long plans in chunks"},
   {"sha":"6a03b0f0eae82ae3d86941569d9d6aa7c90378e0","author":"Jordan Orange","date":"2026-09-17T10:21:00+01:00","subject":"Manage Lots: the BC column is measured, and the tick is gone"},

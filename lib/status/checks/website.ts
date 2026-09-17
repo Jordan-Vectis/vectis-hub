@@ -213,7 +213,12 @@ const check: StatusCheckDef = {
         ? { label: "Last collection loaded", value: `${fmtWhen(lastLoaded)} (${fmtAgo(nowMs - lastLoaded.getTime())} ago)` }
         : { label: "Last collection loaded", value: "Never — nothing has been loaded from the website yet", tone: "warn" },
     ]
+    // ⚠ Say so when the marker is missing rather than leaving the line out. siteSaleId arrived after
+    // the table, so lots loaded before it exists carry NULL and max() is null on a full database —
+    // silence there reads as "nothing to report" and the BC page's own start-from guess is wrong
+    // (2026-09-17: a year of sales was collected again because of it).
     if (collectedTo != null) facts.push({ label: "Collected up to website sale", value: `${collectedTo} — the next run starts at ${collectedTo + 1}` })
+    else if (held > 0) facts.push({ label: "Collected up to website sale", value: "Not recorded for these lots — they were loaded before the Hub kept the sale number, so a new run has no sale to carry on from", tone: "warn" })
     facts.push({ label: "Lots held from the website", value: held.toLocaleString("en-GB") })
     facts.push(waiting.length
       ? { label: "Waiting to be collected", value: listSales(waiting), tone: "warn" }

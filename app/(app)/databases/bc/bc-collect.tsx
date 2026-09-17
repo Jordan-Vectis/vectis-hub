@@ -17,7 +17,7 @@ import { bcCollectorScript, COLLECTOR_FILE_MB, BC_FIRST_SITE_SALE, BC_LAST_SITE_
 //
 // ⚠ Files are sent ONE AT A TIME, with a count that moves (RULES §7b). A single 139 MB post shows
 // nothing while it runs and would be cut off by Railway's 20 MB body limit anyway.
-export default function BcCollect({ defaultFrom, defaultTo, collectedTo }: { defaultFrom: number; defaultTo: number; collectedTo: number | null }) {
+export default function BcCollect({ defaultFrom, defaultTo, collectedTo, held }: { defaultFrom: number; defaultTo: number; collectedTo: number | null; held: number }) {
   const [from, setFrom] = useState(String(defaultFrom))
   const [to, setTo] = useState(String(defaultTo))
   const [copied, setCopied] = useState<"" | "script" | "claude">("")
@@ -46,13 +46,18 @@ export default function BcCollect({ defaultFrom, defaultTo, collectedTo }: { def
     "",
     `    node scripts/collect-bc-lots.mjs ${f} ${t} "<my Downloads folder>/vectis-bc-lots"`,
     "",
+    // ⚠⚠ THREE STATES, because "no marker" and "no lots" are different things — see the comment on
+    // the BC Database page. Claiming an empty database when it is full sends whoever reads this off
+    // to collect a year of sales for nothing, and they have no way of knowing better.
     collectedTo
       ? `The Hub already holds every sale up to the website's sale number ${collectedTo}, so ${f} is where to carry on from.`
-      : "Nothing has been collected yet, so that is the whole range.",
+      : held > 0
+        ? `The Hub already holds ${held.toLocaleString()} lots, but not a record of which website sale each one came from, so there is no way to tell here how far the last collection got. ${f} to ${t} is the whole range. Collecting a sale we already have is safe — loading the files only fills in blanks and never overwrites — but it is slow, so if you can see the range should be narrower, say so before you start rather than after.`
+        : "Nothing has been collected yet, so that is the whole range.",
     "",
     "It walks the website's own sale numbers, skips the pre-Business-Central sales with one small request each, keeps only finished sales and lots whose id looks like r009030-1, and writes JSON files of about 12 MB. Roughly half an hour for a year of sales. A red 500 in the output means there is no sale with that number and is normal.",
     "",
-    "When it finishes, tell me how many lots and sales it collected, how many files, and whether any sale could not be read — it names those at the end. Do not try to load them into the database yourself.",
+    "When it finishes, tell me how many lots and sales it collected, how many files, the highest website sale number it reached, and whether any sale could not be read — it names those at the end. Do not try to load them into the database yourself.",
   ].join(String.fromCharCode(10))
 
   async function copyText(kind: "script" | "claude") {
@@ -102,7 +107,11 @@ export default function BcCollect({ defaultFrom, defaultTo, collectedTo }: { def
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold text-gray-900 dark:text-white">📥 Update the BC lots</h3>
         <span className="text-xs text-gray-500 dark:text-gray-400">
-          {collectedTo ? <>Collected up to the website&rsquo;s sale <span className="font-mono">{collectedTo}</span> — this picks up from <span className="font-mono">{collectedTo + 1}</span></> : <>Nothing collected yet — this starts at sale <span className="font-mono">{defaultFrom}</span></>}
+          {collectedTo
+            ? <>Collected up to the website&rsquo;s sale <span className="font-mono">{collectedTo}</span> — this picks up from <span className="font-mono">{collectedTo + 1}</span></>
+            : held > 0
+              ? <><span className="text-amber-600 dark:text-amber-400">{held.toLocaleString()} lots already collected, but not which sale they came from</span> — this starts at <span className="font-mono">{defaultFrom}</span> and only fills blanks</>
+              : <>Nothing collected yet — this starts at sale <span className="font-mono">{defaultFrom}</span></>}
         </span>
       </div>
 
