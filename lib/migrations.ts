@@ -144,6 +144,13 @@ export const MIGRATIONS = [
   `ALTER TABLE "JordanMealProfile" ADD COLUMN IF NOT EXISTS "goal" TEXT NOT NULL DEFAULT 'lose'`,
   // Which meals he eats, ticked rather than a count (2026-09-17). Empty = fall back to mealsPerDay.
   `ALTER TABLE "JordanMealProfile" ADD COLUMN IF NOT EXISTS "meals" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  // Couples: one plan, one recipe per meal, split into two portions (2026-09-17).
+  `ALTER TABLE "JordanMealPlan" ADD COLUMN IF NOT EXISTS "partnerId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "JordanMealPlan_partnerId_idx" ON "JordanMealPlan"("partnerId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "JordanMealPlan" ADD CONSTRAINT "JordanMealPlan_partnerId_fkey"
+      FOREIGN KEY ("partnerId") REFERENCES "JordanMealProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
   // JORDAN.SYS gym (personal, /jordan) — an AI-written programme plus the log of what was
   // actually lifted. ⚠ No weights are stored on a programme; they are computed from JordanSet.
   `CREATE TABLE IF NOT EXISTS "JordanGymProfile" (

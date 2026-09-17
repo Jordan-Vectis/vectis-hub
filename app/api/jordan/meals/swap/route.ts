@@ -7,7 +7,7 @@ import { friendlyGeminiError } from "@/lib/gemini-retry"
 import { parseModelJson } from "@/lib/model-json"
 import {
   applyMealSwap, normaliseMeal, normalisePlan, normaliseMealOptions, normaliseShopping,
-  planOut, swapMealSystemPrompt, swapMealUserPrompt,
+  planOut, planPeople, swapMealSystemPrompt, swapMealUserPrompt,
 } from "@/lib/jordan-meals"
 
 export const maxDuration = 120
@@ -32,13 +32,20 @@ export async function POST(req: NextRequest) {
     if (!meal) return NextResponse.json({ error: "That meal isn't in the plan any more" }, { status: 404 })
 
     const p = row.profile
+    // ⚠ On a couple's plan the replacement has to be SPLIT the same way, or one swapped dinner
+    // leaves that day with no portions for either of them and the per-person totals go wrong.
+    const people = planPeople((row.targets && typeof row.targets === "object" ? row.targets : {}) as Record<string, unknown>)
+    const partner = row.partnerId ? await prisma.jordanMealProfile.findUnique({ where: { id: row.partnerId } }) : null
+
     const model = await getToolModel("jordan_meals", modelId)
     const raw = await generateAiText({
       model,
       system: swapMealSystemPrompt(),
       prompt: swapMealUserPrompt({
-        meal, dayNo: Number(dayNo), goal: (p as any).goal,
-        likes: p.likes, dislikes: p.dislikes, notes: p.notes,
+        meal, dayNo: Number(dayNo), goal: (p as any).goal, people,
+        likes: [p.likes, partner?.likes].filter(s => s?.trim()).join("; "),
+        dislikes: [p.dislikes, partner?.dislikes].filter(s => s?.trim()).join("; "),
+        notes: [p.notes, partner?.notes].filter(s => s?.trim()).join("; "),
         why: String(why ?? "").slice(0, 500),
         // Everything else on the plan, so it doesn't suggest Tuesday's dinner again.
         otherMeals: plan.days.flatMap(d => d.meals.map(m => m.name)).filter(n => n !== meal.name).slice(0, 30),

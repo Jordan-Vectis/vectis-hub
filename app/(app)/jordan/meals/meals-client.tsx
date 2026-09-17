@@ -5,8 +5,8 @@ import ModelPicker, { getJordanModel } from "../model-picker"
 import {
   ACTIVITY, GOAL_DEFS, MACRO_PRESETS, MEAL_SLOT_OPTIONS, defaultMealKeys,
   kgFromStone, cmFromFeet, stoneFromKg, feetFromCm,
-  goalDef, deltaFor, goalSummary, gbp, shoppingTotals, chosenMeals,
-  targets as workOut, dayTotals, shoppingText,
+  goalDef, deltaFor, goalSummary, gbp, shoppingTotals, chosenMeals, planPeople,
+  targets as workOut, dayTotals, dayTotalsFor, shoppingText,
   type GoalKey, type MealOption, type Plan, type Shopping, type Targets,
 } from "@/lib/jordan-meals"
 
@@ -33,7 +33,8 @@ type Profile = {
 }
 type SavedPlan = {
   id: string; title: string; days: number; brief: string; model: string; createdAt: string
-  targets: Record<string, number>; plan: Plan; shopping: Shopping | null
+  partnerId: string | null
+  targets: Record<string, any>; plan: Plan; shopping: Shopping | null
 }
 
 /** The form holds what's typed, in the units Jordan types them in. */
@@ -95,6 +96,8 @@ export default function MealsClient() {
   const [openId, setOpenId]     = useState<string | null>(null)
   const [days, setDays]         = useState(3)
   const [brief, setBrief]       = useState("")
+  // Cooking for two: one recipe per meal, split so both hit their own targets (2026-09-17).
+  const [partnerId, setPartnerId] = useState("")
   const [since, setSince]       = useState<number | null>(null) // when the current AI call started
   const [madeDays, setMadeDays] = useState(0)                    // days written so far, this run
   const [now, setNow]           = useState(Date.now())
@@ -103,6 +106,10 @@ export default function MealsClient() {
 
   const active = profiles.find(p => p.id === activeId) ?? null
   const t: Targets | null = form ? workOut(numbersOf(form)) : null
+  const partner = profiles.find(p => p.id === partnerId && p.id !== activeId) ?? null
+  // The partner's numbers come from their SAVED profile — the form on screen is the active
+  // person's, and only theirs.
+  const partnerTargets: Targets | null = partner ? workOut(partner) : null
 
   // A live clock for the "42 s" on a running AI call — real progress, never a made-up bar.
   useEffect(() => {
@@ -149,6 +156,8 @@ export default function MealsClient() {
 
   function selectProfile(id: string) {
     if (dirty && !confirm("You have unsaved changes to these numbers. Switch anyway?")) return
+    // ⚠ Nobody cooks for two of themselves.
+    if (id === partnerId) setPartnerId("")
     setActiveId(id)
     const p = profiles.find(x => x.id === id)
     setForm(p ? formFrom(p) : null)
@@ -230,7 +239,7 @@ export default function MealsClient() {
       while (!made || made.plan.days.length < days) {
         const from = (made?.plan.days.length ?? 0) + 1
         const j = await api("/api/jordan/meals/plan", {
-          profileId: activeId, days, brief, model: getJordanModel(),
+          profileId: activeId, partnerId: partnerId || null, days, brief, model: getJordanModel(),
           planId: made?.id ?? null, fromDay: from, toDay: Math.min(from + CHUNK_DAYS - 1, days),
         }, "POST", ac.signal)
         const next: SavedPlan = j.plan
@@ -520,6 +529,46 @@ export default function MealsClient() {
           {/* ── Make a plan ── */}
           <div className={`${box} p-4 space-y-3`} ref={planTopRef}>
             <span className="text-xs tracking-widest opacity-60">MAKE A PLAN</span>
+
+            {/* ── Cooking for two ──────────────────────────────────────────
+                One recipe per meal, cooked once, split so BOTH land on their own targets —
+                his choice when asked how two different calorie targets should work. */}
+            <div className="border border-[#1f5c33] rounded-lg p-3 space-y-2">
+              <span className={label}>COOKING FOR</span>
+              <div className="flex flex-wrap gap-1">
+                <button onClick={() => setPartnerId("")}
+                  className={`min-h-[44px] px-3 rounded border text-xs ${!partnerId ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                  Just {active.name}
+                </button>
+                {profiles.filter(p => p.id !== activeId).map(p => (
+                  <button key={p.id} onClick={() => setPartnerId(partnerId === p.id ? "" : p.id)}
+                    className={`min-h-[44px] px-3 rounded border text-xs ${partnerId === p.id ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                    {active.name} + {p.name}
+                  </button>
+                ))}
+                {profiles.length < 2 && <span className="text-xs opacity-50 self-center">Add a second profile to plan for two.</span>}
+              </div>
+              {partner && (
+                <>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[{ p: active, t }, { p: partner, t: partnerTargets }].map(({ p, t: pt }) => (
+                      <div key={p.id} className="border border-[#1f5c33] rounded p-2">
+                        <div className="text-[10px] tracking-wide opacity-60">{p.name.toUpperCase()}</div>
+                        {pt
+                          ? <div className="text-sm font-bold">{pt.kcal.toLocaleString()} kcal <span className="font-normal opacity-60">· P {pt.protein} g</span></div>
+                          : <div className="text-xs text-amber-400">Needs sex, age, height and weight</div>}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] opacity-50">
+                    One recipe a meal, cooked once, then split — each meal says what each of you takes, and both days land on your own numbers.
+                    {t && partnerTargets ? ` That's ${(t.kcal + partnerTargets.kcal).toLocaleString()} kcal in the pan a day between you.` : ""}
+                    {" "}Anything either of you has under dislikes is off the menu.
+                  </p>
+                </>
+              )}
+            </div>
+
             <div className="flex flex-wrap items-end gap-3">
               <div>
                 <span className={label}>DAYS</span>
@@ -634,6 +683,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
   const day = plan.plan.days[Math.min(dayIdx, plan.plan.days.length - 1)]
   const totals = day ? dayTotals(day) : null
   const shop = plan.shopping
+  const people = planPeople(plan.targets)
   const ticked = shop ? shop.groups.reduce((a, g) => a + g.items.filter(i => i.done).length, 0) : 0
   const items  = shop ? shop.groups.reduce((a, g) => a + g.items.length, 0) : 0
   // ⚠ An estimate, and shown as one. A list made before prices existed has priced = 0, and then
@@ -658,7 +708,12 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
     <div className={`${box}`}>
       <button onClick={onToggle} className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left min-h-[44px]">
         <span className="font-bold">{open ? "▼" : "▶"} {plan.title}</span>
-        <span className="text-xs opacity-60">{plan.days} day{plan.days === 1 ? "" : "s"} · {when(plan.createdAt)} · {tg.kcal?.toLocaleString()} kcal / {tg.protein} g protein a day</span>
+        <span className="text-xs opacity-60">
+          {plan.days} day{plan.days === 1 ? "" : "s"} · {when(plan.createdAt)} ·{" "}
+          {people.length === 2
+            ? `for ${people.map(p => `${p.name} (${p.kcal.toLocaleString()} kcal)`).join(" and ")}`
+            : `${tg.kcal?.toLocaleString()} kcal / ${tg.protein} g protein a day`}
+        </span>
         {shop && <span className="text-xs opacity-60">· 🛒 {ticked}/{items} ticked{hasCost ? ` · about ${gbp(cost!.total)}` : ""}</span>}
       </button>
 
@@ -683,13 +738,35 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                     className={`min-h-[44px] px-3 rounded border text-xs ${i === dayIdx ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>DAY {d.day}</button>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs border border-[#1f5c33] rounded px-3 py-2">
-                <span className="opacity-60">DAY {day.day} TOTAL</span>
-                <span style={{ color: toneFor(totals.kcal, tg.kcal) }}>{totals.kcal} / {tg.kcal} kcal</span>
-                <span style={{ color: totals.protein >= (tg.protein ?? 0) * 0.9 ? GREEN : "#ffc94d" }}>P {totals.protein} / {tg.protein} g</span>
-                <span className="opacity-80">C {totals.carbs} / {tg.carbs} g</span>
-                <span className="opacity-80">F {totals.fat} / {tg.fat} g</span>
-              </div>
+              {/* ⚠ On a couple's plan the meal figures are the WHOLE dish, so the day is totalled
+                  PER PERSON from their own shares — comparing the pan against one person's target
+                  would read as hundreds of calories over, every single day. */}
+              {people.length === 2 ? (
+                <div className="space-y-1">
+                  {people.map(p => {
+                    const mine = dayTotalsFor(day, p.name)
+                    return (
+                      <div key={p.name} className="flex flex-wrap gap-x-4 gap-y-1 text-xs border border-[#1f5c33] rounded px-3 py-2">
+                        <span className="opacity-60">DAY {day.day} · {p.name.toUpperCase()}</span>
+                        <span style={{ color: toneFor(mine.kcal, p.kcal) }}>{mine.kcal} / {p.kcal} kcal</span>
+                        <span style={{ color: mine.protein >= p.protein * 0.9 ? GREEN : "#ffc94d" }}>P {mine.protein} / {p.protein} g</span>
+                        <span className="opacity-80">C {mine.carbs} g</span>
+                        <span className="opacity-80">F {mine.fat} g</span>
+                        {mine.missing > 0 && <span className="text-amber-400">⚠ {mine.missing} meal{mine.missing === 1 ? "" : "s"} not split for {p.name}</span>}
+                      </div>
+                    )
+                  })}
+                  <div className="text-[11px] opacity-50">In the pan: {totals.kcal} kcal · P {totals.protein} g for the two of you.</div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs border border-[#1f5c33] rounded px-3 py-2">
+                  <span className="opacity-60">DAY {day.day} TOTAL</span>
+                  <span style={{ color: toneFor(totals.kcal, tg.kcal) }}>{totals.kcal} / {tg.kcal} kcal</span>
+                  <span style={{ color: totals.protein >= (tg.protein ?? 0) * 0.9 ? GREEN : "#ffc94d" }}>P {totals.protein} / {tg.protein} g</span>
+                  <span className="opacity-80">C {totals.carbs} / {tg.carbs} g</span>
+                  <span className="opacity-80">F {totals.fat} / {tg.fat} g</span>
+                </div>
+              )}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {day.meals.map((m, i) => (
                   <div key={i} className="border border-[#1f5c33] rounded-lg p-3 space-y-2">
@@ -701,7 +778,20 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                       </button>
                     </div>
                     <div className="font-bold">{m.name}</div>
-                    <div className="text-xs opacity-80">{m.kcal} kcal · P {m.protein} g · C {m.carbs} g · F {m.fat} g</div>
+                    {/* Who takes what. The ingredients below are the whole dish. */}
+                    {m.servings.length === 2 ? (
+                      <div className="space-y-1">
+                        {m.servings.map(s => (
+                          <div key={s.name} className="text-xs border border-[#1f5c33] rounded px-2 py-1">
+                            <span className="font-bold">{s.name}:</span> {s.share}
+                            <div className="opacity-70">{s.kcal} kcal · P {s.protein} g · C {s.carbs} g · F {s.fat} g</div>
+                          </div>
+                        ))}
+                        <div className="text-[11px] opacity-50">Whole dish: {m.kcal} kcal · P {m.protein} g</div>
+                      </div>
+                    ) : (
+                      <div className="text-xs opacity-80">{m.kcal} kcal · P {m.protein} g · C {m.carbs} g · F {m.fat} g</div>
+                    )}
                     {swapping?.day === day.day && swapping?.i === i && (
                       <div className="border border-[#33ff66] rounded p-2 space-y-2">
                         {swapErr && <p className="text-xs text-red-300">{swapErr}</p>}

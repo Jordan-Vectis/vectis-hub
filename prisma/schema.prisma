@@ -2922,14 +2922,20 @@ model JordanMealProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  plans JordanMealPlan[]
-  gym   JordanGymProfile?
+  plans        JordanMealPlan[] @relation("MealPlanOwner")
+  partnerPlans JordanMealPlan[] @relation("MealPlanPartner")
+  gym          JordanGymProfile?
 }
 
 model JordanMealPlan {
   id        String            @id @default(cuid())
   profileId String
-  profile   JordanMealProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile   JordanMealProfile @relation("MealPlanOwner", fields: [profileId], references: [id], onDelete: Cascade)
+  // A couple's plan (2026-09-17): one recipe per meal, split into two portions so both hit their
+  // own targets. ⚠ SetNull, not Cascade — deleting the partner's profile must not delete a plan
+  // that is still perfectly good for the person who owns it.
+  partnerId String?
+  partner   JordanMealProfile? @relation("MealPlanPartner", fields: [partnerId], references: [id], onDelete: SetNull)
 
   title String @default("")
   days  Int    @default(1)

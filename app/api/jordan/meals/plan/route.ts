@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   try {
     if (!(await isJordan())) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-    const { profileId, days: rawDays = 1, brief = "", model: modelId = "", planId = null, fromDay: rawFrom = 1, toDay: rawTo = 0 } = await req.json()
+    const { profileId, partnerId = null, days: rawDays = 1, brief = "", model: modelId = "", planId = null, fromDay: rawFrom = 1, toDay: rawTo = 0 } = await req.json()
     if (!profileId) return NextResponse.json({ error: "Pick a profile first" }, { status: 400 })
     const days    = Math.max(1, Math.min(7, Math.round(Number(rawDays)) || 1))
     const fromDay = Math.max(1, Math.min(days, Math.round(Number(rawFrom)) || 1))
@@ -36,6 +36,26 @@ export async function POST(req: NextRequest) {
 
     const t = targets(p)
     if (!t) return NextResponse.json({ error: "Fill in sex, age, height and weight first — the targets come from those." }, { status: 400 })
+
+    // A couple's plan: one recipe per meal, split so BOTH land on their own targets.
+    const partner = partnerId && partnerId !== p.id
+      ? await prisma.jordanMealProfile.findUnique({ where: { id: String(partnerId) } })
+      : null
+    const partnerT = partner ? targets(partner) : null
+    if (partner && !partnerT) {
+      return NextResponse.json({ error: `${partner.name} is missing sex, age, height or weight — both people need those before a plan for two.` }, { status: 400 })
+    }
+    const people = partner && partnerT
+      ? [
+          { name: p.name, kcal: t.kcal, protein: t.protein, carbs: t.carbs, fat: t.fat },
+          { name: partner.name, kcal: partnerT.kcal, protein: partnerT.protein, carbs: partnerT.carbs, fat: partnerT.fat },
+        ]
+      : []
+    // ⚠ Both people's dislikes and allergies apply to every meal — they are eating the same dish,
+    // so anything either of them can't have is off the menu entirely.
+    const dislikes = [p.dislikes, partner?.dislikes].filter(s => s?.trim()).join("; ")
+    const likes    = [p.likes, partner?.likes].filter(s => s?.trim()).join("; ")
+    const notes    = [p.notes, partner?.notes].filter(s => s?.trim()).join("; ")
 
     // Carrying on an existing plan: what's written already, so the model doesn't repeat itself.
     const existingRow = planId ? await prisma.jordanMealPlan.findUnique({ where: { id: String(planId) } }) : null
@@ -50,9 +70,9 @@ export async function POST(req: NextRequest) {
         name: p.name, sex: p.sex, age: p.age, weightKg: p.weightKg, t, days,
         goal: (p as any).goal, goalDelta: p.goalDelta,
         slots: chosenMeals((p as any).meals, p.mealsPerDay),
-        likes: p.likes, dislikes: p.dislikes, notes: p.notes,
+        likes, dislikes, notes,
         brief: String(brief ?? "").slice(0, 2000),
-        fromDay, toDay, alreadyMade,
+        fromDay, toDay, alreadyMade, people,
       }),
       json: true,
       maxOutputTokens: 16384,
@@ -90,9 +110,12 @@ export async function POST(req: NextRequest) {
     const row = await prisma.jordanMealPlan.create({
       data: {
         profileId: p.id,
-        title: parsed.title || `${days}-day plan`,
+        partnerId: partner?.id ?? null,
+        title: parsed.title || `${days}-day plan${partner ? ` for ${p.name} and ${partner.name}` : ""}`,
         days: written.length,
-        targets: { kcal: t.kcal, protein: t.protein, carbs: t.carbs, fat: t.fat, bmr: t.bmr, tdee: t.tdee } as any,
+        // ⚠ `people` is FROZEN here with the rest of the targets: the plan must still be able to
+        // explain whose numbers it was split against, even if a profile changes afterwards.
+        targets: { kcal: t.kcal, protein: t.protein, carbs: t.carbs, fat: t.fat, bmr: t.bmr, tdee: t.tdee, people } as any,
         plan: { ...parsed, days: written } as any,
         brief: String(brief ?? "").slice(0, 2000),
         model,

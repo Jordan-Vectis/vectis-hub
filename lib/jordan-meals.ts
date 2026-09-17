@@ -234,10 +234,23 @@ export function targets(p: ProfileNumbers): Targets | null {
 // ── The plan ─────────────────────────────────────────────────────────────────
 
 export type Ingredient = { item: string; qty: string }
+
+/** One person's share of a meal cooked for two. ⚠ `share` is plain English ("250 g of the
+ *  chicken, two thirds of the rice") because that is what someone does at the hob — a ratio is
+ *  not something you can serve. */
+export type Serving = {
+  name: string; share: string
+  kcal: number; protein: number; carbs: number; fat: number
+}
+
 export type Meal = {
   slot: string; name: string; prepMinutes: number
   ingredients: Ingredient[]; method: string[]
+  /** ⚠ On a COUPLE's plan these are the totals for the meal AS COOKED — both portions together —
+   *  and `servings` says who gets what. On a one-person plan they are simply that meal. */
   kcal: number; protein: number; carbs: number; fat: number
+  /** Empty on a one-person plan. Two entries on a couple's, in the order the people were picked. */
+  servings: Serving[]
 }
 export type PlanDay = { day: number; meals: Meal[] }
 export type Plan = { title: string; tips: string; days: PlanDay[] }
@@ -275,6 +288,13 @@ export function normaliseMeal(m: unknown): Meal {
     }).filter(x => x.item),
     method: arr(mm.method).map(s => str(s, 600)).filter(Boolean),
     kcal: num(mm.kcal), protein: num(mm.protein), carbs: num(mm.carbs), fat: num(mm.fat),
+    servings: arr(mm.servings).map(s => {
+      const ss = (s && typeof s === "object" ? s : {}) as Record<string, unknown>
+      return {
+        name: str(ss.name, 40), share: str(ss.share, 200),
+        kcal: num(ss.kcal), protein: num(ss.protein), carbs: num(ss.carbs), fat: num(ss.fat),
+      }
+    }).filter(s => s.name).slice(0, 2),
   }
 }
 
@@ -310,10 +330,16 @@ RULES:
 export function swapMealUserPrompt(input: {
   meal: Meal; dayNo: number; likes: string; dislikes: string; notes: string; why: string
   goal?: string; otherMeals: string[]
+  /** Two entries = the meal is cooked for a couple and the replacement must be split too. */
+  people?: { name: string; kcal: number; protein: number }[]
 }): string {
+  const forTwo = (input.people?.length ?? 0) === 2 && input.meal.servings.length === 2
   return [
-    `REPLACING, on day ${input.dayNo}: ${input.meal.slot} — "${input.meal.name}" (${input.meal.kcal} kcal, protein ${input.meal.protein} g, carbs ${input.meal.carbs} g, fat ${input.meal.fat} g).`,
+    `REPLACING, on day ${input.dayNo}: ${input.meal.slot} — "${input.meal.name}" (${input.meal.kcal} kcal, protein ${input.meal.protein} g, carbs ${input.meal.carbs} g, fat ${input.meal.fat} g${forTwo ? ", for two people together" : ""}).`,
     `THE REPLACEMENT MUST HIT: about ${input.meal.kcal} kcal and at least ${input.meal.protein} g protein, as a ${input.meal.slot.toLowerCase()}.`,
+    forTwo
+      ? `⚠ THIS IS COOKED FOR TWO. One recipe, ingredients for the whole dish, then a "servings" entry for each person splitting it the SAME way as now: ${input.meal.servings.map(s => `${s.name} ${s.kcal} kcal / ${s.protein} g protein`).join(", ")}. Use those names exactly, and give each a plain-English "share".`
+      : "",
     input.goal ? goalDef(input.goal).prompt.replace("%D%", "the planned") : "",
     input.likes.trim()    ? `LIKES / USUAL FOODS: ${input.likes.trim()}` : "",
     input.dislikes.trim() ? `DISLIKES AND ALLERGIES — NEVER USE: ${input.dislikes.trim()}` : "",
@@ -377,10 +403,11 @@ export function normaliseShopping(raw: unknown, keepDone?: Shopping | null): Sho
  *  route files may only export HTTP handlers, and two routes need it. */
 export function planOut(r: {
   id: string; title: string; days: number; targets: unknown; plan: unknown; shopping: unknown
-  brief: string; model: string; createdAt: Date
+  brief: string; model: string; createdAt: Date; partnerId?: string | null
 }) {
   return {
     id: r.id, title: r.title, days: r.days, brief: r.brief, model: r.model, createdAt: r.createdAt,
+    partnerId: r.partnerId ?? null,
     targets: (r.targets && typeof r.targets === "object" ? r.targets : {}) as Record<string, number>,
     plan: normalisePlan(r.plan),
     shopping: r.shopping ? normaliseShopping(r.shopping) : null,
@@ -390,6 +417,28 @@ export function planOut(r: {
 export function dayTotals(day: PlanDay): { kcal: number; protein: number; carbs: number; fat: number } {
   return day.meals.reduce((t, m) => ({ kcal: t.kcal + m.kcal, protein: t.protein + m.protein, carbs: t.carbs + m.carbs, fat: t.fat + m.fat }),
     { kcal: 0, protein: 0, carbs: 0, fat: 0 })
+}
+
+/** One person's day on a couple's plan — their shares only, not the whole dish. ⚠ Matched on
+ *  NAME, because that is all the model returns; a meal it forgot to split simply contributes
+ *  nothing rather than silently handing them the whole pan. */
+export function dayTotalsFor(day: PlanDay, name: string): { kcal: number; protein: number; carbs: number; fat: number; missing: number } {
+  return day.meals.reduce((t, m) => {
+    const s = m.servings.find(x => x.name.toLowerCase() === name.toLowerCase())
+    if (!s) return { ...t, missing: t.missing + 1 }
+    return { kcal: t.kcal + s.kcal, protein: t.protein + s.protein, carbs: t.carbs + s.carbs, fat: t.fat + s.fat, missing: t.missing }
+  }, { kcal: 0, protein: 0, carbs: 0, fat: 0, missing: 0 })
+}
+
+/** The people a saved plan was written for, from its frozen targets. One entry for a normal
+ *  plan, two for a couple's. */
+export type PlanPerson = { name: string; kcal: number; protein: number; carbs: number; fat: number }
+export function planPeople(targets: Record<string, unknown>): PlanPerson[] {
+  const people = Array.isArray(targets?.people) ? targets.people : []
+  return people
+    .map(p => (p && typeof p === "object" ? p : {}) as Record<string, unknown>)
+    .map(p => ({ name: str(p.name, 40), kcal: num(p.kcal), protein: num(p.protein), carbs: num(p.carbs), fat: num(p.fat) }))
+    .filter(p => p.name)
 }
 
 /** £4 · £4.50 — pence only when there are any. */
@@ -422,6 +471,30 @@ export function shoppingText(s: Shopping, title: string): string {
 
 // ── Prompts ──────────────────────────────────────────────────────────────────
 
+/**
+ * The extra rules for a couple. Jordan, 2026-09-17: "I can select 2 profiles and it plans the
+ * meals and macros for 2", and he chose ONE MEAL, TWO PORTIONS when asked how to handle two
+ * different calorie targets.
+ *
+ * ⚠⚠ The hard part is that the two people almost never want the same amount of food. The recipe
+ * is written ONCE for both, and then split — so they cook once and each still hits their own
+ * numbers. A plan that just doubles everything feeds the smaller person 40% too much.
+ */
+export function couplePromptRules(people: { name: string; kcal: number; protein: number }[]): string {
+  const [a, b] = people
+  return `THIS PLAN IS FOR TWO PEOPLE WHO COOK AND EAT TOGETHER:
+- ${a.name} needs ${a.kcal} kcal and ${a.protein} g protein a day.
+- ${b.name} needs ${b.kcal} kcal and ${b.protein} g protein a day.
+
+HOW TO WRITE FOR TWO — this is the part that matters:
+1. ONE recipe per meal, cooked once. The "ingredients" are the quantities for the WHOLE dish, both portions together, because that is what goes in the pan.
+2. "kcal", "protein", "carbs" and "fat" on the meal are likewise for the WHOLE dish.
+3. Then SPLIT it in "servings", one entry per person, using their names exactly as given. Each entry needs a "share" — how to serve it in plain English at the hob ("250 g of the chicken and two thirds of the rice", "the larger of the two fillets") — and that person's own kcal, protein, carbs and fat for their share.
+4. ⚠ Each person's servings across the day must add up to THEIR OWN target — within 5% on calories, and at or above their protein. ${a.name} eats more than ${b.name}, so the split is NOT down the middle; work out the split that makes both days land.
+5. Where a food cannot sensibly be split unevenly (one egg, one wrap, one chicken breast), give the extra to whoever needs the calories and make up the difference elsewhere in their day — a bigger portion of the carb, an extra spoon of the sauce, a slightly larger breakfast.
+6. The servings must add up to the meal: their kcal together should equal the meal's kcal.`
+}
+
 export function planSystemPrompt(): string {
   return `You plan meals for one adult living in the UK. Write real, cookable recipes using ingredients from a normal UK supermarket, in metric quantities (g, ml, or counts), with British spelling. No brand names needed.
 
@@ -433,7 +506,8 @@ RULES — every one of them matters:
 5. Vary the days. A batch cook is fine when it says so in the meal's name, e.g. "Chilli (batch — day 1 of 2)".
 6. Method: short numbered steps, at most 8.
 7. Answer with JSON only, exactly this shape and nothing else:
-{"title":"a short name for the plan","tips":"one or two lines of prep-ahead or batch-cook advice","days":[{"day":1,"meals":[{"slot":"Breakfast","name":"...","prepMinutes":10,"ingredients":[{"item":"chicken breast","qty":"200 g"}],"method":["...","..."],"kcal":520,"protein":42,"carbs":48,"fat":16}]}]}`
+{"title":"a short name for the plan","tips":"one or two lines of prep-ahead or batch-cook advice","days":[{"day":1,"meals":[{"slot":"Breakfast","name":"...","prepMinutes":10,"ingredients":[{"item":"chicken breast","qty":"200 g"}],"method":["...","..."],"kcal":520,"protein":42,"carbs":48,"fat":16}]}]}
+8. When — and only when — the plan is for TWO people, add a "servings" array to every meal: [{"name":"Jordan","share":"250 g of the chicken and two thirds of the rice","kcal":720,"protein":52,"carbs":60,"fat":22},{"name":"Kate","share":"the rest","kcal":520,"protein":38,"carbs":44,"fat":16}]`
 }
 
 export function planUserPrompt(input: {
@@ -442,16 +516,25 @@ export function planUserPrompt(input: {
   goal?: string; goalDelta?: number
   /** Written a few days at a time — see the plan route. Day numbers are the REAL ones. */
   fromDay?: number; toDay?: number; alreadyMade?: string[]
+  /** Two entries = a couple's plan: one recipe per meal, split per person. */
+  people?: { name: string; kcal: number; protein: number }[]
 }): string {
   const slots = input.slots
   // ⚠ The goal is the SHAPE of the food, not just the calorie number — without this line the
   // model wrote the same meals for someone cutting and someone building.
   const g = goalDef(input.goal)
   const gap = Math.abs(deltaFor(input.goal, input.goalDelta ?? g.defaultDelta))
+  const forTwo = (input.people?.length ?? 0) === 2
   const lines = [
-    `PERSON: ${input.name} — ${input.sex}, ${input.age ?? "?"} years old, ${input.weightKg ? `${Math.round(input.weightKg)} kg` : "weight unknown"}.`,
+    forTwo
+      ? couplePromptRules(input.people!)
+      : `PERSON: ${input.name} — ${input.sex}, ${input.age ?? "?"} years old, ${input.weightKg ? `${Math.round(input.weightKg)} kg` : "weight unknown"}.`,
     g.prompt.replace("%D%", String(gap)),
-    `DAILY TARGET: ${input.t.kcal} kcal · protein ${input.t.protein} g · carbs ${input.t.carbs} g · fat ${input.t.fat} g.`,
+    // ⚠ On a couple's plan the meal's own figures are the WHOLE dish, so the daily line is the
+    // two targets added together — the per-person landing is handled by couplePromptRules.
+    forTwo
+      ? `DAILY TARGET FOR THE WHOLE DISH, BOTH PORTIONS TOGETHER: ${input.people!.reduce((s, p) => s + p.kcal, 0)} kcal · protein ${input.people!.reduce((s, p) => s + p.protein, 0)} g.`
+      : `DAILY TARGET: ${input.t.kcal} kcal · protein ${input.t.protein} g · carbs ${input.t.carbs} g · fat ${input.t.fat} g.`,
     // ⚠ A long plan is written a few days at a time, so the model is asked for a RANGE and told
     // what it has already written — otherwise day 5 is the same dinner as day 1.
     input.fromDay && input.toDay && (input.fromDay !== 1 || input.toDay !== input.days)
