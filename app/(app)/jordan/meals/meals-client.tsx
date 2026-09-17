@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import {
-  ACTIVITY, GOAL_DEFS, MACRO_PRESETS, mealSlots,
+  ACTIVITY, GOAL_DEFS, MACRO_PRESETS, MEAL_SLOT_OPTIONS, defaultMealKeys,
   kgFromStone, cmFromFeet, stoneFromKg, feetFromCm,
-  goalDef, deltaFor, goalSummary, gbp, shoppingTotals,
+  goalDef, deltaFor, goalSummary, gbp, shoppingTotals, chosenMeals,
   targets as workOut, dayTotals, shoppingText,
   type GoalKey, type Plan, type Shopping, type Targets,
 } from "@/lib/jordan-meals"
@@ -28,7 +28,7 @@ const label = "block text-[10px] tracking-widest opacity-60 mb-1"
 type Profile = {
   id: string; name: string; sex: string; age: number | null; heightCm: number | null; weightKg: number | null
   activity: string; goal: string; goalDelta: number; kcalOverride: number | null
-  proteinPct: number; carbsPct: number; fatPct: number; mealsPerDay: number
+  proteinPct: number; carbsPct: number; fatPct: number; meals: string[]; mealsPerDay: number
   likes: string; dislikes: string; notes: string; plans: number
 }
 type SavedPlan = {
@@ -40,7 +40,7 @@ type SavedPlan = {
 type Form = {
   sex: string; age: string; st: string; lb: string; ft: string; in: string
   activity: string; goal: string; goalDelta: number; kcalOverride: string
-  proteinPct: string; carbsPct: string; fatPct: string; mealsPerDay: number
+  proteinPct: string; carbsPct: string; fatPct: string; meals: string[]
   likes: string; dislikes: string; notes: string
 }
 
@@ -54,11 +54,16 @@ function formFrom(p: Profile): Form {
     activity: p.activity, goal: goalDef(p.goal).key, goalDelta: deltaFor(p.goal, p.goalDelta),
     kcalOverride: p.kcalOverride ? String(p.kcalOverride) : "",
     proteinPct: String(p.proteinPct), carbsPct: String(p.carbsPct), fatPct: String(p.fatPct),
-    mealsPerDay: p.mealsPerDay, likes: p.likes, dislikes: p.dislikes, notes: p.notes,
+    // An old profile with nothing ticked keeps the day it already had, turned into ticks.
+    meals: p.meals?.length ? p.meals : defaultMealKeys(p.mealsPerDay),
+    likes: p.likes, dislikes: p.dislikes, notes: p.notes,
   }
 }
 
 const n = (s: string) => { const v = Number(s); return Number.isFinite(v) ? v : 0 }
+
+/** Days per AI call. Two days of full recipes comfortably fits one reply; seven does not. */
+const CHUNK_DAYS = 2
 
 /** The saved numbers a form works out to — the same maths the plan route uses. */
 function numbersOf(f: Form) {
@@ -91,6 +96,7 @@ export default function MealsClient() {
   const [days, setDays]         = useState(3)
   const [brief, setBrief]       = useState("")
   const [since, setSince]       = useState<number | null>(null) // when the current AI call started
+  const [madeDays, setMadeDays] = useState(0)                    // days written so far, this run
   const [now, setNow]           = useState(Date.now())
   const abortRef = useRef<AbortController | null>(null)
   const planTopRef = useRef<HTMLDivElement>(null)
@@ -180,7 +186,7 @@ export default function MealsClient() {
     if (pct !== 100 && !confirm(`The macro split adds up to ${pct}%, not 100%. Save anyway? (It will be scaled to 100.)`)) return
     setError(null); setBusy("save")
     try {
-      await api("/api/jordan/meals/profiles", { id: activeId, ...numbersOf(form), mealsPerDay: form.mealsPerDay, likes: form.likes, dislikes: form.dislikes, notes: form.notes }, "PUT")
+      await api("/api/jordan/meals/profiles", { id: activeId, ...numbersOf(form), meals: form.meals, likes: form.likes, dislikes: form.dislikes, notes: form.notes }, "PUT")
       setDirty(false); setNote("Saved.")
       await loadProfiles(activeId)
     } catch (e: any) { setError(e.message) } finally { setBusy(null) }
@@ -205,23 +211,48 @@ export default function MealsClient() {
     } catch (e: any) { setError(e.message) }
   }
 
+  /**
+   * ⚠⚠ A LONG PLAN IS WRITTEN A FEW DAYS AT A TIME (2026-09-17). A week of full recipes does not
+   * fit in one reply — the model ran out of room mid-JSON and a two-minute wait ended in
+   * "couldn't read the AI's answer" with nothing to show for it. Two days per call, each one
+   * SAVED as it lands, so stopping (or a failure on day 5) keeps days 1–4.
+   * The counter moves a day at a time: real progress, never a made-up bar.
+   */
   async function makePlan() {
     if (!activeId) return
     if (dirty) { setError("Save your numbers first — the plan is written against the saved ones."); return }
     if (!t) { setError("Fill in sex, age, height and weight first."); return }
-    setError(null); setNote(null); setBusy("plan"); setSince(Date.now())
+    if (form && form.meals.length === 0) { setError("Tick the meals you have first."); return }
+    setError(null); setNote(null); setBusy("plan"); setSince(Date.now()); setMadeDays(0)
     const ac = new AbortController(); abortRef.current = ac
+    let made: SavedPlan | null = null
     try {
-      const j = await api("/api/jordan/meals/plan", { profileId: activeId, days, brief, model: getJordanModel() }, "POST", ac.signal)
-      const made: SavedPlan = j.plan
-      setPlans(ps => [made, ...ps]); setOpenId(made.id)
+      while (!made || made.plan.days.length < days) {
+        const from = (made?.plan.days.length ?? 0) + 1
+        const j = await api("/api/jordan/meals/plan", {
+          profileId: activeId, days, brief, model: getJordanModel(),
+          planId: made?.id ?? null, fromDay: from, toDay: Math.min(from + CHUNK_DAYS - 1, days),
+        }, "POST", ac.signal)
+        const next: SavedPlan = j.plan
+        // ⚠ Stop if a chunk adds nothing, or this loops forever on a model that keeps returning
+        // the same day. What is already saved still stands.
+        if (made && next.plan.days.length <= made.plan.days.length) { made = next; break }
+        made = next
+        setMadeDays(made.plan.days.length)
+        setPlans(ps => [made!, ...ps.filter(p => p.id !== made!.id)])
+        setOpenId(made.id)
+        if (j.done) break
+      }
       setProfiles(ps => ps.map(p => p.id === activeId ? { ...p, plans: p.plans + 1 } : p))
       setBrief("")
+      if (made && made.plan.days.length < days) setNote(`Stopped at ${made.plan.days.length} of ${days} days — what's written is saved.`)
       setTimeout(() => planTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
     } catch (e: any) {
-      if (e?.name === "AbortError") setNote("Stopped. (The server may still finish it — reload the page in a minute to see.)")
-      else setError(e.message)
-    } finally { setBusy(null); setSince(null); abortRef.current = null }
+      const got = made?.plan.days.length ?? 0
+      if (e?.name === "AbortError") setNote(got ? `Stopped — days 1 to ${got} are saved.` : "Stopped.")
+      else setError(got ? `${e.message} Days 1 to ${got} are saved.` : e.message)
+      if (made) { setPlans(ps => [made!, ...ps.filter(p => p.id !== made!.id)]); setOpenId(made.id) }
+    } finally { setBusy(null); setSince(null); setMadeDays(0); abortRef.current = null }
   }
 
   async function makeShopping(plan: SavedPlan) {
@@ -411,11 +442,25 @@ export default function MealsClient() {
               </div>
 
               <div className="grid md:grid-cols-2 gap-3">
+                {/* Tick what you actually eat (Jordan, 2026-09-17) — a count forced the day into
+                    someone else's shape: "4 meals" used to mean breakfast, lunch, a snack and
+                    dinner whether or not that was how he ate. */}
                 <div>
-                  <label className={label} htmlFor="m-meals">MEALS A DAY</label>
-                  <select id="m-meals" className={input} value={form.mealsPerDay} onChange={e => edit({ mealsPerDay: Number(e.target.value) })}>
-                    {[1, 2, 3, 4, 5, 6].map(k => <option key={k} value={k}>{k} — {mealSlots(k).join(", ")}</option>)}
-                  </select>
+                  <span className={label}>MEALS YOU HAVE</span>
+                  <div className="flex flex-wrap gap-1">
+                    {MEAL_SLOT_OPTIONS.map(o => {
+                      const on = form.meals.includes(o.key)
+                      return (
+                        <button key={o.key} onClick={() => edit({ meals: on ? form.meals.filter(k => k !== o.key) : [...form.meals, o.key] })}
+                          className={`min-h-[44px] px-3 rounded border text-xs ${on ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                          {on ? "✓ " : ""}{o.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {form.meals.length === 0 && (
+                    <p className="text-[11px] text-amber-400 mt-1">Tick at least one — nothing ticked means no meals to plan.</p>
+                  )}
                 </div>
                 <div>
                   <label className={label} htmlFor="m-over">DAILY CALORIES BY HAND (OPTIONAL)</label>
@@ -493,7 +538,9 @@ export default function MealsClient() {
                 <div className="flex items-center gap-3">
                   <span className="text-xs">
                     <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-2 align-middle" />
-                    Writing {days} day{days === 1 ? "" : "s"} of meals… {secs} s{secs > 60 ? " — a full week takes a couple of minutes" : ""}
+                    {madeDays > 0
+                      ? `Day ${Math.min(madeDays + 1, days)} of ${days}… (${madeDays} written and saved) ${secs} s`
+                      : `Writing day 1 of ${days}… ${secs} s`}
                   </span>
                   <button className={`${btn} min-h-[44px]`} onClick={stop}>STOP</button>
                 </div>
@@ -503,7 +550,7 @@ export default function MealsClient() {
                 </button>
               )}
             </div>
-            {t && <p className="text-[11px] opacity-50">Written for <strong>{goalDef(form.goal).label.toLowerCase()}</strong> — {t.kcal.toLocaleString()} kcal · {t.protein} g protein a day, {form.mealsPerDay} meals a day{form.dislikes.trim() ? ", never using what's under dislikes" : ""}.</p>}
+            {t && <p className="text-[11px] opacity-50">Written for <strong>{goalDef(form.goal).label.toLowerCase()}</strong> — {t.kcal.toLocaleString()} kcal · {t.protein} g protein a day, across {chosenMeals(form.meals, form.meals.length || 3).join(", ").toLowerCase()}{form.dislikes.trim() ? ", never using what's under dislikes" : ""}.{days > CHUNK_DAYS ? ` Written ${CHUNK_DAYS} days at a time and saved as it goes.` : ""}</p>}
           </div>
 
           {/* ── Plans ── */}

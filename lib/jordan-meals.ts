@@ -117,7 +117,47 @@ export const MACRO_PRESETS: { label: string; protein: number; carbs: number; fat
   { label: "Lower carb",   protein: 35, carbs: 25, fat: 40 },
 ]
 
-/** What each meal of the day is called, by how many there are. */
+// ── Which meals you actually eat ─────────────────────────────────────────────
+// Jordan, 2026-09-17: "instead of having a list of options can we have a tickbox to be more
+// flexible". A count forced his day into a shape someone else chose — 4 meals meant breakfast,
+// lunch, a snack and dinner whether or not that is how he eats. Tick the ones you have.
+// ⚠ Kept in DAY ORDER here; the order on screen and the order in the plan both come from this.
+
+export const MEAL_SLOT_OPTIONS: { key: string; label: string }[] = [
+  { key: "breakfast",       label: "Breakfast" },
+  { key: "morning-snack",   label: "Morning snack" },
+  { key: "lunch",           label: "Lunch" },
+  { key: "afternoon-snack", label: "Afternoon snack" },
+  { key: "dinner",          label: "Dinner" },
+  { key: "evening-snack",   label: "Evening snack" },
+]
+
+/** The ticks that match an old profile's count — so switching to tickboxes shows him the day he
+ *  already had. ⚠ Not derived from mealSlots()'s labels: that says plain "Snack", which matches
+ *  none of the options above and would quietly drop a meal. */
+export function defaultMealKeys(n: number): string[] {
+  switch (Math.max(1, Math.min(6, n))) {
+    case 1:  return ["dinner"]
+    case 2:  return ["breakfast", "dinner"]
+    case 3:  return ["breakfast", "lunch", "dinner"]
+    case 4:  return ["breakfast", "lunch", "afternoon-snack", "dinner"]
+    case 5:  return ["breakfast", "morning-snack", "lunch", "afternoon-snack", "dinner"]
+    default: return MEAL_SLOT_OPTIONS.map(o => o.key)
+  }
+}
+
+/**
+ * The meals a profile eats, in day order.
+ * ⚠ An EMPTY list falls back to the old count, so profiles saved before the tickboxes existed
+ * keep the day they already had instead of silently becoming "no meals".
+ */
+export function chosenMeals(meals: string[] | null | undefined, mealsPerDay: number): string[] {
+  const picked = MEAL_SLOT_OPTIONS.filter(o => (meals ?? []).includes(o.key)).map(o => o.label)
+  return picked.length ? picked : mealSlots(mealsPerDay)
+}
+
+/** What each meal of the day is called, by how many there are. Still here for the fallback above
+ *  and for any profile that has never been saved since the tickboxes arrived. */
 export function mealSlots(n: number): string[] {
   switch (Math.max(1, Math.min(6, n))) {
     case 1: return ["Main meal"]
@@ -334,10 +374,12 @@ RULES — every one of them matters:
 
 export function planUserPrompt(input: {
   name: string; sex: string; age: number | null; weightKg: number | null
-  t: Targets; days: number; mealsPerDay: number; likes: string; dislikes: string; notes: string; brief: string
+  t: Targets; days: number; slots: string[]; likes: string; dislikes: string; notes: string; brief: string
   goal?: string; goalDelta?: number
+  /** Written a few days at a time — see the plan route. Day numbers are the REAL ones. */
+  fromDay?: number; toDay?: number; alreadyMade?: string[]
 }): string {
-  const slots = mealSlots(input.mealsPerDay)
+  const slots = input.slots
   // ⚠ The goal is the SHAPE of the food, not just the calorie number — without this line the
   // model wrote the same meals for someone cutting and someone building.
   const g = goalDef(input.goal)
@@ -346,7 +388,14 @@ export function planUserPrompt(input: {
     `PERSON: ${input.name} — ${input.sex}, ${input.age ?? "?"} years old, ${input.weightKg ? `${Math.round(input.weightKg)} kg` : "weight unknown"}.`,
     g.prompt.replace("%D%", String(gap)),
     `DAILY TARGET: ${input.t.kcal} kcal · protein ${input.t.protein} g · carbs ${input.t.carbs} g · fat ${input.t.fat} g.`,
-    `PLAN: ${input.days} day${input.days === 1 ? "" : "s"}, ${input.mealsPerDay} meals a day, in this order each day: ${slots.join(", ")}. Use exactly these slot names.`,
+    // ⚠ A long plan is written a few days at a time, so the model is asked for a RANGE and told
+    // what it has already written — otherwise day 5 is the same dinner as day 1.
+    input.fromDay && input.toDay && (input.fromDay !== 1 || input.toDay !== input.days)
+      ? `PLAN: part of a ${input.days}-day plan. Write ONLY days ${input.fromDay} to ${input.toDay}, numbered exactly that way. ${slots.length} meals a day, in this order each day: ${slots.join(", ")}. Use exactly these slot names.`
+      : `PLAN: ${input.days} day${input.days === 1 ? "" : "s"}, ${slots.length} meals a day, in this order each day: ${slots.join(", ")}. Use exactly these slot names.`,
+    input.alreadyMade?.length
+      ? `ALREADY WRITTEN FOR THE EARLIER DAYS — do NOT repeat these, though reusing the same ingredients is good: ${input.alreadyMade.join("; ")}`
+      : "",
     input.likes.trim()    ? `LIKES / USUAL FOODS: ${input.likes.trim()}` : "",
     input.dislikes.trim() ? `DISLIKES AND ALLERGIES — NEVER USE: ${input.dislikes.trim()}` : "",
     input.notes.trim()    ? `OTHER NOTES: ${input.notes.trim()}` : "",

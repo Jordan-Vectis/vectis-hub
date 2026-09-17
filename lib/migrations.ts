@@ -142,6 +142,8 @@ export const MIGRATIONS = [
   // Lose / maintain / build muscle / gain (2026-09-16). Also in the CREATE above, for a database
   // that has never had these tables; this ALTER covers one that made them the day before.
   `ALTER TABLE "JordanMealProfile" ADD COLUMN IF NOT EXISTS "goal" TEXT NOT NULL DEFAULT 'lose'`,
+  // Which meals he eats, ticked rather than a count (2026-09-17). Empty = fall back to mealsPerDay.
+  `ALTER TABLE "JordanMealProfile" ADD COLUMN IF NOT EXISTS "meals" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
   // JORDAN.SYS gym (personal, /jordan) — an AI-written programme plus the log of what was
   // actually lifted. ⚠ No weights are stored on a programme; they are computed from JordanSet.
   `CREATE TABLE IF NOT EXISTS "JordanGymProfile" (

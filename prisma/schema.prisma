@@ -2909,6 +2909,10 @@ model JordanMealProfile {
   proteinPct   Int  @default(30)
   carbsPct     Int  @default(40)
   fatPct       Int  @default(30)
+  // Which meals he actually eats, in day order — keys from MEAL_SLOT_OPTIONS. ⚠ EMPTY means the
+  // profile predates the tickboxes, and `chosenMeals()` falls back to mealsPerDay rather than
+  // reading it as "no meals at all". mealsPerDay is kept in step as the count.
+  meals        String[] @default([])
   mealsPerDay  Int  @default(3)
 
   likes    String @default("") @db.Text

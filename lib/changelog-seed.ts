@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-16, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-17, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"6a03b0f0eae82ae3d86941569d9d6aa7c90378e0","author":"Jordan Orange","date":"2026-09-17T10:21:00+01:00","subject":"Manage Lots: the BC column is measured, and the tick is gone"},
   {"sha":"1674ee3a077b77980bb53581fbeef16d6cacdedc","author":"Jordan Orange","date":"2026-09-16T16:58:11+01:00","subject":"Gym: make it write a real split, and stop flattering the volume count"},
   {"sha":"d9420ff8bec283d814bcd0dd5d6990b3214839bf","author":"Jordan Orange","date":"2026-09-16T16:39:05+01:00","subject":"Gym: equipment is optional, and every exercise can be swapped"},
   {"sha":"d31290f3d58281f04b6c2c602d263ab30a38f7a4","author":"Jordan Orange","date":"2026-09-16T16:24:25+01:00","subject":"JORDAN.SYS 09 · GYM — AI programmes, and a log that decides the weights"},

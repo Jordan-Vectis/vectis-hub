@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
-import { GOAL_KEYS, deltaFor, goalDef } from "@/lib/jordan-meals"
+import { GOAL_KEYS, MEAL_SLOT_OPTIONS, deltaFor, goalDef } from "@/lib/jordan-meals"
 
 // /api/jordan/meals/profiles — one profile per person: their numbers, targets and likes.
 // Locked to jordan.orange; everyone else gets a 404, as if it didn't exist.
@@ -88,7 +88,15 @@ export async function PUT(req: NextRequest) {
     put("proteinPct", int(b.proteinPct, 0, 100, 30))
     put("carbsPct", int(b.carbsPct, 0, 100, 40))
     put("fatPct", int(b.fatPct, 0, 100, 30))
-    put("mealsPerDay", int(b.mealsPerDay, 1, 6, 3))
+    // Ticked meals and the count are saved as a PAIR — mealsPerDay is just how many were ticked,
+    // so nothing can end up claiming four meals a day with three ticked.
+    if (Array.isArray(b.meals)) {
+      const meals = MEAL_SLOT_OPTIONS.filter(o => b.meals.includes(o.key)).map(o => o.key)
+      data.meals = meals
+      if (meals.length) data.mealsPerDay = meals.length
+    } else {
+      put("mealsPerDay", int(b.mealsPerDay, 1, 6, 3))
+    }
     put("likes", str(b.likes)); put("dislikes", str(b.dislikes)); put("notes", str(b.notes))
 
     await prisma.jordanMealProfile.update({ where: { id: String(b.id) }, data })
