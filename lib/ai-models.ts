@@ -82,6 +82,7 @@ export const AI_TOOLS: AiTool[] = [
   // Writing a week of recipes to hit calorie and macro targets, then the shopping list. Its own
   // slot so it can be moved to a stronger model without disturbing the chat.
   { slot: "jordan_meals",           group: "Other",        label: "Jordan's secret menu (meal planner)", default: "gemini-3-flash-preview", claudeOk: true },
+  { slot: "jordan_gym",             group: "Other",        label: "Jordan's secret menu (gym programmes)", default: "gemini-3-flash-preview", claudeOk: true },
 ]
 
 const SLOT_DEFAULT: Record<string, string> = Object.fromEntries(AI_TOOLS.map((t) => [t.slot, t.default]))

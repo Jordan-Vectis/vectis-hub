@@ -1552,13 +1552,12 @@ export async function toggleLotAiUpgraded(lotId: string, auctionId: string, valu
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
-// Manual cataloguer tick — set after a lot has gone over to Business Central.
-export async function toggleLotAddedToBC(lotId: string, auctionId: string, value: boolean) {
-  const session = await requireCataloguer()
-  await requireNotBCLocked(auctionId, session)
-  await updateLotLogged(lotId, { addedToBC: value }, { changedBy: changedByOf(session), source: "lot_editor" })
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-}
+// ⚠ toggleLotAddedToBC and bulkSetLotsAddedToBC were REMOVED on 2026-09-17, with the tick and
+// the "Mark added to BC" button they existed for. Manage Lots' BC column is now measured from
+// the barcodes in the BC sync, the same way the Auction Manager's In BC column already was, so a
+// by-hand mark could only ever disagree with it — and the lot nobody remembered to tick was
+// always the one that mattered. `CatalogueLot.addedToBC` stays as a column and keeps its history;
+// nothing writes it any more except the spreadsheet importer. Do NOT add a way to set it back.
 
 // Log a bulk flag change: snapshot the flag before, update, log only the lots that changed.
 async function logBulkFlag(lotIds: string[], auctionId: string, field: keyof typeof LOGGABLE_SELECT, label: string, value: boolean, ctx: LotLogCtx) {
@@ -1582,21 +1581,6 @@ export async function bulkSetLotsAiExcluded(lotIds: string[], auctionId: string,
   const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { aiExcluded: value } })
   const newUndoId = await recordBulkUndo(auctionId, session, `${value ? "Exclude" : "Un-exclude"} from AI (${changing.length})`,
     changing.map((l) => ({ lotId: l.id, fields: { aiExcluded: { before: !value, after: value } } })), undoId)
-  if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-  return { count: r.count, undoId: newUndoId }
-}
-
-// Bulk set — used by the mass-select action on Manage Lots.
-export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, value: boolean, undoId?: string | null, skipRevalidate?: boolean) {
-  const session = await requireCataloguer()
-  await requireNotBCLocked(auctionId, session)
-  if (lotIds.length === 0) return { count: 0, undoId: undoId ?? null }
-  const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
-  const changing = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds }, auctionId, addedToBC: { not: value } }, select: { id: true } })
-  await logBulkFlag(lotIds, auctionId, "addedToBC", "Added to BC", value, ctx)
-  const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { addedToBC: value } })
-  const newUndoId = await recordBulkUndo(auctionId, session, `${value ? "Mark" : "Unmark"} added to BC (${changing.length})`,
-    changing.map((l) => ({ lotId: l.id, fields: { addedToBC: { before: !value, after: value } } })), undoId)
   if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { count: r.count, undoId: newUndoId }
 }

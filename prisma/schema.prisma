@@ -2898,6 +2898,10 @@ model JordanMealProfile {
   weightKg Float?
   activity String @default("light") // sedentary | light | moderate | active | very
 
+  // What they're trying to do: lose | maintain | muscle | gain (GOAL_DEFS in lib/jordan-meals.ts).
+  // It decides the calorie gap on offer, the suggested macro split AND what the AI is told to
+  // cook — losing and building muscle are different food at the same calories.
+  goal         String @default("lose")
   // Calories a day against maintenance: -500 = lose, 0 = maintain, +250 = gain.
   goalDelta    Int  @default(-500)
   // A daily target typed in by hand — wins over the calculation when set.
@@ -2905,6 +2909,10 @@ model JordanMealProfile {
   proteinPct   Int  @default(30)
   carbsPct     Int  @default(40)
   fatPct       Int  @default(30)
+  // Which meals he actually eats, in day order — keys from MEAL_SLOT_OPTIONS. ⚠ EMPTY means the
+  // profile predates the tickboxes, and `chosenMeals()` falls back to mealsPerDay rather than
+  // reading it as "no meals at all". mealsPerDay is kept in step as the count.
+  meals        String[] @default([])
   mealsPerDay  Int  @default(3)
 
   likes    String @default("") @db.Text
@@ -2914,13 +2922,20 @@ model JordanMealProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  plans JordanMealPlan[]
+  plans        JordanMealPlan[] @relation("MealPlanOwner")
+  partnerPlans JordanMealPlan[] @relation("MealPlanPartner")
+  gym          JordanGymProfile?
 }
 
 model JordanMealPlan {
   id        String            @id @default(cuid())
   profileId String
-  profile   JordanMealProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile   JordanMealProfile @relation("MealPlanOwner", fields: [profileId], references: [id], onDelete: Cascade)
+  // A couple's plan (2026-09-17): one recipe per meal, split into two portions so both hit their
+  // own targets. ⚠ SetNull, not Cascade — deleting the partner's profile must not delete a plan
+  // that is still perfectly good for the person who owns it.
+  partnerId String?
+  partner   JordanMealProfile? @relation("MealPlanPartner", fields: [partnerId], references: [id], onDelete: SetNull)
 
   title String @default("")
   days  Int    @default(1)
@@ -2939,6 +2954,150 @@ model JordanMealPlan {
 
   @@index([profileId])
   @@index([createdAt])
+}
+
+// ─── JORDAN.SYS gym (personal, /jordan) ──────────────────────────────────────
+// A written programme AND the log of what was actually lifted, because one without the other is
+// half a tool: a programme nobody logs can't progress, and a log with no programme is a diary.
+// ⚠⚠ The AI writes STRUCTURE ONLY — sets, a rep range, reps-in-reserve, rest. It never writes a
+// weight; the weight is computed from JordanSet by double progression (lib/jordan-gym.ts).
+
+model JordanGymProfile {
+  id String @id @default(cuid())
+  // ⚠ LINKS to the meal profile, never copies it: sex, age, weight and the GOAL are read through
+  // this relation every time. A copied goal is the drift bug — the meal planner switches to
+  // "lose" and the gym tool carries on adding 2.5 kg a week until every session fails.
+  mealProfileId String?            @unique
+  mealProfile   JordanMealProfile? @relation(fields: [mealProfileId], references: [id], onDelete: SetNull)
+
+  daysPerWeek    Int    @default(4) // decides the split: 2 = full body, 4 = upper/lower, 5+ = push/pull/legs
+  sessionMinutes Int    @default(60) // the hard cap on how many exercises fit
+  experience     String @default("intermediate") // beginner | novice | intermediate | advanced
+  equipment      String @default("") @db.Text // what the gym HAS. The AI may not prescribe outside it
+  injuries       String @default("") @db.Text // movements that must never appear, in his words
+  preferences    String @default("") @db.Text // likes and hates, like the meal profile's
+  // The plate maths is real maths: the smallest jump possible on a bar is TWICE the smallest
+  // plate, so "add 2.5 kg" is impossible if the smallest plate is 2.5.
+  barKg          Float  @default(20)
+  plates         String @default("25,20,15,10,5,2.5,1.25")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programmes JordanProgramme[]
+  workouts   JordanWorkout[]
+}
+
+/// The exercise catalogue — the continuity key. Every logged set points at a LIFT, so one
+/// movement has one history however it gets spelled. Seeded from LIFT_SEED in lib/jordan-gym.ts.
+model JordanLift {
+  id          String   @id @default(cuid())
+  slug        String   @unique // the identity, e.g. "barbell-back-squat"
+  name        String
+  aliases     String[] @default([]) // every other name he or the AI might use — matched BEFORE creating a twin
+  pattern     String   @default("isolation") // squat | hinge | lunge | *-push | *-pull | isolation | carry | core
+  muscles     String[] @default([])
+  equipment   String   @default("barbell")
+  incrementKg Float    @default(2.5) // the smallest jump THIS gym allows on this lift, never a percentage
+  perHand     Boolean  @default(false) // dumbbells are logged per hand. 2×30 logged as 60 corrupts the lift forever
+  bodyweight  Boolean  @default(false) // pull-ups/dips — bodyweight is added for the e1RM
+  restSec     Int      @default(120)
+  main        Boolean  @default(false) // only main lifts get an estimated-1RM PB
+  createdAt   DateTime @default(now())
+
+  sets JordanSet[]
+}
+
+/// A block of training, frozen exactly like JordanMealPlan — the profile can change afterwards
+/// and the programme must still explain itself. ⚠ It holds NO weights.
+model JordanProgramme {
+  id        String           @id @default(cuid())
+  profileId String
+  profile   JordanGymProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  title       String @default("")
+  goal        String @default("maintain") // the GoalKey as it was when this was written
+  daysPerWeek Int    @default(4)
+  weeks       Int    @default(4)
+  // { title, notes, weeks, days: [{ day, name, estimatedMinutes, exercises: [...] }] }
+  plan        Json   @default("{}")
+  // equipment, injuries, session length and experience FROZEN as they were
+  inputs      Json   @default("{}")
+  // The performance summary the AI was handed, kept beside the plan it produced, so a bad
+  // rewrite can be traced to what it was told.
+  digest      String @default("") @db.Text
+  brief       String @default("") @db.Text
+  model       String @default("")
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime? // null = the block that is running now; only ever one
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  workouts JordanWorkout[]
+
+  @@index([profileId])
+  @@index([createdAt])
+}
+
+/// One gym visit. It exists so a session survives the phone locking, so a session that never
+/// happened is visible (a missed week is a progression input, not a gap), and so bodyweight is
+/// captured for the lifts loaded by it.
+model JordanWorkout {
+  id        String           @id @default(cuid())
+  profileId String
+  profile   JordanGymProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  // ⚠ SetNull, not Cascade — deleting an old programme must never take the log with it.
+  programmeId String?
+  programme   JordanProgramme? @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+
+  dayKey      String    @default("") // which programme day, COPIED not referenced, so it survives a rewrite
+  weekNo      Int       @default(1)
+  status      String    @default("IN_PROGRESS") // IN_PROGRESS | DONE | ABANDONED
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  bodyweightKg Float?   // so pull-up loads stay comparable across months
+  feeling     Int? // 1–5, one tap on finish. Two lifts stalling plus a 2 is recovery, not exercises
+  enteredLate Boolean   @default(false) // typed up later from memory — its rest times are not trusted
+  notes       String    @default("") @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sets JordanSet[]
+
+  @@index([profileId, startedAt])
+  @@index([programmeId])
+}
+
+/// One set, one row — everything else here is derived from this table.
+/// ⚠ There is deliberately NO PB table: a cached PB becomes a lie the moment a typo is fixed.
+model JordanSet {
+  id String @id @default(cuid())
+  // Minted on the PHONE the instant the set is tapped; the save is an upsert on it, so a retry
+  // over a bad gym signal can never log the same set twice.
+  clientId String @unique
+
+  workoutId String
+  workout   JordanWorkout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  liftId    String
+  lift      JordanLift    @relation(fields: [liftId], references: [id])
+
+  position       Int     @default(0) // order of the exercise within the session
+  setNo          Int     @default(1)
+  warmup         Boolean @default(false) // excluded from every count, decision and PB
+  targetReps     String  @default("") // "6-8", what was asked
+  targetWeightKg Float? // what the tool suggested, kept beside what he did so a miss is visible
+  weightKg       Float // ⚠ PER HAND on a perHand lift, always
+  reps           Int
+  rir            Int? // reps in reserve
+  est1rm         Float? // Epley, working sets of ≤10 reps only, + bodyweight where it counts
+  loggedAt       DateTime @default(now()) // the real clock at the tap — rest taken is the gap between rows
+  note           String   @default("")
+
+  @@index([workoutId])
+  @@index([liftId, loggedAt])
+  @@index([liftId, est1rm])
 }
 
 // ─── Training → sign-off ─────────────────────────────────────────────────────

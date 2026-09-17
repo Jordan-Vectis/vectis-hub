@@ -109,6 +109,7 @@ export const MIGRATIONS = [
     "heightCm"     DOUBLE PRECISION,
     "weightKg"     DOUBLE PRECISION,
     "activity"     TEXT NOT NULL DEFAULT 'light',
+    "goal"         TEXT NOT NULL DEFAULT 'lose',
     "goalDelta"    INTEGER NOT NULL DEFAULT -500,
     "kcalOverride" INTEGER,
     "proteinPct"   INTEGER NOT NULL DEFAULT 30,
@@ -138,6 +139,123 @@ export const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "JordanMealPlan_profileId_idx" ON "JordanMealPlan"("profileId")`,
   `CREATE INDEX IF NOT EXISTS "JordanMealPlan_createdAt_idx" ON "JordanMealPlan"("createdAt")`,
+  // Lose / maintain / build muscle / gain (2026-09-16). Also in the CREATE above, for a database
+  // that has never had these tables; this ALTER covers one that made them the day before.
+  `ALTER TABLE "JordanMealProfile" ADD COLUMN IF NOT EXISTS "goal" TEXT NOT NULL DEFAULT 'lose'`,
+  // Which meals he eats, ticked rather than a count (2026-09-17). Empty = fall back to mealsPerDay.
+  `ALTER TABLE "JordanMealProfile" ADD COLUMN IF NOT EXISTS "meals" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  // Couples: one plan, one recipe per meal, split into two portions (2026-09-17).
+  `ALTER TABLE "JordanMealPlan" ADD COLUMN IF NOT EXISTS "partnerId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "JordanMealPlan_partnerId_idx" ON "JordanMealPlan"("partnerId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "JordanMealPlan" ADD CONSTRAINT "JordanMealPlan_partnerId_fkey"
+      FOREIGN KEY ("partnerId") REFERENCES "JordanMealProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // JORDAN.SYS gym (personal, /jordan) — an AI-written programme plus the log of what was
+  // actually lifted. ⚠ No weights are stored on a programme; they are computed from JordanSet.
+  `CREATE TABLE IF NOT EXISTS "JordanGymProfile" (
+    "id"             TEXT NOT NULL PRIMARY KEY,
+    "mealProfileId"  TEXT,
+    "daysPerWeek"    INTEGER NOT NULL DEFAULT 4,
+    "sessionMinutes" INTEGER NOT NULL DEFAULT 60,
+    "experience"     TEXT NOT NULL DEFAULT 'intermediate',
+    "equipment"      TEXT NOT NULL DEFAULT '',
+    "injuries"       TEXT NOT NULL DEFAULT '',
+    "preferences"    TEXT NOT NULL DEFAULT '',
+    "barKg"          DOUBLE PRECISION NOT NULL DEFAULT 20,
+    "plates"         TEXT NOT NULL DEFAULT '25,20,15,10,5,2.5,1.25',
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "JordanGymProfile_mealProfileId_key" ON "JordanGymProfile"("mealProfileId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "JordanGymProfile" ADD CONSTRAINT "JordanGymProfile_mealProfileId_fkey"
+      FOREIGN KEY ("mealProfileId") REFERENCES "JordanMealProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `CREATE TABLE IF NOT EXISTS "JordanLift" (
+    "id"          TEXT NOT NULL PRIMARY KEY,
+    "slug"        TEXT NOT NULL,
+    "name"        TEXT NOT NULL,
+    "aliases"     TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "pattern"     TEXT NOT NULL DEFAULT 'isolation',
+    "muscles"     TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "equipment"   TEXT NOT NULL DEFAULT 'barbell',
+    "incrementKg" DOUBLE PRECISION NOT NULL DEFAULT 2.5,
+    "perHand"     BOOLEAN NOT NULL DEFAULT FALSE,
+    "bodyweight"  BOOLEAN NOT NULL DEFAULT FALSE,
+    "restSec"     INTEGER NOT NULL DEFAULT 120,
+    "main"        BOOLEAN NOT NULL DEFAULT FALSE,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "JordanLift_slug_key" ON "JordanLift"("slug")`,
+  `CREATE TABLE IF NOT EXISTS "JordanProgramme" (
+    "id"          TEXT NOT NULL PRIMARY KEY,
+    "profileId"   TEXT NOT NULL,
+    "title"       TEXT NOT NULL DEFAULT '',
+    "goal"        TEXT NOT NULL DEFAULT 'maintain',
+    "daysPerWeek" INTEGER NOT NULL DEFAULT 4,
+    "weeks"       INTEGER NOT NULL DEFAULT 4,
+    "plan"        JSONB NOT NULL DEFAULT '{}',
+    "inputs"      JSONB NOT NULL DEFAULT '{}',
+    "digest"      TEXT NOT NULL DEFAULT '',
+    "brief"       TEXT NOT NULL DEFAULT '',
+    "model"       TEXT NOT NULL DEFAULT '',
+    "startedAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endedAt"     TIMESTAMP(3),
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "JordanProgramme_profileId_fkey" FOREIGN KEY ("profileId")
+      REFERENCES "JordanGymProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanProgramme_profileId_idx" ON "JordanProgramme"("profileId")`,
+  `CREATE INDEX IF NOT EXISTS "JordanProgramme_createdAt_idx" ON "JordanProgramme"("createdAt")`,
+  `CREATE TABLE IF NOT EXISTS "JordanWorkout" (
+    "id"           TEXT NOT NULL PRIMARY KEY,
+    "profileId"    TEXT NOT NULL,
+    "programmeId"  TEXT,
+    "dayKey"       TEXT NOT NULL DEFAULT '',
+    "weekNo"       INTEGER NOT NULL DEFAULT 1,
+    "status"       TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+    "startedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt"   TIMESTAMP(3),
+    "bodyweightKg" DOUBLE PRECISION,
+    "feeling"      INTEGER,
+    "enteredLate"  BOOLEAN NOT NULL DEFAULT FALSE,
+    "notes"        TEXT NOT NULL DEFAULT '',
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "JordanWorkout_profileId_fkey" FOREIGN KEY ("profileId")
+      REFERENCES "JordanGymProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "JordanWorkout_programmeId_fkey" FOREIGN KEY ("programmeId")
+      REFERENCES "JordanProgramme"("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanWorkout_profileId_startedAt_idx" ON "JordanWorkout"("profileId", "startedAt")`,
+  `CREATE INDEX IF NOT EXISTS "JordanWorkout_programmeId_idx" ON "JordanWorkout"("programmeId")`,
+  `CREATE TABLE IF NOT EXISTS "JordanSet" (
+    "id"             TEXT NOT NULL PRIMARY KEY,
+    "clientId"       TEXT NOT NULL,
+    "workoutId"      TEXT NOT NULL,
+    "liftId"         TEXT NOT NULL,
+    "position"       INTEGER NOT NULL DEFAULT 0,
+    "setNo"          INTEGER NOT NULL DEFAULT 1,
+    "warmup"         BOOLEAN NOT NULL DEFAULT FALSE,
+    "targetReps"     TEXT NOT NULL DEFAULT '',
+    "targetWeightKg" DOUBLE PRECISION,
+    "weightKg"       DOUBLE PRECISION NOT NULL,
+    "reps"           INTEGER NOT NULL,
+    "rir"            INTEGER,
+    "est1rm"         DOUBLE PRECISION,
+    "loggedAt"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "note"           TEXT NOT NULL DEFAULT '',
+    CONSTRAINT "JordanSet_workoutId_fkey" FOREIGN KEY ("workoutId")
+      REFERENCES "JordanWorkout"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "JordanSet_liftId_fkey" FOREIGN KEY ("liftId")
+      REFERENCES "JordanLift"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "JordanSet_clientId_key" ON "JordanSet"("clientId")`,
+  `CREATE INDEX IF NOT EXISTS "JordanSet_workoutId_idx" ON "JordanSet"("workoutId")`,
+  `CREATE INDEX IF NOT EXISTS "JordanSet_liftId_loggedAt_idx" ON "JordanSet"("liftId", "loggedAt")`,
+  `CREATE INDEX IF NOT EXISTS "JordanSet_liftId_est1rm_idx" ON "JordanSet"("liftId", "est1rm")`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "extraDetails" TEXT`,
   `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "appliedDesc" TEXT`,
   `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "favourite" BOOLEAN NOT NULL DEFAULT FALSE`,

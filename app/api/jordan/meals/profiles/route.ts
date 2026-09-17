@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
+import { GOAL_KEYS, MEAL_SLOT_OPTIONS, deltaFor, goalDef } from "@/lib/jordan-meals"
 
 // /api/jordan/meals/profiles — one profile per person: their numbers, targets and likes.
 // Locked to jordan.orange; everyone else gets a 404, as if it didn't exist.
@@ -73,16 +74,37 @@ export async function PUT(req: NextRequest) {
     put("age", optNum(b.age, 10, 120))
     put("heightCm", optNum(b.heightCm, 100, 250))
     put("weightKg", optNum(b.weightKg, 30, 350))
-    put("goalDelta", int(b.goalDelta, -1000, 1000, -500))
+    // ⚠ The goal and the calorie gap are saved as a PAIR. A delta the goal doesn't offer is
+    // corrected to that goal's own default — "Build muscle" must never carry a deficit over
+    // from "Lose weight", whatever reaches the route.
+    if (b.goal !== undefined) {
+      const goal = GOAL_KEYS.includes(b.goal) ? b.goal : "lose"
+      data.goal = goal
+      data.goalDelta = deltaFor(goal, int(b.goalDelta, -1000, 1000, goalDef(goal).defaultDelta) ?? goalDef(goal).defaultDelta)
+    } else {
+      put("goalDelta", int(b.goalDelta, -1000, 1000, -500))
+    }
     put("kcalOverride", optNum(b.kcalOverride, 800, 6000))
     put("proteinPct", int(b.proteinPct, 0, 100, 30))
     put("carbsPct", int(b.carbsPct, 0, 100, 40))
     put("fatPct", int(b.fatPct, 0, 100, 30))
-    put("mealsPerDay", int(b.mealsPerDay, 1, 6, 3))
+    // Ticked meals and the count are saved as a PAIR — mealsPerDay is just how many were ticked,
+    // so nothing can end up claiming four meals a day with three ticked.
+    if (Array.isArray(b.meals)) {
+      const meals = MEAL_SLOT_OPTIONS.filter(o => b.meals.includes(o.key)).map(o => o.key)
+      data.meals = meals
+      if (meals.length) data.mealsPerDay = meals.length
+    } else {
+      put("mealsPerDay", int(b.mealsPerDay, 1, 6, 3))
+    }
     put("likes", str(b.likes)); put("dislikes", str(b.dislikes)); put("notes", str(b.notes))
 
-    await prisma.jordanMealProfile.update({ where: { id: String(b.id) }, data })
-    return NextResponse.json({ ok: true })
+    // ⚠ The saved ROW goes back, not just ok. The page autosaves and keeps its own copy of the
+    // profile list rather than reloading it, and this route CORRECTS what it is given — a goalDelta
+    // the goal does not offer, an age outside 10–120, a weight outside 30–350. Answering "ok" would
+    // leave the screen holding values the database refused and send them again on the next save.
+    const row = await prisma.jordanMealProfile.update({ where: { id: String(b.id) }, data })
+    return NextResponse.json({ ok: true, profile: row })
   } catch (e: any) {
     console.error("jordan/meals/profiles PUT:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

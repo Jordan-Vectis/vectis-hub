@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, bulkSetLotReserves, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, bulkSetLotReserves, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
 import { actionErrorText } from "@/lib/action-error"
 import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
@@ -44,7 +44,9 @@ interface Lot {
   hammerPrice: number | null; condition: string | null; vendor: string | null
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
-  status: string; aiUpgraded: boolean; addedToBC: boolean; aiExcluded: boolean; createdByName: string | null; imageUrls: string[]
+  /** ⚠ MEASURED — the lot's barcode found in the synced BC data, not a tick (2026-09-17).
+   *  Reflects the last Data Sync, so it is read-only here: there is nothing to press. */
+  status: string; aiUpgraded: boolean; inBC: boolean; aiExcluded: boolean; createdByName: string | null; imageUrls: string[]
   aiFlagNote: string | null   // AI-flagged possible cataloguer mistake — surfaced by the Locking Check
   reviewFlag: string | null   // reason text set from the Review tab
   createdAt: string          // ISO — when the lot was created ("Date Added" column)
@@ -1401,8 +1403,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [titlesPending, startTitles] = useTransition()
 
   // Mark/unmark selected as added to BC
-  const [bcMsg, setBcMsg]           = useState<string | null>(null)
-  const [bcPending, startBc]        = useTransition()
+  // (bcMsg/startBc went with the "Mark added to BC" button on 2026-09-17 — see below.)
 
   // Mark/unmark selected as AI excluded
   const [excludeMsg, setExcludeMsg] = useState<string | null>(null)
@@ -1597,7 +1598,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
         (fAi === "upgraded"     ?  l.aiUpgraded :
          fAi === "not_upgraded" ? !l.aiUpgraded :
          fAi === "excluded"     ?  l.aiExcluded : !l.aiExcluded)) &&
-      (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.addedToBC  : !l.addedToBC )) &&
+      (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.inBC       : !l.inBC      )) &&
       (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim())) &&
       (fAddedBy === ""    || (l.createdByName ?? "") === fAddedBy) &&
       (fDateAdded === ""  || ukDay(l.createdAt) === fDateAdded)
@@ -2009,31 +2010,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     })
   }
 
-  // Bulk mark/unmark selected lots as "Added to BC". Decides direction by
-  // looking at the selected lots — if any are still un-ticked we tick them
-  // all; if all are already ticked we untick. Avoids needing two buttons.
-  async function handleToggleAddedToBC() {
-    if (selected.size === 0) return
-    const selectedLots = lots.filter(l => selected.has(l.id))
-    const anyUnticked  = selectedLots.some(l => !l.addedToBC)
-    const newValue     = anyUnticked  // true → mark; false → unmark all
-    startBc(async () => {
-      try {
-        const res = await runInChunks(Array.from(selected), setMassProgress, (chunk, undoId, isLast) =>
-          bulkSetLotsAddedToBC(chunk, auctionId, newValue, undoId, !isLast))
-        const count = res.reduce((s, r) => s + r.count, 0)
-        setBcMsg(`${newValue ? "✓ Marked" : "↺ Unmarked"} ${count} lot${count === 1 ? "" : "s"} ${newValue ? "as added to BC" : ""}`)
-        setSelected(new Set())
-      } catch (e) {
-        setBcMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
-      } finally {
-        setMassProgress(null)
-        onDelete()
-        await refreshUndos()
-        setTimeout(() => setBcMsg(null), 5000)
-      }
-    })
-  }
+  // ⚠ handleToggleAddedToBC was deleted on 2026-09-17 along with its button. The BC column is
+  // measured from the barcodes in the BC sync, so a by-hand mark could only ever disagree with
+  // it — and the one that got forgotten was the one that mattered. The server actions went too;
+  // CatalogueLot.addedToBC keeps its history but nothing writes it from this screen.
 
   async function handleBulkToggleAiExcluded() {
     if (selected.size === 0) return
@@ -2315,7 +2295,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
         </div>
 
         {/* Status messages from the last action, one tidy line */}
-        {(undoMsg || fillMsg || bidsMsg || titlesMsg || massMsg || uniqueIdMsg || condMsg || bcMsg || excludeMsg || photoMsg) && (
+        {(undoMsg || fillMsg || bidsMsg || titlesMsg || massMsg || uniqueIdMsg || condMsg || excludeMsg || photoMsg) && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 px-1">
             {undoMsg && <span className="text-xs text-amber-400">{undoMsg}</span>}
             {fillMsg  && <span className="text-xs text-[#2AB4A6]">{fillMsg}</span>}
@@ -2324,7 +2304,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             {massMsg  && <span className="text-xs text-orange-400">{massMsg}</span>}
             {uniqueIdMsg && <span className="text-xs text-cyan-400">{uniqueIdMsg}</span>}
             {condMsg && <span className="text-xs text-[#2AB4A6]">{condMsg}</span>}
-            {bcMsg && <span className="text-xs text-emerald-400">{bcMsg}</span>}
             {excludeMsg && <span className="text-xs text-amber-400">{excludeMsg}</span>}
             {photoMsg && <span className="text-xs text-[#2AB4A6]">{photoMsg}</span>}
           </div>
@@ -2345,15 +2324,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               selected.size > 0 ? "text-[#2AB4A6] bg-[#2AB4A6]/15" : "text-gray-500 dark:text-gray-400 bg-gray-200/60 dark:bg-white/5"}`}>
               {selected.size > 0 ? `${selected.size} selected` : "Tick lots to use these"}
             </span>
-            {(() => {
-              const anyUnticked = lots.some(l => selected.has(l.id) && !l.addedToBC)
-              return (
-                <button onClick={handleToggleAddedToBC} disabled={bcPending || none}
-                  className={`${TB_BTN} border-emerald-700 text-emerald-500 dark:text-emerald-400 hover:bg-emerald-500/10`}>
-                  {bcPending ? "Updating…" : anyUnticked ? "📦 Mark added to BC" : "↺ Unmark added to BC"}
-                </button>
-              )
-            })()}
+            {/* ⚠ "Mark added to BC" was removed on 2026-09-17 — the BC column is measured from
+                the sync now, so marking it by hand could only ever disagree with it. */}
             {(() => {
               const anyNotExcluded = lots.some(l => selected.has(l.id) && !l.aiExcluded)
               return (
@@ -2798,8 +2770,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               <td className="px-2 py-1.5">
                 <select value={fAddedToBC} onChange={e => setFAddedToBC(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
-                  <option value="yes">📦 Added</option>
-                  <option value="no">Not yet</option>
+                  <option value="yes">📦 In BC</option>
+                  <option value="no">Not in BC</option>
                 </select>
               </td>
             </tr>
@@ -2867,15 +2839,12 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                     </button>
                   )}
                 </td>
-                <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={() => toggleLotAddedToBC(lot.id, auctionId, !lot.addedToBC)}
-                    title={lot.addedToBC ? "Click to mark as not yet added to BC" : "Click to mark as added to BC"}
-                    className="transition-opacity hover:opacity-60">
-                    {lot.addedToBC
-                      ? <span title="Added to Business Central">📦</span>
-                      : <span className="text-gray-700 text-xs">—</span>}
-                  </button>
+                {/* ⚠ Measured, and therefore NOT clickable — this is what the BC sync says, so
+                    there is nothing here for anyone to get wrong or forget. */}
+                <td className="px-4 py-3 text-center">
+                  {lot.inBC
+                    ? <span className="text-emerald-500 dark:text-emerald-400" title="This barcode was found in BC, as at the last Data Sync">📦</span>
+                    : <span className="text-gray-700 text-xs" title="Not in the BC data yet, as at the last Data Sync">—</span>}
                 </td>
                 <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                   {!bcLocked && (

@@ -174,6 +174,8 @@ metadata:
 
 **Doing it again.** BcLotWeb.siteSaleId (**NEEDS Run Migrations**; the write falls back cleanly without it) records which website sale number each lot came from, so the page reads back "collected up to sale N" and sets the next run to N+1. Re-collecting old sales is safe — every column is COALESCEd, so a second pass only fills blanks.
 
+⚠⚠ **A MISSING MARKER IS NOT AN EMPTY DATABASE (2026-09-17).** That same clean fallback is a trap: every lot loaded before the column existed carries siteSaleId NULL, so max() is null on a database holding 216,259 lots. The panel said *"Nothing collected yet"*, the **📋 Copy instructions for Claude** text said *"Nothing has been collected yet, so that is the whole range"*, and a full year of sales — 220,228 lots, 382 sales, 36 minutes — was collected again for nothing before Jordan spotted it: *"whats the point pulling in data we already have?"*. The page and the Status Centre now read **count(\\*) beside max(siteSaleId)** and show three states — collected up to N · *N lots here but not which sale they came from* (amber) · genuinely nothing. Loading any collection fills the marker in, so this self-heals per sale. ⚠ Never word the "nothing collected" branch from a null marker alone, here or in the copied instructions — whoever reads those is on another machine with no way of knowing better.
+
 **⚠ The page's tools are CHIPS** (bc-tools.tsx): 🌐 Website jobs · 📥 Update the BC lots · ⬇ Export & handover. Nothing shows until one is pressed, one at a time, and **a running job opens its own panel and keeps a live dot on the chip** — hiding the tools must never hide a job that is going. Jordan, 2026-09-09: *"these should be really small options at the top that then show the square they need otherwise they should be hidden"* and *"the filtering options are still awful"* — hence sortable columns (date/sale/lot/estimate/hammer, both ways, with an arrow) and on-screen filters (search incl. unique ID, sale name or code, date range, hammer range, sold/unsold, has a photo, full vs short description), every one carried through paging AND sorting.
 `,
   },
@@ -452,8 +454,9 @@ F126 478/498, F127 480/492, F134 194/252, F138 84/102.
   are, from the same barcode query. The date column was narrowed and the flags moved left to make
   room, the flags text dropped to 7pt, and the page footer now states that BC is counted from the
   last Data Sync. ⚠ Only the COMPLETED table has status flags — the active one has none.
-- \`CatalogueLot.addedToBC\` (per-lot) is a different field and is untouched — it still drives
-  Manage Lots' BC column and the "Mark added to BC" bulk action.
+- \`CatalogueLot.addedToBC\` (per-lot) was a different field and survived this change — it drove
+  Manage Lots' BC column and the "Mark added to BC" bulk action until **2026-09-17**, when it went
+  the same way (see below).
 
 ## The other two ticks went the same way (2026-09-15)
 
@@ -464,6 +467,7 @@ Jordan: *"remove the photography tick as it's redundant now we have the counter,
 - Status filters became **All / Not all lots photographed** and **All / Not all lots ran through AI**, count-based like In BC (a sale with no eligible lots is never "all done").
 - **Then the ticks themselves went (same day).** Jordan, on Auction Settings: *"we just need the catalogued tick and the complete tick if the rest are worked off counters anyway"*. \`addedToBC\`, \`photography\` and \`aiRan\` are no longer tickable anywhere; the columns stay in the DB. ⚠ \`updateAuction\` deliberately does NOT write them — an unticked/absent checkbox arrives as absent and the old code saved that as FALSE, so leaving them in \`data\` would have wiped every sale's old value on its next Save. Every display of the ticks was swapped or dropped so nothing shows a frozen value: sale-header badges dropped; Photography list's "Marked photographed"/"In BC" badges dropped; the Manager Portal Completed table's "Added to BC" column is now a measured **In BC** \`616/616\` (same barcode query); the overview PDF's "Photo" flag is measured (every lot has a photo). Export still writes the old columns. RULES.md updated.
 - **Bug found on the way:** Lotting Up's sale picker warned *"is marked Added to BC and is locked"* off \`addedToBC\` — wrong since the lock moved to Catalogued on 2026-09-02. It now reads \`catalogued\`.
+- **The PER-LOT tick went the same way (2026-09-17).** Jordan, on Manage Lots: *"change the added to BC column ... to be automatic like the counter on the page before and remove the button that adds them"*. The BC column on the sale page is now measured per lot — the lot's **barcode** found in \`WarehouseItem\`, one raw query in \`app/(app)/tools/cataloguing/auctions/[id]/page.tsx\`, passed to the table as \`inBC\` — and it is **not clickable**. The "📦 Mark added to BC" / "↺ Unmark added to BC" bulk button is gone, and so are the server actions behind it (\`toggleLotAddedToBC\`, \`bulkSetLotsAddedToBC\` — deleted, not left dead). The column filter reads "In BC / Not in BC". ⚠ \`CatalogueLot.addedToBC\` stays as a column and keeps its lot-log history; only the spreadsheet importer still writes it. Never add a way to set it by hand — the lot nobody remembered to tick was always the one that mattered.
 
 Related: [[reference_admin_centre]], [[reference_end_of_day_bc]], [[reference_manage_lots_bulk_undo]].
 `,
@@ -5667,7 +5671,7 @@ type: reference
 - [Data & Compliance page](reference_compliance_page.md) — /admin/compliance, a static data-protection note; keep its lists in step when an integration changes
 - [Data map — every Prisma table](reference_data_map.md) — one plain-English sentence per table on Data & Compliance, with a self-check for undescribed ones. Read before adding a Prisma model
 - [🎥📸 Screen Recorder + Screenshots (IT Tools)](reference_screen_recorder.md) — record/capture into R2; retry never re-uploads; screenshots stream through the Hub; livestream NOT built
-- [🏢 BC Database (Databases)](reference_bc_database.md) — /databases/bc: BC sync + the website's FULL description/photo/link. ⚠⚠ the site answers Railway 202+empty but an OFFICE machine normally → collected by scripts/collect-bc-lots.mjs and uploaded; BC sales = site 1062–1558; siteSaleId says where to carry on
+- [🏢 BC Database (Databases)](reference_bc_database.md) — /databases/bc: BC sync + the website's FULL description/photo/link. ⚠⚠ the site answers Railway 202+empty but an OFFICE machine normally → collected by scripts/collect-bc-lots.mjs and uploaded; BC sales = site 1062–1566; ⚠ siteSaleId is NULL on lots loaded before the column — a missing marker is NOT an empty database
 - [📚 ABC Database / Lot Archive (Databases)](reference_lot_archive.md) — pre-BC lots: sheet STREAMED from R2 + website pull (LotID = site unique_id, photos keyed on it, match by AuctionID+lot). Read before touching old sold prices/photos
 - [💬 Help box (top bar)](reference_help_box.md) — permissions by FILTERING context server-side (allowedHelpContext); getEffectiveSession() not auth(); DESTINATIONS list
 - [Lens — identify from photo](reference_lens.md) — Gemini + our sold prices; 4 matching traps; since 2026-09-10 checks ABC + BC full descriptions (findComparables everywhere), headline from same-number lots

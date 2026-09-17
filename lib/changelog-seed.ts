@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-15, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-17, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,17 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"aec488ecb9d98b7cb0e448248409f77c6005f104","author":"Jordan Orange","date":"2026-09-17T15:12:56+01:00","subject":"BC Database: a missing sale marker no longer reads as an empty database"},
+  {"sha":"daf782e2ec6c9e70f4b25c58ef57012947ed8f79","author":"Jordan Orange","date":"2026-09-17T10:53:43+01:00","subject":"Meal planner: plan for two, one recipe cooked once and split"},
+  {"sha":"e1c6b6e4c7025a0155f2bf2f432adecb4b78bae0","author":"Jordan Orange","date":"2026-09-17T10:42:30+01:00","subject":"Meal planner: swap a meal you don't fancy for something else"},
+  {"sha":"418bd777ce4ec18e18573c6e3930d9edb234f05d","author":"Jordan Orange","date":"2026-09-17T10:35:08+01:00","subject":"Meal planner: tick the meals you have, and write long plans in chunks"},
+  {"sha":"6a03b0f0eae82ae3d86941569d9d6aa7c90378e0","author":"Jordan Orange","date":"2026-09-17T10:21:00+01:00","subject":"Manage Lots: the BC column is measured, and the tick is gone"},
+  {"sha":"1674ee3a077b77980bb53581fbeef16d6cacdedc","author":"Jordan Orange","date":"2026-09-16T16:58:11+01:00","subject":"Gym: make it write a real split, and stop flattering the volume count"},
+  {"sha":"d9420ff8bec283d814bcd0dd5d6990b3214839bf","author":"Jordan Orange","date":"2026-09-16T16:39:05+01:00","subject":"Gym: equipment is optional, and every exercise can be swapped"},
+  {"sha":"d31290f3d58281f04b6c2c602d263ab30a38f7a4","author":"Jordan Orange","date":"2026-09-16T16:24:25+01:00","subject":"JORDAN.SYS 09 · GYM — AI programmes, and a log that decides the weights"},
+  {"sha":"a51fcd7531eb3dba9111749e16556c795c6f6d46","author":"Jordan Orange","date":"2026-09-16T09:36:42+01:00","subject":"Meal planner: a real goal, and an estimated cost on the shopping list"},
+  {"sha":"e3d4220b4510c21d21e5a6ead0916943e20b2dfa","author":"Jordan Orange","date":"2026-09-15T16:58:47+01:00","subject":"Merge staging into main: meal planner, Auction Manager counters, settings ticks, column order"},
+  {"sha":"e3405d2fad1fa6256e48200292dc5540089a311f","author":"Jordan Orange","date":"2026-09-15T16:57:56+01:00","subject":"Auction Manager: Catalogued column before Lots with photos"},
   {"sha":"833d6a6e73500a7bf6df19e80b603c3f6a4bb994","author":"Jordan Orange","date":"2026-09-15T16:50:58+01:00","subject":"Auction Settings: only the Catalogued and Complete ticks remain"},
   {"sha":"e600754139c41a5f663d25141ad220908569dcdc","author":"Jordan Orange","date":"2026-09-15T16:42:30+01:00","subject":"Auction Manager: drop the Photography tick, count lots ran through AI"},
   {"sha":"ec7b1c6ddc8471a59e76bbbd44a393114829d3a4","author":"Jordan Orange","date":"2026-09-15T15:01:39+01:00","subject":"JORDAN.SYS: 08 Meal Planner - BMR, macro targets, AI meal plans, shopping list"},
