@@ -103,6 +103,14 @@ export default function MealsClient() {
   const [now, setNow]           = useState(Date.now())
   const abortRef = useRef<AbortController | null>(null)
   const planTopRef = useRef<HTMLDivElement>(null)
+  // ⚠⚠ The re-entry guard for MAKE PLAN is a REF, not `busy`. Two presses in the same tick both
+  // read the old state, so a state flag cannot stop the second — and two runs would write two
+  // plans and fight over abortRef.
+  const planRef = useRef(false)
+  // What the plan is doing, and anything that stopped it, shown AT THE BUTTON. The error box at
+  // the top of the page is off screen from down here, which is how a refusal reads as nothing.
+  const [planStage, setPlanStage] = useState("")
+  const [planError, setPlanError] = useState<string | null>(null)
 
   const active = profiles.find(p => p.id === activeId) ?? null
   const t: Targets | null = form ? workOut(numbersOf(form)) : null
@@ -314,16 +322,26 @@ export default function MealsClient() {
    * The counter moves a day at a time: real progress, never a made-up bar.
    */
   async function makePlan() {
-    if (!activeId) return
-    // ⚠ The plan is written server-side against the SAVED profile, so anything still queued has to
-    // land before the call goes out — otherwise it plans against the numbers from a second ago.
-    if (!(await saveNow())) return
-    if (!t) { setError("Fill in sex, age, height and weight first."); return }
-    if (form && form.meals.length === 0) { setError("Tick the meals you have first."); return }
-    setError(null); setNote(null); setBusy("plan"); setSince(Date.now()); setMadeDays(0)
-    const ac = new AbortController(); abortRef.current = ac
+    // ⚠⚠ GUARDED AND LIT BEFORE THE FIRST AWAIT (Jordan, 2026-09-17: "sometimes when you press make
+    // my plan it doesnt do anything and you have to press the button again"). The press was never
+    // lost — it went straight into `await saveNow()`, a network round trip, and only set `busy`
+    // afterwards. For that whole window nothing on screen changed and the button stayed live, so it
+    // read as a dead press, and a second one started a SECOND plan racing the first.
+    // ⚠ NOTHING returns in silence any more, and the button is no longer disabled for a reason it
+    // cannot state — every refusal is a sentence beside the button that was pressed.
+    if (planRef.current) return
+    if (!activeId) { setPlanError("Pick a profile first."); return }
+    planRef.current = true
+    setPlanError(null); setError(null); setNote(null)
+    setBusy("plan"); setSince(Date.now()); setMadeDays(0); setPlanStage("Saving your numbers")
     let made: SavedPlan | null = null
     try {
+      // The plan is written server-side from the SAVED profile, so anything queued lands first.
+      if (!(await saveNow())) { setPlanError("Your numbers haven't saved, so the plan would be written against the old ones. Press RETRY up beside YOUR NUMBERS, then try again."); return }
+      if (!t) { setPlanError("Fill in sex, age, height and weight first — the targets come from those."); return }
+      if (form && form.meals.length === 0) { setPlanError("Tick the meals you have first."); return }
+      setPlanStage("")
+      const ac = new AbortController(); abortRef.current = ac
       while (!made || made.plan.days.length < days) {
         const from = (made?.plan.days.length ?? 0) + 1
         const j = await api("/api/jordan/meals/plan", {
@@ -347,9 +365,11 @@ export default function MealsClient() {
     } catch (e: any) {
       const got = made?.plan.days.length ?? 0
       if (e?.name === "AbortError") setNote(got ? `Stopped — days 1 to ${got} are saved.` : "Stopped.")
-      else setError(got ? `${e.message} Days 1 to ${got} are saved.` : e.message)
+      // ⚠ Beside the button, not in the top box — a failed plan used to put its reason somewhere
+      // the person who pressed it could not see, which is the whole "it did nothing" complaint.
+      else setPlanError(got ? `${e.message} Days 1 to ${got} are saved.` : e.message)
       if (made) { setPlans(ps => [made!, ...ps.filter(p => p.id !== made!.id)]); setOpenId(made.id) }
-    } finally { setBusy(null); setSince(null); setMadeDays(0); abortRef.current = null }
+    } finally { planRef.current = false; setBusy(null); setSince(null); setMadeDays(0); setPlanStage(""); abortRef.current = null }
   }
 
   async function makeShopping(plan: SavedPlan) {
@@ -693,18 +713,23 @@ export default function MealsClient() {
                 <div className="flex items-center gap-3">
                   <span className="text-xs">
                     <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-2 align-middle" />
-                    {madeDays > 0
-                      ? `Day ${Math.min(madeDays + 1, days)} of ${days}… (${madeDays} written and saved) ${secs} s`
-                      : `Writing day 1 of ${days}… ${secs} s`}
+                    {planStage
+                      ? `${planStage}… ${secs} s`
+                      : madeDays > 0
+                        ? `Day ${Math.min(madeDays + 1, days)} of ${days}… (${madeDays} written and saved) ${secs} s`
+                        : `Writing day 1 of ${days}… ${secs} s`}
                   </span>
-                  <button className={`${btn} min-h-[44px]`} onClick={stop}>STOP</button>
+                  {/* ⚠ No STOP until there is something to stop — abortRef is only set once the AI
+                      call starts, so a STOP during the save would be another button doing nothing. */}
+                  {!planStage && <button className={`${btn} min-h-[44px]`} onClick={stop}>STOP</button>}
                 </div>
               ) : (
-                <button className={`${btnGo} min-h-[44px]`} onClick={makePlan} disabled={!t || saveState === "failed" || !!busy}>
+                <button className={`${btnGo} min-h-[44px]`} onClick={makePlan} disabled={!!busy}>
                   ✨ MAKE {days}-DAY PLAN
                 </button>
               )}
             </div>
+            {planError && <p className="text-xs text-red-300 border border-red-800 bg-red-950/40 rounded px-3 py-2">{planError}</p>}
             {t && <p className="text-[11px] opacity-50">Written for <strong>{goalDef(form.goal).label.toLowerCase()}</strong> — {t.kcal.toLocaleString()} kcal · {t.protein} g protein a day, across {chosenMeals(form.meals, form.meals.length || 3).join(", ").toLowerCase()}{form.dislikes.trim() ? ", never using what's under dislikes" : ""}.{days > CHUNK_DAYS ? ` Written ${CHUNK_DAYS} days at a time and saved as it goes.` : ""}</p>}
           </div>
 

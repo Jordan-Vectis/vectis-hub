@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"91925f3e7a44b04261f3030f8b368a707084b82e","author":"Jordan Orange","date":"2026-09-17T16:54:24+01:00","subject":"Meal planner: numbers save themselves, macro split lights up, and a dessert slot"},
   {"sha":"aec488ecb9d98b7cb0e448248409f77c6005f104","author":"Jordan Orange","date":"2026-09-17T15:12:56+01:00","subject":"BC Database: a missing sale marker no longer reads as an empty database"},
   {"sha":"daf782e2ec6c9e70f4b25c58ef57012947ed8f79","author":"Jordan Orange","date":"2026-09-17T10:53:43+01:00","subject":"Meal planner: plan for two, one recipe cooked once and split"},
   {"sha":"e1c6b6e4c7025a0155f2bf2f432adecb4b78bae0","author":"Jordan Orange","date":"2026-09-17T10:42:30+01:00","subject":"Meal planner: swap a meal you don't fancy for something else"},
