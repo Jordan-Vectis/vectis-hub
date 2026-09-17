@@ -99,8 +99,12 @@ export async function PUT(req: NextRequest) {
     }
     put("likes", str(b.likes)); put("dislikes", str(b.dislikes)); put("notes", str(b.notes))
 
-    await prisma.jordanMealProfile.update({ where: { id: String(b.id) }, data })
-    return NextResponse.json({ ok: true })
+    // ⚠ The saved ROW goes back, not just ok. The page autosaves and keeps its own copy of the
+    // profile list rather than reloading it, and this route CORRECTS what it is given — a goalDelta
+    // the goal does not offer, an age outside 10–120, a weight outside 30–350. Answering "ok" would
+    // leave the screen holding values the database refused and send them again on the next save.
+    const row = await prisma.jordanMealProfile.update({ where: { id: String(b.id) }, data })
+    return NextResponse.json({ ok: true, profile: row })
   } catch (e: any) {
     console.error("jordan/meals/profiles PUT:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

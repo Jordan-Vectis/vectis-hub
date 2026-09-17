@@ -85,7 +85,7 @@ export default function MealsClient() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [activeId, setActiveId] = useState("")
   const [form, setForm]         = useState<Form | null>(null)
-  const [dirty, setDirty]       = useState(false)
+  const [saveState, setSaveState] = useState<"clean" | "waiting" | "saving" | "failed">("clean")
   const [loading, setLoading]   = useState(true)
   const [busy, setBusy]         = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
@@ -119,6 +119,31 @@ export default function MealsClient() {
   }, [since])
   const secs = since ? Math.floor((now - since) / 1000) : 0
 
+  /**
+   * ⚠⚠ THE NUMBERS SAVE THEMSELVES (Jordan, 2026-09-17: "can we have an autosave as its annoying
+   * having to press save"). There is no SAVE button any more — a change starts a short timer and
+   * the profile is written when the typing stops.
+   *
+   * ⚠ A SAVE MUST NEVER RELOAD THE FORM. The old saveProfile() finished with loadProfiles(), which
+   * rebuilds every box from the server — harmless behind a button press, but on an autosave it
+   * would wipe whatever was typed in the second the save took. The saved values are merged into the
+   * local `profiles` list instead, so switching person and back still shows them.
+   * ⚠ Saves are CHAINED, not fired in parallel — two PUTs racing could land in either order and the
+   * older one would win. Each link re-reads the newest form from the ref, so a queued save writes
+   * what is on screen now, and `savedRef` makes it a no-op when nothing has actually changed.
+   * ⚠ Nothing here schedules itself off a useEffect on `form`: loading a profile sets the form too,
+   * and that would save a profile straight back over itself on every switch.
+   */
+  const SAVE_AFTER = 900
+  const formRef  = useRef<Form | null>(null)
+  const idRef    = useRef("")
+  const savedRef = useRef("")                                   // what the server last accepted
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const chainRef = useRef<Promise<boolean>>(Promise.resolve(true))
+  const snapshot = (id: string, f: Form | null) => (f ? JSON.stringify([id, f]) : "")
+  useEffect(() => { formRef.current = form }, [form])
+  useEffect(() => { idRef.current = activeId }, [activeId])
+
   const loadProfiles = useCallback(async (selectId?: string) => {
     setLoading(true)
     try {
@@ -131,8 +156,13 @@ export default function MealsClient() {
       const pick = selectId ?? (list.some(p => p.id === activeId) ? activeId : list[0]?.id ?? "")
       setActiveId(pick)
       const chosen = list.find(p => p.id === pick)
-      setForm(chosen ? formFrom(chosen) : null)
-      setDirty(false)
+      const f = chosen ? formFrom(chosen) : null
+      setForm(f)
+      // ⚠ The refs are set here as well as by their effects — a flush can be asked for before
+      // React has run them, and it must not write a stale profile back.
+      formRef.current = f; idRef.current = pick
+      savedRef.current = snapshot(pick, f)
+      setSaveState("clean")
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,17 +184,85 @@ export default function MealsClient() {
     return j
   }
 
-  function selectProfile(id: string) {
-    if (dirty && !confirm("You have unsaved changes to these numbers. Switch anyway?")) return
+  /** Write the profile now. Returns false only if the server refused it. */
+  async function saveNow(): Promise<boolean> {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+    chainRef.current = chainRef.current.then(writeProfile, writeProfile)
+    return chainRef.current
+  }
+
+  async function writeProfile(): Promise<boolean> {
+    const id = idRef.current, f = formRef.current
+    if (!id || !f) return true
+    const stamp = snapshot(id, f)
+    if (stamp === savedRef.current) { setSaveState("clean"); return true }
+    setSaveState("saving")
+    try {
+      const body = { ...numbersOf(f), meals: f.meals, likes: f.likes, dislikes: f.dislikes, notes: f.notes }
+      const j = await api("/api/jordan/meals/profiles", { id, ...body }, "PUT")
+      savedRef.current = stamp
+      // The list keeps the saved values so switching person and back shows them — the form is NOT
+      // rebuilt from the server, see the note above. ⚠ The ROW the route hands back wins over what
+      // was sent: it corrects a value out of range, and the list must show what is actually stored.
+      setProfiles(ps => ps.map(p => p.id === id
+        ? { ...p, ...body, mealsPerDay: f.meals.length || p.mealsPerDay, ...(j?.profile ?? {}), plans: p.plans }
+        : p))
+      // ⚠ Only call it clean if nothing has been typed since this save set off.
+      if (snapshot(idRef.current, formRef.current) === stamp) setSaveState("clean")
+      return true
+    } catch (e: any) {
+      setSaveState("failed")
+      setError(`Your numbers didn't save — ${e.message}`)
+      return false
+    }
+  }
+
+  function schedule() {
+    setSaveState("waiting")
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => { timerRef.current = null; void saveNow() }, SAVE_AFTER)
+  }
+
+  // Leaving the page with a save still queued would lose it — the window is under a second, but
+  // losing a weight change without being told is exactly the sort of thing nobody forgives.
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => { if (timerRef.current || saveState === "saving" || saveState === "failed") e.preventDefault() }
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [saveState])
+
+  // ⚠⚠ THE FLUSH IS ITS OWN EFFECT, WITH NO DEPENDENCIES. Hung on the warning effect above it ran
+  // its cleanup every time saveState changed — which is every keystroke — so it cleared the pending
+  // timer and saved at once, and the debounce did nothing at all. It must fire on UNMOUNT and
+  // nothing else. Everything it needs is in a ref, so an empty dependency list costs it nothing.
+  useEffect(() => () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; void saveNow() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function selectProfile(id: string) {
+    if (id === activeId) return
+    // Anything still queued belongs to the person being left, so it goes first. ⚠ A refused save
+    // STOPS the switch — rebuilding the boxes for someone else would throw away what could not be
+    // written — and says so, because a profile button that just does nothing reads as broken.
+    if (!(await saveNow())) {
+      // ⚠ Added to the ERROR, not a note — the note box is hidden whenever an error is showing,
+      // and the failed save has just set one, so a setNote here would never appear on screen.
+      setError(prev => `${prev ?? "Your numbers did not save."} Still on ${active?.name ?? "this profile"} — it has not switched, so nothing is lost. Press RETRY.`)
+      return
+    }
     // ⚠ Nobody cooks for two of themselves.
     if (id === partnerId) setPartnerId("")
     setActiveId(id)
     const p = profiles.find(x => x.id === id)
-    setForm(p ? formFrom(p) : null)
-    setDirty(false); setOpenId(null)
+    const f = p ? formFrom(p) : null
+    setForm(f)
+    formRef.current = f; idRef.current = id
+    savedRef.current = snapshot(id, f)
+    setSaveState("clean"); setOpenId(null)
   }
 
-  function edit(patch: Partial<Form>) { setForm(f => (f ? { ...f, ...patch } : f)); setDirty(true) }
+  function edit(patch: Partial<Form>) { setForm(f => (f ? { ...f, ...patch } : f)); schedule() }
 
   /** Picking a goal sets THREE things: the goal, a calorie gap that goal actually offers, and its
    *  suggested macro split. The split changes on screen where you can see it (and change it back),
@@ -175,7 +273,7 @@ export default function MealsClient() {
       ...f, goal: key, goalDelta: deltaFor(key, f.goalDelta),
       proteinPct: String(g.macros.protein), carbsPct: String(g.macros.carbs), fatPct: String(g.macros.fat),
     } : f)
-    setDirty(true)
+    schedule()
   }
 
   async function newProfile() {
@@ -185,19 +283,7 @@ export default function MealsClient() {
     try {
       const j = await api("/api/jordan/meals/profiles", { name })
       await loadProfiles(j.id)
-      setNote(`Created "${name}" — fill in the numbers below and save.`)
-    } catch (e: any) { setError(e.message) } finally { setBusy(null) }
-  }
-
-  async function saveProfile() {
-    if (!activeId || !form) return
-    const pct = n(form.proteinPct) + n(form.carbsPct) + n(form.fatPct)
-    if (pct !== 100 && !confirm(`The macro split adds up to ${pct}%, not 100%. Save anyway? (It will be scaled to 100.)`)) return
-    setError(null); setBusy("save")
-    try {
-      await api("/api/jordan/meals/profiles", { id: activeId, ...numbersOf(form), meals: form.meals, likes: form.likes, dislikes: form.dislikes, notes: form.notes }, "PUT")
-      setDirty(false); setNote("Saved.")
-      await loadProfiles(activeId)
+      setNote(`Created "${name}" — fill in the numbers below; they save as you type.`)
     } catch (e: any) { setError(e.message) } finally { setBusy(null) }
   }
 
@@ -229,7 +315,9 @@ export default function MealsClient() {
    */
   async function makePlan() {
     if (!activeId) return
-    if (dirty) { setError("Save your numbers first — the plan is written against the saved ones."); return }
+    // ⚠ The plan is written server-side against the SAVED profile, so anything still queued has to
+    // land before the call goes out — otherwise it plans against the numbers from a second ago.
+    if (!(await saveNow())) return
     if (!t) { setError("Fill in sex, age, height and weight first."); return }
     if (form && form.meals.length === 0) { setError("Tick the meals you have first."); return }
     setError(null); setNote(null); setBusy("plan"); setSince(Date.now()); setMadeDays(0)
@@ -341,7 +429,15 @@ export default function MealsClient() {
             <div className={`${box} p-4 space-y-4`}>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs tracking-widest opacity-60">YOUR NUMBERS — {active.name.toUpperCase()}</span>
-                <button className={btnGo} onClick={saveProfile} disabled={busy === "save" || !dirty}>{busy === "save" ? "SAVING…" : dirty ? "SAVE" : "SAVED"}</button>
+                {/* No SAVE button — it saves itself. This says which of those it is doing, and a
+                    refusal turns into something pressable rather than a line that just sits there. */}
+                {saveState === "failed" ? (
+                  <button className={`${btn} border-red-700 text-red-400 hover:border-red-500`} onClick={() => void saveNow()}>⚠ NOT SAVED — RETRY</button>
+                ) : (
+                  <span className="text-[11px] tracking-widest opacity-60">
+                    {saveState === "clean" ? "✓ SAVED" : "SAVING…"}
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -413,11 +509,21 @@ export default function MealsClient() {
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   <span className={`${label} mb-0`}>MACRO SPLIT (% OF CALORIES)</span>
-                  {MACRO_PRESETS.map(m => (
-                    <button key={m.label} className={btn} onClick={() => edit({ proteinPct: String(m.protein), carbsPct: String(m.carbs), fatPct: String(m.fat) })}>
-                      {m.label} {m.protein}/{m.carbs}/{m.fat}
-                    </button>
-                  ))}
+                  {/* ⚠ The pressed one is LIT (Jordan, 2026-09-17: "when you press the macro split
+                      there is not feedback"). The boxes below did change, but they are three small
+                      numbers further down the screen — nothing happened where the finger was. It is
+                      read off the values, not a remembered click, so picking a goal (which sets the
+                      split too) and typing the numbers by hand both light the right one. */}
+                  {MACRO_PRESETS.map(m => {
+                    const on = n(form.proteinPct) === m.protein && n(form.carbsPct) === m.carbs && n(form.fatPct) === m.fat
+                    return (
+                      <button key={m.label}
+                        className={`px-3 py-1.5 text-xs rounded border transition-colors ${on ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}
+                        onClick={() => edit({ proteinPct: String(m.protein), carbsPct: String(m.carbs), fatPct: String(m.fat) })}>
+                        {on ? "✓ " : ""}{m.label} {m.protein}/{m.carbs}/{m.fat}
+                      </button>
+                    )
+                  })}
                 </div>
                 <div className="grid grid-cols-3 gap-2 max-w-md">
                   {([["proteinPct", "PROTEIN"], ["carbsPct", "CARBS"], ["fatPct", "FAT"]] as const).map(([k, l]) => (
@@ -520,7 +626,7 @@ export default function MealsClient() {
                   <p className="text-[11px] opacity-50 leading-relaxed">
                     Mifflin–St Jeor formula, the one dietitians use. {numbersOf(form).weightKg ? `You're ${numbersOf(form).weightKg} kg and ${numbersOf(form).heightCm} cm.` : ""} A 500 kcal daily deficit is about a pound a week.
                   </p>
-                  {dirty && <p className="text-[11px] text-amber-400">Unsaved — press SAVE before making a plan.</p>}
+                  {saveState === "failed" && <p className="text-[11px] text-red-400">These numbers are not saved — a plan would be written against the old ones.</p>}
                 </>
               )}
             </div>
@@ -594,7 +700,7 @@ export default function MealsClient() {
                   <button className={`${btn} min-h-[44px]`} onClick={stop}>STOP</button>
                 </div>
               ) : (
-                <button className={`${btnGo} min-h-[44px]`} onClick={makePlan} disabled={!t || dirty || !!busy}>
+                <button className={`${btnGo} min-h-[44px]`} onClick={makePlan} disabled={!t || saveState === "failed" || !!busy}>
                   ✨ MAKE {days}-DAY PLAN
                 </button>
               )}

@@ -129,6 +129,9 @@ export const MEAL_SLOT_OPTIONS: { key: string; label: string }[] = [
   { key: "lunch",           label: "Lunch" },
   { key: "afternoon-snack", label: "Afternoon snack" },
   { key: "dinner",          label: "Dinner" },
+  // Dessert sits after dinner and before the evening snack (Jordan, 2026-09-17). It is a meal like
+  // any other — its calories come OUT of the day's target, never on top; see planSystemPrompt().
+  { key: "dessert",         label: "Dessert" },
   { key: "evening-snack",   label: "Evening snack" },
 ]
 
@@ -142,7 +145,9 @@ export function defaultMealKeys(n: number): string[] {
     case 3:  return ["breakfast", "lunch", "dinner"]
     case 4:  return ["breakfast", "lunch", "afternoon-snack", "dinner"]
     case 5:  return ["breakfast", "morning-snack", "lunch", "afternoon-snack", "dinner"]
-    default: return MEAL_SLOT_OPTIONS.map(o => o.key)
+    // ⚠ Spelled out rather than "every option": dessert joined the list later, and mapping the
+    // options would hand a dessert to every old six-meal profile that never asked for one.
+    default: return ["breakfast", "morning-snack", "lunch", "afternoon-snack", "dinner", "evening-snack"]
   }
 }
 
@@ -505,9 +510,10 @@ RULES — every one of them matters:
 4. Keep the shopping simple: reuse ingredients across the days (the same protein two nights, the same vegetables in several meals). Prefer recipes under 30 minutes unless a slower one is clearly worth it.
 5. Vary the days. A batch cook is fine when it says so in the meal's name, e.g. "Chilli (batch — day 1 of 2)".
 6. Method: short numbered steps, at most 8.
-7. Answer with JSON only, exactly this shape and nothing else:
+7. A "Dessert" slot is a REAL MEAL, not a treat bolted on. Its calories and macros come OUT of the day's target like every other slot, so the day still totals correctly — never add it on top. Build it from proper food that earns its place: Greek yoghurt, quark, skyr, cottage cheese, fruit, berries, oats, nuts or seeds in weighed amounts, eggs, a little dark chocolate, ricotta, frozen banana. Lean on the protein — a dessert is a good place to close a protein gap. No cakes, biscuits, ice cream tubs, pastry, sweets or shop puddings, and nothing described as a cheat, treat or guilty pleasure. Keep it small and quick: usually 150–300 kcal and under 10 minutes, no baking unless the person asked for it.
+8. Answer with JSON only, exactly this shape and nothing else:
 {"title":"a short name for the plan","tips":"one or two lines of prep-ahead or batch-cook advice","days":[{"day":1,"meals":[{"slot":"Breakfast","name":"...","prepMinutes":10,"ingredients":[{"item":"chicken breast","qty":"200 g"}],"method":["...","..."],"kcal":520,"protein":42,"carbs":48,"fat":16}]}]}
-8. When — and only when — the plan is for TWO people, add a "servings" array to every meal: [{"name":"Jordan","share":"250 g of the chicken and two thirds of the rice","kcal":720,"protein":52,"carbs":60,"fat":22},{"name":"Kate","share":"the rest","kcal":520,"protein":38,"carbs":44,"fat":16}]`
+9. When — and only when — the plan is for TWO people, add a "servings" array to every meal: [{"name":"Jordan","share":"250 g of the chicken and two thirds of the rice","kcal":720,"protein":52,"carbs":60,"fat":22},{"name":"Kate","share":"the rest","kcal":520,"protein":38,"carbs":44,"fat":16}]`
 }
 
 export function planUserPrompt(input: {
@@ -542,6 +548,11 @@ export function planUserPrompt(input: {
       : `PLAN: ${input.days} day${input.days === 1 ? "" : "s"}, ${slots.length} meals a day, in this order each day: ${slots.join(", ")}. Use exactly these slot names.`,
     input.alreadyMade?.length
       ? `ALREADY WRITTEN FOR THE EARLIER DAYS — do NOT repeat these, though reusing the same ingredients is good: ${input.alreadyMade.join("; ")}`
+      : "",
+    // ⚠ Said again here, beside the slot list. The dessert is the slot most likely to be treated as
+    // an extra, and a day that goes over its target because pudding was added on top is not a plan.
+    slots.some(s => /dessert/i.test(s))
+      ? "DESSERT: it is one of the slots above, so its calories and macros are part of the day's target, not an addition to it. Healthy and properly made — see the dessert rule — and a different one each day."
       : "",
     input.likes.trim()    ? `LIKES / USUAL FOODS: ${input.likes.trim()}` : "",
     input.dislikes.trim() ? `DISLIKES AND ALLERGIES — NEVER USE: ${input.dislikes.trim()}` : "",
