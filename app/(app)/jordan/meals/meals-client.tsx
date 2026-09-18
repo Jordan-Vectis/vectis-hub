@@ -18,11 +18,11 @@ import {
 //
 // ⚠ Full width, no centred column. ⚠ Touch targets: the shopping ticks are used on a phone.
 
-const GREEN = "#33ff66"
-const box   = "border border-[#1f5c33] rounded-lg bg-[#040f08]"
-const input = "w-full bg-black border border-[#1f5c33] rounded px-2.5 py-1.5 text-sm text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]"
-const btn   = "px-3 py-1.5 text-xs border border-[#1f5c33] rounded hover:bg-[#0a2214] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-const btnGo = "px-4 py-2 text-sm font-bold rounded bg-[#33ff66] text-black hover:bg-[#5cff88] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const GREEN = "var(--j-acc)"
+const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const btnGo = "px-4 py-2 text-sm font-bold rounded bg-(--j-acc) text-(--j-on-acc) hover:bg-(--j-acc-hi) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const label = "block text-[10px] tracking-widest opacity-60 mb-1"
 
 type Profile = {
@@ -419,14 +419,14 @@ export default function MealsClient() {
         </div>
       )}
       {error && <div className="border border-red-700 bg-red-950/40 text-red-300 rounded-lg px-4 py-2.5 text-xs">{error}</div>}
-      {note && !error && <div className="border border-[#1f5c33] rounded-lg px-4 py-2.5 text-xs opacity-80">{note}</div>}
+      {note && !error && <div className="border border-(--j-dim) rounded-lg px-4 py-2.5 text-xs opacity-80">{note}</div>}
 
       {/* ── Profiles ── */}
       <div className={`${box} p-3 flex flex-wrap items-center gap-2`}>
         <span className="text-[10px] tracking-widest opacity-60 mr-1">PROFILES</span>
         {loading && profiles.length === 0 ? <span className="text-xs opacity-60">LOADING…</span> : profiles.map(p => (
           <button key={p.id} onClick={() => selectProfile(p.id)}
-            className={`min-h-[44px] px-3 rounded border text-xs transition-colors ${p.id === activeId ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+            className={`min-h-[44px] px-3 rounded border text-xs transition-colors ${p.id === activeId ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>
             {p.name} <span className="opacity-50">· {p.plans} plan{p.plans === 1 ? "" : "s"}</span>
           </button>
         ))}
@@ -466,7 +466,7 @@ export default function MealsClient() {
                   <div className="flex gap-1">
                     {(["male", "female"] as const).map(s => (
                       <button key={s} onClick={() => edit({ sex: s })}
-                        className={`flex-1 min-h-[44px] rounded border text-xs ${form.sex === s ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33]"}`}>{s === "male" ? "Male" : "Female"}</button>
+                        className={`flex-1 min-h-[44px] rounded border text-xs ${form.sex === s ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim)"}`}>{s === "male" ? "Male" : "Female"}</button>
                     ))}
                   </div>
                 </div>
@@ -501,7 +501,7 @@ export default function MealsClient() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
                   {GOAL_DEFS.map(g => (
                     <button key={g.key} onClick={() => pickGoal(g.key)}
-                      className={`min-h-[44px] px-2 rounded border text-xs ${form.goal === g.key ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                      className={`min-h-[44px] px-2 rounded border text-xs ${form.goal === g.key ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>
                       {g.label}
                     </button>
                   ))}
@@ -538,7 +538,7 @@ export default function MealsClient() {
                     const on = n(form.proteinPct) === m.protein && n(form.carbsPct) === m.carbs && n(form.fatPct) === m.fat
                     return (
                       <button key={m.label}
-                        className={`px-3 py-1.5 text-xs rounded border transition-colors ${on ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}
+                        className={`px-3 py-1.5 text-xs rounded border transition-colors ${on ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}
                         onClick={() => edit({ proteinPct: String(m.protein), carbsPct: String(m.carbs), fatPct: String(m.fat) })}>
                         {on ? "✓ " : ""}{m.label} {m.protein}/{m.carbs}/{m.fat}
                       </button>
@@ -587,7 +587,7 @@ export default function MealsClient() {
                       const on = form.meals.includes(o.key)
                       return (
                         <button key={o.key} onClick={() => edit({ meals: on ? form.meals.filter(k => k !== o.key) : [...form.meals, o.key] })}
-                          className={`min-h-[44px] px-3 rounded border text-xs ${on ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                          className={`min-h-[44px] px-3 rounded border text-xs ${on ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>
                           {on ? "✓ " : ""}{o.label}
                         </button>
                       )
@@ -630,7 +630,7 @@ export default function MealsClient() {
                     <Stat label="BMR — burned at rest" value={`${t.bmr.toLocaleString()} kcal`} />
                     <Stat label="Maintenance (with activity)" value={`${t.tdee.toLocaleString()} kcal`} />
                   </div>
-                  <div className="border border-[#33ff66] rounded-lg p-3 text-center">
+                  <div className="border border-(--j-acc) rounded-lg p-3 text-center">
                     <div className="text-[10px] tracking-widest opacity-60">DAILY TARGET{t.overridden ? " (BY HAND)" : ""}</div>
                     <div className="text-3xl font-bold">{t.kcal.toLocaleString()} <span className="text-sm font-normal opacity-60">kcal</span></div>
                     <div className="text-[11px] opacity-70 mt-1">{goalSummary(form.goal, form.goalDelta)}</div>
@@ -659,16 +659,16 @@ export default function MealsClient() {
             {/* ── Cooking for two ──────────────────────────────────────────
                 One recipe per meal, cooked once, split so BOTH land on their own targets —
                 his choice when asked how two different calorie targets should work. */}
-            <div className="border border-[#1f5c33] rounded-lg p-3 space-y-2">
+            <div className="border border-(--j-dim) rounded-lg p-3 space-y-2">
               <span className={label}>COOKING FOR</span>
               <div className="flex flex-wrap gap-1">
                 <button onClick={() => setPartnerId("")}
-                  className={`min-h-[44px] px-3 rounded border text-xs ${!partnerId ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                  className={`min-h-[44px] px-3 rounded border text-xs ${!partnerId ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>
                   Just {active.name}
                 </button>
                 {profiles.filter(p => p.id !== activeId).map(p => (
                   <button key={p.id} onClick={() => setPartnerId(partnerId === p.id ? "" : p.id)}
-                    className={`min-h-[44px] px-3 rounded border text-xs ${partnerId === p.id ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                    className={`min-h-[44px] px-3 rounded border text-xs ${partnerId === p.id ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>
                     {active.name} + {p.name}
                   </button>
                 ))}
@@ -678,7 +678,7 @@ export default function MealsClient() {
                 <>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {[{ p: active, t }, { p: partner, t: partnerTargets }].map(({ p, t: pt }) => (
-                      <div key={p.id} className="border border-[#1f5c33] rounded p-2">
+                      <div key={p.id} className="border border-(--j-dim) rounded p-2">
                         <div className="text-[10px] tracking-wide opacity-60">{p.name.toUpperCase()}</div>
                         {pt
                           ? <div className="text-sm font-bold">{pt.kcal.toLocaleString()} kcal <span className="font-normal opacity-60">· P {pt.protein} g</span></div>
@@ -701,7 +701,7 @@ export default function MealsClient() {
                 <div className="flex gap-1">
                   {[1, 2, 3, 4, 5, 6, 7].map(d => (
                     <button key={d} onClick={() => setDays(d)}
-                      className={`w-11 min-h-[44px] rounded border text-sm ${days === d ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>{d}</button>
+                      className={`w-11 min-h-[44px] rounded border text-sm ${days === d ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>{d}</button>
                   ))}
                 </div>
               </div>
@@ -755,7 +755,7 @@ export default function MealsClient() {
 
 function Stat({ label: l, value }: { label: string; value: string }) {
   return (
-    <div className="border border-[#1f5c33] rounded p-2">
+    <div className="border border-(--j-dim) rounded p-2">
       <div className="text-[10px] tracking-wide opacity-60">{l}</div>
       <div className="text-base font-bold">{value}</div>
     </div>
@@ -849,10 +849,10 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-3 border-t border-[#1f5c33] pt-3">
+        <div className="px-4 pb-4 space-y-3 border-t border-(--j-dim) pt-3">
           <div className="flex flex-wrap items-center gap-2">
-            <button className={`${btn} min-h-[44px] ${view === "meals" ? "border-[#33ff66] bg-[#0a2214]" : ""}`} onClick={() => setView("meals")}>🍽 MEALS</button>
-            <button className={`${btn} min-h-[44px] ${view === "shopping" ? "border-[#33ff66] bg-[#0a2214]" : ""}`} onClick={() => setView("shopping")}>🛒 SHOPPING LIST{shop ? ` (${items - ticked} to get)` : ""}</button>
+            <button className={`${btn} min-h-[44px] ${view === "meals" ? "border-(--j-acc) bg-(--j-glow)" : ""}`} onClick={() => setView("meals")}>🍽 MEALS</button>
+            <button className={`${btn} min-h-[44px] ${view === "shopping" ? "border-(--j-acc) bg-(--j-glow)" : ""}`} onClick={() => setView("shopping")}>🛒 SHOPPING LIST{shop ? ` (${items - ticked} to get)` : ""}</button>
             <span className="ml-auto flex gap-2">
               <button className={btn} onClick={onRename}>RENAME</button>
               <button className={`${btn} hover:border-red-700 hover:text-red-400`} onClick={onDelete}>DELETE</button>
@@ -862,11 +862,11 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
 
           {view === "meals" && day && totals && (
             <>
-              {plan.plan.tips && <p className="text-xs opacity-70 border border-[#1f5c33] rounded px-3 py-2">💡 {plan.plan.tips}</p>}
+              {plan.plan.tips && <p className="text-xs opacity-70 border border-(--j-dim) rounded px-3 py-2">💡 {plan.plan.tips}</p>}
               <div className="flex flex-wrap gap-1">
                 {plan.plan.days.map((d, i) => (
                   <button key={d.day} onClick={() => setDayIdx(i)}
-                    className={`min-h-[44px] px-3 rounded border text-xs ${i === dayIdx ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>DAY {d.day}</button>
+                    className={`min-h-[44px] px-3 rounded border text-xs ${i === dayIdx ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>DAY {d.day}</button>
                 ))}
               </div>
               {/* ⚠ On a couple's plan the meal figures are the WHOLE dish, so the day is totalled
@@ -877,7 +877,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                   {people.map(p => {
                     const mine = dayTotalsFor(day, p.name)
                     return (
-                      <div key={p.name} className="flex flex-wrap gap-x-4 gap-y-1 text-xs border border-[#1f5c33] rounded px-3 py-2">
+                      <div key={p.name} className="flex flex-wrap gap-x-4 gap-y-1 text-xs border border-(--j-dim) rounded px-3 py-2">
                         <span className="opacity-60">DAY {day.day} · {p.name.toUpperCase()}</span>
                         <span style={{ color: toneFor(mine.kcal, p.kcal) }}>{mine.kcal} / {p.kcal} kcal</span>
                         <span style={{ color: mine.protein >= p.protein * 0.9 ? GREEN : "#ffc94d" }}>P {mine.protein} / {p.protein} g</span>
@@ -890,7 +890,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                   <div className="text-[11px] opacity-50">In the pan: {totals.kcal} kcal · P {totals.protein} g for the two of you.</div>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs border border-[#1f5c33] rounded px-3 py-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs border border-(--j-dim) rounded px-3 py-2">
                   <span className="opacity-60">DAY {day.day} TOTAL</span>
                   <span style={{ color: toneFor(totals.kcal, tg.kcal) }}>{totals.kcal} / {tg.kcal} kcal</span>
                   <span style={{ color: totals.protein >= (tg.protein ?? 0) * 0.9 ? GREEN : "#ffc94d" }}>P {totals.protein} / {tg.protein} g</span>
@@ -900,7 +900,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
               )}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {day.meals.map((m, i) => (
-                  <div key={i} className="border border-[#1f5c33] rounded-lg p-3 space-y-2">
+                  <div key={i} className="border border-(--j-dim) rounded-lg p-3 space-y-2">
                     <div className="text-[10px] tracking-widest opacity-60 flex items-center justify-between gap-2">
                       <span>{m.slot.toUpperCase()}{m.prepMinutes ? ` · ${m.prepMinutes} MIN` : ""}</span>
                       <button onClick={() => { setSwapErr(null); setOptions([]); setSwapping(swapping?.day === day.day && swapping?.i === i ? null : { day: day.day, i }) }}
@@ -913,7 +913,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                     {m.servings.length === 2 ? (
                       <div className="space-y-1">
                         {m.servings.map(s => (
-                          <div key={s.name} className="text-xs border border-[#1f5c33] rounded px-2 py-1">
+                          <div key={s.name} className="text-xs border border-(--j-dim) rounded px-2 py-1">
                             <span className="font-bold">{s.name}:</span> {s.share}
                             <div className="opacity-70">{s.kcal} kcal · P {s.protein} g · C {s.carbs} g · F {s.fat} g</div>
                           </div>
@@ -924,13 +924,13 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                       <div className="text-xs opacity-80">{m.kcal} kcal · P {m.protein} g · C {m.carbs} g · F {m.fat} g</div>
                     )}
                     {swapping?.day === day.day && swapping?.i === i && (
-                      <div className="border border-[#33ff66] rounded p-2 space-y-2">
+                      <div className="border border-(--j-acc) rounded p-2 space-y-2">
                         {swapErr && <p className="text-xs text-red-300">{swapErr}</p>}
                         {options.length === 0 ? (
                           <>
                             <input value={swapWhy} onChange={e => setSwapWhy(e.target.value)}
                               placeholder="why? don't fancy fish, no time, use up the mince…"
-                              className="w-full bg-black border border-[#1f5c33] rounded px-2 py-1.5 text-xs text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]" />
+                              className="w-full bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1.5 text-xs text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)" />
                             <button className={`${btn} min-h-[44px] w-full`} onClick={() => askSwap(day.day, i)} disabled={swapBusy}>
                               {swapBusy ? "THINKING…" : "✨ SHOW ME 3 OTHERS"}
                             </button>
@@ -938,7 +938,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                           </>
                         ) : options.map((o, oi) => (
                           <button key={oi} onClick={() => useSwap(day.day, i, o)} disabled={swapBusy}
-                            className="w-full text-left min-h-[52px] px-2 py-2 rounded border border-[#1f5c33] hover:bg-[#0a2214]">
+                            className="w-full text-left min-h-[52px] px-2 py-2 rounded border border-(--j-dim) hover:bg-(--j-glow)">
                             <div className="text-sm font-bold">{o.name}</div>
                             <div className="text-[11px] opacity-70">{o.kcal} kcal · P {o.protein} g{o.prepMinutes ? ` · ${o.prepMinutes} min` : ""}</div>
                             {o.why && <div className="text-[11px] opacity-50">{o.why}</div>}
@@ -977,7 +977,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                     <button className={`${btn} min-h-[44px]`} onClick={untickAll} disabled={!ticked}>UNTICK ALL</button>
                     <span className="text-xs opacity-60 ml-auto">{ticked} of {items} ticked</span>
                     {hasCost && (
-                      <span className="text-xs border border-[#1f5c33] rounded px-2 py-1">
+                      <span className="text-xs border border-(--j-dim) rounded px-2 py-1">
                         ABOUT <strong>{gbp(cost!.total)}</strong>
                         {ticked > 0 && <span className="opacity-60"> · {gbp(cost!.toGet)} still to get</span>}
                       </span>
@@ -998,7 +998,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                   {shop.groups.map((g, gi) => {
                     const groupCost = g.items.reduce((a, i) => a + i.price, 0)
                     return (
-                    <div key={gi} className="border border-[#1f5c33] rounded-lg p-3">
+                    <div key={gi} className="border border-(--j-dim) rounded-lg p-3">
                       <div className="text-[10px] tracking-widest opacity-60 mb-2 flex items-center justify-between gap-2">
                         <span>{g.name.toUpperCase()}</span>
                         {groupCost > 0 && <span>{gbp(groupCost)}</span>}
@@ -1006,8 +1006,8 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                       <ul className="space-y-1">
                         {g.items.map((it, ii) => (
                           <li key={ii}>
-                            <button onClick={() => tick(gi, ii)} className="w-full min-h-[44px] flex items-center gap-3 text-left text-sm rounded px-2 hover:bg-[#0a2214]">
-                              <span className={`w-5 h-5 shrink-0 rounded border flex items-center justify-center text-xs ${it.done ? "border-[#33ff66] bg-[#33ff66] text-black" : "border-[#1f5c33]"}`}>{it.done ? "✓" : ""}</span>
+                            <button onClick={() => tick(gi, ii)} className="w-full min-h-[44px] flex items-center gap-3 text-left text-sm rounded px-2 hover:bg-(--j-glow)">
+                              <span className={`w-5 h-5 shrink-0 rounded border flex items-center justify-center text-xs ${it.done ? "border-(--j-acc) bg-(--j-acc) text-(--j-on-acc)" : "border-(--j-dim)"}`}>{it.done ? "✓" : ""}</span>
                               <span className={it.done ? "line-through opacity-50" : ""}>{it.qty ? <span className="opacity-60">{it.qty} </span> : null}{it.item}</span>
                               {it.price > 0 && <span className={`ml-auto shrink-0 text-xs tabular-nums ${it.done ? "opacity-40" : "opacity-70"}`}>{gbp(it.price)}</span>}
                             </button>

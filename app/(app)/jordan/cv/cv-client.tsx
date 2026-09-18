@@ -13,11 +13,11 @@ import { EMPTY_CV, cvToText, normaliseCv, type Cv, type CvRole, type CvStudy, ty
 // pdf-lib (which writes PDFs, it cannot read them) and nothing else. See the
 // parse route for why that is the right trade here.
 
-const GREEN = "#33ff66"
-const box   = "border border-[#1f5c33] rounded-lg bg-[#040f08]"
-const input = "w-full bg-black border border-[#1f5c33] rounded px-2.5 py-1.5 text-sm text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]"
-const btn   = "px-3 py-1.5 text-xs border border-[#1f5c33] rounded hover:bg-[#0a2214] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-const btnGo = "px-4 py-2 text-sm font-bold rounded bg-[#33ff66] text-black hover:bg-[#5cff88] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const GREEN = "var(--j-acc)"
+const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const btnGo = "px-4 py-2 text-sm font-bold rounded bg-(--j-acc) text-(--j-on-acc) hover:bg-(--j-acc-hi) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
 type Profile = { id: string; name: string; sourceName: string; updatedAt: string; applications: number; cv: Cv }
 type Application = {
@@ -225,7 +225,7 @@ export default function CvClient() {
         </div>
       )}
       {error && <div className="border border-red-700 bg-red-950/40 text-red-300 rounded-lg px-4 py-2.5 text-xs">{error}</div>}
-      {note  && <div className="border border-[#1f5c33] bg-[#0a2214] rounded-lg px-4 py-2.5 text-xs opacity-90">{note}</div>}
+      {note  && <div className="border border-(--j-dim) bg-(--j-glow) rounded-lg px-4 py-2.5 text-xs opacity-90">{note}</div>}
 
       {/* ── Profiles ── */}
       <div className={`${box} p-4`}>
@@ -250,7 +250,7 @@ export default function CvClient() {
             {profiles.map(p => (
               <button key={p.id} onClick={() => selectProfile(p.id)}
                 className={`px-3 py-1.5 text-xs rounded border transition-colors ${
-                  p.id === activeId ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>
+                  p.id === activeId ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>
                 {p.name}
                 <span className="opacity-50 ml-2">{p.applications} job{p.applications === 1 ? "" : "s"}</span>
               </button>
@@ -299,7 +299,7 @@ export default function CvClient() {
             {/* Experience */}
             <Section title="Experience" onAdd={() => edit({ experience: [...cv.experience, { title: "", employer: "", location: "", start: "", end: "", bullets: [] }] })}>
               {cv.experience.map((r, i) => (
-                <div key={i} className="border border-[#123d22] rounded p-3 space-y-2">
+                <div key={i} className="border border-(--j-dim2) rounded p-3 space-y-2">
                   <RowTools
                     onUp={() => edit({ experience: move(cv.experience, i, -1) })}
                     onDown={() => edit({ experience: move(cv.experience, i, 1) })}
@@ -324,7 +324,7 @@ export default function CvClient() {
             {/* Education */}
             <Section title="Education" onAdd={() => edit({ education: [...cv.education, { qualification: "", institution: "", year: "", detail: "" }] })}>
               {cv.education.map((e, i) => (
-                <div key={i} className="border border-[#123d22] rounded p-3 space-y-2">
+                <div key={i} className="border border-(--j-dim2) rounded p-3 space-y-2">
                   <RowTools
                     onUp={() => edit({ education: move(cv.education, i, -1) })}
                     onDown={() => edit({ education: move(cv.education, i, 1) })}
@@ -347,7 +347,7 @@ export default function CvClient() {
             {/* Anything else the CV had */}
             <Section title="Other sections" onAdd={() => edit({ extras: [...cv.extras, { heading: "", lines: [] }] })}>
               {cv.extras.map((x, i) => (
-                <div key={i} className="border border-[#123d22] rounded p-3 space-y-2">
+                <div key={i} className="border border-(--j-dim2) rounded p-3 space-y-2">
                   <RowTools
                     onUp={() => edit({ extras: move(cv.extras, i, -1) })}
                     onDown={() => edit({ extras: move(cv.extras, i, 1) })}
@@ -391,9 +391,9 @@ export default function CvClient() {
             ) : (
               <div className="mt-3 space-y-2">
                 {apps.map(a => (
-                  <div key={a.id} className="border border-[#123d22] rounded">
+                  <div key={a.id} className="border border-(--j-dim2) rounded">
                     <button onClick={() => setOpenApp(openApp?.id === a.id ? null : a)}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-[#0a2214] transition-colors">
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-(--j-glow) transition-colors">
                       <span className="opacity-50 text-xs">{openApp?.id === a.id ? "▼" : "▶"}</span>
                       <span className="text-sm">{[a.jobTitle, a.company].filter(Boolean).join(" — ") || "Untitled application"}</span>
                       <span className="ml-auto text-[11px] opacity-40">
@@ -402,7 +402,7 @@ export default function CvClient() {
                     </button>
                     {openApp?.id === a.id && (
                       <div className="px-3 pb-3 space-y-3">
-                        {a.notes && <p className="text-[11px] opacity-60 border-l-2 border-[#1f5c33] pl-2">{a.notes}</p>}
+                        {a.notes && <p className="text-[11px] opacity-60 border-l-2 border-(--j-dim) pl-2">{a.notes}</p>}
                         <div className="flex flex-wrap gap-2">
                           <button className={btn} onClick={() => copy(a.coverLetter, "Covering letter")}>COPY LETTER</button>
                           <button className={btn} onClick={() => copy(cvToText(a.cv), "Tailored CV")}>COPY CV</button>
@@ -474,7 +474,7 @@ function Pane({ title, text }: { title: string; text: string }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wider opacity-50 mb-1">{title}</p>
-      <pre className="whitespace-pre-wrap text-xs leading-relaxed bg-black border border-[#123d22] rounded p-3 max-h-96 overflow-y-auto" style={{ color: GREEN }}>{text}</pre>
+      <pre className="whitespace-pre-wrap text-xs leading-relaxed bg-(--j-bg) border border-(--j-dim2) rounded p-3 max-h-96 overflow-y-auto" style={{ color: GREEN }}>{text}</pre>
     </div>
   )
 }

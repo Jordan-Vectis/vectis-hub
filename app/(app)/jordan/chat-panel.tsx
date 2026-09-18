@@ -18,9 +18,9 @@ type Msg = { role: "user" | "model"; text: string; queries?: string[]; images?: 
 // A pending attachment: url = data URL for preview, data = base64 (no prefix) + mime for the API.
 type Attn = { url: string; mime: string; data: string }
 
-const ACC = "var(--jsys-acc, #33ff66)"
-const DIM = "var(--jsys-dim, #1f5c33)"
-const GLOW = "var(--jsys-glow, #0a2214)"
+const ACC = "var(--jsys-acc, var(--j-acc))"
+const DIM = "var(--jsys-dim, var(--j-dim))"
+const GLOW = "var(--jsys-glow, var(--j-glow))"
 const MAX_IMAGES = 6
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -210,7 +210,7 @@ export default function ChatPanel({
   }
 
   return (
-    <div className="jsys-chat flex flex-col h-full font-mono" style={{ color: ACC }}
+    <div className="jsys-chat flex flex-col h-full jsys-font" style={{ color: ACC }}
       onDragOver={(e) => { e.preventDefault() }}
       onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer?.files ?? null) }}
     >
@@ -238,7 +238,7 @@ export default function ChatPanel({
                   </div>
                 )}
                 {!m.images && m.imgs ? <p className="text-[10px] opacity-50 mb-1">🖼 {m.imgs} image{m.imgs === 1 ? "" : "s"} attached</p> : null}
-                {m.text && <p><span className="opacity-50 select-none">&gt; </span><span className="text-white">{m.text}</span></p>}
+                {m.text && <p><span className="opacity-50 select-none">&gt; </span><span className="text-(--j-hi)">{m.text}</span></p>}
               </div>
             ) : (
               <>
@@ -268,7 +268,7 @@ export default function ChatPanel({
                   <>
                     <input value={renameText} onChange={(e) => setRenameText(e.target.value)} autoFocus
                       onKeyDown={(e) => { if (e.key === "Enter") doRename(c.id); if (e.key === "Escape") setRenaming(null) }}
-                      className="jsys-input flex-1 min-w-0 bg-black border rounded px-2 py-1 focus:outline-none" />
+                      className="jsys-input flex-1 min-w-0 bg-(--j-bg) border rounded px-2 py-1 focus:outline-none" />
                     <button onClick={() => doRename(c.id)} className="px-1.5 font-bold" style={{ color: ACC }}>✓</button>
                     <button onClick={() => setRenaming(null)} className="px-1.5 opacity-60">×</button>
                   </>
@@ -276,7 +276,7 @@ export default function ChatPanel({
                   <>
                     <button onClick={() => loadSaved(c.id)} disabled={savedBusy}
                       className="flex-1 min-w-0 text-left truncate hover:underline disabled:opacity-40" title="Load this chat">
-                      <span className="text-white">{c.title}</span>
+                      <span className="text-(--j-hi)">{c.title}</span>
                     </button>
                     <span className="opacity-30 shrink-0 text-[10px]">{new Date(c.updatedAt).toLocaleDateString("en-GB")}</span>
                     <button onClick={() => { setRenaming(c.id); setRenameText(c.title) }} className="px-1 opacity-40 hover:opacity-100 shrink-0" title="Rename">✎</button>
@@ -295,7 +295,7 @@ export default function ChatPanel({
               <div key={i} className="relative">
                 <img src={a.url} alt="attachment" className="h-16 w-16 object-cover rounded-lg border" style={{ borderColor: DIM }} />
                 <button onClick={() => removeAttn(i)} title="Remove"
-                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-black border text-xs leading-none flex items-center justify-center"
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-(--j-bg) border text-xs leading-none flex items-center justify-center"
                   style={{ borderColor: ACC, color: ACC }}>×</button>
               </div>
             ))}
@@ -315,7 +315,7 @@ export default function ChatPanel({
             }}
             placeholder={placeholder}
             rows={2}
-            className="jsys-input flex-1 bg-black border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none"
+            className="jsys-input flex-1 bg-(--j-bg) border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none"
           />
           <div className="flex flex-col gap-1.5">
             <button onClick={send} disabled={busy || attaching || (!input.trim() && attns.length === 0)}

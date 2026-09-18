@@ -321,3 +321,12 @@ html.crt-mode body {
   color: #e5e7eb;
 }
 .dark .file-input::file-selector-button:hover { border-color: #6b7280; }
+
+/* ── JORDAN.SYS look & feel ──────────────────────────────────────────────────
+   The colours are CSS variables (--j-acc, --j-dim, --j-bg …) written by
+   app/(app)/jordan/layout.tsx from the palette table in lib/jordan-theme.ts.
+   The font is the one thing a Tailwind class cannot take from a variable
+   without a type hint, so it is a utility of its own. */
+@utility jsys-font {
+  font-family: var(--j-font);
+}

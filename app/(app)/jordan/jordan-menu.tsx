@@ -3,12 +3,16 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { CRT_KEY } from "@/components/crt-mode"
+import { JsysStyleChips } from "./jsys-style"
 
 // The secret menu UI — retro terminal styling, because obviously.
 // Feature 01: RETRO CRT MODE — scanlines/phosphor overlay across the whole Hub,
 // per browser (localStorage), applied everywhere by components/crt-mode.tsx.
+// Feature 10: LOOK & FEEL — the colour scheme of every /jordan screen, from the palette table in
+// lib/jordan-theme.ts (Jordan, 2026-09-18: "the green and black retro is a little jarring to some
+// people"). Per browser too. RETRO stays the default; the chips below are the whole list.
 
-const GREEN = "#33ff66"
+const GREEN = "var(--j-acc)"
 
 export default function JordanMenu() {
   const [crt, setCrt] = useState(false)
@@ -32,10 +36,10 @@ export default function JordanMenu() {
     document.documentElement.classList.toggle("crt-mode", next)
   }
 
-  const row = "flex items-center justify-between gap-4 px-4 py-3 border border-[#1f5c33] rounded-lg"
+  const row = "flex items-center justify-between gap-4 px-4 py-3 border border-(--j-dim) rounded-lg"
 
   return (
-    <div className="min-h-full bg-black p-6 font-mono" style={{ color: GREEN }}>
+    <div className="min-h-full bg-(--j-bg) p-6 jsys-font" style={{ color: GREEN }}>
       <div className="w-full pt-10">
         <pre className="text-[9px] sm:text-xs leading-tight mb-1 select-none overflow-x-auto" style={{ color: GREEN }}>
 {`     ██  ██████  ██████  ██████   █████  ███    ██    ███████ ██    ██ ███████
@@ -53,52 +57,52 @@ export default function JordanMenu() {
           <p className="text-sm">INITIALISING…</p>
         ) : (
           <div className="space-y-3 text-sm">
-            <button onClick={toggleCrt} className={`${row} w-full text-left hover:bg-[#0a2214] transition-colors`}>
+            <button onClick={toggleCrt} className={`${row} w-full text-left hover:bg-(--j-glow) transition-colors`}>
               <span>01 &nbsp;RETRO CRT MODE <span className="opacity-50">— scanlines &amp; phosphor, whole Hub, this browser</span></span>
-              <span className="shrink-0 font-bold" style={{ color: crt ? GREEN : "#777" }}>
+              <span className={`shrink-0 font-bold ${crt ? "" : "opacity-40"}`}>
                 [ {crt ? "ON " : "OFF"} ]
               </span>
             </button>
 
-            <Link href="/jordan/chat" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/chat" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>02 &nbsp;ASK AI <span className="opacity-50">— day-to-day chat, silly questions welcome</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <Link href="/jordan/cooking" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/cooking" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>03 &nbsp;COOKING <span className="opacity-50">— expert chef chat + air fryer photo converter</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <Link href="/jordan/mcoc" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/mcoc" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>04 &nbsp;MCOC <span className="opacity-50">— counters, roster, deck builder, war planner &amp; champion DB</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <Link href="/jordan/cv" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/cv" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>05 &nbsp;CV WORKSHOP <span className="opacity-50">— upload a CV, edit it, tailor it to a job + covering letter</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <Link href="/jordan/garage" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/garage" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>06 &nbsp;GARAGE <span className="opacity-50">— MOT, tax &amp; service due dates, history and past cars</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <Link href="/jordan/docs" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/docs" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>07 &nbsp;DOCUMENTS <span className="opacity-50">— private file store, folders &amp; subfolders, drag to move</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <Link href="/jordan/meals" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/meals" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>08 &nbsp;MEAL PLANNER <span className="opacity-50">— BMR &amp; macro targets, AI meal plans, shopping list</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <Link href="/jordan/gym" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+            <Link href="/jordan/gym" prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
               <span>09 &nbsp;GYM <span className="opacity-50">— AI training programmes, log every set, weights that go up</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
-            <div className={`${row} opacity-40 select-none`}>
-              <span>10 &nbsp;????????????</span>
-              <span className="shrink-0">[ LOCKED ]</span>
+            <div className={`${row} flex-wrap`}>
+              <span>10 &nbsp;LOOK &amp; FEEL <span className="opacity-50">— the colours of every screen in here, this browser</span></span>
+              <JsysStyleChips />
             </div>
 
             <p className="text-xs opacity-50 pt-4">
-              &gt; CRT mode stays on everywhere in the Hub until switched off here. More features when you think of them.
+              &gt; CRT mode stays on everywhere in the Hub until switched off here. A style stays until you pick another. More features when you think of them.
             </p>
           </div>
         )}
