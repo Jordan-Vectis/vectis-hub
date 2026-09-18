@@ -4898,6 +4898,34 @@ Core sync rules (full detail on the reference card):
 
 ---
 
+## Recent work (2026-09-15 → 18) — production is 15941188 (merged 17 Sept 16:57); the last seven commits are STAGING ONLY
+
+### On production (in the 17 Sept merge)
+- **Odd file types show everywhere a customer's photos do** — iPhone HEIC (the prebuilt sharp can't decode HEVC-HEIC, so heic-decode does it), TIFF, camera RAW, videos a browser can't play (ffmpeg makes a playable copy) and PDFs. A converted copy is kept BESIDE each original, one conversion at a time ([[reference_heic]]). Submissions: **Download all** into a folder you pick; the photo viewer steps through the photos without closing.
+- Tablet cataloguing header fits on a phone; Website Search's sale filter is the last filter.
+- **No manual status ticks left on a sale.** Auction Manager: the Photography column is gone ("Lots with photos" says it), **Ran through AI is a measured count** (lots excluded from AI are left out of the total), Catalogued sits before the counts. Auction Settings keeps only **Catalogued 🔒** and **Complete** — the addedToBC / photography / aiRan columns stay in the database and updateAuction deliberately never writes them (an absent checkbox would save false and wipe every sale's value). **Manage Lots' per-lot BC column is measured from the barcode too**, and "Mark added to BC" and its two server actions are deleted ([[reference_bc_lock_and_in_bc_column]]). Lotting Up's "locked" warning now reads Catalogued (it had read the old tick since 2 Sept).
+- Personal /jordan work (meal planner goals, costs, swaps, cooking for two; a new Gym tab) — details in local memory ONLY.
+
+### Staging only — NOT live until I say "push to main"
+- **⚠⚠ Overnight Auto Pipeline: one slice at a time.** The ~48 "[cron/pipeline-queue] error: fetch failed" lines a night were NOT an outage: server.js waited on each 9-minute slice over localhost and Node's fetch gives up waiting after 300 s. But that give-up released the only guard, and the heartbeat was once per lot, so a slow lot let a SECOND slice start on the same sale — lots sent to Gemini twice, and a description could go live after Key Points and Double Check had checked the old text. Now: an in-process lock for the whole slice (its token fences a replaced slice), a 30-second heartbeat timer, the route answers at once and the slice logs its own result, and a queue row's status only ever moves from RUNNING. Also fixed: **"skip lots that already have a description" was dropping lots the run itself had just written**, so they never got Key Points or Double Check. 17 local tests run the real runner ([[reference_pipeline_queue]]).
+- **BC sync:** the 12-hourly incremental now runs at fixed 11:00 and 17:00 London — counting from boot, it landed on the 05:00 FULL after one deploy and lit the database light at five in the morning. Both cron routes answer at once and log their own result (the cause code is printed, so a timeout reads differently from a restart); a FULL that can't start retries every 10 minutes.
+- **Mobile — the whole Hub zoomed and slid about on a phone.** The top bar was wider than a phone (644px for an admin on a 375px screen), which made every page wider than the screen, and the canvas behind the app was pure white even in dark mode (an unlayered body rule beats Tailwind v4's classes). Now a phone-only top bar that wraps (every control kept), dropdowns hanging from the bar, overflow-x: clip on the shell, a dark canvas, and 16px text fields on phones so iPhones stop zooming in on tap. RULES.md design rule 5 carries all four.
+- **Locking Check and Description Copier agree on conditions.** "Has a condition" now uses the Copier's own definition — graded on the lot OR written into the description — for EVERY lot. The AI-excluded exemption had hidden 10 F135 lots with a condition nowhere; the hand-written lots it protected (condition typed into the text) still pass. Excluded lots still aren't sent to Suggest conditions — they're marked to grade by hand. The Copier's condition banner ends with every barcode that needs a condition and a Copy all ([[reference_locking_check]]).
+- /jordan (partly from another session): five looks, the look picker collapsed, a MAKE PLAN fix — local memory ONLY.
+
+### Needs doing
+- **Run Migrations on production** if any /jordan page shows the amber banner — the 17 Sept merge brought new /jordan tables and columns. Nothing that is staging-only needs one.
+- Still open from 14 Sept: the IT emails light (Make.com's scenario history) and the BC Reports cataloguing cache that remembers a failed day as "nobody catalogued".
+
+⚠ **Working-style notes from these sessions:**
+- For anything that runs unattended or spans the whole Hub, investigating in parallel and then having a skeptic try to REFUTE each finding paid off: it confirmed the pipeline race from the code, and on the zoom sweep it threw out three plausible fixes that would not have worked.
+- When a page can't be opened (/jordan 404s for anyone else; staging needs my login), prove the logic with local tests of the REAL code — the pipeline runner was bundled against an in-memory table. In Git Bash set MSYS_NO_PATHCONV=1, or it rewrites "@/lib/..." arguments into Windows paths.
+- When I reverse my own rule, find out what the old rule was protecting before deleting it. The condition exemption was keeping ~100 hand-written lots from being flagged; one shared definition kept that AND caught the 10 real ones. Deleting it would have blocked them all.
+- Another session pushes to staging at the same time — pull before every push, and expect its commits between yours.
+- If a word in my message contradicts the screenshot ("missing descriptions" when both screens count conditions), go by the screenshot and say which you assumed.
+
+---
+
 ## Recent work (2026-09-14) — ON PRODUCTION (merged to main 2026-09-14, a6577674 — main = staging)
 
 - **⚠⚠ Background BC work signs in as ME only.** getBCTokenAny() — the timed BC copy, its reconcile, the report caches and the crons — now uses only the BC sign-in of my Hub login jordan.orange (BACKGROUND_BC_USERNAME in lib/bc.ts), with NO fallback to anyone else; the Status Centre's Business Central light tests the same sign-in. Why: "BC data copy → Location changes" had failed with a 403 on every run since Fri 11 Sept ~20:00 while every other part worked — the old code borrowed an ARBITRARY stored sign-in, and most staff's BC permissions may not cover the change log. If my sign-in lapses, ALL background BC work stops and the light names me: press the BC button in the top bar while logged in as jordan.orange. If Location changes still gets a 403 with my sign-in, my own BC account lacks change-log permission — that's a BC admin job.
@@ -5681,7 +5709,7 @@ type: reference
 - [Upload photos — any sale](reference_photo_upload_any_sale.md) — no sale picked, matched across every UNCOMPLETED sale; ONE engine in lib/photo-scan.ts; a photo matching nothing is NOT saved — never rebuild the holding area
 - [AI cost — caching + price estimator](reference_ai_cost.md) — cachePrefix caching, rates in lib/ai-pricing.ts; unknown model = "Price not set" never $0
 - [Patches & Changes (admin)](reference_patches_changes.md) — /admin/changes; committed seed is the only history; \`npm run changelog:seed\` AMENDS into your work commit
-- [Auto Pipeline overnight queue](reference_pipeline_queue.md) — server-side queue + ✨ AI UPGRADE jobs; runner calls the same AI routes; catalogue overrules stale saved rows. Read before touching
+- [Auto Pipeline overnight queue](reference_pipeline_queue.md) — server-side queue + ✨ AI UPGRADE jobs; runner calls the same AI routes; catalogue overrules stale saved rows; ⚠⚠ ONE SLICE AT A TIME via an in-process lock (2026-09-18) — "fetch failed" every ~10 min was never an outage. Read before touching
 - [🧪 Instructions Testing tab](reference_instructions_testing.md) — Auto Pipeline on 5–10 lots, PREVIEW ONLY, never writes
 - [Marketing Business Plan tab](reference_marketing_plan.md) — GA snapshot FROZEN on the plan; lib/marketing-plan.ts is client-imported
 - [Two AI Providers — Gemini + Claude](reference_ai_providers.md) — model id decides provider; only claudeOk slots may use Claude. Read before touching any AI route
@@ -5720,7 +5748,7 @@ type: reference
 - [Auto Pipeline — appliedDesc](reference_auto_pipeline_apply.md) — appliedDesc is the only record of an apply; model read LIVE via refs
 - [⚠ AI apply keeps the condition line](reference_condition_line_on_ai_apply.md) — keepConditionLine (lib/condition.ts) in all four AI-apply paths; "Add Conditions is glitchy" was never the button
 - [⚠ Leaked tool call ≠ a description](reference_ai_tool_call_leak.md) — stripToolCallLeak universal; MALFORMED_FUNCTION_CALL retried. Read before any AI description route
-- [Locking Check — final gate](reference_locking_check.md) — reuses tote-check + condition; tote checks skipped if BC totes fail
+- [Locking Check — final gate](reference_locking_check.md) — reuses tote-check + condition; tote checks skipped if BC totes fail; ⚠ "has a condition" = graded OR written in, for EVERY lot incl. AI-excluded — the Copier's definition (2026-09-18)
 - [💷 Reserves](reference_reserves.md) — deliberately simple, does NOT check BC; no reserve column; updateLot preserves startingBid/reserve
 - [Vendor / Tote Check tab](reference_tote_check.md) — read-only vs WarehouseTote; stale = amber
 - [⚠⚠ Wrong vendors — the 2026-09-08 review](reference_vendor_flow_faults.md) — ⚠ the tote is TYPED never scanned; a mistyped-but-valid tote is invisible to every check; BC keys receipt-totes on (receipt,line) but our cache is UNIQUE on toteNo; dead duplicate guard. Wizard + cache FIXED (on production since the 2026-09-09 merge); Match BC/End of Day left alone by his decision. Read before touching the tote lookup, wizard step 1 or Match BC
@@ -5741,7 +5769,7 @@ type: reference
 - [Cataloguing Performance PDFs](reference_reports_pdf.md) — one route + one builder, period-scoped
 - [Report Day Exclusion](reference_report_day_exclusion.md) — hides days from report maths only
 - [Manage Lots — Filters/Bulk/Undo](reference_manage_lots_bulk_undo.md) — chunked mass actions, one undo per press; Change Vendor clears the tote. Read before touching bulk actions
-- [⚠ Lock = Catalogued; "In BC" is measured](reference_bc_lock_and_in_bc_column.md) — requireNotBCLocked on Catalogued; "In BC" = barcode count vs sync; addedToBC a note only`,
+- [⚠ Lock = Catalogued; "In BC" is measured](reference_bc_lock_and_in_bc_column.md) — requireNotBCLocked on Catalogued; NO manual BC/photo/AI ticks left anywhere — sale AND per-lot counts are measured (2026-09-15/17); updateAuction never writes the old columns`,
   },
 ]
 

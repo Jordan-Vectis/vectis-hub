@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5370dfa9d1fc810b4b0af449a6819684b91dd6dc","author":"Jordan Orange","date":"2026-09-18T11:54:09+01:00","subject":"Locking Check and Copier agree on conditions, and a copy-all for the barcodes"},
   {"sha":"66a66878f301120ed712841291627e78c2f1154a","author":"Jordan Orange","date":"2026-09-18T11:35:21+01:00","subject":"JORDAN.SYS: the look picker is collapsed until you ask for it"},
   {"sha":"098f7edb0cdc283b17243e08bcf0358403caf948","author":"Jordan Orange","date":"2026-09-18T11:29:17+01:00","subject":"Mobile: stop the Hub widening past the screen and flashing white on zoom"},
   {"sha":"0d3ed9f397e492265bab9dba3fc99621ddeb73a2","author":"Jordan Orange","date":"2026-09-18T10:58:07+01:00","subject":"Overnight jobs: one pipeline slice at a time, and no more false alarms"},
