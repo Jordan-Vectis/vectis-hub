@@ -1554,9 +1554,13 @@ Jordan, 2026-08-14: "I want this as the final screen I can check before I sync e
 
 TWO TIERS, and the distinction is the whole point. **Blocking** means it would reach BC or the website WRONG. **Worth a look** means nobody has confirmed it, and it never blocks.
 
-Blocking: no description; no photos; no barcode; no condition UNLESS the lot is aiExcluded; estimate missing, backwards (70 to 50) or zero; the title not matching the first 83 characters of the CURRENT description; and every issue lib/tote-check.ts reports for tote, vendor and receipt against BC.
+Blocking: no description; no photos; no barcode; no condition ANYWHERE (graded on the lot, or written into the description); estimate missing, backwards (70 to 50) or zero; the title not matching the first 83 characters of the CURRENT description; and every issue lib/tote-check.ts reports for tote, vendor and receipt against BC.
 
-WARNING: the condition exemption is Jordan's rule — an AI-excluded lot is hand-written and its condition is typed into the description rather than graded on the lot, so requiring a graded condition there would flag every one of them.
+WARNING — the condition rule CHANGED on 2026-09-18, and the two screens must never disagree about it again. It used to exempt every AI-excluded lot outright (Jordan's rule from August: an excluded lot is hand-written and its condition is typed into the description, so requiring a graded one would flag them all). On F135 that made the Description Copier say "10 of 636 lots need a condition adding" while this screen said nothing was blocking — those 10 were hand-written lots with a condition NOWHERE. Jordan: "they should still be flagged". Now \`hasConditionAnywhere()\` in locking-check-tab.tsx uses the Copier's definition via checkConditionInDescription: the field is set, OR the description carries a grade ("only-in-description"). So the lots the August rule protected still PASS, and a lot with no condition at all is blocked whether or not it is excluded. Do NOT simply drop the exemption — that would block every hand-written lot. "Condition appears in the description" (worth a look) now covers excluded lots too.
+
+"Suggest conditions" is only for lots with no condition anywhere that are NOT excluded — "excluded from AI" has to mean their photos aren't sent to it. The panel still shows when only excluded lots are missing a condition, and says to grade those by hand.
+
+The Description Copier's condition banner (expanded) ends with "Barcodes that need a condition (N)" and a Copy all — one per line, barcodes whatever the sort order. It sits at the BOTTOM of the expanded banner, below the card, so the macro's screen positions are untouched.
 
 WARNING: the title check exists because editing a description does NOT regenerate the title. The stale title is what goes to BC and onto the website, and nothing else notices.
 

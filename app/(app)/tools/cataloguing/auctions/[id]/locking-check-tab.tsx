@@ -61,6 +61,26 @@ const TOTE_LABEL: Record<ToteCheckIssue, string> = {
   unique_id_mismatch: "Unique ID ≠ receipt",
 }
 
+/**
+ * Does this lot have a condition ANYWHERE — graded on the lot, or written into the description?
+ *
+ * ⚠⚠ The SAME definition the Description Copier's "need a condition adding" banner uses (both go
+ * through checkConditionInDescription in lib/condition.ts). They disagreed on F135 (2026-09-18):
+ * the Copier said 10 lots needed a condition while this screen said nothing was blocking, because
+ * this one skipped every AI-excluded lot outright. Those 10 were hand-written lots with a
+ * condition NOWHERE.
+ *
+ * What the old exemption protected still holds: an excluded lot is hand-written and its condition
+ * is often typed into the description with the grade dropdown left blank (Jordan's rule, August).
+ * That comes back as "only-in-description" and PASSES here — so those lots are not flagged, and
+ * the ones with no condition at all now are (Jordan: "they should still be flagged"). Simply
+ * dropping the exemption would have blocked every hand-written lot instead.
+ */
+function hasConditionAnywhere(lot: LotItem): boolean {
+  if ((lot.condition ?? "").trim()) return true
+  return checkConditionInDescription(lot.description ?? "", "").state === "only-in-description"
+}
+
 function checkOne(lot: LotItem, toteIssues: Map<string, ToteCheckIssue[]> | null): Issue[] {
   const out: Issue[] = []
   const desc = (lot.description ?? "").trim()
@@ -70,9 +90,8 @@ function checkOne(lot: LotItem, toteIssues: Map<string, ToteCheckIssue[]> | null
   if (lot.imageUrls.length === 0) out.push({ key: "photo", label: "No photos", severity: "blocking" })
   if (!lot.barcode?.trim()) out.push({ key: "barcode", label: "No barcode", severity: "blocking" })
 
-  // ⚠ An AI-excluded lot is hand-written, and its condition is typed into the description
-  // rather than graded on the lot — so it is exempt (Jordan's rule).
-  if (!lot.aiExcluded && !(lot.condition ?? "").trim())
+  // Every lot, AI-excluded or not — see hasConditionAnywhere for why the old exemption went.
+  if (!hasConditionAnywhere(lot))
     out.push({ key: "condition", label: "No condition", severity: "blocking" })
 
   const lo = lot.estimateLow, hi = lot.estimateHigh
@@ -122,8 +141,10 @@ function checkOne(lot: LotItem, toteIssues: Map<string, ToteCheckIssue[]> | null
   }
 
   // Reuses the Description Copier's checker — a graded condition that never made it into the
-  // description is not visible to a buyer.
-  if (desc && !lot.aiExcluded) {
+  // description is not visible to a buyer. For every lot now, AI-excluded included: a hand-written
+  // description that leaves out the grade on the lot is exactly worth a look, and the Copier
+  // already counts it.
+  if (desc) {
     const c = checkConditionInDescription(desc, lot.condition ?? "")
     if (c.state === "missing") out.push({ key: "condDesc", label: "Condition not in the description", severity: "look" })
   }
@@ -144,7 +165,8 @@ const CRITERIA: {
   needsBc?: boolean
 }[] = [
   { key: "description", label: "Has a description",                        severity: "blocking" },
-  { key: "condition",   label: "Has a condition — AI-excluded lots exempt", severity: "blocking", scope: l => !l.aiExcluded },
+  // Graded on the lot OR written into the description — the Copier's definition, for every lot.
+  { key: "condition",   label: "Has a condition",                          severity: "blocking" },
   { key: "tote",        label: "Tote, vendor and receipt match BC",         severity: "blocking", needsBc: true },
   { key: "title",       label: "Title matches the current description",     severity: "blocking", scope: l => !!(l.description ?? "").trim() },
   { key: "estimate",    label: "Estimates make sense",                      severity: "blocking" },
@@ -156,7 +178,7 @@ const CRITERIA: {
   { key: "titleLong",   label: `Title within ${TITLE_MAX} characters`,      severity: "look" },
   { key: "artefact",    label: "No leftover AI text in the description",    severity: "look" },
   { key: "condDesc",    label: "Condition appears in the description",      severity: "look",
-    scope: l => !l.aiExcluded && !!(l.description ?? "").trim() },
+    scope: l => !!(l.description ?? "").trim() },
   // ⚠ Only lots that HAVE a reserve recorded here are in scope — nothing can tell us a lot
   // OUGHT to have one. It does NOT check BC; see the reminder in checkOne.
   { key: "reserve",     label: "No reserve waiting to be entered in BC",     severity: "look",
@@ -239,10 +261,13 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot, onRefresh 
     [results],
   )
 
-  const needsCondition = useMemo(
-    () => lots.filter(l => !l.aiExcluded && !(l.condition ?? "").trim()),
-    [lots],
-  )
+  // What the AI may be asked to grade: lots with a condition nowhere — the ones the checklist
+  // blocks on. ⚠ NOT the AI-excluded ones: they are flagged like any other, but "excluded from AI"
+  // has to mean their photos aren't sent to it either. They are counted separately and graded by
+  // hand. (A lot whose description already states a condition isn't asked about at all.)
+  const noCondition = useMemo(() => lots.filter(l => !hasConditionAnywhere(l)), [lots])
+  const needsCondition   = useMemo(() => noCondition.filter(l => !l.aiExcluded), [noCondition])
+  const excludedNoCondition = noCondition.length - needsCondition.length
 
   async function suggestConditions() {
     if (suggesting) return
@@ -431,23 +456,38 @@ Each one is the AI's suggestion — only accept what you have read.`)) return
 
       {/* Conditions the AI can propose. ⚠ Below the checklist and nothing is written until the
           accept button is pressed — the grade a lot ends up with is always a person's call. */}
-      {needsCondition.length > 0 && (
+      {/* ⚠ Shown whenever ANY lot has no condition — not only when the AI can help. On F135 every
+          such lot was excluded from AI, and a panel that only appeared for AI-gradable lots would
+          have said nothing at all about them. */}
+      {noCondition.length > 0 && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
           <div className="flex items-start gap-4 flex-wrap">
             <div className="flex-1 min-w-[280px]">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {needsCondition.length} lot{needsCondition.length === 1 ? "" : "s"} have no condition
+                {noCondition.length} lot{noCondition.length === 1 ? " has" : "s have"} no condition
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                The AI can suggest a grade from each lot&apos;s photographs, using our grading system. It reads the photos,
-                not the description, and says how sure it is. <strong>Nothing is written to a lot until you accept it</strong> —
-                and it cannot see hidden damage, missing parts or the inside of a box, so read them.
-              </p>
+              {needsCondition.length > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  The AI can suggest a grade for {needsCondition.length === noCondition.length ? "them" : `${needsCondition.length} of them`} from
+                  each lot&apos;s photographs, using our grading system. It reads the photos,
+                  not the description, and says how sure it is. <strong>Nothing is written to a lot until you accept it</strong> —
+                  and it cannot see hidden damage, missing parts or the inside of a box, so read them.
+                </p>
+              )}
+              {excludedNoCondition > 0 && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  {excludedNoCondition === noCondition.length ? (excludedNoCondition === 1 ? "It is" : "They are all") : `${excludedNoCondition} of them ${excludedNoCondition === 1 ? "is" : "are"}`} excluded
+                  from AI, so {excludedNoCondition === 1 ? "it isn't" : "they aren't"} sent to it — grade {excludedNoCondition === 1 ? "that one" : "those"} by hand.
+                  Click &ldquo;Has a condition&rdquo; in the checklist above to see which.
+                </p>
+              )}
             </div>
-            <button onClick={suggestConditions} disabled={suggesting}
-              className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold disabled:opacity-50">
-              {suggesting ? `Grading… ${sugProgress.done}/${sugProgress.total}` : "✨ Suggest conditions"}
-            </button>
+            {needsCondition.length > 0 && (
+              <button onClick={suggestConditions} disabled={suggesting}
+                className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold disabled:opacity-50">
+                {suggesting ? `Grading… ${sugProgress.done}/${sugProgress.total}` : "✨ Suggest conditions"}
+              </button>
+            )}
           </div>
 
           {/* ⚠ Green for every message would show a failure as if it had worked, which is the
