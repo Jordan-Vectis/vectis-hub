@@ -1,11 +1,10 @@
 import { notFound } from "next/navigation"
-import Link from "next/link"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { getSignedImageUrl } from "@/lib/r2"
 import { isJordan } from "@/lib/jordan-auth"
 import McocHub from "./mcoc-hub"
-import { JsysStyleButton } from "../jsys-style"
+import { JsysHeader } from "../jsys-style"
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "MCOC.SYS" }
@@ -25,11 +24,10 @@ export default async function JordanMcocPage({ searchParams }: { searchParams: P
   })))
 
   return (
-    <div className="h-full bg-(--j-bg) p-6 jsys-font flex flex-col" style={{ color: "var(--j-acc)" }}>
+    <div className="h-full bg-(--j-bg) p-6 jsys-font flex flex-col" style={{ color: "var(--j-text)" }}>
       <div className="w-full flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
-          <h1 className="text-lg font-bold tracking-widest">04 · MCOC</h1>
-          <span className="flex items-center gap-3"><JsysStyleButton /><Link href="/jordan" prefetch={false} className="text-xs opacity-60 hover:opacity-100">&lt; JORDAN.SYS</Link></span>
+          <JsysHeader n="04" title="MCOC" />
         </div>
         <McocHub roster={roster} initialTab={["roster", "champdb", "deck", "aw"].includes(tab ?? "") ? (tab as "roster" | "champdb" | "deck" | "aw") : "counters"} />
       </div>

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 // and the history of everything done to them. Past cars keep their records.
 
 const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
-const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
 const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const btnGo = "px-4 py-2 text-sm font-bold rounded bg-(--j-acc) text-(--j-on-acc) hover:bg-(--j-acc-hi) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 

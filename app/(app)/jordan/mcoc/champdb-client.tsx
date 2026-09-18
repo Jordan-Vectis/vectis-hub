@@ -13,6 +13,7 @@ import type { Champ } from "./mcoc-hub"
 // browse list to expand its full spotlight-style detail.
 
 const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 // A re-scan (Update meta) persists its staleBefore here so it can RESUME after a
 // stop (rate limits / closed tab) instead of redoing every champion.
 const RESCAN_KEY = "mcoc_meta_rescan_at"
@@ -245,7 +246,7 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto jsys-font space-y-4" style={{ color: GREEN }}>
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font space-y-4" style={{ color: TEXT }}>
       <datalist id="champdb-roster">
         {rosterNames.map((n) => <option key={n} value={n} />)}
       </datalist>
@@ -311,7 +312,7 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
           <span className="text-[10px] text-amber-400/80">· {dupHint.size} flagged ⚠ as a possible duplicate — delete the junk ones with 🗑</span>
         )}
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. nullify, incinerate, Hercules…"
-          className="bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim) ml-auto w-64" style={{ color: GREEN }} />
+          className="bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim) ml-auto w-64" style={{ color: TEXT }} />
       </div>
 
       <div className="space-y-1.5">

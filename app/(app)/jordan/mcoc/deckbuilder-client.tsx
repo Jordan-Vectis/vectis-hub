@@ -12,6 +12,7 @@ import type { Champ } from "./mcoc-hub"
 // button.
 
 const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 
 type DeckEntry = { champion: string; role: "Attacker" | "Defender" | "Flex"; why: string }
 type Result = { deck: DeckEntry[]; strategy: string; watchouts: string }
@@ -71,7 +72,7 @@ export default function DeckBuilderClient({ roster }: { roster: Champ[] }) {
   const matchedCount = result ? result.deck.filter((d) => ownedByName.has(normChampName(d.champion))).length : 0
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: GREEN }}>
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: TEXT }}>
       <div className="border border-(--j-dim) rounded-xl p-4 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm opacity-70">Photograph this Battlegrounds season&apos;s nodes/meta screen — get a full deck recommendation from YOUR roster.</p>
@@ -85,7 +86,7 @@ export default function DeckBuilderClient({ roster }: { roster: Champ[] }) {
           </button>
           <label className="text-xs opacity-70 inline-flex items-center gap-1.5">Deck size
             <select value={size} onChange={(e) => setSize(Number(e.target.value))}
-              className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs" style={{ color: GREEN }}>
+              className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs" style={{ color: TEXT }}>
               {[30, 25, 20, 15].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
@@ -99,7 +100,7 @@ export default function DeckBuilderClient({ roster }: { roster: Champ[] }) {
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
           placeholder="Optional — describe the season meta/nodes if you don't have a screenshot…"
           className="w-full bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
-          style={{ color: GREEN }} />
+          style={{ color: TEXT }} />
 
         {roster.length < size && <p className="text-xs text-amber-400">Your roster has {roster.length} champs — add more (or drop the deck size) to build a {size}-champ deck.</p>}
         {preview && <img src={preview} alt="Season nodes" className="max-h-48 rounded-lg border border-(--j-dim)" />}

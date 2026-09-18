@@ -26,6 +26,7 @@ type Analysis = {
   summary: string; gaps: Gap[]; rankUps: RankUp[]
 }
 const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 const PRIORITY_COL: Record<string, string> = {
   high:   "border-(--j-acc) text-(--j-acc)",
   medium: "border-amber-500 text-amber-400",
@@ -306,7 +307,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto jsys-font space-y-4" style={{ color: GREEN }}>
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font space-y-4" style={{ color: TEXT }}>
 
       {/* ── Full-width work panels — only while a step is in progress. These need
              room, so they sit above the two-column layout rather than in the
@@ -326,7 +327,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
                   value={p.rank}
                   onChange={(e) => setPending((l) => l!.map((x, j) => (j === i ? { ...x, rank: Number(e.target.value) } : x)))}
                   className="w-full bg-(--j-bg) border border-(--j-dim) rounded px-1 py-1 text-[11px]"
-                  style={{ color: GREEN }}
+                  style={{ color: TEXT }}
                 >
                   {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
                 </select>
@@ -370,7 +371,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
                   )}
                 </button>
                 <select value={s.rank ?? addRank} onChange={(e) => setScanned((l) => l!.map((x, j) => j === i ? { ...x, rank: Number(e.target.value) } : x))}
-                  className="bg-(--j-bg) border border-(--j-dim) rounded px-1 text-[10px]" style={{ color: GREEN }}>
+                  className="bg-(--j-bg) border border-(--j-dim) rounded px-1 text-[10px]" style={{ color: TEXT }}>
                   {[5,4,3,2,1].map((r) => <option key={r} value={r}>R{r}</option>)}
                 </select>
               </span>
@@ -550,7 +551,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
               <button onClick={() => setFilter("all")} className={`px-2.5 py-1 rounded border ${filter === "all" ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) opacity-60"}`}>All</button>
               <button onClick={() => setFilter("bgs")} className={`px-2.5 py-1 rounded border ${filter === "bgs" ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) opacity-60"}`}>★ BGS deck</button>
             </div>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter…" className={`${input} py-1 ml-auto w-40`} style={{ color: GREEN }} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter…" className={`${input} py-1 ml-auto w-40`} style={{ color: TEXT }} />
 
             {/* Two-step rather than a browser confirm(): nothing else in /jordan uses
                 one, and this deletes the lot with no undo. */}
@@ -618,10 +619,10 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
             <p className="text-[11px] opacity-55">Filter by rank in-game, shoot each tier, then pick them all at once — you set which rank each shot is. Overlapping shots merge.</p>
             <div className="flex items-center gap-2 flex-wrap text-xs">
               <span className="opacity-60 uppercase tracking-widest text-[10px]">These are</span>
-              <select value={addStars} onChange={(e) => setAddStars(Number(e.target.value))} className={`${input} py-1.5`} style={{ color: GREEN }}>
+              <select value={addStars} onChange={(e) => setAddStars(Number(e.target.value))} className={`${input} py-1.5`} style={{ color: TEXT }}>
                 <option value={7}>7★</option><option value={6}>6★</option>
               </select>
-              <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={`${input} py-1.5`} style={{ color: GREEN }}
+              <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={`${input} py-1.5`} style={{ color: TEXT }}
                 title="Starting rank for each screenshot — set them individually after picking">
                 {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
               </select>
@@ -650,9 +651,9 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
             <div className="border-t border-(--j-dim) pt-2.5 space-y-2">
               <p className="text-[10px] opacity-40 uppercase tracking-widest">or add one by hand</p>
               <input value={mName} onChange={(e) => setMName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addManual() }}
-                placeholder="Champion name…" className={`${input} w-full py-1.5 text-xs`} style={{ color: GREEN }} />
+                placeholder="Champion name…" className={`${input} w-full py-1.5 text-xs`} style={{ color: TEXT }} />
               <div className="flex gap-2">
-                <select value={mClass} onChange={(e) => setMClass(e.target.value)} className={`${input} py-1.5 flex-1`} style={{ color: GREEN }}>
+                <select value={mClass} onChange={(e) => setMClass(e.target.value)} className={`${input} py-1.5 flex-1`} style={{ color: TEXT }}>
                   <option value="">Class…</option>
                   {MCOC_CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -686,7 +687,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
               list="deck-add-names"
               placeholder="Add by name — type + Enter…"
               className={`${input} w-full py-1.5 text-xs`}
-              style={{ color: GREEN }}
+              style={{ color: TEXT }}
             />
             <datalist id="deck-add-names">
               {champs.filter((c) => !c.bgsDeck).map((c) => <option key={c.id} value={c.name} />)}
@@ -764,7 +765,7 @@ function FixNameRow({ champ, suggestions, busy, onFix }: {
       <span className="opacity-40">→</span>
       <input value={val} onChange={(e) => setVal(e.target.value)} list={listId}
         placeholder={suggestions.length ? "" : "type the Champion DB name…"}
-        className="flex-1 min-w-[10rem] bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 focus:outline-none focus:border-(--j-acc)" style={{ color: "var(--j-acc)" }} />
+        className="flex-1 min-w-[10rem] bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 focus:outline-none focus:border-(--j-acc)" style={{ color: "var(--j-text)" }} />
       <datalist id={listId}>{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
       <button onClick={() => onFix(val)} disabled={busy || !val.trim()}
         className="px-3 py-1 rounded border border-(--j-acc) font-bold hover:bg-(--j-glow) disabled:opacity-30 transition-colors">
@@ -780,14 +781,14 @@ function EditChip({ champ, onSave, onCancel, onDelete }: { champ: Champ; onSave:
   const [rank, setRank] = useState(champ.rank)
   const sel = "bg-(--j-bg) border border-(--j-dim) rounded px-1.5 py-0.5 text-[11px]"
   return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-(--j-acc) text-xs" style={{ color: "var(--j-acc)" }}>
+    <span className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-(--j-acc) text-xs" style={{ color: "var(--j-text)" }}>
       <span className="text-(--j-hi) font-bold">{champ.name}</span>
-      <select value={cls} onChange={(e) => setCls(e.target.value)} className={sel} style={{ color: "var(--j-acc)" }}>
+      <select value={cls} onChange={(e) => setCls(e.target.value)} className={sel} style={{ color: "var(--j-text)" }}>
         <option value="">—</option>
         {MCOC_CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
-      <select value={stars} onChange={(e) => setStars(Number(e.target.value))} className={sel} style={{ color: "var(--j-acc)" }}><option value={7}>7★</option><option value={6}>6★</option></select>
-      <select value={rank} onChange={(e) => setRank(Number(e.target.value))} className={sel} style={{ color: "var(--j-acc)" }}>{[5,4,3,2,1].map((r) => <option key={r} value={r}>R{r}</option>)}</select>
+      <select value={stars} onChange={(e) => setStars(Number(e.target.value))} className={sel} style={{ color: "var(--j-text)" }}><option value={7}>7★</option><option value={6}>6★</option></select>
+      <select value={rank} onChange={(e) => setRank(Number(e.target.value))} className={sel} style={{ color: "var(--j-text)" }}>{[5,4,3,2,1].map((r) => <option key={r} value={r}>R{r}</option>)}</select>
       <button onClick={() => onSave({ class: cls, stars, rank })} className="text-(--j-acc) font-bold">✓</button>
       <button onClick={onCancel} className="opacity-60">×</button>
       <button onClick={onDelete} className="text-red-400" title="Delete">🗑</button>

@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useState, type CSSProperties } from "react"
-import Link from "next/link"
 import ChatPanel from "../chat-panel"
 import { PERSONAS, DEFAULT_PERSONA, PERSONA_KEY, getPersona } from "./personas"
-import { useJsysTheme } from "../jsys-style"
-import { JsysStyleButton } from "../jsys-style"
+import { useJsys } from "../jsys-style"
+import { getJsysPalette } from "@/lib/jordan-theme"
+import { JsysHeader } from "../jsys-style"
 
 // 02 · ASK AI — the secret menu's general chat, with a selectable AI PERSONALITY.
 // Switching persona re-skins the whole panel (accent / border / glow) AND swaps
@@ -34,11 +34,11 @@ export default function AskAi() {
   }
 
   const active = getPersona(personaId)
-  // ⚠ A persona only WEARS its colours on the RETRO style. They were picked to sit on pure black —
+  // ⚠ A persona only WEARS its colours on the palettes that say so (skinsChat — the black-background ones). They were picked to sit on pure black —
   // CORTANA blue, HAL red, FUNNY green — and on a light or charcoal theme they would be unreadable
   // or clash with it. On any other style the persona still changes the voice and the intro, and
   // the panel keeps the theme's own colours (the chat panel falls back to --j-acc / --j-dim).
-  const skinned = useJsysTheme() === "retro"
+  const skinned = !!getJsysPalette(useJsys().palette).skinsChat
   const themeVars = (skinned ? {
     color: active.accent,
     "--jsys-acc": active.accent,
@@ -50,8 +50,7 @@ export default function AskAi() {
     <div className="h-full bg-(--j-bg) p-6 jsys-font flex flex-col" style={themeVars}>
       <div className="w-full flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between gap-3 mb-3 shrink-0 flex-wrap">
-          <h1 className="text-lg font-bold tracking-widest">02 · ASK AI</h1>
-          <span className="flex items-center gap-3"><JsysStyleButton /><Link href="/jordan" prefetch={false} className="text-xs opacity-60 hover:opacity-100">&lt; JORDAN.SYS</Link></span>
+          <JsysHeader n="02" title="Ask AI" />
         </div>
 
         {/* Personality selector — each chip wears its own colour so the scheme reads at a glance. */}

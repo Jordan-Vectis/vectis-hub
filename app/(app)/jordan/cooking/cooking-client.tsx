@@ -8,6 +8,7 @@ import ModelPicker, { getJordanModel } from "../model-picker"
 // and a cooking-expert chat.
 
 const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 const PROFILE_KEY = "jordan_airfryer_profile"
 const COMMON_MODES = ["Air Fry", "Max Crisp", "Roast", "Bake", "Grill", "Reheat", "Dehydrate", "Frozen", "Fry", "Pizza"]
 
@@ -123,7 +124,7 @@ export default function CookingClient() {
   const suggestable = COMMON_MODES.filter((m) => !modes.some((x) => x.toLowerCase() === m.toLowerCase()))
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 jsys-font" style={{ color: GREEN }}>
+    <div className="flex flex-col flex-1 min-h-0 jsys-font" style={{ color: TEXT }}>
       <div className="flex gap-2 mb-4 shrink-0">
         <button onClick={() => setTab("airfryer")} className={tabBtn(tab === "airfryer")}>🍟 AIR FRYER CONVERTER</button>
         <button onClick={() => setTab("chat")} className={tabBtn(tab === "chat")}>👨‍🍳 ASK THE CHEF</button>
@@ -149,7 +150,7 @@ export default function CookingClient() {
                   <input value={applianceNotes} onChange={(e) => setNotes(e.target.value)}
                     placeholder="e.g. Ninja Foodi Dual Zone, 2400W"
                     className="w-full bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
-                    style={{ color: GREEN }} />
+                    style={{ color: TEXT }} />
                 </div>
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1">
@@ -175,7 +176,7 @@ export default function CookingClient() {
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addMode(modeInput) } }}
                       placeholder="Type a mode + Enter…"
                       className="flex-1 bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
-                      style={{ color: GREEN }} />
+                      style={{ color: TEXT }} />
                     <button onClick={() => addMode(modeInput)} disabled={!modeInput.trim()}
                       className="px-3 py-2 rounded-lg border border-(--j-dim) text-xs disabled:opacity-30 hover:border-(--j-acc) transition-colors">ADD</button>
                   </div>

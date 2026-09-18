@@ -20,7 +20,7 @@ import {
 
 const GREEN = "var(--j-acc)"
 const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
-const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
 const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const btnGo = "px-4 py-2 text-sm font-bold rounded bg-(--j-acc) text-(--j-on-acc) hover:bg-(--j-acc-hi) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const label = "block text-[10px] tracking-widest opacity-60 mb-1"
@@ -930,7 +930,7 @@ function PlanCard({ plan, open, shopBusy, secs, anyBusy, onToggle, onShopping, o
                           <>
                             <input value={swapWhy} onChange={e => setSwapWhy(e.target.value)}
                               placeholder="why? don't fancy fish, no time, use up the mince…"
-                              className="w-full bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1.5 text-xs text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)" />
+                              className="w-full bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1.5 text-xs text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)" />
                             <button className={`${btn} min-h-[44px] w-full`} onClick={() => askSwap(day.day, i)} disabled={swapBusy}>
                               {swapBusy ? "THINKING…" : "✨ SHOW ME 3 OTHERS"}
                             </button>

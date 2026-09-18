@@ -95,7 +95,7 @@ export default function SwapPicker({ slug, name, onPick, onClose }: {
           <label className="block text-[10px] tracking-widest opacity-60 mb-1" htmlFor={`why-${slug}`}>WHY? (OPTIONAL — HELPS THE AI)</label>
           <input id={`why-${slug}`} value={why} onChange={e => setWhy(e.target.value)}
             placeholder="machine's always taken, hurts my shoulder, bored of it…"
-            className="w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)" />
+            className="w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)" />
         </div>
         <button className={`${btn} min-h-[44px]`} onClick={() => ask(true)} disabled={busy}>
           {busy ? "THINKING…" : "✨ ASK THE AI"}

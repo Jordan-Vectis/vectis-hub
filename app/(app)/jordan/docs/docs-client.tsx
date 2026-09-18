@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, DragEvent } from "re
 // well as files, drag-and-drop between folders, and a search across everything.
 
 const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
-const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
 const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
 type Folder = { id: string; name: string; parentId: string | null }

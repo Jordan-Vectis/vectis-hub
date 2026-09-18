@@ -14,6 +14,7 @@ import type { Champ } from "./mcoc-hub"
 //   DEFENCE: recommend which of your champs to place on which defence nodes.
 
 const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 // AW season reward brackets — passed to the AI as difficulty context.
 const AW_TIERS = ["Bronze", "Silver", "Gold", "Platinum", "Challenger", "Master", "Vibranium"]
 // localStorage keys — remember tier + defence inputs between visits (the path
@@ -415,7 +416,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: GREEN }}>
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: TEXT }}>
       <div className="border border-(--j-dim) rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setMode("path")} className={modeBtn(mode === "path")}>🗡 ATTACK PATH</button>
@@ -423,7 +424,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
           <label className="inline-flex items-center gap-1.5 text-xs opacity-70 ml-1" title="Your war bracket — the AI factors in the tougher nodes at higher tiers">
             🗺 Tier
             <select value={tier} onChange={(e) => setTier(e.target.value)}
-              className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs focus:outline-none focus:border-(--j-acc)" style={{ color: GREEN }}>
+              className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs focus:outline-none focus:border-(--j-acc)" style={{ color: TEXT }}>
               <option value="">— any —</option>
               {AW_TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -479,7 +480,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           onBlur={(e) => saveDefender(f.id, e.target.value)}
                           list="mcoc-all-champs"
                           placeholder="Defender on this node…"
-                          className={`${input} w-full py-1.5`} style={{ color: GREEN }} />
+                          className={`${input} w-full py-1.5`} style={{ color: TEXT }} />
                       </div>
                     </div>
                   )
@@ -661,7 +662,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                             onChange={(e) => editMini(editing.id, { label: e.target.value })}
                             onBlur={(e) => setMiniNodeLabel(editing.id, e.target.value).catch(() => {})}
                             placeholder="Node label (e.g. Node 44)…"
-                            className={`${input} w-full py-2.5`} style={{ color: GREEN }} />
+                            className={`${input} w-full py-2.5`} style={{ color: TEXT }} />
 
                           {/* Take this war (pick mode) */}
                           {miniMode === "pick" && (
@@ -681,7 +682,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                 onBlur={(e) => setMiniNodeDefender(editing.id, e.target.value).catch(() => {})}
                                 list="mcoc-all-champs"
                                 placeholder="Who's defending…"
-                                className={`${input} w-full py-2.5`} style={{ color: GREEN }} />
+                                className={`${input} w-full py-2.5`} style={{ color: TEXT }} />
                             </div>
                           )}
 
@@ -740,7 +741,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                     onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
                                     list="mcoc-all-champs"
                                     placeholder="Defender on this node…"
-                                    className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                                    className={`${input} w-full py-1 text-sm`} style={{ color: TEXT }} />
                                 </div>
                               </div>
                             )
@@ -779,7 +780,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                           onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
                                           list="mcoc-all-champs"
                                           placeholder="Defender…"
-                                          className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                                          className={`${input} w-full py-1 text-sm`} style={{ color: TEXT }} />
                                       </div>
                                     </div>
                                   )
@@ -809,7 +810,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 <input value={forcedInput} onChange={(e) => setForcedInput(e.target.value)} list="mcoc-all-champs"
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addForced(forcedInput) } }}
                   placeholder="Add an attacker you want to use…"
-                  className={`${input} flex-1 min-w-[12rem]`} style={{ color: GREEN }} />
+                  className={`${input} flex-1 min-w-[12rem]`} style={{ color: TEXT }} />
                 <button onClick={() => addForced(forcedInput)} disabled={!forcedInput.trim() || forced.length >= 8}
                   className="px-3 py-2 rounded-lg border border-(--j-dim) text-xs hover:border-(--j-acc) disabled:opacity-30 transition-colors">ADD</button>
               </div>
@@ -1015,7 +1016,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
               </button>
               <label className="text-xs opacity-70 inline-flex items-center gap-1.5">Defenders
                 <select value={defCount} onChange={(e) => setDefCount(Number(e.target.value))}
-                  className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs" style={{ color: GREEN }}>
+                  className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs" style={{ color: TEXT }}>
                   {[5, 6, 7, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </label>
@@ -1028,7 +1029,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
             <textarea value={defNotes} onChange={(e) => setDefNotes(e.target.value)} rows={2}
               placeholder="Optional — war tier, map style, which nodes you're responsible for…"
-              className={`${input} w-full resize-none`} style={{ color: GREEN }} />
+              className={`${input} w-full resize-none`} style={{ color: TEXT }} />
 
             {mapPreview && <img src={mapPreview} alt="War map" className="max-h-48 rounded-lg border border-(--j-dim)" />}
             {defErr && <p className="text-sm text-red-400">✗ {defErr}</p>}

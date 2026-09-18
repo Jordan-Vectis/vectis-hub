@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-17, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-18, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f64cc38637690672d832d5ab04576afd5bc20583","author":"Jordan Orange","date":"2026-09-18T09:14:42+01:00","subject":"JORDAN.SYS: five looks to choose from, not just green on black"},
   {"sha":"b88249d95697ab1dacc0a48ebd6ca4ce37bb3091","author":"Jordan Orange","date":"2026-09-17T17:08:48+01:00","subject":"Meal planner: MAKE PLAN no longer reads as a dead press"},
   {"sha":"91925f3e7a44b04261f3030f8b368a707084b82e","author":"Jordan Orange","date":"2026-09-17T16:54:24+01:00","subject":"Meal planner: numbers save themselves, macro split lights up, and a dessert slot"},
   {"sha":"aec488ecb9d98b7cb0e448248409f77c6005f104","author":"Jordan Orange","date":"2026-09-17T15:12:56+01:00","subject":"BC Database: a missing sale marker no longer reads as an empty database"},

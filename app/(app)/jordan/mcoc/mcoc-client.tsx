@@ -15,6 +15,7 @@ import type { Champ } from "./mcoc-hub"
 //     meta) for when you want depth over speed.
 
 const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 
 type Counter = { champion: string; class: string; why: string; how: string }
 type Result = {
@@ -173,7 +174,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
   const advClass = picked ? classAdvantageAgainst(picked.class) : ""
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: GREEN }}>
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: TEXT }}>
       <div className="border border-(--j-dim) rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setMode("instant")} className={modeBtn(mode === "instant")}>⚡ INSTANT (BGS)</button>
@@ -204,7 +205,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                     list="mcoc-defender-names"
                     placeholder="Type a defender…"
                     className="flex-1 min-w-[12rem] bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
-                    style={{ color: GREEN }}
+                    style={{ color: TEXT }}
                   />
                   <label className="inline-flex items-center gap-1.5 text-[11px] opacity-70 cursor-pointer">
                     <input type="checkbox" checked={deckOnly} onChange={(e) => setDeckOnly(e.target.checked)} className="accent-(--j-acc)" />
@@ -304,7 +305,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                 list="mcoc-defender-names"
                 placeholder="Defender from the Champion DB (optional)…"
                 className="flex-1 min-w-[12rem] bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
-                style={{ color: GREEN }}
+                style={{ color: TEXT }}
               />
               {dbDefender && (
                 <button onClick={() => setDbDefender("")} className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-(--j-dim) opacity-60 hover:opacity-100 transition-opacity">
@@ -325,7 +326,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                 : "e.g. Nick Fury on Aggression + Bane, or Mystic Dispersion / Enhanced Special 3…"}
               rows={2}
               className="w-full bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
-              style={{ color: GREEN }}
+              style={{ color: TEXT }}
             />
 
             <div className="flex items-center gap-2 flex-wrap">

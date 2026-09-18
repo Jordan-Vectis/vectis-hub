@@ -322,11 +322,109 @@ html.crt-mode body {
 }
 .dark .file-input::file-selector-button:hover { border-color: #6b7280; }
 
-/* ── JORDAN.SYS look & feel ──────────────────────────────────────────────────
-   The colours are CSS variables (--j-acc, --j-dim, --j-bg …) written by
-   app/(app)/jordan/layout.tsx from the palette table in lib/jordan-theme.ts.
-   The font is the one thing a Tailwind class cannot take from a variable
-   without a type hint, so it is a utility of its own. */
+/* ── JORDAN.SYS looks — the SHAPE layer ──────────────────────────────────────
+   Colours are CSS variables written by app/(app)/jordan/layout.tsx from the
+   palette table in lib/jordan-theme.ts. What makes a look a LOOK — font,
+   casing, corners, shadows, chamfers, ruled lines — is here, keyed off
+   <html data-jsys-look="…"> and scoped to the `.jsys` wrapper the layout
+   renders, so nothing outside /jordan changes shape.
+
+   ⚠ These rules restyle the Tailwind utilities the /jordan screens already
+   carry (`.rounded-lg`, `.tracking-widest`, `.bg-\(--j-box\)` …) rather than
+   rewriting 25 files a second time. They are unlayered, so they win over the
+   utilities layer without !important. Absent attribute = the terminal, which
+   has no rules — it is the markup as written.
+
+   Two copies of any markup that differs by look sit side by side: `.jsys-t`
+   (terminal only) and `.jsys-m` (every other look). CSS shows one. */
 @utility jsys-font {
   font-family: var(--j-font);
 }
+html[data-jsys-look] .jsys .jsys-t { display: none; }
+html:not([data-jsys-look]) .jsys .jsys-m { display: none; }
+
+/* Everything that is not the terminal: normal letter-spacing, legible small text. */
+html[data-jsys-look] .jsys .tracking-widest { letter-spacing: 0.04em; }
+html[data-jsys-look] .jsys .text-\[10px\] { font-size: 11px; }
+html[data-jsys-look] .jsys .text-\[11px\] { font-size: 12px; }
+html[data-jsys-look] .jsys .text-\[9px\] { font-size: 10px; }
+
+/* ── HUB — the rest of the Vectis Hub: its cards, its rounded inputs, violet on focus ── */
+html[data-jsys-look="hub"] .jsys .rounded, html[data-jsys-look="hub"] .jsys .rounded-lg { border-radius: 0.6rem; }
+html[data-jsys-look="hub"] .jsys .rounded-xl { border-radius: 0.9rem; }
+html[data-jsys-look="hub"] .jsys .bg-\(--j-box\) { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+html[data-jsys-look="hub"] .jsys :is(input, textarea, select):focus { border-color: var(--j-acc) !important; box-shadow: 0 0 0 3px color-mix(in oklab, var(--j-acc) 20%, transparent); }
+html[data-jsys-look="hub"] .jsys .bg-\(--j-acc\) { color: var(--j-on-acc); }
+
+/* ── MODERN — an app: big radii, soft shadows, filled fields, pill buttons ── */
+html[data-jsys-look="modern"] .jsys .rounded, html[data-jsys-look="modern"] .jsys .rounded-lg { border-radius: 14px; }
+html[data-jsys-look="modern"] .jsys .rounded-xl { border-radius: 20px; }
+html[data-jsys-look="modern"] .jsys .bg-\(--j-box\) {
+  border-color: color-mix(in oklab, var(--j-dim) 55%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 14px 36px -18px rgba(0, 0, 0, 0.5);
+}
+html[data-jsys-look="modern"] .jsys :is(input, textarea, select).bg-\(--j-bg\) {
+  background: var(--j-glow);
+  border-color: transparent;
+  border-radius: 12px;
+}
+html[data-jsys-look="modern"] .jsys :is(input, textarea, select):focus {
+  border-color: transparent !important;
+  outline: 2px solid color-mix(in oklab, var(--j-acc) 55%, transparent);
+  outline-offset: 0;
+}
+html[data-jsys-look="modern"] .jsys :is(button, a).rounded, html[data-jsys-look="modern"] .jsys :is(button, a).rounded-lg { border-radius: 999px; }
+html[data-jsys-look="modern"] .jsys .bg-\(--j-acc\) {
+  background-image: linear-gradient(180deg, color-mix(in oklab, var(--j-acc) 82%, white), var(--j-acc));
+  box-shadow: 0 8px 18px -10px color-mix(in oklab, var(--j-acc) 75%, transparent);
+  border-color: transparent;
+}
+html[data-jsys-look="modern"] .jsys .jsys-tile { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 14px 36px -18px rgba(0, 0, 0, 0.5); }
+
+/* ── HALO — chamfered panels, cyan edge light, a faint grid, wide uppercase headings ── */
+html[data-jsys-look="halo"] .jsys > .bg-\(--j-bg\) {
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--j-acc) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--j-acc) 7%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+html[data-jsys-look="halo"] .jsys .rounded, html[data-jsys-look="halo"] .jsys .rounded-lg, html[data-jsys-look="halo"] .jsys .rounded-xl { border-radius: 0; }
+html[data-jsys-look="halo"] .jsys .bg-\(--j-box\) {
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  border-color: color-mix(in oklab, var(--j-acc) 40%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--j-acc) 22%, transparent), inset 0 0 32px -16px var(--j-acc);
+  background-image: linear-gradient(180deg, color-mix(in oklab, var(--j-acc) 7%, transparent), transparent 45%);
+}
+html[data-jsys-look="halo"] .jsys :is(button, a).rounded-lg, html[data-jsys-look="halo"] .jsys :is(button, a).rounded, html[data-jsys-look="halo"] .jsys .bg-\(--j-acc\) {
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+html[data-jsys-look="halo"] .jsys :is(input, textarea, select).bg-\(--j-bg\) {
+  background: color-mix(in oklab, var(--j-acc) 5%, var(--j-bg));
+  border-color: color-mix(in oklab, var(--j-acc) 35%, transparent);
+}
+html[data-jsys-look="halo"] .jsys :is(input, textarea, select):focus { box-shadow: 0 0 14px -4px var(--j-acc); }
+html[data-jsys-look="halo"] .jsys .tracking-widest { letter-spacing: 0.14em; }
+html[data-jsys-look="halo"] .jsys :is(h1, h2, .jsys-title) {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--j-acc);
+  text-shadow: 0 0 16px color-mix(in oklab, var(--j-acc) 60%, transparent);
+}
+html[data-jsys-look="halo"] .jsys .bg-\(--j-acc\) { box-shadow: 0 0 18px -4px var(--j-acc); }
+
+/* ── PAPER — cream, serif, ruled-line fields, the quietest ── */
+html[data-jsys-look="paper"] .jsys .rounded, html[data-jsys-look="paper"] .jsys .rounded-lg, html[data-jsys-look="paper"] .jsys .rounded-xl { border-radius: 3px; }
+html[data-jsys-look="paper"] .jsys .bg-\(--j-box\) {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05), inset 0 0 0 1px var(--j-dim2);
+}
+html[data-jsys-look="paper"] .jsys :is(input, textarea, select).bg-\(--j-bg\) {
+  background: transparent;
+  border-width: 0 0 1px 0;
+  border-radius: 0;
+  padding-left: 0.15rem;
+  padding-right: 0.15rem;
+}
+html[data-jsys-look="paper"] .jsys :is(input, textarea, select):focus { border-color: var(--j-acc) !important; box-shadow: 0 1px 0 var(--j-acc); }
+html[data-jsys-look="paper"] .jsys .tracking-widest { letter-spacing: 0.08em; }
+html[data-jsys-look="paper"] .jsys :is(h1, .jsys-title) { font-style: italic; letter-spacing: 0; }
+html[data-jsys-look="paper"] .jsys .bg-\(--j-acc\) { box-shadow: none; }

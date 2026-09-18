@@ -374,7 +374,7 @@ export default function Session({
               <div className="flex items-stretch gap-1">
                 <button onClick={() => step(-1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">−</button>
                 <input value={weight} onChange={e => setWeight(e.target.value)} inputMode="decimal" aria-label="weight in kg"
-                  className="flex-1 min-h-[56px] w-full bg-(--j-bg) border border-(--j-dim) rounded text-center text-2xl font-bold text-(--j-acc) focus:outline-none focus:border-(--j-acc)" />
+                  className="flex-1 min-h-[56px] w-full bg-(--j-bg) border border-(--j-dim) rounded text-center text-2xl font-bold text-(--j-text) focus:outline-none focus:border-(--j-acc)" />
                 <button onClick={() => step(1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">+</button>
               </div>
             </div>
@@ -383,7 +383,7 @@ export default function Session({
               <div className="flex items-stretch gap-1">
                 <button onClick={() => bump(-1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">−</button>
                 <input value={reps} onChange={e => setReps(e.target.value)} inputMode="numeric" aria-label="reps"
-                  className="flex-1 min-h-[56px] w-full bg-(--j-bg) border border-(--j-dim) rounded text-center text-2xl font-bold text-(--j-acc) focus:outline-none focus:border-(--j-acc)" />
+                  className="flex-1 min-h-[56px] w-full bg-(--j-bg) border border-(--j-dim) rounded text-center text-2xl font-bold text-(--j-text) focus:outline-none focus:border-(--j-acc)" />
                 <button onClick={() => bump(1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">+</button>
               </div>
             </div>
@@ -457,7 +457,7 @@ export default function Session({
 
       {/* Rest timer — counts UP past the target, so "I rested four minutes" is visible. */}
       {rest != null && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-(--j-box) border-t border-(--j-dim) px-4 py-3 flex items-center gap-3 jsys-font" style={{ color: "var(--j-acc)" }}>
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-(--j-box) border-t border-(--j-dim) px-4 py-3 flex items-center gap-3 jsys-font" style={{ color: "var(--j-text)" }}>
           <span className={`text-2xl font-bold tabular-nums ${rest >= restFor ? "" : "opacity-70"}`}>
             {Math.floor(rest / 60)}:{String(rest % 60).padStart(2, "0")}
           </span>
@@ -478,7 +478,7 @@ function AddExercise({ lifts, onAdd, busy }: { lifts: LiftInfo[]; onAdd: (slug: 
   return (
     <div className="flex gap-2">
       <select value={slug} onChange={e => setSlug(e.target.value)} aria-label="add an exercise"
-        className="flex-1 min-h-[44px] bg-(--j-bg) border border-(--j-dim) rounded px-2 text-sm text-(--j-acc) focus:outline-none focus:border-(--j-acc)">
+        className="flex-1 min-h-[44px] bg-(--j-bg) border border-(--j-dim) rounded px-2 text-sm text-(--j-text) focus:outline-none focus:border-(--j-acc)">
         <option value="">Add an exercise…</option>
         {lifts.map(l => <option key={l.slug} value={l.slug}>{l.name}</option>)}
       </select>

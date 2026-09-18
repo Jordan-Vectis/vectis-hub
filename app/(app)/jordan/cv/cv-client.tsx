@@ -14,8 +14,9 @@ import { EMPTY_CV, cvToText, normaliseCv, type Cv, type CvRole, type CvStudy, ty
 // parse route for why that is the right trade here.
 
 const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
-const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-acc) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
 const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const btnGo = "px-4 py-2 text-sm font-bold rounded bg-(--j-acc) text-(--j-on-acc) hover:bg-(--j-acc-hi) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
@@ -474,7 +475,7 @@ function Pane({ title, text }: { title: string; text: string }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wider opacity-50 mb-1">{title}</p>
-      <pre className="whitespace-pre-wrap text-xs leading-relaxed bg-(--j-bg) border border-(--j-dim2) rounded p-3 max-h-96 overflow-y-auto" style={{ color: GREEN }}>{text}</pre>
+      <pre className="whitespace-pre-wrap text-xs leading-relaxed bg-(--j-bg) border border-(--j-dim2) rounded p-3 max-h-96 overflow-y-auto" style={{ color: TEXT }}>{text}</pre>
     </div>
   )
 }
