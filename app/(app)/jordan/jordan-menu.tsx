@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { CRT_KEY } from "@/components/crt-mode"
-import { JsysLookPicker } from "./jsys-style"
+import { JSYS_LOOKS } from "@/lib/jordan-theme"
+import { JsysLookPicker, useJsys } from "./jsys-style"
 
 // The secret menu UI.
 // Feature 01: RETRO CRT MODE — scanlines/phosphor overlay across the whole Hub,
@@ -34,6 +35,14 @@ const TOOLS = [
 export default function JordanMenu() {
   const [crt, setCrt] = useState(false)
   const [booted, setBooted] = useState(false)
+  // ⚠ The look picker is COLLAPSED until asked for (Jordan, 2026-09-18: "this needs to be
+  // collapsible, should not be visible the entire time, it looks silly") — five big preview cards
+  // sat under the menu on every visit for a setting changed once in a blue moon. Not remembered:
+  // it opens when he wants it and is gone next time. One state for both menus, so switching to
+  // or from Retro while it is open keeps it open.
+  const [lookOpen, setLookOpen] = useState(false)
+  const { look } = useJsys()
+  const lookLabel = JSYS_LOOKS.find(l => l.id === look)?.label ?? JSYS_LOOKS[0].label
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -87,10 +96,16 @@ export default function JordanMenu() {
                 <span className="shrink-0 font-bold">[ OPEN ]</span>
               </Link>
             ))}
-            <div className={`${row} flex-wrap`}>
-              <span>10 &nbsp;LOOK &amp; FEEL <span className="opacity-50">— the shape and colours of every screen in here, this browser</span></span>
-              <JsysLookPicker />
-            </div>
+            <button onClick={() => setLookOpen(o => !o)} aria-expanded={lookOpen}
+              className={`${row} w-full text-left hover:bg-(--j-glow) transition-colors`}>
+              <span>10 &nbsp;LOOK &amp; FEEL <span className="opacity-50">— {lookLabel.toUpperCase()} · the shape and colours of every screen in here, this browser</span></span>
+              <span className="shrink-0 font-bold">[ {lookOpen ? "HIDE" : "CHANGE"} ]</span>
+            </button>
+            {lookOpen && (
+              <div className={`${row} flex-wrap`}>
+                <JsysLookPicker />
+              </div>
+            )}
             <p className="text-xs opacity-50 pt-4">
               &gt; CRT mode stays on everywhere in the Hub until switched off here. A look stays until you pick another. More features when you think of them.
             </p>
@@ -121,15 +136,35 @@ export default function JordanMenu() {
             </div>
             <div className="text-sm opacity-70 mt-1 leading-snug">Scanlines and phosphor across the whole Hub, this browser.</div>
           </button>
+          {/* A tile like the others — says which look is on, and opens the picker below. */}
+          <button type="button" onClick={() => setLookOpen(o => !o)} aria-expanded={lookOpen}
+            className={`${tile} text-left ${lookOpen ? "border-(--j-acc)" : ""}`}>
+            <div className="text-2xl mb-2" aria-hidden>🎨</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="jsys-title font-bold text-lg leading-tight">Look &amp; feel</div>
+              <span className="shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg border border-(--j-dim)">{lookLabel}</span>
+            </div>
+            <div className="text-sm opacity-70 mt-1 leading-snug">
+              {lookOpen ? "Pick one below. Tap here again to close." : "The shape and colours of every screen in here. Tap to change."}
+            </div>
+          </button>
         </div>
 
-        <div className="border border-(--j-dim) rounded-xl bg-(--j-box) p-5 space-y-3">
-          <div>
-            <div className="jsys-title font-bold text-lg leading-tight">Look &amp; feel</div>
-            <div className="text-sm opacity-70 mt-1">The shape and colours of every screen in here. Saved on this browser.</div>
+        {lookOpen && (
+          <div className="border border-(--j-dim) rounded-xl bg-(--j-box) p-5 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="jsys-title font-bold text-lg leading-tight">Look &amp; feel</div>
+                <div className="text-sm opacity-70 mt-1">Saved on this browser.</div>
+              </div>
+              <button type="button" onClick={() => setLookOpen(false)}
+                className="shrink-0 min-h-[44px] px-3 text-sm rounded-lg border border-(--j-dim) hover:bg-(--j-glow) transition-colors">
+                Close
+              </button>
+            </div>
+            <JsysLookPicker />
           </div>
-          <JsysLookPicker />
-        </div>
+        )}
       </div>
     </div>
   )
