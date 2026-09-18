@@ -3090,6 +3090,18 @@ when nothing is ticked — the same scope as before).
 
 ⚠ A mass action that fails part-way now SAYS so, naming the error and pointing at the Undo list.
 It used to leave no message at all while the lots done before the failure stayed changed.
+
+## 2026-09-18 — 🔁 Find & Replace (Descriptions group)
+
+Jordan: *"when we make paperwork in BC bullet points are causing formatting issues so I want a way I can replace the bullet points maybe with - but a mass find and replace may be useful in the future"* — then, shown the toolbar: *"As a button in here pls"*. It sits after Clear Descriptions and opens a violet panel: Find, Replace with (empty = remove), **Match case** (ON by default — grades are capitalised words), **Whole words only**, and a one-tap **• bullets → -** quick fill.
+
+- **ONE matcher, lib/find-replace.ts, imported by BOTH the browser preview and bulkFindReplaceDescriptions.** The preview ("45 of 616 lots contain it — 312 times", three −/+ samples) is the safety on a mass edit, so it must be what the press does, not an estimate. Never give either side its own matching.
+- **Literal text, never a pattern** — the typed text is escaped and the replacement goes through a function, so $1, . and ( are just characters. ⚠ **No lookbehind** in the whole-word rule: older iPad Safari throws on one at construction. It captures the character in front and puts it back.
+- The press sends **only the lots that match**, so 20/400 counts real work and an untouched lot is never logged. Otherwise exactly its neighbours: scopeIds() scope, runInChunks, updateLotLogged (source bulk), undoId threaded so **one press is one Undo**, title regenerated from the new description, skipRevalidate on all but the last chunk.
+- ⚠ Its undo **label must end in (N)** — recordBulkUndo rewrites the trailing count as chunks arrive — so the searched text is cut to 18 characters inside it.
+- ⚠ It does **NOT** skip aiExcluded lots (Clear Descriptions does): a hand-typed bullet breaks BC paperwork just the same, and this is an edit of specific text, not a wipe.
+- ⚠ The action **returns** { ok:false, error } rather than throwing (production redacts a thrown server action); the handler re-raises it client-side so the part-way message names the reason. Zero changed is an amber "Nothing changed", never a tick.
+- ⚠ **It changes the Hub only.** BC keeps whatever it was sent, so a sale already in BC needs its descriptions sending again — the panel and the success line both say so. The standing alternative, not built: swap • for - at the BC boundary so the Hub and website keep bullets and nobody has to remember. The Vectis Jo instructions deliberately write •  bullets, so every AI-described sale will need this until that is decided.
 `,
   },
   {
@@ -5775,7 +5787,7 @@ type: reference
 - [iPad AUP Terms Popup](reference_terms_aup.md) — lib/terms.ts; bump TERMS_VERSION
 - [Cataloguing Performance PDFs](reference_reports_pdf.md) — one route + one builder, period-scoped
 - [Report Day Exclusion](reference_report_day_exclusion.md) — hides days from report maths only
-- [Manage Lots — Filters/Bulk/Undo](reference_manage_lots_bulk_undo.md) — chunked mass actions, one undo per press; Change Vendor clears the tote. Read before touching bulk actions
+- [Manage Lots — Filters/Bulk/Undo](reference_manage_lots_bulk_undo.md) — chunked mass actions, one undo per press; Change Vendor clears the tote; 🔁 Find & Replace shares ONE matcher (lib/find-replace.ts) with its preview, changes the Hub only. Read before touching bulk actions
 - [⚠ Lock = Catalogued; "In BC" is measured](reference_bc_lock_and_in_bc_column.md) — requireNotBCLocked on Catalogued; NO manual BC/photo/AI ticks left anywhere — sale AND per-lot counts are measured (2026-09-15/17); updateAuction never writes the old columns`,
   },
 ]

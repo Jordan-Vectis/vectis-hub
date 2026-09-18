@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5843391a327cbef491a8055ec95cef0b157ff90d","author":"Jordan Orange","date":"2026-09-18T15:58:54+01:00","subject":"BC Corrections: Copy IDs works on lots BC Match skipped"},
   {"sha":"b7300f6257d1fd79b60d8fcf9bdd3fee7dbbf59f","author":"Jordan Orange","date":"2026-09-18T14:55:27+01:00","subject":"BC and ABC databases: a lot's photo opens in the Hub's zoom viewer, not a new tab"},
   {"sha":"26774e2a0e174e80285b7044273bf7497413632a","author":"Jordan Orange","date":"2026-09-18T14:47:57+01:00","subject":"Website Search: the photo opens in the Hub's own zoom viewer, not a browser tab"},
   {"sha":"758a86d55c0b9fb61662b7ca2c1ddac5b1903261","author":"Jordan Orange","date":"2026-09-18T12:04:27+01:00","subject":"Memory: 2026-09-15 to 18 in the opening message"},
