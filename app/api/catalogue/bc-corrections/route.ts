@@ -27,6 +27,9 @@ export type BcCorrectionRow = {
   saved:           boolean
   barcode:         string | null
   receiptUniqueId: string | null
+  /** BC's OWN unique ID for this barcode, as at the last Data Sync (WarehouseItem). The Hub's
+   *  receiptUniqueId is blank until BC Match is run — this is what fills the gap. */
+  bcUniqueId:      string | null
   title:           string | null
   tote:            string | null
   oldVendor:       string | null
@@ -87,7 +90,7 @@ export async function GET(req: NextRequest) {
       if (!issues.includes("receipt_mismatch") && !issues.includes("vendor_mismatch")) continue
       live.set(l.id, {
         lotId: l.id, saved: false,
-        barcode: l.barcode, receiptUniqueId: l.receiptUniqueId, title: l.title, tote: l.tote,
+        barcode: l.barcode, receiptUniqueId: l.receiptUniqueId, bcUniqueId: null, title: l.title, tote: l.tote,
         oldVendor: l.vendor, oldReceipt: l.receipt,
         newVendor: tote.vendorNo, newReceipt: tote.receiptNo, newVendorName: tote.vendorName,
         done: false, doneBy: null, doneAt: null,
@@ -125,7 +128,7 @@ export async function GET(req: NextRequest) {
       if (!liveRow) continue   // no live mismatch — nothing to correct in BC
       merged.set(s.lotId, {
         lotId: s.lotId, saved: true,
-        barcode: s.barcode, receiptUniqueId: s.receiptUniqueId, title: s.title, tote: s.tote,
+        barcode: s.barcode, receiptUniqueId: s.receiptUniqueId, bcUniqueId: null, title: s.title, tote: s.tote,
         // ⚠ LIVE values win. The saved row holds them as they were when it was written, which
         // may be stale — showing those would tell someone to make a move BC no longer needs.
         oldVendor: liveRow.oldVendor, oldReceipt: liveRow.oldReceipt,
@@ -134,6 +137,49 @@ export async function GET(req: NextRequest) {
         done: s.done, doneBy: s.doneBy, doneAt: s.doneAt?.toISOString() ?? null,
         stillWrong: true,   // only live rows reach here now
       })
+    }
+
+    // ── 3. BC's OWN unique ID for each lot, found by BARCODE in the synced BC data ──
+    // ⚠⚠ The Hub never mints unique IDs (RULES.md) — a lot's receiptUniqueId is blank until BC
+    // Match is run on the sale. But this tab exists to hand BC's Transfer/Copy dialog a list of
+    // unique IDs, and these are exactly the lots least likely to have been matched: they went into
+    // BC wrong. Jordan, 2026-09-18: 45 of 47 lots on F134 had no ID, so the button read "Copy 0
+    // IDs" on the one screen built for copying them — "there has 100% been a BC sync done since
+    // then so it should have the ids". It did: WarehouseItem holds BC's unique ID against the
+    // internal barcode. Matched ON the barcode and the ID is BC's own, which is the one direction
+    // the barcode-only rule allows (never the other way round).
+    // ⚠ It is what BC held at the LAST DATA SYNC. A line transferred since then has a new ID, which
+    // is why the tab prefers the ID from an uploaded export over this one.
+    const rowsNow = [...merged.values()]
+    const codes = [...new Set(rowsNow.map(r => (r.barcode ?? "").trim()).filter(Boolean))]
+    if (codes.length > 0) {
+      try {
+        // The three spellings keep this on the barcode index; upper() in SQL would scan the table.
+        const spellings = [...new Set(codes.flatMap(c => [c, c.toUpperCase(), c.toLowerCase()]))]
+        const items = await prisma.warehouseItem.findMany({
+          where:  { barcode: { in: spellings } },
+          select: { barcode: true, uniqueId: true, receiptNo: true },
+        })
+        const byCode = new Map<string, { uniqueId: string; receiptNo: string | null }[]>()
+        for (const it of items) {
+          const k = (it.barcode ?? "").trim().toUpperCase()
+          if (!k) continue
+          if (!byCode.has(k)) byCode.set(k, [])
+          byCode.get(k)!.push({ uniqueId: it.uniqueId, receiptNo: it.receiptNo })
+        }
+        const same = (a: string | null, b: string | null) => !!a && !!b && a.trim().toUpperCase() === b.trim().toUpperCase()
+        for (const r of rowsNow) {
+          const hits = byCode.get((r.barcode ?? "").trim().toUpperCase())
+          if (!hits?.length) continue
+          // A barcode normally appears once. If BC holds it twice, the line on the receipt this row
+          // is about is the one to move; failing that, the one already where it belongs; else the first.
+          const pick = hits.find(h => same(h.receiptNo, r.oldReceipt)) ?? hits.find(h => same(h.receiptNo, r.newReceipt)) ?? hits[0]
+          r.bcUniqueId = pick.uniqueId
+        }
+      } catch (e) {
+        // The sync table being absent or slow must not take the to-do list down with it.
+        console.error("catalogue/bc-corrections: BC unique ID lookup failed:", e)
+      }
     }
 
     const groups = new Map<string, BcCorrectionGroup>()
