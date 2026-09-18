@@ -8,9 +8,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, DragEvent } from "re
 // What this does that the shared one doesn't: RENAME and MOVE, for folders as
 // well as files, drag-and-drop between folders, and a search across everything.
 
-const box   = "border border-[#1f5c33] rounded-lg bg-[#040f08]"
-const input = "w-full bg-black border border-[#1f5c33] rounded px-2.5 py-1.5 text-sm text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]"
-const btn   = "px-3 py-1.5 text-xs border border-[#1f5c33] rounded hover:bg-[#0a2214] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
 type Folder = { id: string; name: string; parentId: string | null }
 type DocFile = { id: string; name: string; key: string; size: number; mimeType: string; folderId: string | null; createdAt: string }
@@ -194,7 +194,7 @@ export default function DocsClient() {
             onDragOver={e => { e.preventDefault(); setDropTarget(ROOT) }}
             onDragLeave={() => setDropTarget(null)}
             onDrop={e => { e.preventDefault(); void dropOnFolder(null) }}
-            className={`px-2 py-1 rounded border transition-colors ${dropTarget === ROOT ? "border-[#33ff66] bg-[#0a2214]" : "border-transparent hover:bg-[#0a2214]"}`}>
+            className={`px-2 py-1 rounded border transition-colors ${dropTarget === ROOT ? "border-(--j-acc) bg-(--j-glow)" : "border-transparent hover:bg-(--j-glow)"}`}>
             🏠 HOME
           </button>
           {breadcrumb.map(f => (
@@ -204,7 +204,7 @@ export default function DocsClient() {
                 onDragOver={e => { e.preventDefault(); setDropTarget(f.id) }}
                 onDragLeave={() => setDropTarget(null)}
                 onDrop={e => { e.preventDefault(); void dropOnFolder(f.id) }}
-                className={`px-2 py-1 rounded border transition-colors ${dropTarget === f.id ? "border-[#33ff66] bg-[#0a2214]" : "border-transparent hover:bg-[#0a2214]"}`}>
+                className={`px-2 py-1 rounded border transition-colors ${dropTarget === f.id ? "border-(--j-acc) bg-(--j-glow)" : "border-transparent hover:bg-(--j-glow)"}`}>
                 {f.name}
               </button>
             </span>
@@ -228,8 +228,8 @@ export default function DocsClient() {
                 <span className={u.error ? "text-red-400" : "opacity-60"}>{u.error ?? `${u.pct}%`}</span>
               </div>
               {!u.error && (
-                <div className="h-1 bg-[#0a2214] rounded mt-1 overflow-hidden">
-                  <div className="h-full bg-[#33ff66] transition-all" style={{ width: `${u.pct}%` }} />
+                <div className="h-1 bg-(--j-glow) rounded mt-1 overflow-hidden">
+                  <div className="h-full bg-(--j-acc) transition-all" style={{ width: `${u.pct}%` }} />
                 </div>
               )}
             </div>
@@ -242,7 +242,7 @@ export default function DocsClient() {
         onDragOver={e => { e.preventDefault(); if (!dragItem.current) setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
-        className={`${box} p-2 min-h-[260px] transition-colors ${dragOver ? "border-[#33ff66] bg-[#0a2214]" : ""}`}>
+        className={`${box} p-2 min-h-[260px] transition-colors ${dragOver ? "border-(--j-acc) bg-(--j-glow)" : ""}`}>
 
         {loading ? <p className="text-xs opacity-60 p-3">LOADING…</p>
           : shownFolders.length === 0 && shownFiles.length === 0 ? (
@@ -258,7 +258,7 @@ export default function DocsClient() {
                 onDragOver={e => { e.preventDefault(); if (dragItem.current) setDropTarget(f.id) }}
                 onDragLeave={() => setDropTarget(null)}
                 onDrop={e => { e.preventDefault(); e.stopPropagation(); void dropOnFolder(f.id) }}
-                className={`flex items-center gap-3 px-3 py-2 group ${dropTarget === f.id ? "bg-[#0a2214] outline outline-1 outline-[#33ff66]" : ""}`}>
+                className={`flex items-center gap-3 px-3 py-2 group ${dropTarget === f.id ? "bg-(--j-glow) outline outline-1 outline-(--j-acc)" : ""}`}>
                 <button className="flex items-center gap-3 flex-1 min-w-0 text-left" onClick={() => { setSearch(""); setHere(f.id) }}>
                   <span>📁</span>
                   <span className="truncate">{f.name}</span>

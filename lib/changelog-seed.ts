@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-17, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-18, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,18 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5843391a327cbef491a8055ec95cef0b157ff90d","author":"Jordan Orange","date":"2026-09-18T15:58:54+01:00","subject":"BC Corrections: Copy IDs works on lots BC Match skipped"},
+  {"sha":"b7300f6257d1fd79b60d8fcf9bdd3fee7dbbf59f","author":"Jordan Orange","date":"2026-09-18T14:55:27+01:00","subject":"BC and ABC databases: a lot's photo opens in the Hub's zoom viewer, not a new tab"},
+  {"sha":"26774e2a0e174e80285b7044273bf7497413632a","author":"Jordan Orange","date":"2026-09-18T14:47:57+01:00","subject":"Website Search: the photo opens in the Hub's own zoom viewer, not a browser tab"},
+  {"sha":"758a86d55c0b9fb61662b7ca2c1ddac5b1903261","author":"Jordan Orange","date":"2026-09-18T12:04:27+01:00","subject":"Memory: 2026-09-15 to 18 in the opening message"},
+  {"sha":"5370dfa9d1fc810b4b0af449a6819684b91dd6dc","author":"Jordan Orange","date":"2026-09-18T11:54:09+01:00","subject":"Locking Check and Copier agree on conditions, and a copy-all for the barcodes"},
+  {"sha":"66a66878f301120ed712841291627e78c2f1154a","author":"Jordan Orange","date":"2026-09-18T11:35:21+01:00","subject":"JORDAN.SYS: the look picker is collapsed until you ask for it"},
+  {"sha":"098f7edb0cdc283b17243e08bcf0358403caf948","author":"Jordan Orange","date":"2026-09-18T11:29:17+01:00","subject":"Mobile: stop the Hub widening past the screen and flashing white on zoom"},
+  {"sha":"0d3ed9f397e492265bab9dba3fc99621ddeb73a2","author":"Jordan Orange","date":"2026-09-18T10:58:07+01:00","subject":"Overnight jobs: one pipeline slice at a time, and no more false alarms"},
+  {"sha":"a7ff0c2c2da409ab7cdc7bc507cdfa76f88a9e05","author":"Jordan Orange","date":"2026-09-18T09:33:36+01:00","subject":"JORDAN.SYS: five LOOKS, not just colours — Retro, Hub, Modern, Halo, Paper"},
+  {"sha":"f64cc38637690672d832d5ab04576afd5bc20583","author":"Jordan Orange","date":"2026-09-18T09:14:42+01:00","subject":"JORDAN.SYS: five looks to choose from, not just green on black"},
+  {"sha":"b88249d95697ab1dacc0a48ebd6ca4ce37bb3091","author":"Jordan Orange","date":"2026-09-17T17:08:48+01:00","subject":"Meal planner: MAKE PLAN no longer reads as a dead press"},
+  {"sha":"91925f3e7a44b04261f3030f8b368a707084b82e","author":"Jordan Orange","date":"2026-09-17T16:54:24+01:00","subject":"Meal planner: numbers save themselves, macro split lights up, and a dessert slot"},
   {"sha":"aec488ecb9d98b7cb0e448248409f77c6005f104","author":"Jordan Orange","date":"2026-09-17T15:12:56+01:00","subject":"BC Database: a missing sale marker no longer reads as an empty database"},
   {"sha":"daf782e2ec6c9e70f4b25c58ef57012947ed8f79","author":"Jordan Orange","date":"2026-09-17T10:53:43+01:00","subject":"Meal planner: plan for two, one recipe cooked once and split"},
   {"sha":"e1c6b6e4c7025a0155f2bf2f432adecb4b78bae0","author":"Jordan Orange","date":"2026-09-17T10:42:30+01:00","subject":"Meal planner: swap a meal you don't fancy for something else"},

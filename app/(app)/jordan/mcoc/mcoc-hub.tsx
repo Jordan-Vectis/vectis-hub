@@ -17,7 +17,7 @@ export default function McocHub({ roster, initialTab }: { roster: Champ[]; initi
 
   const btn = (active: boolean) =>
     `px-3.5 py-2 rounded-lg text-sm font-bold border transition-colors ${
-      active ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60 hover:opacity-100"
+      active ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) opacity-60 hover:opacity-100"
     }`
 
   return (

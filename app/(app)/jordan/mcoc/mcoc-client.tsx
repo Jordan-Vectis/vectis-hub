@@ -14,7 +14,8 @@ import type { Champ } from "./mcoc-hub"
 //   🤖 AI DEEP DIVE: the original grounded AI lookup (screenshot support, live
 //     meta) for when you want depth over speed.
 
-const GREEN = "#33ff66"
+const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 
 type Counter = { champion: string; class: string; why: string; how: string }
 type Result = {
@@ -148,7 +149,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
 
   const modeBtn = (active: boolean) =>
     `px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-      active ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60 hover:opacity-100"
+      active ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) opacity-60 hover:opacity-100"
     }`
 
   // Instant counter list: the defender's stored counters (minus any that are
@@ -173,8 +174,8 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
   const advClass = picked ? classAdvantageAgainst(picked.class) : ""
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto font-mono" style={{ color: GREEN }}>
-      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-4">
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: TEXT }}>
+      <div className="border border-(--j-dim) rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setMode("instant")} className={modeBtn(mode === "instant")}>⚡ INSTANT (BGS)</button>
           <button onClick={() => setMode("ai")} className={modeBtn(mode === "ai")}>🤖 AI DEEP DIVE</button>
@@ -203,11 +204,11 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                     onChange={(e) => choose(e.target.value)}
                     list="mcoc-defender-names"
                     placeholder="Type a defender…"
-                    className="flex-1 min-w-[12rem] bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
-                    style={{ color: GREEN }}
+                    className="flex-1 min-w-[12rem] bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
+                    style={{ color: TEXT }}
                   />
                   <label className="inline-flex items-center gap-1.5 text-[11px] opacity-70 cursor-pointer">
-                    <input type="checkbox" checked={deckOnly} onChange={(e) => setDeckOnly(e.target.checked)} className="accent-[#33ff66]" />
+                    <input type="checkbox" checked={deckOnly} onChange={(e) => setDeckOnly(e.target.checked)} className="accent-(--j-acc)" />
                     BGS deck only
                   </label>
                 </div>
@@ -216,9 +217,9 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
 
                 {picked && (
                   <div className="space-y-3">
-                    <div className="border-t border-[#1f5c33] pt-3">
+                    <div className="border-t border-(--j-dim) pt-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-bold text-white">{picked.name}</span>
+                        <span className="text-base font-bold text-(--j-hi)">{picked.name}</span>
                         {picked.class && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: CLASS_COL(picked.class), borderColor: CLASS_COL(picked.class) + "88" }}>{picked.class}</span>}
                         {advClass && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: CLASS_COL(advClass), borderColor: CLASS_COL(advClass) + "88" }}>bring {advClass} ▲</span>}
                         {!picked.profileAt && <span className="text-[10px] text-amber-400">not profiled yet — build it in the Champion DB tab</span>}
@@ -238,11 +239,11 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                         {myCounterRows.map((c, i) => (
                           <div key={i} className={`flex items-center gap-2 border rounded-lg px-2.5 py-1.5 border-[#8a6d1a] ${c.inDeck ? "bg-[#2a2208]/60" : ""}`}>
                             {c.owned?.imageUrl && <img src={c.owned.imageUrl} alt="" width={24} height={24} className="rounded object-cover" style={{ boxShadow: `0 0 0 1.5px ${CLASS_COL(c.owned.class)}` }} />}
-                            <span className="text-sm font-bold text-white">{c.name}</span>
+                            <span className="text-sm font-bold text-(--j-hi)">{c.name}</span>
                             {c.inDeck
-                              ? <span className="text-[10px] font-bold text-[#33ff66]">★ IN DECK · {c.owned!.stars}★ R{c.owned!.rank}</span>
+                              ? <span className="text-[10px] font-bold text-(--j-acc)">★ IN DECK · {c.owned!.stars}★ R{c.owned!.rank}</span>
                               : c.owned
-                                ? <span className="text-[10px] text-[#33ff66]">✓ owned · {c.owned.stars}★ R{c.owned.rank}</span>
+                                ? <span className="text-[10px] text-(--j-acc)">✓ owned · {c.owned.stars}★ R{c.owned.rank}</span>
                                 : <span className="text-[10px] opacity-50">not owned</span>}
                             <button onClick={() => removePersonal(c.name)} className="ml-auto text-red-400 opacity-60 hover:opacity-100 text-xs" title="Remove">×</button>
                           </div>
@@ -253,7 +254,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPersonal(myAdd) } }}
                           list="my-counter-names"
                           placeholder="Add your own counter + Enter…"
-                          className="flex-1 bg-black border border-[#8a6d1a] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#ffd23f] placeholder:text-[#8a6d1a]"
+                          className="flex-1 bg-(--j-bg) border border-[#8a6d1a] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#ffd23f] placeholder:text-[#8a6d1a]"
                           style={{ color: "#ffd23f" }} />
                         <datalist id="my-counter-names">
                           {roster.map((c) => <option key={c.id} value={c.name} />)}
@@ -270,13 +271,13 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                       )}
                       <div className="space-y-1.5">
                         {instantCounters.map((c, i) => (
-                          <div key={i} className={`flex items-center gap-2 border rounded-lg px-2.5 py-1.5 ${c.owned ? "border-[#33ff66]" : "border-[#1f5c33] opacity-60"} ${c.inDeck ? "bg-[#0a2214]/60" : ""}`}>
+                          <div key={i} className={`flex items-center gap-2 border rounded-lg px-2.5 py-1.5 ${c.owned ? "border-(--j-acc)" : "border-(--j-dim) opacity-60"} ${c.inDeck ? "bg-(--j-glow)/60" : ""}`}>
                             {c.owned?.imageUrl && <img src={c.owned.imageUrl} alt="" width={24} height={24} className="rounded object-cover" style={{ boxShadow: `0 0 0 1.5px ${CLASS_COL(c.owned.class)}` }} />}
-                            <span className="text-sm font-bold text-white">{c.name}</span>
+                            <span className="text-sm font-bold text-(--j-hi)">{c.name}</span>
                             {c.inDeck
-                              ? <span className="text-[10px] font-bold text-[#33ff66]">★ IN DECK · {c.owned!.stars}★ R{c.owned!.rank}</span>
+                              ? <span className="text-[10px] font-bold text-(--j-acc)">★ IN DECK · {c.owned!.stars}★ R{c.owned!.rank}</span>
                               : c.owned
-                                ? <span className="text-[10px] text-[#33ff66]">✓ owned · {c.owned.stars}★ R{c.owned.rank}</span>
+                                ? <span className="text-[10px] text-(--j-acc)">✓ owned · {c.owned.stars}★ R{c.owned.rank}</span>
                                 : <span className="text-[10px] opacity-50">not owned</span>}
                           </div>
                         ))}
@@ -303,11 +304,11 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                 onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); findCounters() } }}
                 list="mcoc-defender-names"
                 placeholder="Defender from the Champion DB (optional)…"
-                className="flex-1 min-w-[12rem] bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
-                style={{ color: GREEN }}
+                className="flex-1 min-w-[12rem] bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
+                style={{ color: TEXT }}
               />
               {dbDefender && (
-                <button onClick={() => setDbDefender("")} className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
+                <button onClick={() => setDbDefender("")} className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-(--j-dim) opacity-60 hover:opacity-100 transition-opacity">
                   ✗ CLEAR
                 </button>
               )}
@@ -324,27 +325,27 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                 ? "Nodes / buffs for this fight — e.g. Aggression + Bane, Mystic Dispersion…"
                 : "e.g. Nick Fury on Aggression + Bane, or Mystic Dispersion / Enhanced Special 3…"}
               rows={2}
-              className="w-full bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
-              style={{ color: GREEN }}
+              className="w-full bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
+              style={{ color: TEXT }}
             />
 
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => defInput.current?.click()} disabled={busy}
-                className="px-4 py-2.5 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
+                className="px-4 py-2.5 rounded-lg border border-(--j-dim) text-sm hover:border-(--j-acc) disabled:opacity-40 transition-colors">
                 📷 {defImage ? "Change defender shot" : "Defender photo"}
               </button>
               <button onClick={() => nodeInput.current?.click()} disabled={busy}
-                className="px-4 py-2.5 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
+                className="px-4 py-2.5 rounded-lg border border-(--j-dim) text-sm hover:border-(--j-acc) disabled:opacity-40 transition-colors">
                 🎯 {nodeImage ? "Change nodes shot" : "Nodes photo"}
               </button>
               <button onClick={() => setSearch((s) => !s)}
                 className={`text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border transition-colors ${
-                  search ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60 hover:opacity-100"
+                  search ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) opacity-60 hover:opacity-100"
                 }`} title="Look up the current meta on Google">
                 🔎 LIVE META [ {search ? "ON" : "OFF"} ]
               </button>
               <button onClick={findCounters} disabled={busy || !canAsk}
-                className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors ml-auto"
+                className="px-5 py-2.5 rounded-lg text-sm font-bold text-(--j-on-acc) disabled:opacity-40 transition-colors ml-auto"
                 style={{ background: GREEN }}>
                 {busy ? "SCOUTING…" : "⚔ FIND COUNTERS"}
               </button>
@@ -354,7 +355,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
               <div className="flex gap-3 flex-wrap">
                 {defPreview && (
                   <figure className="space-y-1">
-                    <img src={defPreview} alt="Defender" className="max-h-48 rounded-lg border border-[#1f5c33]" />
+                    <img src={defPreview} alt="Defender" className="max-h-48 rounded-lg border border-(--j-dim)" />
                     <figcaption className="text-[10px] opacity-50 uppercase tracking-widest flex items-center gap-2">
                       Defender
                       <button onClick={() => pickDefImage(null)} className="opacity-60 hover:opacity-100">✗ remove</button>
@@ -363,7 +364,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                 )}
                 {nodePreview && (
                   <figure className="space-y-1">
-                    <img src={nodePreview} alt="Nodes" className="max-h-48 rounded-lg border border-[#1f5c33]" />
+                    <img src={nodePreview} alt="Nodes" className="max-h-48 rounded-lg border border-(--j-dim)" />
                     <figcaption className="text-[10px] opacity-50 uppercase tracking-widest flex items-center gap-2">
                       Nodes
                       <button onClick={() => pickNodeImage(null)} className="opacity-60 hover:opacity-100">✗ remove</button>
@@ -376,9 +377,9 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
 
             {result && (
               <div className="space-y-3">
-                <div className="border-t border-[#1f5c33] pt-3">
+                <div className="border-t border-(--j-dim) pt-3">
                   <p className="text-[10px] opacity-50 uppercase tracking-widest">Defender</p>
-                  <p className="text-base font-bold text-white">{result.defender}</p>
+                  <p className="text-base font-bold text-(--j-hi)">{result.defender}</p>
                   {!result.confident && <p className="text-xs text-amber-400 mt-1">⚠ Not sure who this is — general advice below; try a clearer screenshot or exact name.</p>}
                   {result.queries && result.queries.length > 0 && <p className="text-[10px] opacity-50 mt-1">🔎 {result.queries.join(" · ")}</p>}
                   {result.groundedFallback && <p className="text-[10px] text-amber-400 mt-1">(live search unavailable on this model — answered from knowledge)</p>}
@@ -388,14 +389,14 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                   const owned = ownedByName.get(normChampName(c.champion))
                   const colour = CLASS_COL(c.class || owned?.class || "")
                   return (
-                    <div key={i} className={`border rounded-lg p-3 ${owned ? "border-[#33ff66] bg-[#0a2214]/40" : "border-[#1f5c33]"}`}>
+                    <div key={i} className={`border rounded-lg p-3 ${owned ? "border-(--j-acc) bg-(--j-glow)/40" : "border-(--j-dim)"}`}>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[11px] opacity-50 font-bold">{i + 1}</span>
                         {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={26} height={26} className="rounded object-cover" style={{ boxShadow: `0 0 0 1.5px ${colour}` }} />}
-                        <span className="text-base font-bold text-white">{c.champion}</span>
+                        <span className="text-base font-bold text-(--j-hi)">{c.champion}</span>
                         {c.class && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: colour, borderColor: colour + "88" }}>{c.class}</span>}
                         {owned
-                          ? <span className="text-[10px] font-bold text-[#33ff66]">✓ OWNED · {owned.stars}★ R{owned.rank}</span>
+                          ? <span className="text-[10px] font-bold text-(--j-acc)">✓ OWNED · {owned.stars}★ R{owned.rank}</span>
                           : <span className="text-[10px] opacity-40">not in roster</span>}
                       </div>
                       {c.why && <p className="text-sm"><span className="opacity-50">Why: </span>{c.why}</p>}
@@ -405,7 +406,7 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                 })}
 
                 {result.strategy && (
-                  <div className="border border-[#33ff66] rounded-lg p-3">
+                  <div className="border border-(--j-acc) rounded-lg p-3">
                     <p className="text-[10px] opacity-50 uppercase tracking-widest mb-1">Strategy</p>
                     <p className="text-sm">{result.strategy}</p>
                   </div>

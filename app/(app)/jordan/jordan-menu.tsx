@@ -3,16 +3,46 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { CRT_KEY } from "@/components/crt-mode"
+import { JSYS_LOOKS } from "@/lib/jordan-theme"
+import { JsysLookPicker, useJsys } from "./jsys-style"
 
-// The secret menu UI — retro terminal styling, because obviously.
+// The secret menu UI.
 // Feature 01: RETRO CRT MODE — scanlines/phosphor overlay across the whole Hub,
 // per browser (localStorage), applied everywhere by components/crt-mode.tsx.
+// Feature 10: LOOK & FEEL — the shape and colours of every /jordan screen, from the tables in
+// lib/jordan-theme.ts (Jordan, 2026-09-18: "the green and black retro is a little jarring to some
+// people" … "a retro option, a standard hub option and a modern option and whatever else you can
+// come up with? Halo style option would be cool"). Per browser too. RETRO stays the default.
+//
+// ⚠⚠ TWO MENUS ARE IN THE MARKUP AND CSS SHOWS ONE. The terminal (`jsys-t`: banner, numbered rows,
+// [ OPEN ]) and the tile grid every other look uses (`jsys-m`). Not a hook — the server does not
+// know the browser's choice, and a hook would paint the terminal first and swap after hydration.
+// The <html> attribute is set before paint, so CSS gets it right from the first frame.
 
-const GREEN = "#33ff66"
+const TEXT = "var(--j-text)"
+
+const TOOLS = [
+  { n: "02", href: "/jordan/chat",    icon: "💬", title: "Ask AI",       blurb: "day-to-day chat, silly questions welcome" },
+  { n: "03", href: "/jordan/cooking", icon: "🍳", title: "Cooking",      blurb: "expert chef chat + air fryer photo converter" },
+  { n: "04", href: "/jordan/mcoc",    icon: "⚔️", title: "MCOC",         blurb: "counters, roster, deck builder, war planner & champion DB" },
+  { n: "05", href: "/jordan/cv",      icon: "📄", title: "CV workshop",  blurb: "upload a CV, edit it, tailor it to a job + covering letter" },
+  { n: "06", href: "/jordan/garage",  icon: "🚗", title: "Garage",       blurb: "MOT, tax & service due dates, history and past cars" },
+  { n: "07", href: "/jordan/docs",    icon: "🗂️", title: "Documents",    blurb: "private file store, folders & subfolders, drag to move" },
+  { n: "08", href: "/jordan/meals",   icon: "🍽️", title: "Meal planner", blurb: "BMR & macro targets, AI meal plans, shopping list" },
+  { n: "09", href: "/jordan/gym",     icon: "🏋️", title: "Gym",          blurb: "AI training programmes, log every set, weights that go up" },
+]
 
 export default function JordanMenu() {
   const [crt, setCrt] = useState(false)
   const [booted, setBooted] = useState(false)
+  // ⚠ The look picker is COLLAPSED until asked for (Jordan, 2026-09-18: "this needs to be
+  // collapsible, should not be visible the entire time, it looks silly") — five big preview cards
+  // sat under the menu on every visit for a setting changed once in a blue moon. Not remembered:
+  // it opens when he wants it and is gone next time. One state for both menus, so switching to
+  // or from Retro while it is open keeps it open.
+  const [lookOpen, setLookOpen] = useState(false)
+  const { look } = useJsys()
+  const lookLabel = JSYS_LOOKS.find(l => l.id === look)?.label ?? JSYS_LOOKS[0].label
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -32,12 +62,15 @@ export default function JordanMenu() {
     document.documentElement.classList.toggle("crt-mode", next)
   }
 
-  const row = "flex items-center justify-between gap-4 px-4 py-3 border border-[#1f5c33] rounded-lg"
+  const row = "flex items-center justify-between gap-4 px-4 py-3 border border-(--j-dim) rounded-lg"
+  const tile = "jsys-tile block border border-(--j-dim) rounded-xl bg-(--j-box) p-5 hover:bg-(--j-glow) transition-colors min-h-[128px]"
 
   return (
-    <div className="min-h-full bg-black p-6 font-mono" style={{ color: GREEN }}>
-      <div className="w-full pt-10">
-        <pre className="text-[9px] sm:text-xs leading-tight mb-1 select-none overflow-x-auto" style={{ color: GREEN }}>
+    <div className="min-h-full bg-(--j-bg) p-6 jsys-font" style={{ color: TEXT }}>
+
+      {/* ── The terminal (the original) ── */}
+      <div className="jsys-t w-full pt-10">
+        <pre className="text-[9px] sm:text-xs leading-tight mb-1 select-none overflow-x-auto" style={{ color: "var(--j-acc)" }}>
 {`     ██  ██████  ██████  ██████   █████  ███    ██    ███████ ██    ██ ███████
      ██ ██    ██ ██   ██ ██   ██ ██   ██ ████   ██    ██       ██  ██  ██
      ██ ██    ██ ██████  ██   ██ ███████ ██ ██  ██    ███████   ████   ███████
@@ -46,60 +79,90 @@ export default function JordanMenu() {
         </pre>
         <p className="text-xs mb-8 opacity-70">
           PERSONAL CONTROL PANEL v1.0 — ACCESS GRANTED: JORDAN.ORANGE
-          <span className="inline-block w-2 h-3.5 ml-1 align-middle animate-pulse" style={{ background: GREEN }} />
+          <span className="inline-block w-2 h-3.5 ml-1 align-middle animate-pulse" style={{ background: "var(--j-acc)" }} />
         </p>
 
         {!booted ? (
           <p className="text-sm">INITIALISING…</p>
         ) : (
           <div className="space-y-3 text-sm">
-            <button onClick={toggleCrt} className={`${row} w-full text-left hover:bg-[#0a2214] transition-colors`}>
+            <button onClick={toggleCrt} className={`${row} w-full text-left hover:bg-(--j-glow) transition-colors`}>
               <span>01 &nbsp;RETRO CRT MODE <span className="opacity-50">— scanlines &amp; phosphor, whole Hub, this browser</span></span>
-              <span className="shrink-0 font-bold" style={{ color: crt ? GREEN : "#777" }}>
-                [ {crt ? "ON " : "OFF"} ]
-              </span>
+              <span className={`shrink-0 font-bold ${crt ? "" : "opacity-40"}`}>[ {crt ? "ON " : "OFF"} ]</span>
             </button>
-
-            <Link href="/jordan/chat" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>02 &nbsp;ASK AI <span className="opacity-50">— day-to-day chat, silly questions welcome</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <Link href="/jordan/cooking" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>03 &nbsp;COOKING <span className="opacity-50">— expert chef chat + air fryer photo converter</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <Link href="/jordan/mcoc" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>04 &nbsp;MCOC <span className="opacity-50">— counters, roster, deck builder, war planner &amp; champion DB</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <Link href="/jordan/cv" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>05 &nbsp;CV WORKSHOP <span className="opacity-50">— upload a CV, edit it, tailor it to a job + covering letter</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <Link href="/jordan/garage" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>06 &nbsp;GARAGE <span className="opacity-50">— MOT, tax &amp; service due dates, history and past cars</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <Link href="/jordan/docs" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>07 &nbsp;DOCUMENTS <span className="opacity-50">— private file store, folders &amp; subfolders, drag to move</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <Link href="/jordan/meals" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>08 &nbsp;MEAL PLANNER <span className="opacity-50">— BMR &amp; macro targets, AI meal plans, shopping list</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <Link href="/jordan/gym" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>09 &nbsp;GYM <span className="opacity-50">— AI training programmes, log every set, weights that go up</span></span>
-              <span className="shrink-0 font-bold">[ OPEN ]</span>
-            </Link>
-            <div className={`${row} opacity-40 select-none`}>
-              <span>10 &nbsp;????????????</span>
-              <span className="shrink-0">[ LOCKED ]</span>
-            </div>
-
+            {TOOLS.map(t => (
+              <Link key={t.n} href={t.href} prefetch={false} className={`${row} w-full hover:bg-(--j-glow) transition-colors`}>
+                <span>{t.n} &nbsp;{t.title.toUpperCase()} <span className="opacity-50">— {t.blurb}</span></span>
+                <span className="shrink-0 font-bold">[ OPEN ]</span>
+              </Link>
+            ))}
+            <button onClick={() => setLookOpen(o => !o)} aria-expanded={lookOpen}
+              className={`${row} w-full text-left hover:bg-(--j-glow) transition-colors`}>
+              <span>10 &nbsp;LOOK &amp; FEEL <span className="opacity-50">— {lookLabel.toUpperCase()} · the shape and colours of every screen in here, this browser</span></span>
+              <span className="shrink-0 font-bold">[ {lookOpen ? "HIDE" : "CHANGE"} ]</span>
+            </button>
+            {lookOpen && (
+              <div className={`${row} flex-wrap`}>
+                <JsysLookPicker />
+              </div>
+            )}
             <p className="text-xs opacity-50 pt-4">
-              &gt; CRT mode stays on everywhere in the Hub until switched off here. More features when you think of them.
+              &gt; CRT mode stays on everywhere in the Hub until switched off here. A look stays until you pick another. More features when you think of them.
             </p>
+          </div>
+        )}
+      </div>
+
+      {/* ── The tile grid (Hub, Modern, Halo, Paper) ── */}
+      <div className="jsys-m w-full space-y-6">
+        <div>
+          <h1 className="jsys-title text-2xl font-bold">Jordan&rsquo;s tools</h1>
+          <p className="text-sm opacity-60 mt-1">Personal control panel — signed in as jordan.orange.</p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {TOOLS.map(t => (
+            <Link key={t.n} href={t.href} prefetch={false} className={tile}>
+              <div className="text-2xl mb-2" aria-hidden>{t.icon}</div>
+              <div className="jsys-title font-bold text-lg leading-tight">{t.title}</div>
+              <div className="text-sm opacity-70 mt-1 leading-snug">{t.blurb[0].toUpperCase() + t.blurb.slice(1)}</div>
+            </Link>
+          ))}
+          <button type="button" onClick={toggleCrt} className={`${tile} text-left`}>
+            <div className="text-2xl mb-2" aria-hidden>📺</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="jsys-title font-bold text-lg leading-tight">Retro CRT mode</div>
+              <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg border ${crt ? "border-(--j-acc) bg-(--j-acc) text-(--j-on-acc)" : "border-(--j-dim) opacity-60"}`}>{crt ? "ON" : "OFF"}</span>
+            </div>
+            <div className="text-sm opacity-70 mt-1 leading-snug">Scanlines and phosphor across the whole Hub, this browser.</div>
+          </button>
+          {/* A tile like the others — says which look is on, and opens the picker below. */}
+          <button type="button" onClick={() => setLookOpen(o => !o)} aria-expanded={lookOpen}
+            className={`${tile} text-left ${lookOpen ? "border-(--j-acc)" : ""}`}>
+            <div className="text-2xl mb-2" aria-hidden>🎨</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="jsys-title font-bold text-lg leading-tight">Look &amp; feel</div>
+              <span className="shrink-0 text-xs font-bold px-2.5 py-1 rounded-lg border border-(--j-dim)">{lookLabel}</span>
+            </div>
+            <div className="text-sm opacity-70 mt-1 leading-snug">
+              {lookOpen ? "Pick one below. Tap here again to close." : "The shape and colours of every screen in here. Tap to change."}
+            </div>
+          </button>
+        </div>
+
+        {lookOpen && (
+          <div className="border border-(--j-dim) rounded-xl bg-(--j-box) p-5 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="jsys-title font-bold text-lg leading-tight">Look &amp; feel</div>
+                <div className="text-sm opacity-70 mt-1">Saved on this browser.</div>
+              </div>
+              <button type="button" onClick={() => setLookOpen(false)}
+                className="shrink-0 min-h-[44px] px-3 text-sm rounded-lg border border-(--j-dim) hover:bg-(--j-glow) transition-colors">
+                Close
+              </button>
+            </div>
+            <JsysLookPicker />
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { titleFromDescription } from "@/lib/lot-title"
+import { applyFindReplace, FIND_MAX, REPLACE_MAX, type FindReplaceOpts } from "@/lib/find-replace"
 import { auth } from "@/auth"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
 import {
@@ -2263,6 +2264,73 @@ export async function bulkClearDescriptions(
   const newUndoId = await recordBulkUndo(auctionId, session, `Clear descriptions (${updated})`, undo, undoId)
   if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { updated, skippedExcluded, undoId: newUndoId }
+}
+
+// 🔁 Find & replace across descriptions (Jordan, 2026-09-18: "when we make paperwork in BC bullet
+// points are causing formatting issues so I want a way I can replace the bullet points maybe
+// with - but a mass find and replace may be useful in the future").
+//
+// Built exactly like its neighbours — scoped to the ids it is handed, chunked by the toolbar, logged
+// through updateLotLogged, ONE undo row per press (undoId threaded), title regenerated from the new
+// description. Three things are its own:
+//   · ⚠ The matcher is lib/find-replace.ts, the SAME one the browser previewed with. Never give
+//     this action its own idea of what matches.
+//   · ⚠ It does NOT skip aiExcluded lots (Clear Descriptions does). A hand-typed description with a
+//     bullet in it breaks BC's paperwork just as well as an AI one; this is a deliberate edit of
+//     specific text, not a wipe.
+//   · ⚠ Refusals are RETURNED, not thrown — a thrown server action is redacted in production and
+//     "An error occurred in the Server Components render" tells nobody that the Find box was empty.
+export async function bulkFindReplaceDescriptions(
+  auctionId: string,
+  lotIds: string[] | undefined,
+  find: string,
+  replace: string,
+  opts: FindReplaceOpts,
+  /** The undo row this press is already building — see recordBulkUndo. */
+  undoId?: string | null,
+  /** Intermediate chunk of a chunked press — skip the page revalidation. */
+  skipRevalidate?: boolean,
+): Promise<{ ok: boolean; error?: string; updated: number; occurrences: number; skipped: number; undoId: string | null }> {
+  const none = { updated: 0, occurrences: 0, skipped: 0, undoId: undoId ?? null }
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+
+    const f = String(find ?? ""), r = String(replace ?? "")
+    if (!f) return { ok: false, error: "Type what to find first.", ...none }
+    if (f.length > FIND_MAX) return { ok: false, error: `The text to find is too long (${FIND_MAX} characters at most).`, ...none }
+    if (r.length > REPLACE_MAX) return { ok: false, error: `The replacement is too long (${REPLACE_MAX} characters at most).`, ...none }
+    const o: FindReplaceOpts = { matchCase: !!opts?.matchCase, wholeWord: !!opts?.wholeWord }
+
+    const lots = await prisma.catalogueLot.findMany({
+      where:  scopeWhere(auctionId, lotIds),
+      select: { id: true, description: true },
+    })
+
+    let updated = 0, occurrences = 0, skipped = 0
+    const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+    const undo: UndoEntry[] = []
+
+    for (const lot of lots) {
+      const oldDesc = lot.description ?? ""
+      const res = applyFindReplace(oldDesc, f, r, o)
+      // Someone may have edited the lot since the preview was worked out — that is a skip, not a fault.
+      if (res.count === 0 || res.text === oldDesc) { skipped++; continue }
+      await updateLotLogged(lot.id, { description: res.text, title: titleFromDescription(res.text) }, ctx)
+      undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: res.text } } })
+      updated++; occurrences += res.count
+    }
+
+    // ⚠ The label must END in "(N)" — recordBulkUndo rewrites that to the running total as the
+    // chunks of one press arrive. The searched text is cut short so a long one cannot push it off.
+    const short = (s: string) => (s.length > 18 ? s.slice(0, 17) + "…" : s)
+    const label = `Find & replace “${short(f)}” → “${short(r)}” (${updated})`
+    const newUndoId = await recordBulkUndo(auctionId, session, label, undo, undoId)
+    if (!skipRevalidate) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true, updated, occurrences, skipped, undoId: newUndoId }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "The replace could not be done", ...none }
+  }
 }
 
 // Highest existing line number for a receipt base, e.g. "R000123" → 4 when

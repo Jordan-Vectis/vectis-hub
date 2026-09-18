@@ -1237,6 +1237,7 @@ function CopierTab({ active }: { active: boolean }) {
   // flagged — so the lot card below it lands somewhere different on every sale, and the macro
   // types into the wrong place. Collapsed it is one line, always, whatever the counts.
   const [condOpen, setCondOpen] = useState(false)
+  const [needCopy, setNeedCopy] = useState<"idle" | "copied" | "failed">("idle")
   const [sortBy, setSortBy]     = useState<SortBy>("uniqueId")
   const [idx, setIdx]           = useState(0)
   const [copiedType, setCopied] = useState<"desc" | "both" | null>(null)
@@ -1355,6 +1356,24 @@ function CopierTab({ active }: { active: boolean }) {
   const condNoDesc   = condChecked.filter(c => c.check.state === "no-description")
   const condProblems = condMissing.length + condNone.length + condNoDesc.length
   const haveConditionData = rows.some(r => r.condition !== undefined)
+  // Every lot counted in "need a condition adding", as BARCODES whatever the sort order (the chips
+  // above follow the sort, so on Unique ID they show R-numbers) — Jordan, 2026-09-18: "list all
+  // the barcodes missing conditions and have a quick copy for them all". In lot order, one per line
+  // when copied, so it pastes straight into a spreadsheet column or a message.
+  const needCondBarcodes = condChecked
+    .filter(c => c.check.state === "missing" || c.check.state === "none-recorded" || c.check.state === "no-description")
+    .map(c => c.row.barcode || c.row.uniqueId || c.row.folder)
+    .filter(Boolean)
+  async function copyNeedCond() {
+    try {
+      await navigator.clipboard.writeText(needCondBarcodes.join("\n"))
+      setNeedCopy("copied")
+      setTimeout(() => setNeedCopy("idle"), 2500)
+    } catch {
+      // ⚠ Never let a failed copy read as done — the list is shown as selectable text below.
+      setNeedCopy("failed")
+    }
+  }
 
   function CondList({ items, tone }: { items: typeof condChecked; tone: string }) {
     if (items.length === 0) return null
@@ -1579,6 +1598,27 @@ function CopierTab({ active }: { active: boolean }) {
                       blank, which is worth tidying on the sale page.
                     </p>
                     <CondList items={condOnlyDesc} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
+                  </div>
+                )}
+
+                {/* All of them as barcodes, with one copy — at the BOTTOM, per the rule above. */}
+                {needCondBarcodes.length > 0 && (
+                  <div className="pt-3 border-t border-amber-200 dark:border-amber-800/60">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                        Barcodes that need a condition ({needCondBarcodes.length})
+                      </p>
+                      <button onClick={copyNeedCond}
+                        className="ml-auto px-3 py-1.5 rounded-md text-xs font-semibold border border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40">
+                        {needCopy === "copied" ? `✓ Copied ${needCondBarcodes.length}` : `📋 Copy all ${needCondBarcodes.length}`}
+                      </button>
+                    </div>
+                    {needCopy === "failed" && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">Couldn&apos;t reach the clipboard — select the list below and copy it instead.</p>
+                    )}
+                    <p className="mt-1.5 font-mono text-[11px] leading-relaxed text-amber-900 dark:text-amber-100 break-words select-all">
+                      {needCondBarcodes.join(", ")}
+                    </p>
                   </div>
                 )}
               </div>

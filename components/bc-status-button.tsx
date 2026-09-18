@@ -41,7 +41,9 @@ export default function BcStatusButton() {
   const title = connected == null ? "Business Central — checking…" : connected ? "Business Central — connected" : "Business Central — not connected"
 
   return (
-    <div ref={ref} className="relative">
+    // Phones: the panel hangs full width from the top bar (see help-button.tsx) — anchored to this
+    // button it started off the left of the screen.
+    <div ref={ref} className="relative max-sm:static">
       <button onClick={() => setOpen(o => !o)} title={title} aria-label={title}
         className="flex items-center text-gray-400 hover:text-white transition-colors">
         <span className="relative inline-flex items-center justify-center w-7 h-5 rounded bg-gray-800 border border-gray-600 text-[10px] font-bold tracking-tight">
@@ -51,7 +53,7 @@ export default function BcStatusButton() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-64 z-50 rounded-lg border border-gray-700 bg-gray-900 shadow-xl p-3 text-sm">
+        <div className="absolute right-0 top-full mt-2 w-64 max-sm:inset-x-2 max-sm:w-auto z-50 rounded-lg border border-gray-700 bg-gray-900 shadow-xl p-3 text-sm">
           <p className="font-semibold text-white mb-1.5 flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${dot}`} />
             Business Central

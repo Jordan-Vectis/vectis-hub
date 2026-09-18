@@ -14,10 +14,10 @@ import { EXPERIENCE, goalLabel, missingMuscles, weeklySets, type GoalKey, type L
 // ⚠ The GOAL is read from the linked MEAL PLANNER profile, never copied here — training in a
 // deficit is a different job from training in a surplus, and two copies would drift.
 
-const box   = "border border-[#1f5c33] rounded-lg bg-[#040f08]"
-const input = "w-full bg-black border border-[#1f5c33] rounded px-2.5 py-1.5 text-sm text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]"
-const btn   = "px-3 py-1.5 text-xs border border-[#1f5c33] rounded hover:bg-[#0a2214] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-const btnGo = "px-4 py-2 text-sm font-bold rounded bg-[#33ff66] text-black hover:bg-[#5cff88] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const btnGo = "px-4 py-2 text-sm font-bold rounded bg-(--j-acc) text-(--j-on-acc) hover:bg-(--j-acc-hi) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const label = "block text-[10px] tracking-widest opacity-60 mb-1"
 
 type Profile = {
@@ -177,12 +177,12 @@ export default function GymClient() {
         </div>
       )}
       {error && <div className="border border-red-700 bg-red-950/40 text-red-300 rounded-lg px-4 py-2.5 text-xs">{error}</div>}
-      {note && !error && <div className="border border-[#1f5c33] rounded-lg px-4 py-2.5 text-xs opacity-80">{note}</div>}
+      {note && !error && <div className="border border-(--j-dim) rounded-lg px-4 py-2.5 text-xs opacity-80">{note}</div>}
 
       <div className={`${box} p-3 flex flex-wrap items-center gap-2`}>
         {([["today", "TODAY"], ["programme", "PROGRAMME"], ["history", "HISTORY"], ["setup", "SETUP"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => setView(k)}
-            className={`min-h-[44px] px-3 rounded border text-xs ${view === k ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>{l}</button>
+            className={`min-h-[44px] px-3 rounded border text-xs ${view === k ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>{l}</button>
         ))}
         {person && (
           <span className="text-xs opacity-60 ml-2">
@@ -220,7 +220,7 @@ export default function GymClient() {
                   const last = recent.find(w => w.dayKey === d.name)
                   return (
                     <button key={d.day} onClick={() => startSession(d.name)} disabled={busy === "start"}
-                      className="min-h-[56px] px-4 rounded border border-[#1f5c33] hover:bg-[#0a2214] text-left">
+                      className="min-h-[56px] px-4 rounded border border-(--j-dim) hover:bg-(--j-glow) text-left">
                       <div className="font-bold text-sm">{d.name}</div>
                       <div className="text-[11px] opacity-60">
                         {d.exercises.length} exercises{d.estimatedMinutes ? ` · ~${d.estimatedMinutes} min` : ""}
@@ -241,7 +241,7 @@ export default function GymClient() {
             {recent.length === 0 ? (
               <p className="text-xs opacity-60">Nothing logged yet.</p>
             ) : recent.map(w => (
-              <div key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs border-t border-[#1f5c33] pt-2 first:border-0">
+              <div key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs border-t border-(--j-dim) pt-2 first:border-0">
                 <span className="font-bold">{w.dayKey || "Session"}</span>
                 <span className="opacity-60">{when(w.startedAt)}</span>
                 <span className="opacity-60">{w.sets} sets</span>
@@ -264,7 +264,7 @@ export default function GymClient() {
                 <div className="flex gap-1">
                   {[3, 4, 6, 8].map(w => (
                     <button key={w} onClick={() => setWeeks(w)}
-                      className={`w-11 min-h-[44px] rounded border text-sm ${weeks === w ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] hover:bg-[#0a2214]"}`}>{w}</button>
+                      className={`w-11 min-h-[44px] rounded border text-sm ${weeks === w ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) hover:bg-(--j-glow)"}`}>{w}</button>
                   ))}
                 </div>
               </div>
@@ -312,7 +312,7 @@ export default function GymClient() {
             ) : (
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {history.pbs.map((p: any) => (
-                  <div key={p.lift.slug} className="border border-[#1f5c33] rounded p-2">
+                  <div key={p.lift.slug} className="border border-(--j-dim) rounded p-2">
                     <div className="text-[10px] tracking-wide opacity-60">{p.lift.name.toUpperCase()}{p.lift.perHand ? " (EACH)" : ""}</div>
                     <div className="text-base font-bold">{p.best.weightKg} kg × {p.best.reps}</div>
                     <div className="text-[11px] opacity-50">
@@ -330,7 +330,7 @@ export default function GymClient() {
             {!history?.sessions?.length ? (
               <p className="text-xs opacity-60">Nothing logged yet.</p>
             ) : history.sessions.map((s: any) => (
-              <div key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs border-t border-[#1f5c33] pt-2 first:border-0">
+              <div key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs border-t border-(--j-dim) pt-2 first:border-0">
                 <span className="font-bold">{s.dayKey || "Session"}</span>
                 <span className="opacity-60">{when(s.startedAt)}</span>
                 <span className="opacity-60">{s.sets} sets</span>
@@ -461,11 +461,11 @@ function ProgrammeCard({ p, lifts, live, onSwapped, onEnd, onDelete }: {
         <span className="text-xs opacity-60">
           {p.plan.days.length} days · {p.weeks} weeks · {when(p.createdAt)} · for {goalLabel(p.goal as GoalKey).toLowerCase()}
         </span>
-        {live ? <span className="text-xs text-[#33ff66]">● RUNNING</span> : <span className="text-xs opacity-40">finished</span>}
+        {live ? <span className="text-xs text-(--j-acc)">● RUNNING</span> : <span className="text-xs opacity-40">finished</span>}
       </button>
       {open && (
-        <div className="px-4 pb-4 space-y-3 border-t border-[#1f5c33] pt-3">
-          {p.plan.notes && <p className="text-xs opacity-70 border border-[#1f5c33] rounded px-3 py-2">💡 {p.plan.notes}</p>}
+        <div className="px-4 pb-4 space-y-3 border-t border-(--j-dim) pt-3">
+          {p.plan.notes && <p className="text-xs opacity-70 border border-(--j-dim) rounded px-3 py-2">💡 {p.plan.notes}</p>}
           {p.brief && <p className="text-xs opacity-60">Asked for: {p.brief}</p>}
           {asked > 0 && asked !== p.plan.days.length && (
             <p className="text-xs text-amber-400">
@@ -475,7 +475,7 @@ function ProgrammeCard({ p, lifts, live, onSwapped, onEnd, onDelete }: {
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {p.plan.days.map(d => (
-              <div key={d.day} className="border border-[#1f5c33] rounded-lg p-3 space-y-2">
+              <div key={d.day} className="border border-(--j-dim) rounded-lg p-3 space-y-2">
                 <div className="text-[10px] tracking-widest opacity-60">{d.name.toUpperCase()}{d.estimatedMinutes ? ` · ~${d.estimatedMinutes} MIN` : ""}</div>
                 <ul className="text-xs space-y-1">
                   {d.exercises.map((e, i) => (

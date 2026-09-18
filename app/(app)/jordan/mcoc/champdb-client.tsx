@@ -12,7 +12,8 @@ import type { Champ } from "./mcoc-hub"
 // abilities breakdown, best counters, defender notes). Click a champion in the
 // browse list to expand its full spotlight-style detail.
 
-const GREEN = "#33ff66"
+const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 // A re-scan (Update meta) persists its staleBefore here so it can RESUME after a
 // stop (rate limits / closed tab) instead of redoing every champion.
 const RESCAN_KEY = "mcoc_meta_rescan_at"
@@ -245,11 +246,11 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto font-mono space-y-4" style={{ color: GREEN }}>
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font space-y-4" style={{ color: TEXT }}>
       <datalist id="champdb-roster">
         {rosterNames.map((n) => <option key={n} value={n} />)}
       </datalist>
-      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
+      <div className="border border-(--j-dim) rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm opacity-70">Build the all-champions database that powers instant counters. Grounded (live meta) — the build takes a while; leave it running.</p>
           <ModelPicker />
@@ -257,10 +258,10 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
 
         {status && (
           <div className="text-sm">
-            <p>{status.total} champions catalogued · <span className="text-[#33ff66] font-bold">{status.profiled} profiled</span>{status.unbuilt > 0 ? ` · ${status.unbuilt} to build` : ""}</p>
+            <p>{status.total} champions catalogued · <span className="text-(--j-acc) font-bold">{status.profiled} profiled</span>{status.unbuilt > 0 ? ` · ${status.unbuilt} to build` : ""}</p>
             {status.total > 0 && (
-              <div className="h-2 rounded-full bg-[#0a2214] overflow-hidden mt-1.5 border border-[#1f5c33]">
-                <div className="h-full bg-[#33ff66] transition-all" style={{ width: `${pct}%` }} />
+              <div className="h-2 rounded-full bg-(--j-glow) overflow-hidden mt-1.5 border border-(--j-dim)">
+                <div className="h-full bg-(--j-acc) transition-all" style={{ width: `${pct}%` }} />
               </div>
             )}
           </div>
@@ -268,21 +269,21 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
 
         <div className="flex gap-2 flex-wrap">
           <button onClick={buildList} disabled={busy}
-            className="px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors">
+            className="px-4 py-2 rounded-lg border border-(--j-acc) text-sm font-bold hover:bg-(--j-glow) disabled:opacity-40 transition-colors">
             ① Build champion list
           </button>
           <button onClick={() => buildProfiles(false)} disabled={busy || !status?.total}
-            className="px-4 py-2 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors" style={{ background: GREEN }}>
+            className="px-4 py-2 rounded-lg text-sm font-bold text-(--j-on-acc) disabled:opacity-40 transition-colors" style={{ background: GREEN }}>
             ② Build profiles{status && status.unbuilt > 0 ? ` (${status.unbuilt})` : ""}
           </button>
           <button onClick={() => buildProfiles(true)} disabled={busy || !status?.profiled}
-            className="px-4 py-2 rounded-lg border text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors"
-            style={{ borderColor: metaPending ? GREEN : "#1f5c33" }}>
+            className="px-4 py-2 rounded-lg border text-sm hover:border-(--j-acc) disabled:opacity-40 transition-colors"
+            style={{ borderColor: metaPending ? GREEN : "var(--j-dim)" }}>
             {metaPending ? "▶ Resume update meta" : "🔄 Update meta (re-scan all)"}
           </button>
           {metaPending && !busy && (
             <button onClick={clearRescan}
-              className="px-3 py-2 rounded-lg border border-[#1f5c33] text-xs opacity-60 hover:opacity-100 transition-opacity">
+              className="px-3 py-2 rounded-lg border border-(--j-dim) text-xs opacity-60 hover:opacity-100 transition-opacity">
               ✕ start fresh
             </button>
           )}
@@ -290,15 +291,15 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
         {msg && <p className={`text-xs ${msg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{busy && <span className="animate-pulse">▮ </span>}{msg}</p>}
         {prog && prog.total > 0 ? (
           <div className="space-y-1">
-            <div className="h-2.5 rounded-full bg-[#0a2214] overflow-hidden border border-[#1f5c33]">
-              <div className="h-full bg-[#33ff66] transition-all duration-500" style={{ width: `${Math.round((prog.done / prog.total) * 100)}%` }} />
+            <div className="h-2.5 rounded-full bg-(--j-glow) overflow-hidden border border-(--j-dim)">
+              <div className="h-full bg-(--j-acc) transition-all duration-500" style={{ width: `${Math.round((prog.done / prog.total) * 100)}%` }} />
             </div>
             <p className="text-[10px] opacity-60 text-right">{Math.round((prog.done / prog.total) * 100)}% · {prog.done}/{prog.total}</p>
           </div>
         ) : busy ? (
           // Indeterminate — the first batch can take 20–40s before it reports back.
-          <div className="h-2.5 rounded-full bg-[#0a2214] overflow-hidden border border-[#1f5c33] relative">
-            <div className="absolute inset-y-0 w-1/3 bg-[#33ff66] rounded-full champdb-indet" />
+          <div className="h-2.5 rounded-full bg-(--j-glow) overflow-hidden border border-(--j-dim) relative">
+            <div className="absolute inset-y-0 w-1/3 bg-(--j-acc) rounded-full champdb-indet" />
           </div>
         ) : null}
         <style>{`@keyframes champdbIndet { 0%{left:-35%} 100%{left:100%} } .champdb-indet{ animation: champdbIndet 1.15s ease-in-out infinite; }`}</style>
@@ -311,20 +312,20 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
           <span className="text-[10px] text-amber-400/80">· {dupHint.size} flagged ⚠ as a possible duplicate — delete the junk ones with 🗑</span>
         )}
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. nullify, incinerate, Hercules…"
-          className="bg-black border border-[#1f5c33] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33] ml-auto w-64" style={{ color: GREEN }} />
+          className="bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim) ml-auto w-64" style={{ color: TEXT }} />
       </div>
 
       <div className="space-y-1.5">
         {shown.map((c) => {
           const isOpen = open === c.name
           return (
-            <div key={c.name} className={`border rounded-lg px-3 py-2 ${isOpen ? "border-[#33ff66]" : dupHint.has(c.name) ? "border-amber-700/50" : "border-[#1f5c33]"}`}>
+            <div key={c.name} className={`border rounded-lg px-3 py-2 ${isOpen ? "border-(--j-acc)" : dupHint.has(c.name) ? "border-amber-700/50" : "border-(--j-dim)"}`}>
               <div className="flex items-start gap-2">
                 <button onClick={() => { setDbAdd(""); setOpen(isOpen ? null : c.name) }} className="flex-1 min-w-0 text-left">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-white">{c.name}</span>
+                    <span className="text-sm font-bold text-(--j-hi)">{c.name}</span>
                     {c.class && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: classColour(c.class), borderColor: classColour(c.class) + "88" }}>{c.class}</span>}
-                    {ownedByName.has(normChampName(c.name)) && <span className="text-[10px] text-[#33ff66]">✓ owned</span>}
+                    {ownedByName.has(normChampName(c.name)) && <span className="text-[10px] text-(--j-acc)">✓ owned</span>}
                     {!c.profileAt && <span className="text-[10px] opacity-40">not profiled yet</span>}
                     {dupHint.has(c.name) && (
                       <span className="text-[10px] text-amber-400" title={`Might be the same champion as: ${dupHint.get(c.name)!.join(", ")}. If it's a duplicate, delete it — if it's a real separate champ, leave it.`}>
@@ -342,7 +343,7 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
                       {delBusy === c.name ? "…" : "Delete?"}
                     </button>
                     <button onClick={() => setConfirmDel(null)} disabled={delBusy === c.name}
-                      className="text-[10px] px-2 py-0.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">No</button>
+                      className="text-[10px] px-2 py-0.5 rounded border border-(--j-dim) opacity-60 hover:opacity-100 transition-opacity">No</button>
                   </span>
                 ) : (
                   <button onClick={() => setConfirmDel(c.name)} title="Delete this entry from the Champion DB"
@@ -352,14 +353,14 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
               </div>
 
               {isOpen && (
-                <div className="mt-2 space-y-3 border-t border-[#1f5c33] pt-2">
+                <div className="mt-2 space-y-3 border-t border-(--j-dim) pt-2">
                   {c.summary && <p className="text-xs opacity-80">{c.summary}</p>}
                   {c.defenderNotes && <p className="text-xs text-amber-300">⚠ On defence: {c.defenderNotes}</p>}
 
                   {(c.immunities.length > 0 || c.tags.length > 0) && (
                     <div className="flex flex-wrap gap-1">
                       {c.immunities.map((t) => <span key={"i" + t} className="text-[10px] px-1.5 py-0.5 rounded border border-sky-700/60 text-sky-300">🛡 {t}</span>)}
-                      {c.tags.map((t) => <span key={"t" + t} className="text-[10px] px-1.5 py-0.5 rounded border border-[#1f5c33] opacity-80">{t}</span>)}
+                      {c.tags.map((t) => <span key={"t" + t} className="text-[10px] px-1.5 py-0.5 rounded border border-(--j-dim) opacity-80">{t}</span>)}
                     </div>
                   )}
 
@@ -369,10 +370,10 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
                       {(c.myCounters ?? []).map((n) => {
                         const owned = ownedByName.get(normChampName(n))
                         return (
-                          <span key={n} className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#8a6d1a] text-white">
+                          <span key={n} className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#8a6d1a] text-(--j-hi)">
                             {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
                             {n}
-                            {owned && <span className="text-[9px] text-[#33ff66]">{owned.stars}★R{owned.rank}</span>}
+                            {owned && <span className="text-[9px] text-(--j-acc)">{owned.stars}★R{owned.rank}</span>}
                             <button onClick={() => removeMy(c.name, c.myCounters ?? [], n)} className="text-[#ffd23f]/60 hover:text-red-400 ml-0.5 leading-none" title="Remove">×</button>
                           </span>
                         )
@@ -383,7 +384,7 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
                         onChange={(e) => setDbAdd(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addMy(c.name, c.myCounters ?? [], dbAdd) } }}
                         placeholder="+ add your counter"
-                        className="bg-black border border-[#8a6d1a]/60 rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-[#ffd23f] placeholder:text-[#8a6d1a] w-40"
+                        className="bg-(--j-bg) border border-[#8a6d1a]/60 rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-[#ffd23f] placeholder:text-[#8a6d1a] w-40"
                         style={{ color: "#ffd23f" }}
                       />
                       {dbAdd.trim() && (
@@ -400,10 +401,10 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
                         {c.counters.map((n) => {
                           const owned = ownedByName.get(normChampName(n))
                           return (
-                            <span key={n} className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border ${owned ? "border-[#33ff66] text-white" : "border-[#1f5c33] opacity-60"}`}>
+                            <span key={n} className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border ${owned ? "border-(--j-acc) text-(--j-hi)" : "border-(--j-dim) opacity-60"}`}>
                               {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
                               {n}
-                              {owned && <span className="text-[9px] text-[#33ff66]">{owned.stars}★R{owned.rank}</span>}
+                              {owned && <span className="text-[9px] text-(--j-acc)">{owned.stars}★R{owned.rank}</span>}
                             </span>
                           )
                         })}
@@ -415,7 +416,7 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
                     <div className="space-y-2">
                       <p className="text-[10px] uppercase tracking-widest opacity-50">Abilities</p>
                       {c.abilities.map((a, i) => (
-                        <div key={i} className="border border-[#1f5c33] rounded-lg p-2.5">
+                        <div key={i} className="border border-(--j-dim) rounded-lg p-2.5">
                           <p className="text-xs font-bold text-[#b8ff66] uppercase tracking-wide mb-1">{a.name}</p>
                           <ul className="space-y-0.5">
                             {a.details.map((d, j) => (

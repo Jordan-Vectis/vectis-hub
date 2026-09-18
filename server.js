@@ -116,10 +116,22 @@ app.prepare().then(async () => {
       return
     }
 
-    // Background warehouse sync — runs every 12 hours.
-    // First run is delayed 2 minutes to let Next.js finish initialising.
-    const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000
-    const SYNC_INITIAL_DELAY_MS = 2 * 60 * 1000
+    // ⚠ The cron routes below ANSWER AT ONCE and run their work in the background (2026-09-18).
+    // They used to hold the request open for the whole job, and Node's fetch gives up waiting for
+    // headers after 300 s — so every long job printed "fetch failed" while it carried on and
+    // finished. Each route now logs its own result; these lines only say whether it STARTED.
+    // `e.cause?.code` is printed because "fetch failed" on its own can't tell a timeout
+    // (UND_ERR_HEADERS_TIMEOUT) from a server that is down (ECONNREFUSED).
+    const why = (e) => `${e.message}${e.cause?.code ? ` (${e.cause.code})` : ''}`
+
+    // Incremental warehouse sync — 11:00 and 17:00 London, catching up through the working day.
+    //
+    // ⚠⚠ FIXED TIMES, not "every 12 hours from boot" (changed 2026-09-18). Counting from boot put
+    // it wherever Railway last deployed, and after one deploy it landed on top of the 05:00 FULL:
+    // two walks at once in one 10-connection pool, which turned the Status Centre's database light
+    // at five in the morning. The FULL covers overnight, so nothing is lost by not running then.
+    // (The route also holds an in-process lock, so an overlap can't happen even if these move.)
+    const INCREMENTAL_LONDON_HOURS = [11, 17]
     function runWarehouseSync() {
       const secret = process.env.CRON_SECRET
       if (!secret) { console.warn('[cron] CRON_SECRET not set — skipping warehouse sync') ; return }
@@ -129,13 +141,19 @@ app.prepare().then(async () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
       })
         .then(r => r.json())
-        .then(d => console.log('[cron/bc-warehouse] complete', JSON.stringify(d.results ?? {})))
-        .catch(e => console.warn('[cron/bc-warehouse] error:', e.message))
+        .then(d => console.log(d.started
+          ? '[cron/bc-warehouse] started — it logs its own result when it finishes'
+          : `[cron/bc-warehouse] not started — ${d.skipped ?? d.error ?? 'no reason given'}`))
+        .catch(e => console.warn('[cron/bc-warehouse] could not start:', why(e)))
     }
-    setTimeout(() => {
-      runWarehouseSync()
-      setInterval(runWarehouseSync, SYNC_INTERVAL_MS)
-    }, SYNC_INITIAL_DELAY_MS)
+    function scheduleWarehouseSync() {
+      const wait = Math.min(...INCREMENTAL_LONDON_HOURS.map(msUntilLondonHour))
+      console.log(`[cron/bc-warehouse] next incremental sync in ${Math.round(wait / 1000 / 60)} minutes`)
+      // Re-armed a minute AFTER firing, so a timer landing a hair early can't compute "0 ms to
+      // go" and fire the same hour twice.
+      setTimeout(() => { runWarehouseSync(); setTimeout(scheduleWarehouseSync, 60 * 1000) }, wait)
+    }
+    scheduleWarehouseSync()
 
     // Full warehouse re-sync — 05:00 UK, an hour after the overnight BC macro finishes.
     //
@@ -160,19 +178,35 @@ app.prepare().then(async () => {
       const delta = secsTarget - secsNow
       return (delta > 0 ? delta : delta + 24 * 3600) * 1000
     }
+    // ⚠ If the FULL can't start (another sync is still running), it tries again in 10 minutes
+    // rather than waiting until tomorrow — the whole point of the 05:00 run is that the morning's
+    // BC Match starts from a complete copy. Capped at six tries, then it waits for the next day.
+    let fullRetries = 0
     function runFullWarehouseSync() {
       const secret = process.env.CRON_SECRET
       if (!secret) { console.warn('[cron] CRON_SECRET not set — skipping full warehouse sync') ; return }
       console.log('[cron/bc-warehouse] starting FULL sync')
+      const tomorrow = () => { fullRetries = 0; setTimeout(runFullWarehouseSync, msUntilLondonHour(5)) }
+      const retrySoon = (reason) => {
+        if (++fullRetries > 6) { console.warn(`[cron/bc-warehouse] FULL gave up for today — ${reason}`); return tomorrow() }
+        console.warn(`[cron/bc-warehouse] FULL waiting — ${reason}; trying again in 10 minutes (${fullRetries}/6)`)
+        setTimeout(runFullWarehouseSync, 10 * 60 * 1000)
+      }
       fetch(`http://localhost:${port}/api/cron/bc-warehouse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
         body: JSON.stringify({ full: true }),
       })
         .then(r => r.json())
-        .then(d => console.log('[cron/bc-warehouse] FULL complete', JSON.stringify(d.results ?? d)))
-        .catch(e => console.warn('[cron/bc-warehouse] FULL error:', e.message))
-        .finally(() => setTimeout(runFullWarehouseSync, msUntilLondonHour(5)))
+        .then(d => {
+          if (d.started) {
+            console.log('[cron/bc-warehouse] FULL started — it logs its own result when it finishes')
+            tomorrow()
+          } else {
+            retrySoon(d.skipped ?? d.error ?? 'did not start')
+          }
+        })
+        .catch(e => retrySoon(`could not reach the route: ${why(e)}`))
     }
     {
       const wait = msUntilLondonHour(5)
@@ -208,11 +242,13 @@ app.prepare().then(async () => {
     // every 30s keeps the gap between slices small, and a tick is a cheap no-op
     // whenever a slice is already in flight or the queue is empty.
     const PIPELINE_TICK_MS = 30 * 1000
+    // ⚠ This flag now only covers the tick's own few-millisecond request. It is NOT the guard
+    // against two slices on one sale — it used to be, and it dropped at the 300 s fetch timeout
+    // while the slice ran on. The real guard is the in-process lock in lib/pipeline-runner.ts.
     let pipelineTickBusy = false
     function runPipelineQueue() {
       const secret = process.env.CRON_SECRET
       if (!secret) return   // silent: this loop ticks constantly, unlike the others
-      // A slice outlives the tick interval, so guard here as well as in the DB.
       if (pipelineTickBusy) return
       pipelineTickBusy = true
       fetch(`http://localhost:${port}/api/cron/pipeline-queue`, {
@@ -220,8 +256,9 @@ app.prepare().then(async () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
       })
         .then(r => r.json())
-        .then(d => { if (d && d.ran) console.log(`[cron/pipeline-queue] ${d.code}: ${d.message} (${d.done}/${d.total}, ${d.stage})`) })
-        .catch(e => console.warn('[cron/pipeline-queue] error:', e.message))
+        // Silent on success: the route only STARTS a slice now, and the slice logs its own outcome.
+        .then(d => { if (d && d.error) console.warn('[cron/pipeline-queue] error:', d.error) })
+        .catch(e => console.warn('[cron/pipeline-queue] could not start a slice:', why(e)))
         .finally(() => { pipelineTickBusy = false })
     }
     setTimeout(() => {

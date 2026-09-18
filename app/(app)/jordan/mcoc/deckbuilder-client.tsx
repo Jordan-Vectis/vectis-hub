@@ -11,7 +11,8 @@ import type { Champ } from "./mcoc-hub"
 // recommended full deck built from the roster, with an "apply as my BGS deck"
 // button.
 
-const GREEN = "#33ff66"
+const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 
 type DeckEntry = { champion: string; role: "Attacker" | "Defender" | "Flex"; why: string }
 type Result = { deck: DeckEntry[]; strategy: string; watchouts: string }
@@ -71,8 +72,8 @@ export default function DeckBuilderClient({ roster }: { roster: Champ[] }) {
   const matchedCount = result ? result.deck.filter((d) => ownedByName.has(normChampName(d.champion))).length : 0
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto font-mono" style={{ color: GREEN }}>
-      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-4">
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: TEXT }}>
+      <div className="border border-(--j-dim) rounded-xl p-4 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm opacity-70">Photograph this Battlegrounds season&apos;s nodes/meta screen — get a full deck recommendation from YOUR roster.</p>
           <ModelPicker />
@@ -80,17 +81,17 @@ export default function DeckBuilderClient({ roster }: { roster: Champ[] }) {
 
         <div className="flex gap-2 items-center flex-wrap">
           <button onClick={() => fileInput.current?.click()} disabled={busy}
-            className="px-4 py-2.5 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors">
+            className="px-4 py-2.5 rounded-lg border border-(--j-acc) text-sm font-bold hover:bg-(--j-glow) disabled:opacity-40 transition-colors">
             📷 {file ? "Change nodes photo" : "Nodes / meta photo"}
           </button>
           <label className="text-xs opacity-70 inline-flex items-center gap-1.5">Deck size
             <select value={size} onChange={(e) => setSize(Number(e.target.value))}
-              className="bg-black border border-[#1f5c33] rounded px-2 py-1 text-xs" style={{ color: GREEN }}>
+              className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs" style={{ color: TEXT }}>
               {[30, 25, 20, 15].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
           <button onClick={build} disabled={busy || (!file && !notes.trim()) || roster.length < size}
-            className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors ml-auto"
+            className="px-5 py-2.5 rounded-lg text-sm font-bold text-(--j-on-acc) disabled:opacity-40 transition-colors ml-auto"
             style={{ background: GREEN }}>
             {busy ? "BUILDING…" : "🃏 BUILD DECK"}
           </button>
@@ -98,26 +99,26 @@ export default function DeckBuilderClient({ roster }: { roster: Champ[] }) {
 
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
           placeholder="Optional — describe the season meta/nodes if you don't have a screenshot…"
-          className="w-full bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
-          style={{ color: GREEN }} />
+          className="w-full bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
+          style={{ color: TEXT }} />
 
         {roster.length < size && <p className="text-xs text-amber-400">Your roster has {roster.length} champs — add more (or drop the deck size) to build a {size}-champ deck.</p>}
-        {preview && <img src={preview} alt="Season nodes" className="max-h-48 rounded-lg border border-[#1f5c33]" />}
+        {preview && <img src={preview} alt="Season nodes" className="max-h-48 rounded-lg border border-(--j-dim)" />}
         {error && <p className="text-sm text-red-400">✗ {error}</p>}
         {busy && <p className="text-sm opacity-60 animate-pulse">Reading the season, weighing your roster… this one takes a minute.</p>}
 
         {result && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 flex-wrap border-t border-[#1f5c33] pt-3">
-              <p className="text-sm font-bold text-white">Recommended deck — {result.deck.length} champs</p>
+            <div className="flex items-center gap-2 flex-wrap border-t border-(--j-dim) pt-3">
+              <p className="text-sm font-bold text-(--j-hi)">Recommended deck — {result.deck.length} champs</p>
               <button onClick={applyDeck} disabled={applied}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold text-black disabled:opacity-50 ml-auto" style={{ background: GREEN }}>
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-(--j-on-acc) disabled:opacity-50 ml-auto" style={{ background: GREEN }}>
                 {applied ? `✓ Applied (${matchedCount})` : `★ Set as my BGS deck (${matchedCount})`}
               </button>
             </div>
 
             {result.strategy && (
-              <div className="border border-[#33ff66] rounded-lg p-3">
+              <div className="border border-(--j-acc) rounded-lg p-3">
                 <p className="text-[10px] opacity-50 uppercase tracking-widest mb-1">Season strategy</p>
                 <p className="text-sm">{result.strategy}</p>
               </div>
@@ -133,10 +134,10 @@ export default function DeckBuilderClient({ roster }: { roster: Champ[] }) {
                     {group.map((d, i) => {
                       const owned = ownedByName.get(normChampName(d.champion))
                       return (
-                        <div key={i} className="flex items-start gap-2 border border-[#1f5c33] rounded-lg px-2.5 py-1.5">
+                        <div key={i} className="flex items-start gap-2 border border-(--j-dim) rounded-lg px-2.5 py-1.5">
                           {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={24} height={24} className="rounded object-cover mt-0.5" style={{ boxShadow: `0 0 0 1.5px ${classColour(owned.class)}` }} />}
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-white">{d.champion} {owned && <span className="text-[10px] font-normal opacity-50">{owned.stars}★ R{owned.rank}</span>}{!owned && <span className="text-[10px] text-amber-400 font-normal"> ⚠ not matched to your roster</span>}</p>
+                            <p className="text-sm font-bold text-(--j-hi)">{d.champion} {owned && <span className="text-[10px] font-normal opacity-50">{owned.stars}★ R{owned.rank}</span>}{!owned && <span className="text-[10px] text-amber-400 font-normal"> ⚠ not matched to your roster</span>}</p>
                             {d.why && <p className="text-xs opacity-70">{d.why}</p>}
                           </div>
                         </div>

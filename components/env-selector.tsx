@@ -29,15 +29,17 @@ export default function EnvSelector() {
   }, [])
 
   return (
-    <div ref={ref} className="relative">
+    // Phones: shorter label, and the list hangs from the top bar itself (see help-button.tsx).
+    <div ref={ref} className="relative max-sm:static">
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-gray-400 hover:text-white text-sm transition-colors"
+        aria-label="Environments"
+        className="text-gray-400 hover:text-white text-sm transition-colors whitespace-nowrap"
       >
-        Environments ▾
+        <span className="max-sm:hidden">Environments</span><span className="sm:hidden">Env</span> ▾
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-40 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 py-1">
+        <div className="absolute right-0 mt-1 w-40 max-sm:top-full max-sm:right-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 py-1">
           {ENVIRONMENTS.map(env => (
             <a
               key={env.name}

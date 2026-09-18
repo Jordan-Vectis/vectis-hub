@@ -49,6 +49,37 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // ⚠⚠ The check above only SAMPLES: each stage writes its own "running" row just while its one
+  // request is in flight, so between stages it sees nothing — and on 2026-09-18 the 12-hourly
+  // incremental ran on top of the 05:00 FULL, two walks in one 10-connection pool, which is what
+  // turned the Status Centre's database light at five in the morning. This lock is taken
+  // synchronously and held for the whole walk, so two cron syncs can never overlap in this process.
+  const cur = lockBox.__warehouseCronLock
+  if (cur && Date.now() - cur.startedAt < LOCK_MAX_AGE_MS) {
+    return NextResponse.json({
+      ok: false,
+      skipped: `The ${cur.full ? "FULL" : "incremental"} cron sync started at ${new Date(cur.startedAt).toISOString()} is still running.`,
+    })
+  }
+  const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  lockBox.__warehouseCronLock = { token, startedAt: Date.now(), full }
+
+  // ⚠⚠ ANSWER AT ONCE and let the walk run on (2026-09-18). A FULL walk takes far longer than
+  // Node's 300 s fetch headers timeout, so server.js's wait ended in "FULL error: fetch failed"
+  // every single morning while the walk carried on and finished — a false alarm that would have
+  // looked identical to a real failure. runSync logs its own result, as it always did.
+  void runSync(full, secret)
+    .catch(e => console.error(`[cron/bc-warehouse]${full ? " FULL" : ""} failed:`, e))
+    .finally(() => { if (lockBox.__warehouseCronLock?.token === token) lockBox.__warehouseCronLock = undefined })
+  return NextResponse.json({ ok: true, started: true, full }, { status: 202 })
+}
+
+/** A cron walk older than this is treated as dead rather than blocking for ever — the same
+ *  three hours the WarehouseSyncLog check above already uses. */
+const LOCK_MAX_AGE_MS = 3 * 60 * 60 * 1000
+const lockBox = globalThis as unknown as { __warehouseCronLock?: { token: string; startedAt: number; full: boolean } }
+
+async function runSync(full: boolean, secret: string): Promise<void> {
   const base    = `http://localhost:${process.env.PORT ?? 3000}`
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${secret}` }
   const results: Record<string, any> = {}
@@ -228,6 +259,5 @@ export async function POST(req: NextRequest) {
     if (!results.reconcileDeleted) results.reconcileDeleted = { removed: rdItems, passes: rdPasses }
   }
 
-  console.log(`[cron/bc-warehouse]${full ? " FULL" : ""}`, JSON.stringify(results))
-  return NextResponse.json({ ok: true, full, results })
+  console.log(`[cron/bc-warehouse]${full ? " FULL" : ""} finished`, JSON.stringify(results))
 }

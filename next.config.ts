@@ -15,9 +15,13 @@ const nextConfig: NextConfig = {
     // request body so it can be read twice — capped at 10MB by DEFAULT. A photo
     // upload past that is silently TRUNCATED, the multipart parser then throws
     // "Unexpected end of form", and because server.js installs no uncaughtException
-    // handler the whole process goes down with it — which is what the burst of
-    // "[cron/pipeline-queue] error: fetch failed" lines around it actually is: the
-    // overnight runner failing to reach a server that is restarting.
+    // handler the whole process goes down with it — a burst of "could not start a
+    // slice … (ECONNREFUSED)" lines from the pipeline tick around it is the overnight
+    // runner failing to reach a server that is restarting.
+    // ⚠ Not every "fetch failed" was that. Until 2026-09-18 the cron routes held their
+    // request open for the whole job, and Node's 300 s fetch timeout printed one
+    // "fetch failed" per ~9-minute pipeline slice with NO restart at all — look for a
+    // "> Vectis Hub ready" line before blaming a crash. The cause code is logged now.
     // Matched to the server action limit so one number governs an upload.
     // ⚠ The runtime warning still names the OLD key (middlewareClientMaxBodySize).
     // It was renamed to this one — see node_modules/next/dist/docs/01-app/02-guides/

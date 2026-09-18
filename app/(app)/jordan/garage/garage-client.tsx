@@ -5,10 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react"
 // JORDAN.SYS → GARAGE. Private to /jordan. A handful of cars, what is due when,
 // and the history of everything done to them. Past cars keep their records.
 
-const box   = "border border-[#1f5c33] rounded-lg bg-[#040f08]"
-const input = "w-full bg-black border border-[#1f5c33] rounded px-2.5 py-1.5 text-sm text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]"
-const btn   = "px-3 py-1.5 text-xs border border-[#1f5c33] rounded hover:bg-[#0a2214] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-const btnGo = "px-4 py-2 text-sm font-bold rounded bg-[#33ff66] text-black hover:bg-[#5cff88] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const box   = "border border-(--j-dim) rounded-lg bg-(--j-box)"
+const input = "w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)"
+const btn   = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const btnGo = "px-4 py-2 text-sm font-bold rounded bg-(--j-acc) text-(--j-on-acc) hover:bg-(--j-acc-hi) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
 const KINDS = ["MOT", "SERVICE", "REPAIR", "TAX", "INSURANCE", "OTHER"] as const
 const KIND_LABEL: Record<string, string> = {
@@ -50,7 +50,7 @@ function dueTone(d: string | null): { colour: string; label: string } {
   if (n < 0)      return { colour: "#ff5c5c", label: `${Math.abs(n)} day${Math.abs(n) === 1 ? "" : "s"} overdue` }
   if (n === 0)    return { colour: "#ff5c5c", label: "today" }
   if (n <= 30)    return { colour: "#ffc94d", label: `in ${n} day${n === 1 ? "" : "s"}` }
-  return { colour: "#33ff66", label: `in ${n} days` }
+  return { colour: "var(--j-ok)", label: `in ${n} days` }
 }
 
 export default function GarageClient() {
@@ -163,7 +163,7 @@ function DueStrip({ cars, onOpen }: { cars: Car[]; onOpen: (id: string) => void 
           const t = dueTone(i.when)
           return (
             <button key={n} onClick={() => onOpen(i.car.id)}
-              className="px-3 py-1.5 text-xs rounded border hover:bg-[#0a2214] transition-colors"
+              className="px-3 py-1.5 text-xs rounded border hover:bg-(--j-glow) transition-colors"
               style={{ borderColor: t.colour, color: t.colour }}>
               {i.car.nickname || i.car.reg || "Car"} · {i.what} <span className="opacity-70">{t.label}</span>
             </button>
@@ -237,11 +237,11 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy }: {
 
   return (
     <div className={box}>
-      <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[#0a2214] transition-colors">
+      <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-(--j-glow) transition-colors">
         {car.photoKey
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={fileUrl(car.photoKey)} alt="" className="w-16 h-12 object-cover rounded border border-[#1f5c33]" />
-          : <span className="w-16 h-12 rounded border border-[#123d22] grid place-items-center text-[10px] opacity-40">no photo</span>}
+          ? <img src={fileUrl(car.photoKey)} alt="" className="w-16 h-12 object-cover rounded border border-(--j-dim)" />
+          : <span className="w-16 h-12 rounded border border-(--j-dim2) grid place-items-center text-[10px] opacity-40">no photo</span>}
         <span className="min-w-0 flex-1">
           <span className="block font-bold">{title}</span>
           {sub && <span className="block text-xs opacity-50">{sub}</span>}
@@ -357,7 +357,7 @@ function History({ car, onChanged, onError }: { car: Car; onChanged: () => void;
   }
 
   return (
-    <div className="border-t border-[#123d22] pt-3">
+    <div className="border-t border-(--j-dim2) pt-3">
       <div className="flex items-center justify-between gap-3 mb-2">
         <span className="text-[11px] uppercase tracking-wider opacity-50">
           History ({car.records.length}){total > 0 && <span className="ml-2 opacity-70">spent {money(total)}</span>}
@@ -366,7 +366,7 @@ function History({ car, onChanged, onError }: { car: Car; onChanged: () => void;
       </div>
 
       {adding && (
-        <div className="border border-[#123d22] rounded p-3 space-y-2 mb-3">
+        <div className="border border-(--j-dim2) rounded p-3 space-y-2 mb-3">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <label className="block">
               <span className="block text-[11px] uppercase tracking-wider opacity-50 mb-1">Type</span>
@@ -408,7 +408,7 @@ function History({ car, onChanged, onError }: { car: Car; onChanged: () => void;
       ) : (
         <div className="space-y-1.5">
           {car.records.map(r => (
-            <div key={r.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs border border-[#123d22] rounded px-3 py-2">
+            <div key={r.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs border border-(--j-dim2) rounded px-3 py-2">
               <span className="font-bold" style={{ color: r.result === "FAIL" ? "#ff5c5c" : undefined }}>
                 {KIND_LABEL[r.kind] ?? r.kind}{r.result ? ` · ${r.result === "PASS" ? "Pass" : "Fail"}` : ""}
               </span>

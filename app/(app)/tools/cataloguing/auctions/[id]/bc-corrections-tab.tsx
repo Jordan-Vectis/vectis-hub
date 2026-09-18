@@ -32,7 +32,7 @@ type VerifyStatus = "done" | "not_done" | "different" | "missing"
 type Verify = {
   fileName: string
   rows:     number
-  byLot:    Record<string, { status: VerifyStatus; bcReceipt: string; bcVendor: string }>
+  byLot:    Record<string, { status: VerifyStatus; bcReceipt: string; bcVendor: string; bcUniqueId: string }>
   counts:   Record<VerifyStatus, number>
 }
 
@@ -51,6 +51,15 @@ const VERIFY_TONE: Record<VerifyStatus, string> = {
 }
 
 const nrm = (v: unknown) => String(v ?? "").trim().toLowerCase()
+
+// Where a row's unique ID came from — said on the row, because an ID the Hub does not itself hold
+// must never look like one it does (design rule 3).
+type IdSource = "export" | "sync" | "hub"
+const ID_FROM: Record<IdSource, { tag: string; title: string }> = {
+  export: { tag: "from the export", title: "BC's unique ID, read from the export you loaded — matched on the internal barcode." },
+  sync:   { tag: "from BC sync",    title: "BC's unique ID as at the last Data Sync — matched on the internal barcode. The Hub holds none for this lot because BC Match has not been run on it." },
+  hub:    { tag: "",                title: "The unique ID saved on the lot in the Hub (written by BC Match)." },
+}
 
 // BC's column headings vary between exports, so take the first one that's there.
 function col(row: Record<string, unknown>, ...names: string[]): string {
@@ -101,7 +110,7 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
             const hit = (row.barcode && byBarcode.get(nrm(row.barcode)))
               || (row.receiptUniqueId && byUniqueId.get(nrm(row.receiptUniqueId)))
             if (!hit) {
-              byLot[row.lotId] = { status: "missing", bcReceipt: "", bcVendor: "" }
+              byLot[row.lotId] = { status: "missing", bcReceipt: "", bcVendor: "", bcUniqueId: "" }
               counts.missing++
               continue
             }
@@ -115,7 +124,8 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                            || (!!row.oldVendor  && nrm(bcVendor)  === nrm(row.oldVendor))
 
             const status: VerifyStatus = receiptOk && vendorOk ? "done" : stillOld ? "not_done" : "different"
-            byLot[row.lotId] = { status, bcReceipt, bcVendor }
+            // The ID BC holds for this line RIGHT NOW — fresher than the last Data Sync.
+            byLot[row.lotId] = { status, bcReceipt, bcVendor, bcUniqueId: col(hit, "UniqueID", "Unique ID", "EVA_UniqueID") }
             counts[status]++
           }
         }
@@ -168,7 +178,21 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
   function idsFor(g: BcCorrectionGroup): string[] {
     const left = g.rows.filter(r => !r.done)
     const use  = left.length > 0 ? left : g.rows
-    return use.map(r => (r.receiptUniqueId ?? "").trim()).filter(Boolean)
+    return use.map(r => idFor(r)?.id ?? "").filter(Boolean)
+  }
+
+  // ⚠⚠ The ID BC's dialog needs is the one BC holds NOW — and the Hub's own receiptUniqueId is
+  // BLANK until BC Match has been run on the sale (the Hub never mints one). It used to be the only
+  // source, so a sale that went into BC wrong and was never matched read "Copy 0 IDs" on the one
+  // screen built for copying them (Jordan, 2026-09-18, F134: 45 of 47). Freshest first: the export
+  // just loaded, then the last Data Sync (matched on BARCODE, server-side), then the Hub's own.
+  function idFor(r: BcCorrectionRow): { id: string; from: IdSource } | null {
+    const fromExport = (verify?.byLot[r.lotId]?.bcUniqueId ?? "").trim()
+    if (fromExport) return { id: fromExport, from: "export" }
+    const fromSync = (r.bcUniqueId ?? "").trim()
+    if (fromSync) return { id: fromSync, from: "sync" }
+    const own = (r.receiptUniqueId ?? "").trim()
+    return own ? { id: own, from: "hub" } : null
   }
 
   const load = useCallback(() => {
@@ -375,7 +399,7 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                     <button
                       onClick={() => copy(ids.join("|"), `${g.key}:ids`)}
                       disabled={ids.length === 0}
-                      title="Copies the unique IDs still to do, pipe-separated, ready for the UniqueID filter in BC's Transfer/Copy Receipt Line dialog."
+                      title="Copies the unique IDs still to do, pipe-separated, ready for the UniqueID filter in BC's Transfer/Copy Receipt Line dialog. Each is BC's own ID — from a loaded export, else the last Data Sync (matched on barcode), else the lot's own."
                       className="text-xs font-semibold px-2.5 py-1 rounded border transition-colors disabled:opacity-40 border-[#2AB4A6]/60 text-[#2AB4A6] hover:bg-[#2AB4A6]/10">
                       {copied === `${g.key}:ids` ? "✓ Copied" : `⧉ Copy ${ids.length} ID${ids.length === 1 ? "" : "s"}`}
                     </button>
@@ -399,7 +423,7 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                   </div>
                   {noId > 0 && (
                     <p className="w-full text-xs text-amber-500">
-                      ⚠ {noId} of these {noId === 1 ? "has" : "have"} no unique ID, so {noId === 1 ? "it isn't" : "they aren't"} in the copied list — those need doing by barcode.
+                      ⚠ {noId} of these {noId === 1 ? "has" : "have"} no unique ID anywhere — not on the lot, not in the last Data Sync, not in a loaded export — so {noId === 1 ? "it isn't" : "they aren't"} in the copied list. Load a BC Lines export above, or do {noId === 1 ? "it" : "those"} by barcode.
                     </p>
                   )}
                 </div>
@@ -424,7 +448,18 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                         <td className={`px-4 py-2.5 font-mono text-xs whitespace-nowrap ${r.done ? "line-through text-gray-500" : "font-bold text-gray-800 dark:text-gray-100"}`}>
                           {r.barcode ?? "—"}
                         </td>
-                        <td className="px-4 py-2.5 font-mono text-xs text-cyan-500 whitespace-nowrap">{r.receiptUniqueId ?? "—"}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-cyan-500 whitespace-nowrap">
+                          {(() => {
+                            const x = idFor(r)
+                            if (!x) return "—"
+                            return (
+                              <span title={ID_FROM[x.from].title}>
+                                {x.id}
+                                {ID_FROM[x.from].tag && <span className="ml-1.5 font-sans text-[10px] text-gray-500">{ID_FROM[x.from].tag}</span>}
+                              </span>
+                            )
+                          })()}
+                        </td>
                         <td className="px-4 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{r.tote ?? "—"}</td>
                         {verify && (() => {
                           const v = verify.byLot[r.lotId]

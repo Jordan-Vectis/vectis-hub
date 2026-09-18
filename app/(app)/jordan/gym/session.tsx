@@ -17,8 +17,8 @@ import { platesFor, type LiftInfo, type Suggestion } from "@/lib/jordan-gym"
 // ⚠ A miss is as easy to log as a hit. No "failed" styling: the whole progression rule depends
 //   on honest reps, and a tool that sulks gets lied to.
 
-const box = "border border-[#1f5c33] rounded-lg bg-[#040f08]"
-const btn = "px-3 py-1.5 text-xs border border-[#1f5c33] rounded hover:bg-[#0a2214] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const box = "border border-(--j-dim) rounded-lg bg-(--j-box)"
+const btn = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const label = "block text-[10px] tracking-widest opacity-60 mb-1"
 
 export type DayPlan = {
@@ -312,7 +312,7 @@ export default function Session({
         </div>
       )}
       {error && <div className="border border-red-700 bg-red-950/40 text-red-300 rounded-lg px-3 py-2 text-xs">{error}</div>}
-      {pb && <div className="border border-[#33ff66] rounded-lg px-3 py-2 text-xs font-bold">🏆 {pb}</div>}
+      {pb && <div className="border border-(--j-acc) rounded-lg px-3 py-2 text-xs font-bold">🏆 {pb}</div>}
 
       {/* Which exercise */}
       <div className="flex gap-1 overflow-x-auto pb-1">
@@ -321,7 +321,7 @@ export default function Session({
           const full = done >= e.sets
           return (
             <button key={`${e.liftId}-${i}`} onClick={() => setIdx(i)}
-              className={`shrink-0 min-h-[44px] px-3 rounded border text-xs ${i === idx ? "border-[#33ff66] bg-[#0a2214]" : full ? "border-[#1f5c33] opacity-60" : "border-[#1f5c33]"}`}>
+              className={`shrink-0 min-h-[44px] px-3 rounded border text-xs ${i === idx ? "border-(--j-acc) bg-(--j-glow)" : full ? "border-(--j-dim) opacity-60" : "border-(--j-dim)"}`}>
               {full ? "✓ " : ""}{e.name} <span className="opacity-50">{done}/{e.sets}</span>
             </button>
           )
@@ -352,7 +352,7 @@ export default function Session({
           {swapping && <SwapPicker slug={ex.slug} name={ex.name} onPick={swapExercise} onClose={() => setSwapping(false)} />}
 
           {/* The suggestion, and WHY. */}
-          <div className="border border-[#1f5c33] rounded-lg p-3 space-y-1">
+          <div className="border border-(--j-dim) rounded-lg p-3 space-y-1">
             <div className="text-lg font-bold">
               {ex.suggestion.weightKg != null ? `${kg(ex.suggestion.weightKg)}${ex.perHand ? " each" : ""} × ${ex.suggestion.reps}` : "First time"}
             </div>
@@ -372,19 +372,19 @@ export default function Session({
             <div>
               <span className={label}>WEIGHT{ex.perHand ? " (EACH)" : ""}</span>
               <div className="flex items-stretch gap-1">
-                <button onClick={() => step(-1)} className="w-14 min-h-[56px] rounded border border-[#1f5c33] text-xl hover:bg-[#0a2214]">−</button>
+                <button onClick={() => step(-1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">−</button>
                 <input value={weight} onChange={e => setWeight(e.target.value)} inputMode="decimal" aria-label="weight in kg"
-                  className="flex-1 min-h-[56px] w-full bg-black border border-[#1f5c33] rounded text-center text-2xl font-bold text-[#33ff66] focus:outline-none focus:border-[#33ff66]" />
-                <button onClick={() => step(1)} className="w-14 min-h-[56px] rounded border border-[#1f5c33] text-xl hover:bg-[#0a2214]">+</button>
+                  className="flex-1 min-h-[56px] w-full bg-(--j-bg) border border-(--j-dim) rounded text-center text-2xl font-bold text-(--j-text) focus:outline-none focus:border-(--j-acc)" />
+                <button onClick={() => step(1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">+</button>
               </div>
             </div>
             <div>
               <span className={label}>REPS</span>
               <div className="flex items-stretch gap-1">
-                <button onClick={() => bump(-1)} className="w-14 min-h-[56px] rounded border border-[#1f5c33] text-xl hover:bg-[#0a2214]">−</button>
+                <button onClick={() => bump(-1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">−</button>
                 <input value={reps} onChange={e => setReps(e.target.value)} inputMode="numeric" aria-label="reps"
-                  className="flex-1 min-h-[56px] w-full bg-black border border-[#1f5c33] rounded text-center text-2xl font-bold text-[#33ff66] focus:outline-none focus:border-[#33ff66]" />
-                <button onClick={() => bump(1)} className="w-14 min-h-[56px] rounded border border-[#1f5c33] text-xl hover:bg-[#0a2214]">+</button>
+                  className="flex-1 min-h-[56px] w-full bg-(--j-bg) border border-(--j-dim) rounded text-center text-2xl font-bold text-(--j-text) focus:outline-none focus:border-(--j-acc)" />
+                <button onClick={() => bump(1)} className="w-14 min-h-[56px] rounded border border-(--j-dim) text-xl hover:bg-(--j-glow)">+</button>
               </div>
             </div>
           </div>
@@ -393,18 +393,18 @@ export default function Session({
             <span className="text-[10px] tracking-widest opacity-60">LEFT IN RESERVE</span>
             {[0, 1, 2, 3].map(v => (
               <button key={v} onClick={() => setRir(rir === v ? null : v)}
-                className={`min-h-[44px] w-11 rounded border text-xs ${rir === v ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33]"}`}>
+                className={`min-h-[44px] w-11 rounded border text-xs ${rir === v ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim)"}`}>
                 {v === 3 ? "3+" : v}
               </button>
             ))}
             <button onClick={() => setWarmup(!warmup)}
-              className={`min-h-[44px] px-3 rounded border text-xs ml-auto ${warmup ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33]"}`}>
+              className={`min-h-[44px] px-3 rounded border text-xs ml-auto ${warmup ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim)"}`}>
               {warmup ? "✓ WARM-UP" : "WARM-UP"}
             </button>
           </div>
 
           <button onClick={logSet}
-            className="w-full min-h-[64px] rounded-lg bg-[#33ff66] text-black text-lg font-bold hover:bg-[#5cff88] transition-colors">
+            className="w-full min-h-[64px] rounded-lg bg-(--j-acc) text-(--j-on-acc) text-lg font-bold hover:bg-(--j-acc-hi) transition-colors">
             ✓ LOG {warmup ? "WARM-UP" : `SET ${doneHere.length + 1}`}
           </button>
 
@@ -412,7 +412,7 @@ export default function Session({
           {allHere.length > 0 && (
             <ul className="space-y-1">
               {allHere.map(s => (
-                <li key={s.clientId} className="flex items-center gap-2 text-xs border border-[#1f5c33] rounded px-2 py-1.5">
+                <li key={s.clientId} className="flex items-center gap-2 text-xs border border-(--j-dim) rounded px-2 py-1.5">
                   <span className="opacity-60 w-12 shrink-0">{s.warmup ? "W/UP" : `SET ${s.setNo}`}</span>
                   <span className="font-bold">{kg(s.weightKg)} × {s.reps}</span>
                   {s.rir != null && <span className="opacity-60">@ {s.rir} left</span>}
@@ -442,7 +442,7 @@ export default function Session({
             <p className="text-xs opacity-70">How did that feel?</p>
             <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map(f => (
-                <button key={f} onClick={() => finish(f)} className="flex-1 min-h-[52px] rounded border border-[#1f5c33] hover:bg-[#0a2214] text-sm">
+                <button key={f} onClick={() => finish(f)} className="flex-1 min-h-[52px] rounded border border-(--j-dim) hover:bg-(--j-glow) text-sm">
                   {["😵", "😮‍💨", "🙂", "💪", "🔥"][f - 1]}
                 </button>
               ))}
@@ -457,7 +457,7 @@ export default function Session({
 
       {/* Rest timer — counts UP past the target, so "I rested four minutes" is visible. */}
       {rest != null && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#040f08] border-t border-[#1f5c33] px-4 py-3 flex items-center gap-3 font-mono" style={{ color: "#33ff66" }}>
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-(--j-box) border-t border-(--j-dim) px-4 py-3 flex items-center gap-3 jsys-font" style={{ color: "var(--j-text)" }}>
           <span className={`text-2xl font-bold tabular-nums ${rest >= restFor ? "" : "opacity-70"}`}>
             {Math.floor(rest / 60)}:{String(rest % 60).padStart(2, "0")}
           </span>
@@ -478,7 +478,7 @@ function AddExercise({ lifts, onAdd, busy }: { lifts: LiftInfo[]; onAdd: (slug: 
   return (
     <div className="flex gap-2">
       <select value={slug} onChange={e => setSlug(e.target.value)} aria-label="add an exercise"
-        className="flex-1 min-h-[44px] bg-black border border-[#1f5c33] rounded px-2 text-sm text-[#33ff66] focus:outline-none focus:border-[#33ff66]">
+        className="flex-1 min-h-[44px] bg-(--j-bg) border border-(--j-dim) rounded px-2 text-sm text-(--j-text) focus:outline-none focus:border-(--j-acc)">
         <option value="">Add an exercise…</option>
         {lifts.map(l => <option key={l.slug} value={l.slug}>{l.name}</option>)}
       </select>

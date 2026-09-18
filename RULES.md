@@ -132,6 +132,25 @@ Much of this app is used on shared tablets, standing up.
   with a ~16px thumb; on a tablet they read as simply broken.
 - **A drag inside a scrolling panel needs `touch-action: none`**, or the panel scrolls instead and
   the control feels dead.
+- ⚠⚠ **Nothing in the shell may be wider than a phone** (2026-09-18 — Jordan: *"on mobile zooming
+  in and out is really glitchy on the entire hub, you get this white space"*). The top bar was one
+  row that couldn't wrap — 435px for staff, 644px for an admin, on a 375px screen — so the whole
+  PAGE became wider than the phone: it zoomed out, slid sideways, and showed the canvas beside the
+  app. And the canvas was PURE WHITE in dark mode, because an unlayered `body { background:
+  var(--background) }` beats Tailwind v4's layered `bg-*` classes and `--background` had no dark
+  value. Fixed four ways, keep all four:
+  - The page canvas is set for pages inside the shell (`html:has(.hub-shell)` in globals.css). Keep
+    `hub-shell` on the shell wrapper in `app/(app)/layout.tsx`.
+  - The shell has **`overflow-x-clip`** as a backstop. ⚠ CLIP, never `overflow-x-hidden` — hidden
+    makes a scroll container and breaks the h-full pages, sticky banners and dropdowns. Never put an
+    overflow rule on html/body either (iOS ignores it when pinch-zooming).
+  - Below `sm` the top bar drops only words that repeat an icon and **wraps** rather than
+    overflows; every control stays. Its dropdowns hang from the BAR (wrapper `max-sm:static`, panel
+    `max-sm:inset-x-2`), not a fixed `top-12`, because the bar can be two rows. Adding a button to
+    it? Check it at 375px as an admin with the Dashboard switch.
+  - iPhones zoom the page in when a field under 16px is tapped; a phone-only rule in globals.css
+    sets text fields to 16px. ⚠ **Never** fix zoom with `maximum-scale` / `user-scalable=no` —
+    stopping people zooming is an accessibility failure.
 - **Desktop-only styling uses `desk:`** (`app/globals.css`: a mouse or trackpad AND ≥1,280px) —
   never plain `xl:` for "desktop": a 12.9" iPad Pro in landscape is 1,366px wide, and the tablets
   must not change. First used on the Add Lot wizard (2026-09-11, Jordan: "the text boxes are so

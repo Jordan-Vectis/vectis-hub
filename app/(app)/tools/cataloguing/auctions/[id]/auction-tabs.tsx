@@ -3,6 +3,8 @@
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, bulkSetLotReserves, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
+import { bulkFindReplaceDescriptions } from "@/lib/actions/catalogue"
+import { applyFindReplace, firstMatchSnippet, FIND_MAX, REPLACE_MAX } from "@/lib/find-replace"
 import { actionErrorText } from "@/lib/action-error"
 import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
@@ -1423,6 +1425,13 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
 
   // Starting bid panel
   const [showBids, setShowBids] = useState(false)
+  // 🔁 Find & Replace (Descriptions group). Nothing here is remembered between visits — a mass
+  // edit should never be one stale box away from running again.
+  const [showFindReplace, setShowFindReplace] = useState(false)
+  const [frFind, setFrFind]       = useState("")
+  const [frReplace, setFrReplace] = useState("")
+  const [frCase, setFrCase]       = useState(true)
+  const [frWord, setFrWord]       = useState(false)
   const [bidPct, setBidPct]     = useState(60)
   const [bidsMsg, setBidsMsg]   = useState<string | null>(null)
   const [bidsPending, startBids] = useTransition()
@@ -1559,6 +1568,66 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
         const skippedExcluded = res.reduce((s, r) => s + r.skippedExcluded, 0)
         setCondMsg(`✓ ${updated} cleared${skippedExcluded ? `, ${skippedExcluded} AI-excluded left alone` : ""}`)
         setTimeout(() => setCondMsg(null), 5000)
+      } catch (e) {
+        setCondMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
+      } finally {
+        setMassProgress(null)
+        await refreshUndos()
+      }
+    })
+  }
+
+  // ── 🔁 Find & Replace ────────────────────────────────────────────────────
+  // ⚠⚠ THE PREVIEW IS THE SAFETY. It is worked out here, from the lots already on the page, with
+  // the SAME matcher the server uses (lib/find-replace.ts) — so "45 lots, 312 times" is what the
+  // press will do, not an estimate. The press then sends ONLY the lots that match: the 20/400
+  // counts real work, and a lot that does not contain the text is never touched or logged.
+  const frPreview = useMemo(() => {
+    if (!showFindReplace || !frFind) return null
+    const pool = selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots
+    const opts = { matchCase: frCase, wholeWord: frWord }
+    const ids: string[] = []
+    const samples: { id: string; label: string; before: string; after: string }[] = []
+    let occurrences = 0
+    for (const l of pool) {
+      const desc = l.description ?? ""
+      const r = applyFindReplace(desc, frFind, frReplace, opts)
+      if (r.count === 0 || r.text === desc) continue
+      ids.push(l.id); occurrences += r.count
+      if (samples.length < 3) {
+        const s = firstMatchSnippet(desc, frFind, frReplace, opts)
+        if (s) samples.push({ id: l.id, label: l.barcode || "no barcode", ...s })
+      }
+    }
+    return { pool: pool.length, ids, occurrences, samples }
+  }, [showFindReplace, frFind, frReplace, frCase, frWord, lots, selected])
+
+  function handleFindReplace() {
+    const p = frPreview
+    if (!p || p.ids.length === 0) return
+    const find = frFind, replace = frReplace, opts = { matchCase: frCase, wholeWord: frWord }
+    const expected = p.ids.length
+    const times = (n: number) => `${n.toLocaleString()} time${n === 1 ? "" : "s"}`
+    const lotsW = (n: number) => `${n.toLocaleString()} lot${n === 1 ? "" : "s"}`
+    const withWhat = replace === "" ? "nothing (it is removed)" : `“${replace}”`
+    if (!confirm(`Replace “${find}” with ${withWhat} — ${times(p.occurrences)} across ${lotsW(expected)} (searched ${scopeWord()}). This can be undone. Continue?`)) return
+    startCond(async () => {
+      try {
+        const res = await runInChunks(p.ids, setMassProgress, async (chunk, undoId, isLast) => {
+          const r = await bulkFindReplaceDescriptions(auctionId, chunk, find, replace, opts, undoId, !isLast)
+          // Returned, not thrown, by the action (production redacts a thrown one) — raised here so
+          // the part-way message below names the reason.
+          if (!r.ok) throw new Error(r.error ?? "The replace was refused")
+          return r
+        })
+        const updated = res.reduce((s, r) => s + r.updated, 0)
+        const occ     = res.reduce((s, r) => s + r.occurrences, 0)
+        // ⚠ Zero is never a tick (design rule 7), and a shortfall is said out loud: a lot edited
+        // by someone else between the preview and the press simply no longer contains the text.
+        setCondMsg(updated === 0
+          ? "⚠ Nothing changed — none of those lots contain that text any more."
+          : `✓ Replaced ${times(occ)} in ${lotsW(updated)}${updated < expected ? ` — ${lotsW(expected - updated)} no longer contained it` : ""}. BC keeps what it was sent — a sale already in BC needs its descriptions sending again.`)
+        setTimeout(() => setCondMsg(null), 9000)
       } catch (e) {
         setCondMsg(`⚠ Stopped part-way — ${actionErrorText(e)}. Anything already changed is in the Undo list.`)
       } finally {
@@ -2252,6 +2321,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   className={`${TB_NEUTRAL} hover:border-red-500 hover:text-red-400`}>
                   {condPending ? "Working…" : "🧹 Clear Descriptions"}
                 </button>
+                <button onClick={() => setShowFindReplace(v => !v)} disabled={condPending}
+                  className={showFindReplace ? `${TB_BTN} border-violet-500 text-violet-500 dark:text-violet-400 bg-violet-500/10` : `${TB_NEUTRAL} hover:border-violet-500 hover:text-violet-500 dark:hover:text-violet-400`}>
+                  🔁 Find &amp; Replace
+                </button>
                 {/* "20/400" — the whole point of chunking the work. One readout for every mass
                     action, since only one can run at a time. */}
                 <MassProgressLabel p={massProgress} />
@@ -2541,6 +2614,87 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       )}
 
       {/* ── Set Starting Bids panel ── */}
+      {showFindReplace && !bcLocked && (
+        <div className="rounded-xl border border-violet-300 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/5 p-4 space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">🔁 Find &amp; replace in descriptions</h3>
+            <span className="text-xs text-gray-600 dark:text-gray-400">
+              Searching {selected.size > 0 ? `the ${selected.size} ticked lot${selected.size === 1 ? "" : "s"}` : `all ${lots.length.toLocaleString()} lots in this sale`} · the exact text you type, not a pattern
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Find</span>
+              <input value={frFind} onChange={e => setFrFind(e.target.value.slice(0, FIND_MAX))} placeholder="the text to look for — e.g. •" spellCheck={false}
+                className="w-full min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0d0f] px-3 text-sm font-mono text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Replace with</span>
+              <input value={frReplace} onChange={e => setFrReplace(e.target.value.slice(0, REPLACE_MAX))} placeholder="leave empty to remove it" spellCheck={false}
+                className="w-full min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0d0f] px-3 text-sm font-mono text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-700 dark:text-gray-300">
+            <label className="inline-flex items-center gap-2 min-h-[32px] cursor-pointer">
+              <input type="checkbox" checked={frCase} onChange={e => setFrCase(e.target.checked)} className="w-4 h-4 accent-violet-500" />
+              Match case <span className="text-gray-500">— “Mint” is not “mint”</span>
+            </label>
+            <label className="inline-flex items-center gap-2 min-h-[32px] cursor-pointer">
+              <input type="checkbox" checked={frWord} onChange={e => setFrWord(e.target.checked)} className="w-4 h-4 accent-violet-500" />
+              Whole words only <span className="text-gray-500">— “bus” leaves “omnibus” alone</span>
+            </label>
+            <span className="text-gray-400">·</span>
+            <span className="text-gray-500">Quick fill:</span>
+            <button type="button" onClick={() => { setFrFind("•"); setFrReplace("-") }}
+              className={`${TB_NEUTRAL} hover:border-violet-500 hover:text-violet-500 dark:hover:text-violet-400`}
+              title="BC's paperwork trips over bullet points — this swaps every • for a hyphen.">
+              • bullets → -
+            </button>
+          </div>
+
+          {/* The preview — what the press WILL do, worked out with the server's own matcher. */}
+          {frFind === "" ? (
+            <p className="text-xs text-gray-500">Type what to find and the lots that contain it are counted here before anything changes.</p>
+          ) : frPreview && frPreview.ids.length === 0 ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Nothing to replace — none of the {frPreview.pool.toLocaleString()} lots searched contain “{frFind}”{frCase ? " with that exact capitalisation" : ""}{frFind === frReplace ? " (and the replacement is the same text)" : ""}.
+            </p>
+          ) : frPreview && (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-800 dark:text-gray-200">
+                <span className="font-bold tabular-nums">{frPreview.ids.length.toLocaleString()}</span> of {frPreview.pool.toLocaleString()} lots contain it —{" "}
+                <span className="font-bold tabular-nums">{frPreview.occurrences.toLocaleString()}</span> time{frPreview.occurrences === 1 ? "" : "s"} in all.
+              </p>
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-200 dark:divide-gray-800 bg-white dark:bg-[#0d0d0f]">
+                {frPreview.samples.map(s => (
+                  <div key={s.id} className="px-3 py-2 text-xs font-mono">
+                    <div className="text-gray-500 mb-0.5">{s.label}</div>
+                    <div className="text-red-600 dark:text-red-400 break-words">− {s.before}</div>
+                    <div className="text-green-700 dark:text-green-400 break-words">+ {s.after}</div>
+                  </div>
+                ))}
+              </div>
+              {frPreview.ids.length > frPreview.samples.length && (
+                <p className="text-[11px] text-gray-500">Showing the first {frPreview.samples.length}; the same change is made in the other {(frPreview.ids.length - frPreview.samples.length).toLocaleString()}.</p>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={handleFindReplace} disabled={condPending || !frPreview || frPreview.ids.length === 0}
+              className="min-h-[44px] px-4 rounded-lg text-sm font-semibold bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-40">
+              {condPending ? "Replacing…" : frPreview && frPreview.ids.length > 0 ? `Replace in ${frPreview.ids.length.toLocaleString()} lot${frPreview.ids.length === 1 ? "" : "s"}` : "Replace"}
+            </button>
+            <MassProgressLabel p={massProgress} />
+            <span className="text-[11px] text-gray-500">
+              One press is one Undo. The title follows the description. ⚠ BC keeps what it was sent — a sale already in BC needs its descriptions sending again.
+            </span>
+          </div>
+        </div>
+      )}
+
       {showBids && (() => {
         const eligible = (selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots).filter(l => l.estimateLow != null)
         const preview  = eligible.slice(0, 3).map(l => ({

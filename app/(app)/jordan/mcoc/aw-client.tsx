@@ -13,7 +13,8 @@ import type { Champ } from "./mcoc-hub"
 //   returns the best attackers per fight + a few 3-champ teams.
 //   DEFENCE: recommend which of your champs to place on which defence nodes.
 
-const GREEN = "#33ff66"
+const GREEN = "var(--j-acc)"
+const TEXT  = "var(--j-text)"
 // AW season reward brackets — passed to the AI as difficulty context.
 const AW_TIERS = ["Bronze", "Silver", "Gold", "Platinum", "Challenger", "Master", "Vibranium"]
 // localStorage keys — remember tier + defence inputs between visits (the path
@@ -24,7 +25,7 @@ const FORCED_KEY = "mcoc_aw_forced"
 const MINI_MODE_KEY = "mcoc_aw_mini_mode"
 
 const RATING_COL: Record<string, string> = {
-  best:  "border-[#33ff66] text-[#33ff66]",
+  best:  "border-(--j-acc) text-(--j-acc)",
   good:  "border-emerald-500 text-emerald-400",
   risky: "border-amber-500 text-amber-400",
   avoid: "border-red-500 text-red-400",
@@ -399,31 +400,31 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
   const modeBtn = (active: boolean) =>
     `px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-      active ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60 hover:opacity-100"
+      active ? "border-(--j-acc) bg-(--j-glow)" : "border-(--j-dim) opacity-60 hover:opacity-100"
     }`
-  const input = "bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
+  const input = "bg-(--j-bg) border border-(--j-dim) rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-(--j-acc) placeholder:text-(--j-dim)"
 
   function ChampInline({ name }: { name: string }) {
     const owned = ownedByName.get(normChampName(name))
     return (
       <span className="inline-flex items-center gap-1.5">
         {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={22} height={22} className="rounded object-cover" style={{ boxShadow: `0 0 0 1.5px ${classColour(owned.class)}` }} />}
-        <span className="font-bold text-white">{name}</span>
+        <span className="font-bold text-(--j-hi)">{name}</span>
         {owned && <span className="text-[10px] opacity-50">{owned.stars}★ R{owned.rank}</span>}
       </span>
     )
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto font-mono" style={{ color: GREEN }}>
-      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-4">
+    <div className="flex-1 min-h-0 overflow-y-auto jsys-font" style={{ color: TEXT }}>
+      <div className="border border-(--j-dim) rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setMode("path")} className={modeBtn(mode === "path")}>🗡 ATTACK PATH</button>
           <button onClick={() => setMode("defence")} className={modeBtn(mode === "defence")}>🛡 DEFENCE PLACER</button>
           <label className="inline-flex items-center gap-1.5 text-xs opacity-70 ml-1" title="Your war bracket — the AI factors in the tougher nodes at higher tiers">
             🗺 Tier
             <select value={tier} onChange={(e) => setTier(e.target.value)}
-              className="bg-black border border-[#1f5c33] rounded px-2 py-1 text-xs focus:outline-none focus:border-[#33ff66]" style={{ color: GREEN }}>
+              className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs focus:outline-none focus:border-(--j-acc)" style={{ color: TEXT }}>
               <option value="">— any —</option>
               {AW_TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -450,10 +451,10 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 {warFights.map((f, i) => {
                   const cls = defClass(f.defender)
                   return (
-                    <div key={f.id} className="border border-[#1f5c33] rounded-lg p-2.5 flex gap-3 items-start">
+                    <div key={f.id} className="border border-(--j-dim) rounded-lg p-2.5 flex gap-3 items-start">
                       {/* Nodes photo */}
                       <button onClick={() => pickFightPhoto(f.id)} disabled={uploadingId === f.id}
-                        className="shrink-0 w-24 h-16 rounded-lg border border-[#1f5c33] hover:border-[#33ff66] overflow-hidden flex items-center justify-center text-[10px] opacity-70 disabled:opacity-40 transition-colors"
+                        className="shrink-0 w-24 h-16 rounded-lg border border-(--j-dim) hover:border-(--j-acc) overflow-hidden flex items-center justify-center text-[10px] opacity-70 disabled:opacity-40 transition-colors"
                         title={f.nodesImageUrl ? "Change nodes photo" : "Add a photo of this fight's nodes"}>
                         {uploadingId === f.id
                           ? <span className="animate-pulse">Saving…</span>
@@ -479,7 +480,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           onBlur={(e) => saveDefender(f.id, e.target.value)}
                           list="mcoc-all-champs"
                           placeholder="Defender on this node…"
-                          className={`${input} w-full py-1.5`} style={{ color: GREEN }} />
+                          className={`${input} w-full py-1.5`} style={{ color: TEXT }} />
                       </div>
                     </div>
                   )
@@ -487,7 +488,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={addFight} disabled={addingFight}
-                    className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
+                    className="px-4 py-2 rounded-lg border border-(--j-dim) text-sm hover:border-(--j-acc) disabled:opacity-40 transition-colors">
                     ＋ Add fight
                   </button>
                   {warFights.length === 0 && <span className="text-[11px] opacity-50">Add your first fight to start building the path.</span>}
@@ -501,16 +502,16 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
             {/* ── Mini bosses — a node map like the war map. Photos are uploaded ONCE
                 per node; each war you just tap the nodes you're taking and type the
                 defenders. Selected nodes join the plan after the path fights. ── */}
-            <div className="border-t border-[#1f5c33] pt-3 space-y-2">
+            <div className="border-t border-(--j-dim) pt-3 space-y-2">
               <div className="flex items-center gap-3 flex-wrap">
                 <p className="text-[10px] uppercase tracking-widest opacity-50">👑 Mini Bosses</p>
                 {/* Pick yourself, or let the plan choose 1 per path + a boss side. */}
-                <div className="inline-flex rounded-lg border border-[#1f5c33] overflow-hidden text-[10px]">
+                <div className="inline-flex rounded-lg border border-(--j-dim) overflow-hidden text-[10px]">
                   <button onClick={() => setMiniMode("pick")}
-                    className={`px-2.5 py-1 font-bold uppercase tracking-widest transition-colors ${miniMode === "pick" ? "text-black" : "opacity-60 hover:opacity-100"}`}
+                    className={`px-2.5 py-1 font-bold uppercase tracking-widest transition-colors ${miniMode === "pick" ? "text-(--j-on-acc)" : "opacity-60 hover:opacity-100"}`}
                     style={miniMode === "pick" ? { background: GREEN } : undefined}>✍ Pick myself</button>
                   <button onClick={() => setMiniMode("recommend")}
-                    className={`px-2.5 py-1 font-bold uppercase tracking-widest border-l border-[#1f5c33] transition-colors ${miniMode === "recommend" ? "text-black" : "opacity-60 hover:opacity-100"}`}
+                    className={`px-2.5 py-1 font-bold uppercase tracking-widest border-l border-(--j-dim) transition-colors ${miniMode === "recommend" ? "text-(--j-on-acc)" : "opacity-60 hover:opacity-100"}`}
                     style={miniMode === "recommend" ? { background: GREEN } : undefined}>🤖 Recommend</button>
                 </div>
               </div>
@@ -568,14 +569,14 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                     <div className="relative w-full max-w-[540px] mx-auto select-none" style={{ aspectRatio: "100/130" }}>
                       <svg viewBox="0 0 100 130" preserveAspectRatio="none" className="absolute inset-0 w-full h-full pointer-events-none">
                         {MAP_EDGES.map(([x1, y1, x2, y2], i) => (
-                          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#1f5c33" strokeWidth="0.6" />
+                          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} style={{ stroke: "var(--j-dim)" }} strokeWidth="0.6" />
                         ))}
                         {MAP_DOTS.map(([x, y], i) => (
                           <circle key={i} cx={x} cy={y} r="1.3" fill="#38b6ff" opacity="0.9" />
                         ))}
                         {MAP_LABELS.map((l, i) => (
-                          <text key={i} x={l.x} y={l.y} textAnchor="middle" fontSize="3.2" fill={GREEN} opacity="0.45"
-                            style={{ letterSpacing: "0.6px" }}>{l.text}</text>
+                          <text key={i} x={l.x} y={l.y} textAnchor="middle" fontSize="3.2" opacity="0.45"
+                            style={{ fill: GREEN, letterSpacing: "0.6px" }}>{l.text}</text>
                         ))}
                       </svg>
                       {MAP_SLOTS.map((s) => {
@@ -586,7 +587,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                             <button key={s.key}
                               onClick={() => (placingId ? placeMini(placingId, s.key) : createInSlot(s.key))}
                               disabled={addingMini}
-                              className={`absolute -translate-x-1/2 -translate-y-1/2 w-[17%] sm:w-[15%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-sm transition-all ${placingId ? "border-[#33ff66] text-[#33ff66] animate-pulse bg-[#33ff66]/10" : "border-[#1f5c33] opacity-50 hover:opacity-100 hover:border-[#33ff66] active:bg-[#33ff66]/10"}`}
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 w-[17%] sm:w-[15%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-sm transition-all ${placingId ? "border-(--j-acc) text-(--j-acc) animate-pulse bg-(--j-acc)/10" : "border-(--j-dim) opacity-50 hover:opacity-100 hover:border-(--j-acc) active:bg-(--j-acc)/10"}`}
                               style={pos}
                               title={placingId ? "Place the node here" : `Add the ${s.hint || "node"} here`}>
                               {s.hint ? <span className="text-[9px] font-bold tracking-widest opacity-80">{s.hint}</span> : "＋"}
@@ -603,14 +604,14 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                             {/* One consistent action: tap the node to open its editor
                                 (photo, take, defender). Big target for mobile. */}
                             <button onClick={() => { if (!placingId) setEditingMiniId(editingThis ? null : m.id) }}
-                              className={`relative w-full aspect-square rounded-full border-2 overflow-hidden flex items-center justify-center transition-all active:scale-95 ${live ? "border-[#33ff66] shadow-[0_0_12px_rgba(51,255,102,0.45)]" : editingThis ? "border-[#33ff66]" : candidate ? "border-[#38b6ff]/70 opacity-90" : "border-[#1f5c33] opacity-60 hover:opacity-90"}`}
+                              className={`relative w-full aspect-square rounded-full border-2 overflow-hidden flex items-center justify-center transition-all active:scale-95 ${live ? "border-(--j-acc) shadow-[0_0_12px_rgba(51,255,102,0.45)]" : editingThis ? "border-(--j-acc)" : candidate ? "border-[#38b6ff]/70 opacity-90" : "border-(--j-dim) opacity-60 hover:opacity-90"}`}
                               title={`${m.label || s.hint || "Node"} — tap to edit / add photo`}>
                               {m.nodesImageUrl
                                 ? <img src={m.nodesImageUrl} alt="" className={`absolute inset-0 w-full h-full object-cover ${live ? "" : "grayscale-[40%]"}`} />
                                 : <span className="text-base opacity-70">📷</span>}
-                              {live && <span className="absolute inset-0 rounded-full ring-2 ring-[#33ff66]/60" />}
-                              {live && <span className="absolute bottom-0 inset-x-0 text-[7px] font-bold text-black bg-[#33ff66] text-center leading-tight py-px">TAKING</span>}
-                              {candidate && !live && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#38b6ff] border border-black" title="Defender set — in the running" />}
+                              {live && <span className="absolute inset-0 rounded-full ring-2 ring-(--j-acc)/60" />}
+                              {live && <span className="absolute bottom-0 inset-x-0 text-[7px] font-bold text-(--j-on-acc) bg-(--j-acc) text-center leading-tight py-px">TAKING</span>}
+                              {candidate && !live && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#38b6ff] border border-(--j-bg)" title="Defender set — in the running" />}
                             </button>
                             <p className={`mt-0.5 text-center text-[9px] uppercase tracking-widest truncate ${live ? "opacity-90" : "opacity-50"}`}
                               style={{ color: live ? GREEN : undefined }}>
@@ -636,15 +637,15 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                       const hint = MAP_SLOTS.find((s) => s.key === editing.slot)?.hint ?? ""
                       const showDefender = miniMode === "recommend" || editing.taking
                       return (
-                        <div ref={miniEditorRef} className="border-2 border-[#33ff66]/40 rounded-xl p-3 space-y-3 max-w-[540px] mx-auto w-full bg-[#33ff66]/[0.04]">
+                        <div ref={miniEditorRef} className="border-2 border-(--j-acc)/40 rounded-xl p-3 space-y-3 max-w-[540px] mx-auto w-full bg-(--j-acc)/[0.04]">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[11px] uppercase tracking-widest opacity-70">Editing {sec ? `${sec}${hint ? ` · ${hint}` : ""}` : "node"}</span>
-                            <button onClick={() => setEditingMiniId(null)} className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] active:bg-[#33ff66]/10">✓ Done</button>
+                            <button onClick={() => setEditingMiniId(null)} className="px-4 py-2 rounded-lg border border-(--j-dim) text-sm hover:border-(--j-acc) active:bg-(--j-acc)/10">✓ Done</button>
                           </div>
 
                           {/* Photo — big, obvious */}
                           <button onClick={() => pickMiniPhoto(editing.id)} disabled={miniUploadingId === editing.id}
-                            className="w-full h-40 rounded-lg border-2 border-dashed border-[#1f5c33] hover:border-[#33ff66] active:border-[#33ff66] overflow-hidden flex items-center justify-center text-sm opacity-80 disabled:opacity-40 transition-colors">
+                            className="w-full h-40 rounded-lg border-2 border-dashed border-(--j-dim) hover:border-(--j-acc) active:border-(--j-acc) overflow-hidden flex items-center justify-center text-sm opacity-80 disabled:opacity-40 transition-colors">
                             {miniUploadingId === editing.id
                               ? <span className="animate-pulse">Saving photo…</span>
                               : editing.nodesImageUrl
@@ -661,12 +662,12 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                             onChange={(e) => editMini(editing.id, { label: e.target.value })}
                             onBlur={(e) => setMiniNodeLabel(editing.id, e.target.value).catch(() => {})}
                             placeholder="Node label (e.g. Node 44)…"
-                            className={`${input} w-full py-2.5`} style={{ color: GREEN }} />
+                            className={`${input} w-full py-2.5`} style={{ color: TEXT }} />
 
                           {/* Take this war (pick mode) */}
                           {miniMode === "pick" && (
                             <button onClick={() => toggleTaking(editing.id)}
-                              className={`w-full py-3 rounded-lg text-sm font-bold uppercase tracking-widest border-2 transition-colors ${editing.taking ? "text-black border-transparent" : "border-[#1f5c33] hover:border-[#33ff66] active:bg-[#33ff66]/10"}`}
+                              className={`w-full py-3 rounded-lg text-sm font-bold uppercase tracking-widest border-2 transition-colors ${editing.taking ? "text-(--j-on-acc) border-transparent" : "border-(--j-dim) hover:border-(--j-acc) active:bg-(--j-acc)/10"}`}
                               style={editing.taking ? { background: GREEN } : undefined}>
                               {editing.taking ? "✓ Taking this war — tap to drop" : "＋ Take this war"}
                             </button>
@@ -681,7 +682,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                 onBlur={(e) => setMiniNodeDefender(editing.id, e.target.value).catch(() => {})}
                                 list="mcoc-all-champs"
                                 placeholder="Who's defending…"
-                                className={`${input} w-full py-2.5`} style={{ color: GREEN }} />
+                                className={`${input} w-full py-2.5`} style={{ color: TEXT }} />
                             </div>
                           )}
 
@@ -700,7 +701,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[10px] uppercase tracking-widest opacity-40">Not on the map:</span>
                         {unplaced.map((m) => (
-                          <span key={m.id} className="inline-flex items-center gap-1.5 border border-[#1f5c33] rounded-lg pl-1 pr-1.5 py-1">
+                          <span key={m.id} className="inline-flex items-center gap-1.5 border border-(--j-dim) rounded-lg pl-1 pr-1.5 py-1">
                             {m.nodesImageUrl && <img src={m.nodesImageUrl} alt="" className="w-6 h-6 rounded object-cover" />}
                             <span className="text-[11px] opacity-80">{m.label || "Unnamed"}</span>
                             {placingId === m.id
@@ -723,8 +724,8 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           ).map((m) => {
                             const cls = defClass(m.defender)
                             return (
-                              <div key={m.id} className="border border-[#33ff66]/50 rounded-lg p-2 flex gap-2.5 items-center">
-                                <div className="shrink-0 w-12 h-12 rounded-lg border border-[#1f5c33] overflow-hidden flex items-center justify-center text-[9px] opacity-80">
+                              <div key={m.id} className="border border-(--j-acc)/50 rounded-lg p-2 flex gap-2.5 items-center">
+                                <div className="shrink-0 w-12 h-12 rounded-lg border border-(--j-dim) overflow-hidden flex items-center justify-center text-[9px] opacity-80">
                                   {m.nodesImageUrl
                                     ? <img src={m.nodesImageUrl} alt="" className="w-full h-full object-cover" />
                                     : <span>📷</span>}
@@ -740,7 +741,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                     onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
                                     list="mcoc-all-champs"
                                     placeholder="Defender on this node…"
-                                    className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                                    className={`${input} w-full py-1 text-sm`} style={{ color: TEXT }} />
                                 </div>
                               </div>
                             )
@@ -757,29 +758,29 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           <p className="text-[10px] uppercase tracking-widest opacity-50">Candidate defenders — who&apos;s on each this war (take one per cluster)</p>
                           {groupClusters(candidates).map((cluster) => (
                             <div key={cluster.section} className="space-y-1.5">
-                              <p className="text-[10px] uppercase tracking-widest text-[#38b6ff]/80">{cluster.section} <span className="opacity-50 text-white">· {cluster.section === "Boss" ? "go left or right" : "take one"}</span></p>
+                              <p className="text-[10px] uppercase tracking-widest text-[#38b6ff]/80">{cluster.section} <span className="opacity-50 text-(--j-hi)">· {cluster.section === "Boss" ? "go left or right" : "take one"}</span></p>
                               <div className="grid gap-2 sm:grid-cols-3">
                                 {cluster.nodes.map((m) => {
                                   const cls = defClass(m.defender)
                                   const won = focusedMinis.some((r) => r.slot === m.slot)
                                   const slotHint = MAP_SLOTS.find((s) => s.key === m.slot)
                                   return (
-                                    <div key={m.id} className={`border rounded-lg p-2 flex gap-2.5 items-center ${won ? "border-[#33ff66]/70 bg-[#33ff66]/5" : "border-[#1f5c33]"}`}>
-                                      <div className="shrink-0 w-12 h-12 rounded-lg border border-[#1f5c33] overflow-hidden flex items-center justify-center text-[9px] opacity-80">
+                                    <div key={m.id} className={`border rounded-lg p-2 flex gap-2.5 items-center ${won ? "border-(--j-acc)/70 bg-(--j-acc)/5" : "border-(--j-dim)"}`}>
+                                      <div className="shrink-0 w-12 h-12 rounded-lg border border-(--j-dim) overflow-hidden flex items-center justify-center text-[9px] opacity-80">
                                         {m.nodesImageUrl ? <img src={m.nodesImageUrl} alt="" className="w-full h-full object-cover" /> : <span>📷</span>}
                                       </div>
                                       <div className="flex-1 min-w-0 space-y-1">
                                         <div className="flex items-center gap-2">
                                           <span className="text-[10px] uppercase tracking-widest opacity-60 truncate">{slotHint?.hint}{m.label ? ` · ${m.label}` : ""}</span>
                                           {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
-                                          {won && <span className="ml-auto text-[9px] font-bold text-[#33ff66] shrink-0">✓ PICKED</span>}
+                                          {won && <span className="ml-auto text-[9px] font-bold text-(--j-acc) shrink-0">✓ PICKED</span>}
                                         </div>
                                         <input value={m.defender}
                                           onChange={(e) => editMini(m.id, { defender: e.target.value })}
                                           onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
                                           list="mcoc-all-champs"
                                           placeholder="Defender…"
-                                          className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                                          className={`${input} w-full py-1 text-sm`} style={{ color: TEXT }} />
                                       </div>
                                     </div>
                                   )
@@ -801,7 +802,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
             </div>
 
             {/* Must-use attackers — the plan reports which fights each one handles. */}
-            <div className="border-t border-[#1f5c33] pt-3 space-y-2">
+            <div className="border-t border-(--j-dim) pt-3 space-y-2">
               <p className="text-[11px] opacity-60">
                 🎯 Must-use attackers <span className="opacity-70">(optional)</span> — champs you want to bring; the plan tells you which fights each one handles.
               </p>
@@ -809,16 +810,16 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 <input value={forcedInput} onChange={(e) => setForcedInput(e.target.value)} list="mcoc-all-champs"
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addForced(forcedInput) } }}
                   placeholder="Add an attacker you want to use…"
-                  className={`${input} flex-1 min-w-[12rem]`} style={{ color: GREEN }} />
+                  className={`${input} flex-1 min-w-[12rem]`} style={{ color: TEXT }} />
                 <button onClick={() => addForced(forcedInput)} disabled={!forcedInput.trim() || forced.length >= 8}
-                  className="px-3 py-2 rounded-lg border border-[#1f5c33] text-xs hover:border-[#33ff66] disabled:opacity-30 transition-colors">ADD</button>
+                  className="px-3 py-2 rounded-lg border border-(--j-dim) text-xs hover:border-(--j-acc) disabled:opacity-30 transition-colors">ADD</button>
               </div>
               {forced.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {forced.map((f) => (
-                    <span key={f} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-[#33ff66]">
+                    <span key={f} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-(--j-acc)">
                       {ownedByName.get(normChampName(f))?.imageUrl && <img src={ownedByName.get(normChampName(f))!.imageUrl!} alt="" width={18} height={18} className="rounded object-cover" />}
-                      <span className="text-white">{f}</span>
+                      <span className="text-(--j-hi)">{f}</span>
                       <button onClick={() => setForced((l) => l.filter((x) => x !== f))} className="text-red-400" title="Remove">×</button>
                     </span>
                   ))}
@@ -827,14 +828,14 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
             </div>
 
             <button onClick={planPath} disabled={pathBusy || warLoading || (!warFights.some((f) => f.defender.trim()) && !(miniMode === "recommend" ? minis.some((m) => m.slot && m.defender.trim()) : takenMinis.some((m) => m.defender.trim())))}
-              className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors"
+              className="px-5 py-2.5 rounded-lg text-sm font-bold text-(--j-on-acc) disabled:opacity-40 transition-colors"
               style={{ background: GREEN }}>
               {pathBusy ? "PLANNING…" : "🗡 PLAN MY PATH"}
             </button>
             {pathErr && <p className="text-sm text-red-400">✗ {pathErr}</p>}
 
             {path && (
-              <div className="space-y-3 border-t border-[#1f5c33] pt-3">
+              <div className="space-y-3 border-t border-(--j-dim) pt-3">
                 {path.groundedFallback && (
                   <p className="text-[11px] text-amber-400">
                     ⚠ Live search didn&apos;t work on this run, so this is from the model&apos;s own (older) knowledge — it may miss newer or
@@ -852,38 +853,38 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                         return (
                         <div key={i}
                           onClick={() => { if (miniMode === "recommend") setFocusTeam(i) }}
-                          className={`border-2 rounded-lg p-3 space-y-2.5 transition-colors ${miniMode === "recommend" ? "cursor-pointer" : ""} ${focused ? "border-[#33ff66] bg-[#33ff66]/[0.04]" : "border-[#33ff66]/60 hover:border-[#33ff66]"}`}>
+                          className={`border-2 rounded-lg p-3 space-y-2.5 transition-colors ${miniMode === "recommend" ? "cursor-pointer" : ""} ${focused ? "border-(--j-acc) bg-(--j-acc)/[0.04]" : "border-(--j-acc)/60 hover:border-(--j-acc)"}`}>
                           <div className="flex items-baseline gap-2">
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#0a2214] border border-[#33ff66] shrink-0">TEAM {String.fromCharCode(65 + i)}</span>
-                            <p className="text-sm font-bold text-white truncate">{t.name || `Team ${i + 1}`}</p>
-                            {focused && <span className="ml-auto text-[8px] font-bold uppercase tracking-wider text-[#33ff66] shrink-0">📍 on map</span>}
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-(--j-glow) border border-(--j-acc) shrink-0">TEAM {String.fromCharCode(65 + i)}</span>
+                            <p className="text-sm font-bold text-(--j-hi) truncate">{t.name || `Team ${i + 1}`}</p>
+                            {focused && <span className="ml-auto text-[8px] font-bold uppercase tracking-wider text-(--j-acc) shrink-0">📍 on map</span>}
                           </div>
                           {/* The 3 champs as chips */}
                           <div className="flex flex-wrap gap-1.5">
                             {t.champions.map((c, j) => (
-                              <span key={j} className="inline-flex items-center gap-1 text-xs px-1.5 py-1 rounded border border-[#1f5c33]">
+                              <span key={j} className="inline-flex items-center gap-1 text-xs px-1.5 py-1 rounded border border-(--j-dim)">
                                 {ownedByName.get(normChampName(c.champion))?.imageUrl && <img src={ownedByName.get(normChampName(c.champion))!.imageUrl!} alt="" width={18} height={18} className="rounded object-cover" />}
-                                <span className="text-white">{c.champion}</span>
+                                <span className="text-(--j-hi)">{c.champion}</span>
                               </span>
                             ))}
                           </div>
                           {t.summary && <p className="text-[11px] opacity-60">{t.summary}</p>}
                           {/* How this team takes the path — the assignment */}
                           {t.path && t.path.length > 0 && (
-                            <div className="space-y-1 pt-1.5 border-t border-[#1f5c33]/70">
+                            <div className="space-y-1 pt-1.5 border-t border-(--j-dim)/70">
                               <p className="text-[9px] uppercase tracking-widest opacity-40">The path</p>
                               {t.path.map((s, j) => {
                                 const dcls = defClass(s.defender)
                                 return (
                                   <div key={j} className="text-xs">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className={`text-[9px] font-bold px-1 py-0.5 rounded border shrink-0 ${s.miniLabel ? "border-amber-400 text-amber-300" : "border-[#1f5c33] opacity-60"}`}>{s.miniLabel ? `👑 ${s.miniLabel}` : `F${s.fight}`}</span>
+                                      <span className={`text-[9px] font-bold px-1 py-0.5 rounded border shrink-0 ${s.miniLabel ? "border-amber-400 text-amber-300" : "border-(--j-dim) opacity-60"}`}>{s.miniLabel ? `👑 ${s.miniLabel}` : `F${s.fight}`}</span>
                                       {dcls && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: classColour(dcls) }} title={dcls} />}
-                                      <span className="text-white/80">{s.defender}</span>
+                                      <span className="text-(--j-hi)/80">{s.defender}</span>
                                       <span className="opacity-40">→</span>
                                       {s.attacker
                                         ? <>
-                                            <span className={`font-semibold ${s.confidence === "unlikely" ? "text-orange-300" : s.confidence === "risky" ? "text-amber-300" : "text-[#33ff66]"}`}>{s.attacker}</span>
+                                            <span className={`font-semibold ${s.confidence === "unlikely" ? "text-orange-300" : s.confidence === "risky" ? "text-amber-300" : "text-(--j-acc)"}`}>{s.attacker}</span>
                                             {s.confidence && CONF_COL[s.confidence] && s.confidence !== "good" && (
                                               <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${CONF_COL[s.confidence].cls}`}>{CONF_COL[s.confidence].label}</span>
                                             )}
@@ -898,7 +899,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           )}
                           {/* This team's MINIS — picked from its own 3 champs (recommend mode). */}
                           {miniMode === "recommend" && (
-                            <div className="space-y-1 pt-1.5 border-t border-[#1f5c33]/70">
+                            <div className="space-y-1 pt-1.5 border-t border-(--j-dim)/70">
                               <p className="text-[9px] uppercase tracking-widest opacity-40">👑 Its minis</p>
                               {myMinis.length > 0 ? myMinis.map((s, j) => {
                                 const dcls = defClass(s.defender)
@@ -907,12 +908,12 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className="text-[9px] font-bold px-1 py-0.5 rounded border border-amber-400/70 text-amber-300 shrink-0">{s.section === "Boss" ? `Boss ${s.side}` : `${s.section} ${s.side}`}</span>
                                       {dcls && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: classColour(dcls) }} title={dcls} />}
-                                      <span className="text-white/80">{s.defender}</span>
+                                      <span className="text-(--j-hi)/80">{s.defender}</span>
                                       {s.label && <span className="opacity-40">({s.label})</span>}
                                       <span className="opacity-40">→</span>
                                       {s.attacker
                                         ? <>
-                                            <span className={`font-semibold ${s.confidence === "unlikely" ? "text-orange-300" : s.confidence === "risky" ? "text-amber-300" : "text-[#33ff66]"}`}>{s.attacker}</span>
+                                            <span className={`font-semibold ${s.confidence === "unlikely" ? "text-orange-300" : s.confidence === "risky" ? "text-amber-300" : "text-(--j-acc)"}`}>{s.attacker}</span>
                                             {s.confidence && CONF_COL[s.confidence] && s.confidence !== "good" && (
                                               <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${CONF_COL[s.confidence].cls}`}>{CONF_COL[s.confidence].label}</span>
                                             )}
@@ -942,13 +943,13 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                   {showPlanDetail ? "▾ Hide" : "▸ Show"} more detail — best options per fight{path.forced?.length ? " + your must-use attackers" : ""}
                 </button>
                 {showPlanDetail && (
-                  <div className="space-y-3 border-l border-[#1f5c33] pl-3">
+                  <div className="space-y-3 border-l border-(--j-dim) pl-3">
                     {path.forced && path.forced.length > 0 && (
                       <div className="space-y-2">
                         <p className="text-[10px] uppercase tracking-widest opacity-50">🎯 Your must-use attackers — which fights they handle</p>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {path.forced.map((f, i) => (
-                            <div key={i} className="border border-[#33ff66] rounded-lg p-3 space-y-2">
+                            <div key={i} className="border border-(--j-acc) rounded-lg p-3 space-y-2">
                               <ChampInline name={f.attacker} />
                               {f.fights.length === 0 ? (
                                 <p className="text-[11px] text-red-400">No good fight for this one on this path.</p>
@@ -958,7 +959,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                     <div key={j} className="flex items-start gap-2 text-xs">
                                       <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${RATING_COL[x.rating] ?? RATING_COL.good}`}>{x.rating}</span>
                                       <div className="min-w-0">
-                                        <span className="text-white">Fight {x.fight}</span>
+                                        <span className="text-(--j-hi)">Fight {x.fight}</span>
                                         {x.defender && <span className="opacity-60"> · {x.defender}</span>}
                                         {x.how && <p className="opacity-70 mt-0.5">{x.how}</p>}
                                       </div>
@@ -974,18 +975,18 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                     <p className="text-[10px] uppercase tracking-widest opacity-50">Fight by fight — best options for each</p>
                     <div className="grid gap-2 lg:grid-cols-2">
                       {path.fights.map((f, i) => (
-                        <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
+                        <div key={i} className="border border-(--j-dim) rounded-lg px-3 py-2 text-sm">
                           <p className="flex items-center gap-1.5 flex-wrap mb-1">
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${f.miniLabel ? "border-amber-400 text-amber-300" : "border-[#1f5c33] opacity-80"}`}>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${f.miniLabel ? "border-amber-400 text-amber-300" : "border-(--j-dim) opacity-80"}`}>
                               {f.miniLabel ? `👑 MINI — ${f.miniLabel}` : `FIGHT ${i + 1}`}
                             </span>
-                            <span className="text-white font-bold">{f.defender}</span>
+                            <span className="text-(--j-hi) font-bold">{f.defender}</span>
                           </p>
                           {f.nodeBuff && <p className="text-[11px] text-amber-300 mb-1.5">⚡ {f.nodeBuff}</p>}
                           <div className="space-y-1.5">
                             {f.options.map((o, j) => (
                               <div key={j} className="flex items-start gap-2">
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 ${j === 0 ? "text-black" : "border border-[#1f5c33] opacity-60"}`}
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 ${j === 0 ? "text-(--j-on-acc)" : "border border-(--j-dim) opacity-60"}`}
                                   style={j === 0 ? { background: GREEN } : undefined}>{j === 0 ? "BEST" : `#${j + 1}`}</span>
                                 <div className="min-w-0">
                                   <ChampInline name={o.attacker} />
@@ -1010,17 +1011,17 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
             <div className="flex gap-2 items-center flex-wrap">
               <button onClick={() => defFile.current?.click()} disabled={defBusy}
-                className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
+                className="px-4 py-2 rounded-lg border border-(--j-dim) text-sm hover:border-(--j-acc) disabled:opacity-40 transition-colors">
                 📷 {mapFile ? "Change map photo" : "Map photo (optional)"}
               </button>
               <label className="text-xs opacity-70 inline-flex items-center gap-1.5">Defenders
                 <select value={defCount} onChange={(e) => setDefCount(Number(e.target.value))}
-                  className="bg-black border border-[#1f5c33] rounded px-2 py-1 text-xs" style={{ color: GREEN }}>
+                  className="bg-(--j-bg) border border-(--j-dim) rounded px-2 py-1 text-xs" style={{ color: TEXT }}>
                   {[5, 6, 7, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </label>
               <button onClick={planDefence} disabled={defBusy || roster.length < defCount}
-                className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors ml-auto"
+                className="px-5 py-2.5 rounded-lg text-sm font-bold text-(--j-on-acc) disabled:opacity-40 transition-colors ml-auto"
                 style={{ background: GREEN }}>
                 {defBusy ? "PLANNING…" : "🛡 PLACE MY DEFENCE"}
               </button>
@@ -1028,16 +1029,16 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
             <textarea value={defNotes} onChange={(e) => setDefNotes(e.target.value)} rows={2}
               placeholder="Optional — war tier, map style, which nodes you're responsible for…"
-              className={`${input} w-full resize-none`} style={{ color: GREEN }} />
+              className={`${input} w-full resize-none`} style={{ color: TEXT }} />
 
-            {mapPreview && <img src={mapPreview} alt="War map" className="max-h-48 rounded-lg border border-[#1f5c33]" />}
+            {mapPreview && <img src={mapPreview} alt="War map" className="max-h-48 rounded-lg border border-(--j-dim)" />}
             {defErr && <p className="text-sm text-red-400">✗ {defErr}</p>}
 
             {defence && (
-              <div className="space-y-1.5 border-t border-[#1f5c33] pt-3">
+              <div className="space-y-1.5 border-t border-(--j-dim) pt-3">
                 {defence.placements.map((p, i) => (
-                  <div key={i} className="flex items-start gap-3 border border-[#1f5c33] rounded-lg px-3 py-2">
-                    <span className="shrink-0 text-xs font-bold px-2 py-1 rounded border border-[#33ff66] mt-0.5">NODE {p.node}</span>
+                  <div key={i} className="flex items-start gap-3 border border-(--j-dim) rounded-lg px-3 py-2">
+                    <span className="shrink-0 text-xs font-bold px-2 py-1 rounded border border-(--j-acc) mt-0.5">NODE {p.node}</span>
                     <div className="min-w-0">
                       <ChampInline name={p.champion} />
                       {p.why && <p className="text-xs opacity-70 mt-0.5">{p.why}</p>}

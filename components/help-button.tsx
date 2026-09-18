@@ -88,20 +88,24 @@ export default function HelpButton() {
   }
 
   return (
-    <div className="relative" ref={panelRef}>
+    // ⚠ Phones (below sm): the wrapper goes `static`, so the panel is placed against the TOP BAR
+    // (which is `relative`) — full width under it, wherever the bar ends. Anchored to this button
+    // it ran off the left of the screen, and a fixed top-12 would sit over a wrapped second row.
+    <div className="relative max-sm:static" ref={panelRef}>
       <button
         onClick={() => setOpen(o => !o)}
         title="Ask where to find things in the Hub"
+        aria-label="Help"
         className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
           open ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
         }`}
       >
         <span aria-hidden>💬</span>
-        Help
+        <span className="max-sm:hidden">Help</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[min(92vw,26rem)] rounded-xl border border-gray-700 bg-[#1C1C1E] shadow-2xl shadow-black/50 z-50 flex flex-col overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-[min(92vw,26rem)] max-sm:inset-x-2 max-sm:w-auto rounded-xl border border-gray-700 bg-[#1C1C1E] shadow-2xl shadow-black/50 z-50 flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-white">Help</p>

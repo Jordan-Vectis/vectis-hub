@@ -11,7 +11,7 @@ import type { SwapOption } from "@/lib/jordan-gym"
 // at a taken machine watching a spinner is not a feature. The AI list is a deliberate extra tap,
 // for when he wants a reasoned answer rather than a name.
 
-const btn = "px-3 py-1.5 text-xs border border-[#1f5c33] rounded hover:bg-[#0a2214] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+const btn = "px-3 py-1.5 text-xs border border-(--j-dim) rounded hover:bg-(--j-glow) transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 
 type Cat = { slug: string; name: string; equipment: string; perHand: boolean; sessions: number }
 
@@ -48,7 +48,7 @@ export default function SwapPicker({ slug, name, onPick, onClose }: {
   useEffect(() => { void ask(false) /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [slug])
 
   return (
-    <div className="border border-[#33ff66] rounded-lg p-3 space-y-3 bg-[#040f08]">
+    <div className="border border-(--j-acc) rounded-lg p-3 space-y-3 bg-(--j-box)">
       <div className="flex items-center gap-2">
         <span className="text-xs tracking-widest opacity-60">INSTEAD OF {name.toUpperCase()}</span>
         <button className={`${btn} ml-auto`} onClick={onClose}>CLOSE</button>
@@ -62,7 +62,7 @@ export default function SwapPicker({ slug, name, onPick, onClose }: {
           <span className="text-[10px] tracking-widest opacity-60">THE AI SUGGESTS</span>
           {options.map(o => (
             <button key={o.slug} onClick={() => onPick(o)}
-              className="w-full text-left min-h-[52px] px-3 py-2 rounded border border-[#1f5c33] hover:bg-[#0a2214]">
+              className="w-full text-left min-h-[52px] px-3 py-2 rounded border border-(--j-dim) hover:bg-(--j-glow)">
               <div className="text-sm font-bold">{o.name}</div>
               {o.why && <div className="text-[11px] opacity-60">{o.why}</div>}
             </button>
@@ -78,7 +78,7 @@ export default function SwapPicker({ slug, name, onPick, onClose }: {
           <div className="grid gap-1 sm:grid-cols-2">
             {catalogue.map(c => (
               <button key={c.slug} onClick={() => onPick({ slug: c.slug, name: c.name, equipment: c.equipment, why: "" })}
-                className="text-left min-h-[48px] px-3 py-2 rounded border border-[#1f5c33] hover:bg-[#0a2214]">
+                className="text-left min-h-[48px] px-3 py-2 rounded border border-(--j-dim) hover:bg-(--j-glow)">
                 <span className="text-sm">{c.name}</span>
                 <span className="text-[11px] opacity-50">
                   {" "}— {c.equipment}{c.perHand ? ", each hand" : ""}
@@ -95,7 +95,7 @@ export default function SwapPicker({ slug, name, onPick, onClose }: {
           <label className="block text-[10px] tracking-widest opacity-60 mb-1" htmlFor={`why-${slug}`}>WHY? (OPTIONAL — HELPS THE AI)</label>
           <input id={`why-${slug}`} value={why} onChange={e => setWhy(e.target.value)}
             placeholder="machine's always taken, hurts my shoulder, bored of it…"
-            className="w-full bg-black border border-[#1f5c33] rounded px-2.5 py-1.5 text-sm text-[#33ff66] placeholder:text-[#1f5c33] focus:outline-none focus:border-[#33ff66]" />
+            className="w-full bg-(--j-bg) border border-(--j-dim) rounded px-2.5 py-1.5 text-sm text-(--j-text) placeholder:text-(--j-dim) focus:outline-none focus:border-(--j-acc)" />
         </div>
         <button className={`${btn} min-h-[44px]`} onClick={() => ask(true)} disabled={busy}>
           {busy ? "THINKING…" : "✨ ASK THE AI"}

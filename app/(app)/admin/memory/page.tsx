@@ -82,7 +82,8 @@ How it works:
 - The website's HTML: BcLotWeb descriptions were stored as the site's HTML (<p>, &nbsp;, &auml;...). lib/html-text.ts htmlToText() is the one cleaner - writeBcSale stores new lots clean, the spelling-list build cleans old rows first (only rows still holding tags/entities, 500 at a time, raw UPDATE), and the search, BC Database page and BC export clean on the way out too.
 - SPEED, measured on production: gluing description + IDs + sale name per row took ~6 s; description-only matching with the counts as window totals in ONE query is ~2.4 s, even for "corgi" (115k matches). The counts use count(*) FILTER (WHERE source = ...) OVER () - PARTITION BY lost the count of any source with no row on the page.
 - No trigram index on the DESCRIPTIONS yet (~500 MB on ArchiveLot) - ask Jordan before adding one. The small SearchWord table is the only trigram index.
-- It searches OUR copies: vectis.co.uk refuses the Hub's server, so it is as fresh as the last office "Update the BC lots" collection.`,
+- It searches OUR copies: vectis.co.uk refuses the Hub's server, so it is as fresh as the last office "Update the BC lots" collection.
+- **The photo opens in the Hub's own viewer, never a new tab (2026-09-18).** Jordan: *"you have a button that says tap to open full size and it opens really small."* ⚠ The file was NEVER small — measured: bc-photos/xl/R009356-1.webp is 4000×3733, 307 KB, byte-for-byte the website's /xlarge/ (the site's sizes are small 140 · medium 300 · large 650 · xlarge 4000; anything bigger answers 403). What shrank it was **Chrome's per-address zoom**: a raw …r2.cloudflarestorage.com tab had been left at 25% once and every photo opened from storage inherited it (the magnifier icon in the address bar is the tell; a 4000 px image fitted to the window ≈ 970 px × 25% = the 244 px he saw). So "open it full size" in a browser tab is at the browser's mercy, and clumsy on an iPad anyway. The detail view now opens **components/zoomable-lightbox.tsx** (the shared viewer — pinch, wheel, double-tap, drag, ‹ › through a lot's photos) **portalled to <body>**, because the detail view is an absolute z-10 layer inside the panel and a fixed overlay rendered in place lives in that stacking context. The lightbox carries data-zoom-lightbox so the panel's Escape handler stands down (one press used to close the photo AND the lot behind it) and data-hub-popup so a feedback survey waits. A small "Open the file in a new tab ↗" link stays for saving or emailing the picture. ⚠ Before blaming a "small" or "blurry" photo on the copy job, MEASURE the object (sharp metadata) — and reuse this viewer rather than building a fifth.`,
   },
   {
     filename: "reference_hub_feedback.md",
@@ -176,6 +177,8 @@ metadata:
 
 ⚠⚠ **A MISSING MARKER IS NOT AN EMPTY DATABASE (2026-09-17).** That same clean fallback is a trap: every lot loaded before the column existed carries siteSaleId NULL, so max() is null on a database holding 216,259 lots. The panel said *"Nothing collected yet"*, the **📋 Copy instructions for Claude** text said *"Nothing has been collected yet, so that is the whole range"*, and a full year of sales — 220,228 lots, 382 sales, 36 minutes — was collected again for nothing before Jordan spotted it: *"whats the point pulling in data we already have?"*. The page and the Status Centre now read **count(\\*) beside max(siteSaleId)** and show three states — collected up to N · *N lots here but not which sale they came from* (amber) · genuinely nothing. Loading any collection fills the marker in, so this self-heals per sale. ⚠ Never word the "nothing collected" branch from a null marker alone, here or in the copied instructions — whoever reads those is on another machine with no way of knowing better.
 
+**Photos open in the Hub zoom viewer, not a new tab (2026-09-18).** components/zoom-photo.tsx is a client thumbnail button in front of the shared components/zoomable-lightbox.tsx, portalled to <body> — these pages are server components and cannot hold the open/closed state themselves. The full-size file loads only when the viewer OPENS, never 100 x 300 KB up front. The files were always full size (4000 px, measured); a raw storage tab just inherits the per-address zoom saved in Chrome — the whole story is in [[reference_website_search]].
+
 **⚠ The page's tools are CHIPS** (bc-tools.tsx): 🌐 Website jobs · 📥 Update the BC lots · ⬇ Export & handover. Nothing shows until one is pressed, one at a time, and **a running job opens its own panel and keeps a live dot on the chip** — hiding the tools must never hide a job that is going. Jordan, 2026-09-09: *"these should be really small options at the top that then show the square they need otherwise they should be hidden"* and *"the filtering options are still awful"* — hence sortable columns (date/sale/lot/estimate/hammer, both ways, with an arrow) and on-screen filters (search incl. unique ID, sale name or code, date range, hammer range, sold/unsold, has a photo, full vs short description), every one carried through paging AND sorting.
 `,
   },
@@ -197,6 +200,8 @@ metadata:
 **Why:** Jordan no longer has Crystal Reports and the xlsx lacks the LotID column; the site's unique_id IS that LotID and photos are keyed on it (verified on 2008, 2019 and 2023 lots). ⚠ The number at the end of a lot URL (/4656-…-751438) is the site's own row id — never treat it as the LotID.
 
 **Gotchas:** oldest sale on the site is Feb 2006 — 1999–2005 stays text-only. Site figures can differ from the sheet (Steiff 724/4656: sheet 50–60/£45, site 80–120/£100) — shown as amber "site £100" under the hammer; the sheet's value stays. Jobs survive the tab closing, not a redeploy — the button resumes from the cursor. 250 ms between requests, honest User-Agent. The feed shows hammer prices the lot pages paywall — internal use only.
+
+**Photos open in the Hub zoom viewer, not a new tab (2026-09-18).** components/zoom-photo.tsx is a client thumbnail button in front of the shared components/zoomable-lightbox.tsx, portalled to <body> — these pages are server components and cannot hold the open/closed state themselves. The full-size file loads only when the viewer OPENS, never 100 x 300 KB up front. The files were always full size (4000 px, measured); a raw storage tab just inherits the per-address zoom saved in Chrome — the whole story is in [[reference_website_search]].
 `,
   },
   {
@@ -1301,6 +1306,40 @@ description is **stale**: its statuses are dropped so the lot runs again, and th
 queue it again — it now does exactly the empty ones. If ↺ Reset Progress has been pressed (as it
 was on F113 mid-investigation), queue it with **"skip lots that already have a description"**
 ticked, which comes to the same thing.
+
+## ⚠⚠ One slice at a time — the in-process lock (2026-09-18)
+
+A production log showed ~48 \`[cron/pipeline-queue] error: fetch failed\` lines ending in "F135:
+complete". Not an outage: server.js awaited each ~9-minute slice over a localhost fetch, and Node's
+fetch gives up on headers after **300 s** — one "fetch failed" per slice while the slice ran on. But
+the give-up released server.js's \`pipelineTickBusy\`, and \`heartbeatAt\` was only written once per
+LOT, so a lot quiet for >3 min let the next tick "take over" a live sale and run a SECOND slice on
+it (verified from the code; the log couldn't show whether it hit F135). Duplication, never loss —
+but a description could go live after Key Points / Double Check had checked the old text.
+
+Fixed (Jordan: *"yes fix all four"*):
+- **\`startQueueSlice()\`** takes an in-process lock SYNCHRONOUSLY (on globalThis), holds it for the
+  whole slice, releases in \`finally\`, and **the route answers at once** — the slice logs its own
+  outcome. ⚠ Never go back to awaiting the slice in the route.
+- The lock's **token fences** the slice: \`flush\` writes nothing and \`stopRequested\` returns true once
+  it no longer owns the lock. Max age **20 min** (healthy ≈ 9 min + one AI call capped at 300 s), so
+  a wedged slice (a hung DB call like 2026-09-09) is taken over rather than blocking all night; the
+  replaced one logs "a replaced slice stopped" instead of a false "complete".
+- **Heartbeat is a 30 s timer**, only on a RUNNING row, stopping 6 min past the slice's deadline so a
+  genuinely wedged one DOES go stale.
+- **The status only moves FROM RUNNING** — replaces "not PAUSED/CANCELLED", which let an older slice
+  set a row (even a DONE one) back to QUEUED.
+- ⚠ **\`skipHasDesc\` bug:** it was applied every slice, so a lot the batch stage described in slice 1
+  was dropped from every later slice and never got Key Points or Double Check. It now drops only lots
+  with a description AND no saved row for this run.
+- 17 local tests run the REAL runner against a fake table (lock, fence, takeover, status rule, skip).
+
+**Same review, BC warehouse cron:** the route now answers 202 at once and holds its own in-process
+lock for the whole walk (its WarehouseSyncLog check only SAMPLES between stages). The incremental
+runs at **fixed London times, 11:00 and 17:00** — "every 12 h from boot" landed it on the 05:00
+FULL after one deploy, two walks in a 10-connection pool, which lit the database light at 5 am. A
+FULL that can't start retries every 10 min (six tries) instead of losing the day. server.js logs
+\`e.cause?.code\` so a timeout (UND_ERR_HEADERS_TIMEOUT) is told apart from a restart (ECONNREFUSED).
 `,
   },
   {
@@ -1520,9 +1559,13 @@ Jordan, 2026-08-14: "I want this as the final screen I can check before I sync e
 
 TWO TIERS, and the distinction is the whole point. **Blocking** means it would reach BC or the website WRONG. **Worth a look** means nobody has confirmed it, and it never blocks.
 
-Blocking: no description; no photos; no barcode; no condition UNLESS the lot is aiExcluded; estimate missing, backwards (70 to 50) or zero; the title not matching the first 83 characters of the CURRENT description; and every issue lib/tote-check.ts reports for tote, vendor and receipt against BC.
+Blocking: no description; no photos; no barcode; no condition ANYWHERE (graded on the lot, or written into the description); estimate missing, backwards (70 to 50) or zero; the title not matching the first 83 characters of the CURRENT description; and every issue lib/tote-check.ts reports for tote, vendor and receipt against BC.
 
-WARNING: the condition exemption is Jordan's rule — an AI-excluded lot is hand-written and its condition is typed into the description rather than graded on the lot, so requiring a graded condition there would flag every one of them.
+WARNING — the condition rule CHANGED on 2026-09-18, and the two screens must never disagree about it again. It used to exempt every AI-excluded lot outright (Jordan's rule from August: an excluded lot is hand-written and its condition is typed into the description, so requiring a graded one would flag them all). On F135 that made the Description Copier say "10 of 636 lots need a condition adding" while this screen said nothing was blocking — those 10 were hand-written lots with a condition NOWHERE. Jordan: "they should still be flagged". Now \`hasConditionAnywhere()\` in locking-check-tab.tsx uses the Copier's definition via checkConditionInDescription: the field is set, OR the description carries a grade ("only-in-description"). So the lots the August rule protected still PASS, and a lot with no condition at all is blocked whether or not it is excluded. Do NOT simply drop the exemption — that would block every hand-written lot. "Condition appears in the description" (worth a look) now covers excluded lots too.
+
+"Suggest conditions" is only for lots with no condition anywhere that are NOT excluded — "excluded from AI" has to mean their photos aren't sent to it. The panel still shows when only excluded lots are missing a condition, and says to grade those by hand.
+
+The Description Copier's condition banner (expanded) ends with "Barcodes that need a condition (N)" and a Copy all — one per line, barcodes whatever the sort order. It sits at the BOTTOM of the expanded banner, below the card, so the macro's screen positions are untouched.
 
 WARNING: the title check exists because editing a description does NOT regenerate the title. The stale title is what goes to BC and onto the website, and nothing else notices.
 
@@ -3047,6 +3090,18 @@ when nothing is ticked — the same scope as before).
 
 ⚠ A mass action that fails part-way now SAYS so, naming the error and pointing at the Undo list.
 It used to leave no message at all while the lots done before the failure stayed changed.
+
+## 2026-09-18 — 🔁 Find & Replace (Descriptions group)
+
+Jordan: *"when we make paperwork in BC bullet points are causing formatting issues so I want a way I can replace the bullet points maybe with - but a mass find and replace may be useful in the future"* — then, shown the toolbar: *"As a button in here pls"*. It sits after Clear Descriptions and opens a violet panel: Find, Replace with (empty = remove), **Match case** (ON by default — grades are capitalised words), **Whole words only**, and a one-tap **• bullets → -** quick fill.
+
+- **ONE matcher, lib/find-replace.ts, imported by BOTH the browser preview and bulkFindReplaceDescriptions.** The preview ("45 of 616 lots contain it — 312 times", three −/+ samples) is the safety on a mass edit, so it must be what the press does, not an estimate. Never give either side its own matching.
+- **Literal text, never a pattern** — the typed text is escaped and the replacement goes through a function, so $1, . and ( are just characters. ⚠ **No lookbehind** in the whole-word rule: older iPad Safari throws on one at construction. It captures the character in front and puts it back.
+- The press sends **only the lots that match**, so 20/400 counts real work and an untouched lot is never logged. Otherwise exactly its neighbours: scopeIds() scope, runInChunks, updateLotLogged (source bulk), undoId threaded so **one press is one Undo**, title regenerated from the new description, skipRevalidate on all but the last chunk.
+- ⚠ Its undo **label must end in (N)** — recordBulkUndo rewrites the trailing count as chunks arrive — so the searched text is cut to 18 characters inside it.
+- ⚠ It does **NOT** skip aiExcluded lots (Clear Descriptions does): a hand-typed bullet breaks BC paperwork just the same, and this is an edit of specific text, not a wipe.
+- ⚠ The action **returns** { ok:false, error } rather than throwing (production redacts a thrown server action); the handler re-raises it client-side so the part-way message names the reason. Zero changed is an amber "Nothing changed", never a tick.
+- ⚠ **It changes the Hub only.** BC keeps whatever it was sent, so a sale already in BC needs its descriptions sending again — the panel and the success line both say so. The standing alternative, not built: swap • for - at the BC boundary so the Hub and website keep bullets and nobody has to remember. The Vectis Jo instructions deliberately write •  bullets, so every AI-described sale will need this until that is decided.
 `,
   },
   {
@@ -3355,6 +3410,8 @@ Jordan's rule: **BC is correct; our system was wrong; and because our system was
 **⬆ Check against a BC export (2026-08-03).** After working through BC, upload a BC **"Lines"** export on the tab to prove the transfers landed. Parsed **in the browser** with \`xlsx\` — nothing is uploaded. Per correction it reports ✓ done in BC / ✗ still on the old receipt / ⚠ on something else (showing what BC has) / ? not in the export, as summary chips plus an "In BC now" column, and offers **"Untick the ones BC says aren't done"** to put the ticks right.
 
 ⚠ **Match on INTERNAL BARCODE, never on UniqueID.** A transferred item is re-sequenced under its new receipt (R008300-677 → R008584-…), so matching on the unique ID would fail for exactly the rows that *succeeded*. UniqueID is only a fallback for a lot with no barcode. Columns are read by name with fallbacks (Internal Barcode/Barcode, Receipt No./Receipt No, Vendor No./Vendor No, UniqueID) — verified against a real 641-row export.
+
+⚠⚠ **The Copy-IDs list takes the unique ID BC ITSELF holds, found by barcode (2026-09-18).** It used to read only the receiptUniqueId on the Hub lot, which is BLANK until BC Match is run (the Hub never mints one) — so on F134, 45 of 47 lots that went into BC wrong read *Copy 0 IDs* on the one screen built for copying them. Jordan: *there has 100% been a BC sync done since then so it should have the ids* — it did. The route now adds bcUniqueId per row from WarehouseItem, matched ON the barcode (three spellings, so it stays on the barcode index; if BC holds the barcode twice, the line on the old receipt of that row wins). The tab also reads UniqueID from a loaded export, and idFor() prefers export, then last Data Sync, then the ID on the lot, tagging the row *from the export* / *from BC sync*. ⚠ Matching BY barcode to fetch the BC ID is the allowed direction of the barcode-only rule — never the reverse. ⚠ WHY they had no IDs: the 🔗 BC Match modal marks a lot *Receipt mismatch — skipped* when the receipt BC holds for the barcode differs from the receipt on the Hub lot, so exactly these lots never get an ID written — a circle this lookup breaks. ⚠⚠ And *done in BC* on the export check only means BC agrees with the TOTE. Which side is wrong is for Jordan to say: if the tote on the lots was mistyped (see the wrong-vendors review — the tote is typed, never scanned), BC is the wrong one, the direction shown on this tab is backwards, and Tote Check then Match BC would make the Hub wrong as well. I told him to press it before knowing which, and had to take it back — ask which side is wrong BEFORE recommending Match BC.
 
 **Built for BC's Transfer/Copy Receipt Line dialog (2026-08-03).** That dialog takes **UniqueID** as a **pipe-separated** filter (R008300-677|R008300-678|…) plus a **Target Receipt No.**, so each group header carries two copy buttons: **⧉ Copy N IDs** (the still-to-do rows' receiptUniqueId joined with "|"; falls back to the whole group once everything is ticked so it never copies an empty string) and **⧉ R008584** (the target receipt). Uses \`navigator.clipboard\` with a hidden-textarea + execCommand fallback, since the clipboard API needs a secure context. Lots with no unique ID can't go in the filter — the header says how many were left out rather than quietly copying a short list.
 
@@ -4860,6 +4917,34 @@ Core sync rules (full detail on the reference card):
 
 ---
 
+## Recent work (2026-09-15 → 18) — production is 15941188 (merged 17 Sept 16:57); the last seven commits are STAGING ONLY
+
+### On production (in the 17 Sept merge)
+- **Odd file types show everywhere a customer's photos do** — iPhone HEIC (the prebuilt sharp can't decode HEVC-HEIC, so heic-decode does it), TIFF, camera RAW, videos a browser can't play (ffmpeg makes a playable copy) and PDFs. A converted copy is kept BESIDE each original, one conversion at a time ([[reference_heic]]). Submissions: **Download all** into a folder you pick; the photo viewer steps through the photos without closing.
+- Tablet cataloguing header fits on a phone; Website Search's sale filter is the last filter.
+- **No manual status ticks left on a sale.** Auction Manager: the Photography column is gone ("Lots with photos" says it), **Ran through AI is a measured count** (lots excluded from AI are left out of the total), Catalogued sits before the counts. Auction Settings keeps only **Catalogued 🔒** and **Complete** — the addedToBC / photography / aiRan columns stay in the database and updateAuction deliberately never writes them (an absent checkbox would save false and wipe every sale's value). **Manage Lots' per-lot BC column is measured from the barcode too**, and "Mark added to BC" and its two server actions are deleted ([[reference_bc_lock_and_in_bc_column]]). Lotting Up's "locked" warning now reads Catalogued (it had read the old tick since 2 Sept).
+- Personal /jordan work (meal planner goals, costs, swaps, cooking for two; a new Gym tab) — details in local memory ONLY.
+
+### Staging only — NOT live until I say "push to main"
+- **⚠⚠ Overnight Auto Pipeline: one slice at a time.** The ~48 "[cron/pipeline-queue] error: fetch failed" lines a night were NOT an outage: server.js waited on each 9-minute slice over localhost and Node's fetch gives up waiting after 300 s. But that give-up released the only guard, and the heartbeat was once per lot, so a slow lot let a SECOND slice start on the same sale — lots sent to Gemini twice, and a description could go live after Key Points and Double Check had checked the old text. Now: an in-process lock for the whole slice (its token fences a replaced slice), a 30-second heartbeat timer, the route answers at once and the slice logs its own result, and a queue row's status only ever moves from RUNNING. Also fixed: **"skip lots that already have a description" was dropping lots the run itself had just written**, so they never got Key Points or Double Check. 17 local tests run the real runner ([[reference_pipeline_queue]]).
+- **BC sync:** the 12-hourly incremental now runs at fixed 11:00 and 17:00 London — counting from boot, it landed on the 05:00 FULL after one deploy and lit the database light at five in the morning. Both cron routes answer at once and log their own result (the cause code is printed, so a timeout reads differently from a restart); a FULL that can't start retries every 10 minutes.
+- **Mobile — the whole Hub zoomed and slid about on a phone.** The top bar was wider than a phone (644px for an admin on a 375px screen), which made every page wider than the screen, and the canvas behind the app was pure white even in dark mode (an unlayered body rule beats Tailwind v4's classes). Now a phone-only top bar that wraps (every control kept), dropdowns hanging from the bar, overflow-x: clip on the shell, a dark canvas, and 16px text fields on phones so iPhones stop zooming in on tap. RULES.md design rule 5 carries all four.
+- **Locking Check and Description Copier agree on conditions.** "Has a condition" now uses the Copier's own definition — graded on the lot OR written into the description — for EVERY lot. The AI-excluded exemption had hidden 10 F135 lots with a condition nowhere; the hand-written lots it protected (condition typed into the text) still pass. Excluded lots still aren't sent to Suggest conditions — they're marked to grade by hand. The Copier's condition banner ends with every barcode that needs a condition and a Copy all ([[reference_locking_check]]).
+- /jordan (partly from another session): five looks, the look picker collapsed, a MAKE PLAN fix — local memory ONLY.
+
+### Needs doing
+- **Run Migrations on production** if any /jordan page shows the amber banner — the 17 Sept merge brought new /jordan tables and columns. Nothing that is staging-only needs one.
+- Still open from 14 Sept: the IT emails light (Make.com's scenario history) and the BC Reports cataloguing cache that remembers a failed day as "nobody catalogued".
+
+⚠ **Working-style notes from these sessions:**
+- For anything that runs unattended or spans the whole Hub, investigating in parallel and then having a skeptic try to REFUTE each finding paid off: it confirmed the pipeline race from the code, and on the zoom sweep it threw out three plausible fixes that would not have worked.
+- When a page can't be opened (/jordan 404s for anyone else; staging needs my login), prove the logic with local tests of the REAL code — the pipeline runner was bundled against an in-memory table. In Git Bash set MSYS_NO_PATHCONV=1, or it rewrites "@/lib/..." arguments into Windows paths.
+- When I reverse my own rule, find out what the old rule was protecting before deleting it. The condition exemption was keeping ~100 hand-written lots from being flagged; one shared definition kept that AND caught the 10 real ones. Deleting it would have blocked them all.
+- Another session pushes to staging at the same time — pull before every push, and expect its commits between yours.
+- If a word in my message contradicts the screenshot ("missing descriptions" when both screens count conditions), go by the screenshot and say which you assumed.
+
+---
+
 ## Recent work (2026-09-14) — ON PRODUCTION (merged to main 2026-09-14, a6577674 — main = staging)
 
 - **⚠⚠ Background BC work signs in as ME only.** getBCTokenAny() — the timed BC copy, its reconcile, the report caches and the crons — now uses only the BC sign-in of my Hub login jordan.orange (BACKGROUND_BC_USERNAME in lib/bc.ts), with NO fallback to anyone else; the Status Centre's Business Central light tests the same sign-in. Why: "BC data copy → Location changes" had failed with a 403 on every run since Fri 11 Sept ~20:00 while every other part worked — the old code borrowed an ARBITRARY stored sign-in, and most staff's BC permissions may not cover the change log. If my sign-in lapses, ALL background BC work stops and the light names me: press the BC button in the top bar while logged in as jordan.orange. If Location changes still gets a 403 with my sign-in, my own BC account lacks change-log permission — that's a BC admin job.
@@ -5643,7 +5728,7 @@ type: reference
 - [Upload photos — any sale](reference_photo_upload_any_sale.md) — no sale picked, matched across every UNCOMPLETED sale; ONE engine in lib/photo-scan.ts; a photo matching nothing is NOT saved — never rebuild the holding area
 - [AI cost — caching + price estimator](reference_ai_cost.md) — cachePrefix caching, rates in lib/ai-pricing.ts; unknown model = "Price not set" never $0
 - [Patches & Changes (admin)](reference_patches_changes.md) — /admin/changes; committed seed is the only history; \`npm run changelog:seed\` AMENDS into your work commit
-- [Auto Pipeline overnight queue](reference_pipeline_queue.md) — server-side queue + ✨ AI UPGRADE jobs; runner calls the same AI routes; catalogue overrules stale saved rows. Read before touching
+- [Auto Pipeline overnight queue](reference_pipeline_queue.md) — server-side queue + ✨ AI UPGRADE jobs; runner calls the same AI routes; catalogue overrules stale saved rows; ⚠⚠ ONE SLICE AT A TIME via an in-process lock (2026-09-18) — "fetch failed" every ~10 min was never an outage. Read before touching
 - [🧪 Instructions Testing tab](reference_instructions_testing.md) — Auto Pipeline on 5–10 lots, PREVIEW ONLY, never writes
 - [Marketing Business Plan tab](reference_marketing_plan.md) — GA snapshot FROZEN on the plan; lib/marketing-plan.ts is client-imported
 - [Two AI Providers — Gemini + Claude](reference_ai_providers.md) — model id decides provider; only claudeOk slots may use Claude. Read before touching any AI route
@@ -5682,7 +5767,7 @@ type: reference
 - [Auto Pipeline — appliedDesc](reference_auto_pipeline_apply.md) — appliedDesc is the only record of an apply; model read LIVE via refs
 - [⚠ AI apply keeps the condition line](reference_condition_line_on_ai_apply.md) — keepConditionLine (lib/condition.ts) in all four AI-apply paths; "Add Conditions is glitchy" was never the button
 - [⚠ Leaked tool call ≠ a description](reference_ai_tool_call_leak.md) — stripToolCallLeak universal; MALFORMED_FUNCTION_CALL retried. Read before any AI description route
-- [Locking Check — final gate](reference_locking_check.md) — reuses tote-check + condition; tote checks skipped if BC totes fail
+- [Locking Check — final gate](reference_locking_check.md) — reuses tote-check + condition; tote checks skipped if BC totes fail; ⚠ "has a condition" = graded OR written in, for EVERY lot incl. AI-excluded — the Copier's definition (2026-09-18)
 - [💷 Reserves](reference_reserves.md) — deliberately simple, does NOT check BC; no reserve column; updateLot preserves startingBid/reserve
 - [Vendor / Tote Check tab](reference_tote_check.md) — read-only vs WarehouseTote; stale = amber
 - [⚠⚠ Wrong vendors — the 2026-09-08 review](reference_vendor_flow_faults.md) — ⚠ the tote is TYPED never scanned; a mistyped-but-valid tote is invisible to every check; BC keys receipt-totes on (receipt,line) but our cache is UNIQUE on toteNo; dead duplicate guard. Wizard + cache FIXED (on production since the 2026-09-09 merge); Match BC/End of Day left alone by his decision. Read before touching the tote lookup, wizard step 1 or Match BC
@@ -5702,8 +5787,8 @@ type: reference
 - [iPad AUP Terms Popup](reference_terms_aup.md) — lib/terms.ts; bump TERMS_VERSION
 - [Cataloguing Performance PDFs](reference_reports_pdf.md) — one route + one builder, period-scoped
 - [Report Day Exclusion](reference_report_day_exclusion.md) — hides days from report maths only
-- [Manage Lots — Filters/Bulk/Undo](reference_manage_lots_bulk_undo.md) — chunked mass actions, one undo per press; Change Vendor clears the tote. Read before touching bulk actions
-- [⚠ Lock = Catalogued; "In BC" is measured](reference_bc_lock_and_in_bc_column.md) — requireNotBCLocked on Catalogued; "In BC" = barcode count vs sync; addedToBC a note only`,
+- [Manage Lots — Filters/Bulk/Undo](reference_manage_lots_bulk_undo.md) — chunked mass actions, one undo per press; Change Vendor clears the tote; 🔁 Find & Replace shares ONE matcher (lib/find-replace.ts) with its preview, changes the Hub only. Read before touching bulk actions
+- [⚠ Lock = Catalogued; "In BC" is measured](reference_bc_lock_and_in_bc_column.md) — requireNotBCLocked on Catalogued; NO manual BC/photo/AI ticks left anywhere — sale AND per-lot counts are measured (2026-09-15/17); updateAuction never writes the old columns`,
   },
 ]
 
