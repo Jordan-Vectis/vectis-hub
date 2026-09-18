@@ -223,8 +223,80 @@ function isMissingTable(e: any): boolean {
   return e?.code === "P2021" || e?.code === "P2022" || /does not exist in the current database/i.test(e?.message ?? "")
 }
 
-export async function runQueueSlice(): Promise<SliceResult> {
+// ── One slice at a time, in this process ────────────────────────────────────
+// ⚠⚠ THIS is the guard that stops two slices running the same sale (2026-09-18).
+//
+// What it replaces, and why that failed: server.js used to await the whole ~9-minute slice over
+// a localhost fetch, and Node's fetch gives up waiting for headers after 300 s ("fetch failed" —
+// ~48 of them in one night's log, one per slice). The slice carried on regardless, but the
+// give-up released server.js's `pipelineTickBusy` from minute 5 onwards, and the DB heartbeat
+// was only written once per LOT — so a lot quiet for over 3 minutes (two rate limits, a slow
+// Gemini call) let the next tick decide the slice had crashed and start a SECOND one on the same
+// sale. Nothing lost, but lots sent to Gemini twice, applied twice, and a description could go
+// live AFTER Key Points / Double Check had checked the previous text.
+//
+// Now: the lock is taken SYNCHRONOUSLY (no await between the check and the set, so two ticks can
+// never both win), held for the WHOLE slice, and released in `finally`. It lives on globalThis so
+// every bundle that imports this module shares one lock. The token also FENCES the slice: if the
+// lock is ever broken by age, the old slice finds it no longer owns it and stops writing.
+//
+// ⚠ The max age is what keeps a WEDGED slice (a hung database call, like 2026-09-09) from
+// blocking the queue for ever. A healthy slice is SLICE_MS (9 min) plus at most one in-flight AI
+// call, which Node's fetch caps at 300 s — about 15 minutes. Twenty leaves room without letting a
+// dead slice hold the sale all night.
+type SliceLock = { token: string; startedAt: number }
+const LOCK_MAX_AGE_MS = 20 * 60 * 1000
+/** How often a running slice proves it is alive — well inside HEARTBEAT_STALE_MS (3 min). */
+const HEARTBEAT_EVERY_MS = 30 * 1000
+/** A slice that has overrun its own deadline by this much stops beating, so a genuinely wedged
+ *  one DOES go stale and can be taken over instead of looking alive for ever. */
+const HEARTBEAT_GRACE_MS = 6 * 60 * 1000
+
+const lockBox = globalThis as unknown as { __pipelineSliceLock?: SliceLock }
+const lockHeldBy = (token: string) => lockBox.__pipelineSliceLock?.token === token
+
+function tryLock(): string | null {
+  const cur = lockBox.__pipelineSliceLock
+  if (cur && Date.now() - cur.startedAt < LOCK_MAX_AGE_MS) return null
+  if (cur) console.warn(`[cron/pipeline-queue] a slice has held the lock for over ${LOCK_MAX_AGE_MS / 60_000} min — treating it as wedged and starting a new one; the old one will stop writing`)
+  const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  lockBox.__pipelineSliceLock = { token, startedAt: Date.now() }
+  return token
+}
+function unlock(token: string) {
+  if (lockHeldBy(token)) lockBox.__pipelineSliceLock = undefined
+}
+
+/**
+ * Start a slice if none is running, and return AT ONCE.
+ *
+ * ⚠ It does not wait for the slice. The route used to, and a nine-minute wait over a localhost
+ * fetch is what produced a "fetch failed" line every slice and broke the old guard (above). The
+ * slice now logs its own outcome, the way the BC warehouse cron already did.
+ */
+export function startQueueSlice(): { started: boolean; reason?: string } {
+  if (!process.env.CRON_SECRET) return { started: false, reason: "CRON_SECRET not set" }
+  const token = tryLock()
+  if (!token) return { started: false, reason: "a slice is already running" }
+  void runQueueSlice(token)
+    .then(r => {
+      // ⚠ A slice that was replaced wrote nothing after losing the lock, so its own "complete" is
+      // not true of the sale — say what actually happened instead.
+      if (!lockHeldBy(token)) {
+        if (r.ran) console.warn(`[cron/pipeline-queue] ${r.code}: a replaced slice stopped — its later work was not saved; the newer slice carries on`)
+        return
+      }
+      if (r.ran) console.log(`[cron/pipeline-queue] ${r.code}: ${r.message} (${r.done}/${r.total}, ${r.stage})`)
+    })
+    .catch(e => console.error("[cron/pipeline-queue] slice failed:", e))
+    .finally(() => unlock(token))
+  return { started: true }
+}
+
+async function runQueueSlice(token: string): Promise<SliceResult> {
   if (!process.env.CRON_SECRET) return { ran: false, reason: "CRON_SECRET not set" }
+  /** Does this slice still own the lock? False only if it was broken by age (see above). */
+  const owner = () => lockHeldBy(token)
 
   const now = new Date()
 
@@ -281,6 +353,9 @@ export async function runQueueSlice(): Promise<SliceResult> {
   //   · Remove pressed mid-slice deletes the row — update() would then throw
   //     inside the error handler. updateMany simply matches nothing.
   const flush = async (fields: Record<string, any>) => {
+    // ⚠ A slice that has lost the lock must not write ANYTHING — its progress figures, stage and
+    // log are older than the slice that replaced it, and writing them would put the row back.
+    if (!owner()) { log.length = 0; return }
     // Pull the pinned problems back out, add any new ones, and trim only the
     // BODY — see PROBLEMS_HEAD above for why this exists.
     const { pinned, body } = splitPinned(item.logText ?? "")
@@ -299,10 +374,14 @@ export async function runQueueSlice(): Promise<SliceResult> {
       where: { id: item.id },
       data: { ...rest, logText: merged, heartbeatAt: new Date() },
     })
-    // The STATUS is only ever moved on a row nobody has taken control of.
+    // ⚠⚠ The STATUS only ever moves FROM RUNNING — the state this slice claimed. That one rule
+    // covers every way it went wrong: Hold pressed mid-slice (PAUSED), the sale removed
+    // (CANCELLED / deleted), and — the one found on 2026-09-18 — an older slice's exit setting a
+    // row back to QUEUED under a newer one, or even a finished (DONE) sale back to QUEUED. It
+    // used to exclude only PAUSED and CANCELLED, which let the last two through.
     if (status !== undefined) {
       await prisma.pipelineQueueItem.updateMany({
-        where: { id: item.id, status: { notIn: ["PAUSED", "CANCELLED"] } },
+        where: { id: item.id, status: "RUNNING" },
         data: { status },
       })
     }
@@ -314,11 +393,27 @@ export async function runQueueSlice(): Promise<SliceResult> {
    *  lot? Checked between lots so a click takes effect in seconds rather than at
    *  the end of a nine-minute slice. */
   const stopRequested = async (): Promise<boolean> => {
+    // A slice that has been replaced stops at the next lot, not at the end of its nine minutes.
+    if (!owner()) return true
     const row = await prisma.pipelineQueueItem.findUnique({ where: { id: item.id }, select: { status: true } })
     return !row || row.status === "PAUSED" || row.status === "CANCELLED"
   }
 
   const deadline = new Deadline(Date.now() + SLICE_MS)
+
+  // ⚠⚠ THE HEARTBEAT IS A TIMER NOW, not a side effect of finishing a lot. Written only per lot, a
+  // single slow lot (two rate limits, one long Gemini call) went quiet for over HEARTBEAT_STALE_MS
+  // and the row looked crashed — which is how a second slice got started on a live sale. Every
+  // 30 s while this slice owns the lock and hasn't badly overrun its deadline, and only on a row
+  // that is still RUNNING (never resurrecting a paused or finished one).
+  const beatUntil = Date.now() + SLICE_MS + HEARTBEAT_GRACE_MS
+  const beat = setInterval(() => {
+    if (!owner() || Date.now() > beatUntil) { clearInterval(beat); return }
+    prisma.pipelineQueueItem.updateMany({
+      where: { id: item.id, status: "RUNNING" },
+      data:  { heartbeatAt: new Date() },
+    }).catch(() => { /* a missed beat is harmless; six fit inside the stale window */ })
+  }, HEARTBEAT_EVERY_MS)
   const ctx: Ctx = { changedBy: `Auto Pipeline (overnight${item.addedBy ? `, queued by ${item.addedBy}` : ""})`, source: "ai_apply" }
 
   try {
@@ -371,6 +466,10 @@ export async function runQueueSlice(): Promise<SliceResult> {
     addLog(`✗ ${item.code} — ${e?.message ?? e}. Will try again in a minute.`)
     await flush({ status: "QUEUED", retryAfter: new Date(Date.now() + 60_000), lastMessage: e?.message ?? "Unknown error — retrying." })
     return { ran: true, code: item.code, status: "QUEUED", done: item.done, total: item.total, stage: item.stage, message: `error, retrying: ${e?.message ?? e}` }
+  } finally {
+    // Every exit path — finished, handed back, errored, or thrown — stops the heartbeat, or a
+    // finished slice would keep a RUNNING row looking alive.
+    clearInterval(beat)
   }
 }
 
@@ -450,7 +549,12 @@ async function loadLots(item: NonNullable<Item>): Promise<{ auctionId: string; l
     }
   })
   if (item.onlyWithPhotos) lots = lots.filter(l => l.imageUrls.length > 0)
-  if (item.skipHasDesc)    lots = lots.filter(l => !(l.currentDesc ?? "").trim())
+  // ⚠⚠ "Skip lots that already have a description" means lots that had one BEFORE THIS RUN — ones
+  // a person wrote. It was applied on every slice, so a lot the batch stage described in slice 1
+  // HAD a description by slice 2 and was dropped from every later slice: it never got Key Points
+  // or Double Check at all (found 2026-09-18). A lot this run has a saved row for is the run's own
+  // work, and it carries on through the stages whatever its description says now.
+  if (item.skipHasDesc)    lots = lots.filter(l => !(l.currentDesc ?? "").trim() || !!saved[l.id])
   return { auctionId: cat.auctionId, lots, staleCleared }
 }
 
@@ -493,8 +597,11 @@ async function withRetry<T>(
       const isEmpty = EMPTY_ANSWER.test(lastError)
       const wait    = isRL ? rateLimitWait(attempt) : (isRecit || isEmpty) ? 1500 : otherWait(attempt)
       // ⚠⚠ NEVER sleep in-process for as long as the heartbeat takes to go stale.
-      // flush() is the only thing that writes heartbeatAt and it runs once per LOT, so a
-      // long sleep here leaves the queue row looking dead: the 30-second tick sees a
+      // (Belt and braces since 2026-09-18: the heartbeat is now a 30 s timer and the slice holds
+      // an in-process lock, so this is no longer the only thing preventing a takeover — but a
+      // long wait is still better parked in the queue than held in memory.)
+      // flush() USED to be the only thing that wrote heartbeatAt, once per LOT, so a
+      // long sleep here left the queue row looking dead: the 30-second tick saw a
       // RUNNING row more than HEARTBEAT_STALE_MS old, reclaims the sale, and TWO SLICES
       // then run it at once — double the Gemini spend and interleaved writes. The rate-limit
       // backoff reaches 240s on the third consecutive 429, which is past the 3-minute

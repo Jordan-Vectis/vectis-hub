@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a7ff0c2c2da409ab7cdc7bc507cdfa76f88a9e05","author":"Jordan Orange","date":"2026-09-18T09:33:36+01:00","subject":"JORDAN.SYS: five LOOKS, not just colours — Retro, Hub, Modern, Halo, Paper"},
   {"sha":"f64cc38637690672d832d5ab04576afd5bc20583","author":"Jordan Orange","date":"2026-09-18T09:14:42+01:00","subject":"JORDAN.SYS: five looks to choose from, not just green on black"},
   {"sha":"b88249d95697ab1dacc0a48ebd6ca4ce37bb3091","author":"Jordan Orange","date":"2026-09-17T17:08:48+01:00","subject":"Meal planner: MAKE PLAN no longer reads as a dead press"},
   {"sha":"91925f3e7a44b04261f3030f8b368a707084b82e","author":"Jordan Orange","date":"2026-09-17T16:54:24+01:00","subject":"Meal planner: numbers save themselves, macro split lights up, and a dessert slot"},

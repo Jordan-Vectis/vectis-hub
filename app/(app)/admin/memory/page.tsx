@@ -1301,6 +1301,40 @@ description is **stale**: its statuses are dropped so the lot runs again, and th
 queue it again — it now does exactly the empty ones. If ↺ Reset Progress has been pressed (as it
 was on F113 mid-investigation), queue it with **"skip lots that already have a description"**
 ticked, which comes to the same thing.
+
+## ⚠⚠ One slice at a time — the in-process lock (2026-09-18)
+
+A production log showed ~48 \`[cron/pipeline-queue] error: fetch failed\` lines ending in "F135:
+complete". Not an outage: server.js awaited each ~9-minute slice over a localhost fetch, and Node's
+fetch gives up on headers after **300 s** — one "fetch failed" per slice while the slice ran on. But
+the give-up released server.js's \`pipelineTickBusy\`, and \`heartbeatAt\` was only written once per
+LOT, so a lot quiet for >3 min let the next tick "take over" a live sale and run a SECOND slice on
+it (verified from the code; the log couldn't show whether it hit F135). Duplication, never loss —
+but a description could go live after Key Points / Double Check had checked the old text.
+
+Fixed (Jordan: *"yes fix all four"*):
+- **\`startQueueSlice()\`** takes an in-process lock SYNCHRONOUSLY (on globalThis), holds it for the
+  whole slice, releases in \`finally\`, and **the route answers at once** — the slice logs its own
+  outcome. ⚠ Never go back to awaiting the slice in the route.
+- The lock's **token fences** the slice: \`flush\` writes nothing and \`stopRequested\` returns true once
+  it no longer owns the lock. Max age **20 min** (healthy ≈ 9 min + one AI call capped at 300 s), so
+  a wedged slice (a hung DB call like 2026-09-09) is taken over rather than blocking all night; the
+  replaced one logs "a replaced slice stopped" instead of a false "complete".
+- **Heartbeat is a 30 s timer**, only on a RUNNING row, stopping 6 min past the slice's deadline so a
+  genuinely wedged one DOES go stale.
+- **The status only moves FROM RUNNING** — replaces "not PAUSED/CANCELLED", which let an older slice
+  set a row (even a DONE one) back to QUEUED.
+- ⚠ **\`skipHasDesc\` bug:** it was applied every slice, so a lot the batch stage described in slice 1
+  was dropped from every later slice and never got Key Points or Double Check. It now drops only lots
+  with a description AND no saved row for this run.
+- 17 local tests run the REAL runner against a fake table (lock, fence, takeover, status rule, skip).
+
+**Same review, BC warehouse cron:** the route now answers 202 at once and holds its own in-process
+lock for the whole walk (its WarehouseSyncLog check only SAMPLES between stages). The incremental
+runs at **fixed London times, 11:00 and 17:00** — "every 12 h from boot" landed it on the 05:00
+FULL after one deploy, two walks in a 10-connection pool, which lit the database light at 5 am. A
+FULL that can't start retries every 10 min (six tries) instead of losing the day. server.js logs
+\`e.cause?.code\` so a timeout (UND_ERR_HEADERS_TIMEOUT) is told apart from a restart (ECONNREFUSED).
 `,
   },
   {
