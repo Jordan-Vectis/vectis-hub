@@ -10,6 +10,38 @@
   --foreground: #171717;
 }
 
+/* ─── The page canvas behind the Hub (2026-09-18) ────────────────────────────
+   Jordan: "on mobile zooming in and out is really glitchy on the entire hub, you get this white
+   space". The unlayered `body { background: var(--background) }` below beats the bg-gray-50 class
+   on <body> (Tailwind v4 puts utilities in a layer, and unlayered rules always win), and
+   --background was never redefined for dark — so the canvas behind the whole app was PURE WHITE
+   in dark mode, the default. Only <main> and the top bar paint dark, so anything that showed the
+   canvas (zooming out, the overscroll bounce, the strip beside a too-wide page, toolbars
+   resizing) flashed white.
+   ⚠ Scoped to pages inside the Hub shell with :has(), so /login, /first-aid, /submit and the
+   customer site keep their own light bounce. Browsers without :has() (iOS < 15.4) simply stay as
+   they were. Colours match <main> in app/(app)/layout.tsx. */
+html:has(.hub-shell) {
+  --background: #f9fafb; /* gray-50, <main>'s light colour */
+}
+html.dark:has(.hub-shell) {
+  --background: #141416; /* <main>'s dark colour */
+}
+
+/* ─── iPhone: stop the page zooming in when a text box is tapped ─────────────
+   iOS Safari zooms the whole page in when a field under 16px gets focus, and leaves it zoomed —
+   half of "zooming is glitchy". Almost every field in the Hub is text-sm or text-xs. (The
+   --font-size-* tokens in @theme below do nothing in Tailwind v4, which reads --text-*.)
+   ⚠ PHONES ONLY: a coarse pointer AND under 744px wide (the iPad mini upright), or a phone held
+   sideways (under 500px tall). Every iPad, every desktop — and so the Description Copier — is
+   untouched. Never "fix" this with maximum-scale / user-scalable=no: that stops people zooming
+   at all, which is an accessibility failure. Fields already 16px or larger are left alone. */
+@media (pointer: coarse) and (max-width: 743px), (pointer: coarse) and (max-height: 500px) {
+  :is(input:not([type=checkbox],[type=radio],[type=range],[type=color],[type=file],[type=button],[type=submit],[type=reset],[type=image],[type=hidden]), textarea, select):not(.text-base,.text-lg,.text-xl,.text-2xl,.text-3xl,.text-4xl) {
+    font-size: 16px;
+  }
+}
+
 
 @theme inline {
   --color-background: var(--background);

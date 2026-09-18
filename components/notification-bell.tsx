@@ -179,7 +179,7 @@ export default function NotificationBell() {
   const seenMs = seenAtOpen ? Date.parse(seenAtOpen) : NaN
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative max-sm:static">
       {/* 40 px to tap, without making the 48 px bar any taller: the negative margin keeps the
           icon's spacing identical to its neighbours. */}
       <button type="button" onClick={() => (open ? closePopover() : openPopover())} title={title} aria-label={title}
@@ -198,9 +198,11 @@ export default function NotificationBell() {
 
       {open && (
         // ⚠ On a phone the bell sits ~150 px from the right edge, so a 384 px box anchored to it ran off the
-        // LEFT of the screen. Below `sm` it is pinned under the 48 px bar, full width less a margin, instead.
+        // LEFT of the screen. Below `sm` the wrapper goes `static` and the panel hangs full width from the
+        // TOP BAR instead (2026-09-18) — it used to be `fixed top-12`, which assumed a 48 px bar, and on a
+        // phone the bar can now wrap to a second row.
         <div role="dialog" aria-label="Alerts"
-          className="absolute right-0 top-full mt-1 w-96 max-w-[calc(100vw-1rem)] max-sm:fixed max-sm:inset-x-2 max-sm:top-12 max-sm:mt-1 max-sm:w-auto max-sm:max-w-none z-50 rounded-lg border border-gray-700 bg-gray-900 shadow-xl text-sm">
+          className="absolute right-0 top-full mt-1 w-96 max-w-[calc(100vw-1rem)] max-sm:inset-x-2 max-sm:mt-1 max-sm:w-auto max-sm:max-w-none z-50 rounded-lg border border-gray-700 bg-gray-900 shadow-xl text-sm">
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
             <p className="font-semibold text-white">Alerts</p>
             {failed && data && <p className="text-xs text-amber-400">Couldn&apos;t refresh — showing the last list</p>}

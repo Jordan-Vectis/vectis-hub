@@ -259,7 +259,8 @@ export default function FeedbackPrompt() {
       {/* display:none, so it takes no room (and no flex gap) in the top bar. */}
       <span ref={anchorRef} hidden />
       {later.length > 0 && (
-        <div ref={listRef} className="relative flex-shrink-0">
+        // Phones: the list hangs full width from the top bar (see help-button.tsx).
+        <div ref={listRef} className="relative flex-shrink-0 max-sm:static">
           {/* The hit area is 44px tall for a finger; the visible pill is 32px, so the 48px top bar
               doesn't grow. */}
           <button
@@ -285,7 +286,7 @@ export default function FeedbackPrompt() {
           {listOpen && later.length > 1 && (
             <div
               role="menu"
-              className="absolute right-0 top-full z-50 mt-1 w-[min(92vw,22rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl shadow-black/30 dark:border-gray-700 dark:bg-[#1C1C1E] dark:shadow-black/50"
+              className="absolute right-0 top-full z-50 mt-1 w-[min(92vw,22rem)] max-sm:inset-x-2 max-sm:w-auto overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl shadow-black/30 dark:border-gray-700 dark:bg-[#1C1C1E] dark:shadow-black/50"
             >
               <p className="px-4 pb-2 pt-3 text-xs text-gray-500 dark:text-gray-400">You put these off — pick one to finish:</p>
               {later.map(s => {

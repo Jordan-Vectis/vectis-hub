@@ -55,7 +55,17 @@ export default async function AppLayout({
   } catch { hasDashboard = false }
 
   return (
-    <div className="flex flex-col h-full min-h-screen">
+    // ⚠ Three things here are about phones (2026-09-18, "zooming in and out is really glitchy on
+    // the entire hub"):
+    //  · `hub-shell` is what globals.css keys the dark page canvas on — without it the area
+    //    behind the app was pure white in dark mode.
+    //  · `overflow-x-clip` is the backstop that stops anything wider than the phone widening the
+    //    whole PAGE (the top bar used to, ~644px on a 375px screen, which is what let the page
+    //    zoom out and slide sideways). CLIP, never hidden: clip creates no scroll container, so
+    //    the h-full flex pages, the sticky banners and every dropdown behave exactly as before.
+    //  · `max-sm:min-h-0`: min-h-screen is 100vh, which on a phone is taller than the visible
+    //    screen, so the page scrolled by a toolbar's height on top of <main>. Phones only.
+    <div className="hub-shell flex flex-col h-full min-h-screen max-sm:min-h-0 overflow-x-clip">
       <CrtMode />
       {/* App-wide on purpose: the deploy banner lives only in the cataloguing
           shell, so an iPad parked on any other page would never hear about a
