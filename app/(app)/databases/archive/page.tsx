@@ -6,6 +6,7 @@ import ArchiveSite from "./archive-site"
 import ArchiveTools from "./archive-tools"
 import { getSignedImageUrl } from "@/lib/r2"
 import { SITE_IMAGES } from "@/lib/archive-site"
+import ZoomPhoto from "@/components/zoom-photo"
 
 // Databases → Lot Archive: the pre-BC lot history (1999 → the BC switch), searchable.
 // Photos: our R2 copy when the photo job has run, else the site's own picture.
@@ -261,7 +262,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                   {rows.map((r, i) => (
                     <tr key={r.id} className={`border-t border-gray-100 dark:border-gray-800/70 align-top ${i % 2 ? "bg-white dark:bg-[#141416]/40" : ""}`}>
                       <td className="px-2 py-2 w-16">
-                        {r.photo ? <a href={r.photoFull ?? r.photo} target="_blank" rel="noreferrer"><img src={r.photo} alt="" loading="lazy" className="h-14 w-14 object-cover rounded-md bg-gray-100 dark:bg-gray-800" /></a> : <div className="h-14 w-14 rounded-md bg-gray-100 dark:bg-gray-800/60" />}
+                        {r.photo ? <ZoomPhoto thumb={r.photo} full={r.photoFull} /> : <div className="h-14 w-14 rounded-md bg-gray-100 dark:bg-gray-800/60" />}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(r.auctionDate)}</td>
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[220px]">{r.saleTitle || `Sale ${r.auctionId}`}<div className="text-xs text-gray-400">sale {r.auctionId}</div></td>

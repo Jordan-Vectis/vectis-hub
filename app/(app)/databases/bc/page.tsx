@@ -9,6 +9,7 @@ import ArchiveSite from "../archive/archive-site"
 import BcCollect from "./bc-collect"
 import BcTools from "./bc-tools"
 import { BC_FIRST_SITE_SALE, BC_LAST_SITE_SALE } from "@/lib/bc-web-collector"
+import ZoomPhoto from "@/components/zoom-photo"
 
 // Databases → BC Database: every Business Central lot that has been through a sale,
 // built like the ABC database. The lot's own figures (sale, lot number, estimate,
@@ -276,7 +277,7 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
                   {rows.map((r, i) => (
                     <tr key={r.id} className={`border-t border-gray-100 dark:border-gray-800/70 align-top ${i % 2 ? "bg-white dark:bg-[#141416]/40" : ""}`}>
                       <td className="px-2 py-2 w-16">
-                        {r.photo ? <a href={r.photoFull ?? r.photo} target="_blank" rel="noreferrer"><img src={r.photo} alt="" loading="lazy" className="h-14 w-14 object-cover rounded-md bg-gray-100 dark:bg-gray-800" /></a> : <div className="h-14 w-14 rounded-md bg-gray-100 dark:bg-gray-800/60" />}
+                        {r.photo ? <ZoomPhoto thumb={r.photo} full={r.photoFull} /> : <div className="h-14 w-14 rounded-md bg-gray-100 dark:bg-gray-800/60" />}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(r.auctionDate)}</td>
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[220px]">{r.auctionName || `Sale ${r.auctionCode}`}<div className="text-xs text-gray-400">{r.auctionCode}</div></td>
