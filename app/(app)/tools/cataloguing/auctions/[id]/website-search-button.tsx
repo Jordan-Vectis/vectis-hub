@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import type { SearchResponse, SearchResult, SearchSource } from "@/app/api/website-search/route"
+import ZoomableLightbox from "@/components/zoomable-lightbox"
 import { useCategoryMap } from "@/lib/use-category-map"
 import ThemeToggle from "@/components/theme-toggle"
 
@@ -199,6 +201,7 @@ function InfoText({ children }: { children: React.ReactNode }) {
 
 function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
   const [shown, setShown] = useState(0)
+  const [viewer, setViewer] = useState(false)
   const [copied, setCopied] = useState<"yes" | "no" | null>(null)
   const pics = r.images.length ? r.images : r.photoFull ? [r.photoFull] : r.photo ? [r.photo] : []
   const big = pics[shown] ?? null
@@ -228,9 +231,16 @@ function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
         <div className="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div>
             {big ? (
-              <a href={big} target="_blank" rel="noreferrer" title="Open the full-size photo">
+              // ⚠ Opens the Hub's own full-screen viewer, NOT a new browser tab (Jordan, 2026-09-18:
+              // "you have a button that says tap to open full size and it opens really small"). The
+              // file was always full size — 4000 px, measured — but a raw storage tab is at the mercy
+              // of the browser: Chrome remembers a zoom level per address and his was at 25%, and a
+              // new tab on an iPad is clumsy anyway. components/zoomable-lightbox.tsx is the shared
+              // viewer (pinch, wheel, double-tap, drag, arrows) — reuse it, never build another.
+              <button type="button" onClick={() => setViewer(true)} title="Zoom in on the photo"
+                style={{ touchAction: "manipulation" }} className="block w-full cursor-zoom-in">
                 <img src={big} alt="" className="w-full max-h-[60vh] object-contain rounded-xl bg-black" />
-              </a>
+              </button>
             ) : (
               <div className="flex h-64 items-center justify-center rounded-xl bg-white dark:bg-[#1C1C1E] text-gray-500">No photo for this lot</div>
             )}
@@ -244,7 +254,12 @@ function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
                 ))}
               </div>
             )}
-            {big && <p className="mt-1 text-xs text-gray-500">Tap the photo to open it full size.</p>}
+            {big && (
+              <p className="mt-1 text-xs text-gray-500">
+                Tap the photo to zoom in — pinch, scroll or double-tap, and drag to move around.{" "}
+                <a href={big} target="_blank" rel="noreferrer" className="underline hover:text-gray-700 dark:hover:text-gray-300">Open the file in a new tab ↗</a>
+              </p>
+            )}
           </div>
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
@@ -273,6 +288,13 @@ function Detail({ r, onBack }: { r: SearchResult; onBack: () => void }) {
           </div>
         </div>
       </div>
+      {/* ⚠ Portalled to <body>: this view is an absolute z-10 layer inside the panel, and a fixed
+          overlay rendered in place would live in that stacking context — under anything in the
+          panel with a higher z-index. On <body> it is simply on top. */}
+      {viewer && big && typeof document !== "undefined" && createPortal(
+        <ZoomableLightbox src={big} images={pics} onClose={() => setViewer(false)} />,
+        document.body,
+      )}
     </div>
   )
 }
@@ -323,6 +345,9 @@ export default function WebsiteSearchButton({ tablet = false, standalone = false
     if (!shown) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
+      // ⚠ The photo viewer is open on top — this Escape is ITS, not ours. Both listen on the
+      // window, so without this one press closed the photo AND the lot behind it.
+      if (document.querySelector("[data-zoom-lightbox]")) return
       if (detail) setDetail(null)
       else if (!standalone) setOpen(false)
     }

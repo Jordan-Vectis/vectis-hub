@@ -129,6 +129,12 @@ export default function ZoomableLightbox({
 
   return (
     <div
+      // data-zoom-lightbox: lets whatever is underneath know a viewer is open, so ITS Escape handler
+      // stands down (Website Search closed the lot behind the photo on the same key press).
+      // data-hub-popup: the feedback survey waits while any of these is on screen — a survey
+      // popping up over a full-screen photo is two stacked modals on an iPad.
+      data-zoom-lightbox
+      data-hub-popup
       className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center select-none overflow-hidden"
       onClick={onClose}
     >
