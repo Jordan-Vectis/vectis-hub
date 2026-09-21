@@ -4,8 +4,7 @@ import { isJordan } from "@/lib/jordan-auth"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError, AiNotConfiguredError } from "@/lib/ai-provider"
 import { friendlyGeminiError } from "@/lib/gemini-retry"
-import { parseModelJson } from "@/lib/model-json"
-import { chosenMeals, normalisePlan, planOut, planSystemPrompt, planUserPrompt, targets, type Plan } from "@/lib/jordan-meals"
+import { chosenMeals, normalisePlan, parsePlanReply, planOut, planSystemPrompt, planUserPrompt, targets, type Plan } from "@/lib/jordan-meals"
 
 export const maxDuration = 180
 
@@ -63,30 +62,52 @@ export async function POST(req: NextRequest) {
     const alreadyMade = existing ? existing.days.flatMap(d => d.meals.map(m => m.name)).slice(-24) : []
 
     const model = await getToolModel("jordan_meals", modelId)
+    const slots = chosenMeals((p as any).meals, p.mealsPerDay)
+    // ⚠⚠ ROOM TO THINK. The default model thinks before it writes, and its thoughts come out of the
+    // SAME allowance as the answer — so two days of full recipes (more with a dessert slot, more
+    // again when every meal carries two people's servings) could arrive empty or chopped, and that
+    // was reported as "couldn't read the AI's answer" (Jordan, 2026-09-21: "still getting a lot").
+    // Gemini is given twice the room; Claude streams and keeps its own figure.
+    let meta: { finishReason?: string; outputTokens?: number; thinkingTokens?: number } = {}
     const raw = await generateAiText({
       model,
       system: planSystemPrompt(),
       prompt: planUserPrompt({
         name: p.name, sex: p.sex, age: p.age, weightKg: p.weightKg, t, days,
         goal: (p as any).goal, goalDelta: p.goalDelta,
-        slots: chosenMeals((p as any).meals, p.mealsPerDay),
+        slots,
         likes, dislikes, notes,
         brief: String(brief ?? "").slice(0, 2000),
         fromDay, toDay, alreadyMade, people,
       }),
       json: true,
-      maxOutputTokens: 16384,
+      maxOutputTokens: /^claude/i.test(model) ? 16384 : 32768,
+      onMeta: m => { meta = m },
     })
 
-    const parsed = normalisePlan(parseModelJson(raw))
+    // ⚠ Never all-or-nothing: a reply that won't parse whole still gives up its COMPLETE days
+    // (lib/jordan-meals.ts → parsePlanReply). Each call is saved as it lands and the page asks for
+    // the next day after whatever is saved, so a salvaged day is progress, not a fudge.
+    const reply = parsePlanReply(raw, slots.length)
+    const parsed = reply.plan
+    const spent = `model ${model}, finish ${meta.finishReason ?? "?"}, output ${meta.outputTokens ?? "?"} tokens (thinking ${meta.thinkingTokens ?? "?"}), ${raw.length} chars, days ${fromDay}-${toDay}`
     if (!parsed.days.length) {
-      const cut = raw.trim() && !raw.trim().endsWith("}")
+      // ⚠ LOGGED WITH BOTH ENDS OF THE REPLY. Without this the only evidence was the sentence on
+      // his screen; the head shows prose or a fence, the tail shows where it stopped.
+      console.error(`jordan/meals/plan: nothing readable — ${spent}, ${reply.dropped} incomplete day(s). HEAD ${JSON.stringify(raw.slice(0, 200))} TAIL ${JSON.stringify(raw.slice(-200))}`)
+      const ranOut = meta.finishReason === "MAX_TOKENS"
+      const why = !raw.trim()
+        ? (ranOut ? "The AI used its whole allowance thinking and wrote nothing" : "The AI sent back an empty reply")
+        : ranOut ? "The reply ran out of room before one day was finished" : "The AI's reply wasn't readable"
       const got = existing?.days.length ?? 0
       return NextResponse.json({
-        error: `${cut ? "The reply was cut off" : "Couldn't read the AI's answer"} on day ${fromDay}. ${got ? `Days 1 to ${got} are saved — try again to carry on from there.` : "Try again."}`,
+        error: `${why} (day ${fromDay}${toDay > fromDay ? ` to ${toDay}` : ""}). ${got ? `Days 1 to ${got} are saved — try again to carry on from there.` : "Try again."}`,
+        // The page asks again for ONE day before it gives up — see makePlan().
+        retryable: true,
         planId: existingRow?.id ?? null,
       }, { status: 502 })
     }
+    if (reply.how === "salvaged") console.warn(`jordan/meals/plan: reply not valid JSON — kept ${parsed.days.length} complete day(s), dropped ${reply.dropped}. ${spent}`)
 
     // ⚠ The day numbers are OURS, not the model's. Asked for days 3–4 it will sometimes answer
     // "day 1, day 2", and a plan with two day ones is nonsense the client cannot show.

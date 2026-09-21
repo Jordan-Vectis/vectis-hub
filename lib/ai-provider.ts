@@ -52,6 +52,11 @@ export type AiRequest = {
   maxOutputTokens?:  number
   /** Ask for raw JSON back. Gemini uses responseMimeType; Claude is instructed. */
   json?:             boolean
+  /** Told what the model reported about the reply — why it stopped and what it spent. For a caller
+   *  that must tell "ran out of room" from "wrote something unreadable" (the meal planner: a
+   *  thinking model's thoughts come out of the same allowance as its answer, so a big JSON reply
+   *  can arrive empty or chopped with finishReason MAX_TOKENS). It never changes the call. */
+  onMeta?:           (m: { finishReason?: string; outputTokens?: number; thinkingTokens?: number }) => void
 }
 
 function cleanHistory(history?: AiTurn[]): AiTurn[] {
@@ -150,6 +155,10 @@ async function generateGemini(req: AiRequest): Promise<string> {
   const finish = response.candidates?.[0]?.finishReason
   // A block is Google ANSWERING, not failing — recorded as "blocked" so the Status
   // Centre never counts a refused lot as an outage.
+  try {
+    const u = (response as any).usageMetadata
+    req.onMeta?.({ finishReason: finish ? String(finish) : undefined, outputTokens: u?.candidatesTokenCount, thinkingTokens: u?.thoughtsTokenCount })
+  } catch { /* telling the caller is a courtesy — never fail the call over it */ }
   const refused = !!blocked || (!!finish && finish !== "STOP" && finish !== "MAX_TOKENS")
   noteAiOutcome(refused
     ? { provider: "gemini", model: req.model, outcome: "error", kind: "blocked" }
@@ -264,6 +273,10 @@ async function generateAnthropic(req: AiRequest): Promise<string> {
   if (wrote || read) {
     console.log(`[ai-provider] ${req.model} cache: wrote ${wrote}, read ${read}, uncached ${message.usage?.input_tokens ?? 0}`)
   }
+
+  try {
+    req.onMeta?.({ finishReason: message.stop_reason === "max_tokens" ? "MAX_TOKENS" : String(message.stop_reason ?? ""), outputTokens: message.usage?.output_tokens })
+  } catch { /* a courtesy — never fail the call over it */ }
 
   // Claude's safety classifiers can decline: a normal 200 with stop_reason
   // "refusal" and possibly empty content. Check BEFORE reading content.
