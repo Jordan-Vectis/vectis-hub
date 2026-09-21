@@ -20,7 +20,9 @@ export default async function AuctionDetailPage({
   // Resolved up front so the transfer-lots target list can be filtered by it too.
   const viewer = await prisma.user.findUnique({
     where:  { id: session.user.id },
-    select: { role: true, email: true, allowedApps: true, showScanTimer: true, showLotTimer: true, timerRedMins: true },
+    // ⚠ manualDescriptions was MISSING from this select, so the wizard was always told "false" and
+    // never showed the description-only step to the people it was built for (2026-09-21).
+    select: { role: true, email: true, allowedApps: true, showScanTimer: true, showLotTimer: true, timerRedMins: true, manualDescriptions: true },
   })
   const access = await getDepartmentAccess(session.user.id, viewer?.role ?? "")
 
@@ -131,7 +133,7 @@ export default async function AuctionDetailPage({
         userRole={session.user.role}
         showScanTimer={currentUser?.showScanTimer ?? true}
         showLotTimer={currentUser?.showLotTimer ?? false}
-        manualDescriptions={(currentUser as any)?.manualDescriptions ?? false}
+        manualDescriptions={currentUser?.manualDescriptions ?? false}
         timerRedMins={currentUser?.timerRedMins ?? 30}
         allAuctions={allAuctions.map(a => ({ id: a.id, code: a.code, name: a.name, auctionDate: a.auctionDate }))}
         extraAccess={extraAccess}

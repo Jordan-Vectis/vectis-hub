@@ -3051,6 +3051,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   }, [])
 
   function navigate(id: string, dir: "next" | "prev") {
+    flushAutoSave()
     const el = contentRef.current
     if (!el) { onEdit?.(id, dir); return }
     const endX = dir === "next" ? "-60px" : "60px"
@@ -3072,17 +3073,42 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   // Clear pending auto-save on unmount
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
+  // ⚠⚠ EXCLUDE FROM AI — held in state + a ref and ALWAYS written into the FormData, the way the
+  // tablet lot view does it (Jordan, 2026-09-21: hand-typed lots "loosing the tick at some point…
+  // then the AI runs over it when we do a mass run"). It was a bare checkbox, and the ONLY field on
+  // this form with no auto-save on it: type the description (auto-saved, "✓ Saved" shows), tick the
+  // box, press Back or Next — and the tick was never sent. Tick first and type second and it was,
+  // which is why it looked random. A tick is one deliberate action, so it saves AT ONCE, no wait.
+  const [aiExcluded, setAiExcluded] = useState(lot?.aiExcluded ?? false)
+  const aiExcludedRef = useRef(aiExcluded)
+
+  function lotFormData(form: HTMLFormElement) {
+    const fd = new FormData(form)
+    fd.set("aiExcluded", aiExcludedRef.current ? "true" : "false")
+    return fd
+  }
+
+  function saveNow() {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    if (!lot || !formRef.current) return
+    const fd = lotFormData(formRef.current)
+    start(async () => {
+      await updateLot(lot.id, auctionId, fd)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    })
+  }
+
   function triggerAutoSave() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      if (!lot || !formRef.current) return
-      const fd = new FormData(formRef.current)
-      start(async () => {
-        await updateLot(lot.id, auctionId, fd)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
-      })
-    }, 800)
+    saveTimer.current = setTimeout(() => { saveTimer.current = null; saveNow() }, 800)
+  }
+
+  // ⚠ Leaving the lot SENDS whatever is still waiting. The unmount above only clears the timer, so
+  // anything changed in the last 800 ms before Back / Prev / Next was silently dropped — every
+  // field, not just the tick.
+  function flushAutoSave() {
+    if (saveTimer.current) saveNow()
   }
 
   const [titleVal, setTitleVal] = useState(lot?.title ?? "")
@@ -3173,7 +3199,8 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!lot) return
-    const fd = new FormData(e.currentTarget)
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    const fd = lotFormData(e.currentTarget)
     start(async () => {
       await updateLot(lot.id, auctionId, fd)
       setSaved(true)
@@ -3189,7 +3216,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
     <div>
       {/* Sticky nav bar */}
       <div className="sticky top-0 z-10 flex items-center gap-2 py-2 mb-5 bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-800 -mx-3 px-3">
-        <button onClick={onDone} className="text-sm text-[#2AB4A6] hover:text-[#24a090] transition-colors flex-shrink-0">
+        <button onClick={() => { flushAutoSave(); onDone() }} className="text-sm text-[#2AB4A6] hover:text-[#24a090] transition-colors flex-shrink-0">
           ← Back to lots
         </button>
         {sortedLots.length > 0 && (
@@ -3236,7 +3263,10 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             </div>
             <div>
               <label className="flex items-center gap-2 cursor-pointer w-fit">
-                <input type="checkbox" name="aiExcluded" value="true" defaultChecked={lot.aiExcluded ?? false}
+                {/* No name on purpose — lotFormData() writes the value, ticked OR not. An unticked
+                    HTML checkbox posts nothing, which is the shape of the original bug. */}
+                <input type="checkbox" checked={aiExcluded}
+                  onChange={e => { aiExcludedRef.current = e.target.checked; setAiExcluded(e.target.checked); saveNow() }}
                   className="w-4 h-4 accent-amber-500" />
                 <span className="text-sm text-gray-400">Exclude from AI — description typed manually</span>
               </label>

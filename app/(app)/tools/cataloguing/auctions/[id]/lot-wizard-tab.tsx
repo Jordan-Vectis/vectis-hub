@@ -1476,7 +1476,10 @@ export default function LotWizardTab({
       setSaveStatus(`✓ Lot #${n} saved — ${vendor} / ${tote} / ${barcode}`)
       // Tote / Vendor / Receipt stay locked for the whole batch — leave them (and the
       // vendor name hint) as-is so the next lot keeps the same identity.
-      setBarcode(""); setKeyPoints(""); setAiExcluded(false); setManualDesc("")
+      // ⚠ Back to the person's DEFAULT, not to false. For someone set to write their own
+      // descriptions the tick is hidden, so resetting it to false turned their Description box
+      // into Key Points from the second lot on with no way to turn it back.
+      setBarcode(""); setKeyPoints(""); setAiExcluded(manualDescriptions); setManualDesc("")
       setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand(pinnedBrand)
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
       setBoxOn(false); setBoxPrefixMode("Box is"); setBoxCustomPrefix(""); setBoxCond1(""); setBoxCond2("")
