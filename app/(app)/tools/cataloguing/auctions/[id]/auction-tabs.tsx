@@ -10,7 +10,7 @@ import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { identityWarning } from "@/lib/lot-identity"
 import { useCategoryMap } from "@/lib/use-category-map"
-import { parseCondition, buildCondition, withConditionSentence, type BoxPrefixMode } from "@/lib/condition"
+import { parseCondition, buildCondition, withConditionSentence, stripConditionSentences, type BoxPrefixMode } from "@/lib/condition"
 import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -1648,8 +1648,16 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [fPhotos,        setFPhotos]        = useState("")   // "any" | "none" | ""
   const [fAddedBy,       setFAddedBy]       = useState("")   // exact createdByName
   const [fDateAdded,     setFDateAdded]     = useState("")   // yyyy-mm-dd, matched in UK local time
-  // One AI filter covering both flags: "" | "upgraded" | "not_upgraded" | "excluded" | "not_excluded"
+  // One AI filter covering both flags: "" | "upgraded" | "not_upgraded" | "excluded" | "not_excluded" | "hand_typed"
   const [fAi,            setFAi]            = useState("")
+
+  // ✍ "Looks hand-typed, not excluded" — a description someone wrote, no key points, never
+  // through the AI, and NOT excluded: exactly the lot a mass AI run overwrites. Finds the lots
+  // that lost their Exclude tick before the 2026-09-21 fix (Jordan, 2026-09-22). ⚠ A description
+  // that is only OUR condition sentence doesn't count — Add Conditions writes that line onto
+  // AI-bound lots too, and they would all show up here.
+  const looksHandTyped = (l: Lot) =>
+    !l.aiExcluded && !l.aiUpgraded && !l.keyPoints?.trim() && !!stripConditionSentences(l.description).trim()
   const [fAddedToBC,     setFAddedToBC]     = useState("")   // "yes" | "no" | ""
   const [fKeyPoints,     setFKeyPoints]     = useState("")   // "yes" | "no" | ""
 
@@ -1666,6 +1674,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       (fAi === "" ||
         (fAi === "upgraded"     ?  l.aiUpgraded :
          fAi === "not_upgraded" ? !l.aiUpgraded :
+         fAi === "hand_typed"   ?  looksHandTyped(l) :
          fAi === "excluded"     ?  l.aiExcluded : !l.aiExcluded)) &&
       (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.inBC       : !l.inBC      )) &&
       (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim())) &&
@@ -2084,14 +2093,14 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   // it — and the one that got forgotten was the one that mattered. The server actions went too;
   // CatalogueLot.addedToBC keeps its history but nothing writes it from this screen.
 
-  async function handleBulkToggleAiExcluded() {
-    if (selected.size === 0) return
-    const selectedLots = lots.filter(l => selected.has(l.id))
-    const anyNotExcluded = selectedLots.some(l => !l.aiExcluded)
-    const newValue = anyNotExcluded
+  async function handleBulkToggleAiExcluded(ids: string[] = Array.from(selected), value?: boolean) {
+    if (ids.length === 0) return
+    const idSet = new Set(ids)
+    const targets = lots.filter(l => idSet.has(l.id))
+    const newValue = value ?? targets.some(l => !l.aiExcluded)
     startExclude(async () => {
       try {
-        const res = await runInChunks(Array.from(selected), setMassProgress, (chunk, undoId, isLast) =>
+        const res = await runInChunks(ids, setMassProgress, (chunk, undoId, isLast) =>
           bulkSetLotsAiExcluded(chunk, auctionId, newValue, undoId, !isLast))
         const count = res.reduce((s, r) => s + r.count, 0)
         setExcludeMsg(`${newValue ? "🚫 Excluded" : "✓ Unexcluded"} ${count} lot${count === 1 ? "" : "s"} from AI`)
@@ -2367,6 +2376,28 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
           )}
         </div>
 
+        {/* ✍ One click for the whole hand-typed set — three clicks (filter, tick all, Exclude)
+            is how the wrong one gets left out. Goes through the same chunked, undoable action. */}
+        {fAi === "hand_typed" && !bcLocked && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+            {filtered.length === 0 ? (
+              <span>No lots look hand-typed without the Exclude tick — nothing here for a mass run to overwrite.</span>
+            ) : (
+              <>
+                <span>
+                  <b>{filtered.length} lot{filtered.length === 1 ? "" : "s"}</b> {filtered.length === 1 ? "has" : "have"} a written description, no key points and no AI run, but
+                  {filtered.length === 1 ? " isn't" : " aren't"} excluded from AI — a mass run would overwrite {filtered.length === 1 ? "it" : "them"}.
+                </span>
+                <button onClick={() => handleBulkToggleAiExcluded(filtered.map(l => l.id), true)} disabled={excludePending}
+                  className={`${TB_BTN} border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10`}>
+                  {excludePending ? "Updating…" : `🚫 Exclude all ${filtered.length} from AI`}
+                </button>
+                <span className="text-xs opacity-80">One undo entry; check the list first if you&apos;re not sure.</span>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Status messages from the last action, one tidy line */}
         {(undoMsg || fillMsg || bidsMsg || titlesMsg || massMsg || uniqueIdMsg || condMsg || excludeMsg || photoMsg) && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 px-1">
@@ -2402,7 +2433,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             {(() => {
               const anyNotExcluded = lots.some(l => selected.has(l.id) && !l.aiExcluded)
               return (
-                <button onClick={handleBulkToggleAiExcluded} disabled={excludePending || none}
+                <button onClick={() => handleBulkToggleAiExcluded()} disabled={excludePending || none}
                   className={`${TB_BTN} border-amber-700 text-amber-500 dark:text-amber-400 hover:bg-amber-500/10`}>
                   {excludePending ? "Updating…" : anyNotExcluded ? "🚫 Exclude from AI" : "✓ Unexclude from AI"}
                 </button>
@@ -2917,6 +2948,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <option value="">All</option>
                   <option value="excluded">🚫 Excluded from AI</option>
                   <option value="not_excluded">Not excluded</option>
+                  <option value="hand_typed">✍ Looks hand-typed, not excluded</option>
                   <option value="upgraded">✨ Upgraded</option>
                   <option value="not_upgraded">Not upgraded</option>
                 </select>
