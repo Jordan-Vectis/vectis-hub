@@ -20,6 +20,15 @@ import type {
 // try/catch and the latest results are ALSO held in memory: while the database is
 // refusing saves, /admin/status still shows the truth, and the bad spell is filed
 // as an alert the moment the database can record it again.
+//
+// ⚠ A check can be SWITCHED OFF (Jordan, 2026-09-22: "I don't use the it emails thing
+// anymore can I have options in the status centre to disable things"). StatusService
+// .disabledAt/.disabledBy — NULL = on. Off means: never run (the loop AND "Check now"),
+// left out of the banner's answer and of "Check everything", never rings the bell. The
+// tile stays on the page, greyed, saying who switched it off and when, so it can be
+// switched back on. The two columns arrive with Run Migrations, so every read of them
+// is tiered: with them, then without — the page must not lose its history over a
+// column that isn't there yet.
 
 const NOTIFY_AFTER = 2
 const DEFAULT_INTERVAL_MIN = 5
@@ -44,6 +53,78 @@ function mem(): Mem {
 }
 
 const isBad = (s: StatusState | null | undefined) => s === "down" || s === "degraded"
+
+// ── The switch ─────────────────────────────────────────────────────────────────
+
+const SERVICE_COLS = {
+  service: true, state: true, summary: true, detail: true, latencyMs: true, since: true,
+  lastCheckedAt: true, lastOkAt: true, badSince: true, failStreak: true, notifiedState: true,
+} as const
+type ServiceRow = { [K in keyof typeof SERVICE_COLS]: Awaited<ReturnType<typeof prisma.statusService.findMany>>[number][K] }
+  & { disabledAt: Date | null; disabledBy: string | null }
+
+/** Prisma says "column does not exist" as P2022; a raw error says it in words. */
+const isMissingColumn = (e: unknown) =>
+  (e as { code?: string })?.code === "P2022" || /column .* does not exist/i.test(String((e as Error)?.message ?? ""))
+
+/** Every service's row — with the switch columns where they exist, without them where they don't yet.
+ *  ⚠ Each tier drops exactly one thing (RULES.md): the second tier is the page as it was before the switch. */
+async function readServiceRows(): Promise<ServiceRow[]> {
+  try {
+    return await prisma.statusService.findMany({ select: { ...SERVICE_COLS, disabledAt: true, disabledBy: true } })
+  } catch (e) {
+    if (!isMissingColumn(e)) throw e
+    const rows = await prisma.statusService.findMany({ select: SERVICE_COLS })
+    return rows.map(r => ({ ...r, disabledAt: null, disabledBy: null }))
+  }
+}
+
+/** The keys switched off right now. ⚠ Empty, never an error, when the columns aren't there yet or the
+ *  database can't be read — a check must not stop running because the switch can't be read. */
+async function disabledKeys(): Promise<Set<string>> {
+  try {
+    const rows = await prisma.statusService.findMany({ where: { disabledAt: { not: null } }, select: { service: true } })
+    return new Set(rows.map(r => r.service))
+  } catch {
+    return new Set()
+  }
+}
+
+export async function isServiceDisabled(key: string): Promise<boolean> {
+  return (await disabledKeys()).has(key)
+}
+
+/** Switches a check off (never run, never counted, never rings the bell) or back on. Throws with a
+ *  plain sentence the page can show — including "press Run Migrations" while the columns are missing. */
+export async function setServiceSwitch(key: string, enabled: boolean, by: string): Promise<void> {
+  const def = CHECKS.find(c => c.key === key)
+  if (!def) throw new Error(`No such check: ${key}`)
+  const m = mem()
+  const now = new Date()
+  try {
+    if (enabled) {
+      // updateMany: a check switched off before it was ever checked has a row; one never switched off
+      // may not, and "switch on" on a row that doesn't exist is simply already on.
+      await prisma.statusService.updateMany({ where: { service: key }, data: { disabledAt: null, disabledBy: null } })
+      m.lastRun.delete(key) // checked at the loop's next tick rather than after a full interval
+    } else {
+      // ⚠ The bell's bookkeeping is reset with it: a service switched off mid-outage must not ring
+      // "working again" the day it is switched back on, and its streak starts from nothing then.
+      await prisma.statusService.upsert({
+        where: { service: key },
+        create: { service: key, state: "unknown", summary: "Switched off before it was ever checked here.", disabledAt: now, disabledBy: by, failStreak: 0 },
+        update: { disabledAt: now, disabledBy: by, failStreak: 0, badSince: null, notifiedState: null },
+        select: { service: true },
+      })
+      m.latest.delete(key)
+      m.unrecorded.delete(key)
+    }
+  } catch (e) {
+    if (isMissingColumn(e)) throw new Error("The database doesn't have this switch yet — press Run Migrations at the bottom of the Admin page, then try again.")
+    throw e
+  }
+  ;(globalThis as { _io?: { emit: (event: string) => void } })._io?.emit("status:changed")
+}
 
 export function checkContext(): CheckContext {
   const prodBuild = process.env.NODE_ENV === "production"
@@ -78,6 +159,12 @@ function fmtDuration(ms: number): string {
 function fmtLondon(ms: number): string {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/London", weekday: "short", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(ms))
+}
+
+function fmtLondonDate(ms: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
   }).format(new Date(ms))
 }
 
@@ -121,7 +208,12 @@ async function record(def: StatusCheckDef, r: CheckResult): Promise<boolean> {
   const changedInMemory = !prevSnap || prevSnap.state !== r.state
 
   try {
-    const prev = await prisma.statusService.findUnique({ where: { service: def.key } })
+    // ⚠ Explicit select — a bare findUnique reads every column, including the switch columns, which
+    // arrive with Run Migrations; without this, no result could be recorded until that was pressed.
+    const prev = await prisma.statusService.findUnique({
+      where: { service: def.key },
+      select: { state: true, failStreak: true, badSince: true, notifiedState: true, since: true, lastOkAt: true },
+    })
     const prevState = (prev?.state ?? null) as StatusState | null
     const un = m.unrecorded.get(def.key)
 
@@ -204,8 +296,10 @@ export async function runChecks(opts: { only?: string[]; force?: boolean } = {})
   const ctx = checkContext()
   const m = mem()
   const nowMs = Date.now()
+  const disabled = await disabledKeys()
   const due = CHECKS
     .filter(d => !opts.only || opts.only.includes(d.key))
+    .filter(d => !disabled.has(d.key)) // switched off on the page — never run, not even by "Check now"
     .filter(d => opts.force || nowMs - (m.lastRun.get(d.key) ?? 0) >= (d.intervalMin ?? DEFAULT_INTERVAL_MIN) * 60_000 - 30_000)
     .filter(d => !m.running.has(d.key)) // a slow check still in flight is never started twice
   for (const d of due) { m.running.add(d.key); m.lastRun.set(d.key, nowMs) }
@@ -243,14 +337,14 @@ export async function getStatusView(): Promise<StatusResponse> {
   const ctx = checkContext()
   const m = mem()
   let historyAvailable = true
-  let rows = new Map<string, Awaited<ReturnType<typeof prisma.statusService.findMany>>[number]>()
+  let rows = new Map<string, ServiceRow>()
   const uptime = new Map<string, ServiceView["uptime"]>()
   const hourMap = new Map<string, Map<string, StatusState>>()
   const dayMap = new Map<string, Map<string, StatusState>>()
   let alerts: NotificationView[] = []
 
   try {
-    rows = new Map((await prisma.statusService.findMany()).map(s => [s.service, s]))
+    rows = new Map((await readServiceRows()).map(s => [s.service, s]))
   } catch {
     historyAvailable = false
   }
@@ -307,14 +401,38 @@ export async function getStatusView(): Promise<StatusResponse> {
 
   const services: ServiceView[] = CHECKS.map(def => {
     const row = rows.get(def.key)
+    const hm = hourMap.get(def.key)
+    const dm = dayMap.get(def.key)
+    const history = {
+      uptime: uptime.get(def.key) ?? { h24: null, d7: null, d30: null },
+      hours: hourKeys.map((at): Bucket => ({ at, state: hm?.get(at) ?? null })),
+      days: dayKeys.map((at): Bucket => ({ at, state: dm?.get(at) ?? null })),
+    }
+    // Switched off: the row's last real result is kept but not shown — the tile says who and when.
+    if (row?.disabledAt) {
+      const who = row.disabledBy || "an admin"
+      return {
+        key: def.key, name: def.name, group: def.group, what: def.what, whenDown: def.whenDown,
+        statusPage: def.statusPage ?? null,
+        state: "disabled",
+        cause: def.group === "hub" ? "hub" : "supplier",
+        summary: `Switched off by ${who} on ${fmtLondonDate(row.disabledAt.getTime())} — not checked, not counted in the answer at the top, and never rings the bell.`,
+        facts: [],
+        latencyMs: null,
+        since: row.disabledAt.toISOString(),
+        lastCheckedAt: row.lastCheckedAt.toISOString(),
+        lastOkAt: row.lastOkAt?.toISOString() ?? null,
+        disabledBy: row.disabledBy,
+        disabledAt: row.disabledAt.toISOString(),
+        ...history,
+      }
+    }
     const snap = m.latest.get(def.key)
     // Prefer the in-memory result when it is newer than what the database holds (e.g. saves refused).
     const useSnap = snap && (!row || snap.checkedAt > row.lastCheckedAt.getTime() + 1000)
     const facts = useSnap ? snap!.facts : (((row?.detail as { facts?: Fact[] } | null)?.facts) ?? [])
     const state: ServiceView["state"] = useSnap ? snap!.state : ((row?.state as StatusState | undefined) ?? "pending")
     const storedCause = useSnap ? snap!.cause : (row?.detail as { cause?: string } | null)?.cause
-    const hm = hourMap.get(def.key)
-    const dm = dayMap.get(def.key)
     return {
       key: def.key,
       name: def.name,
@@ -330,9 +448,9 @@ export async function getStatusView(): Promise<StatusResponse> {
       since: useSnap ? (row && row.state === snap!.state ? row.since.toISOString() : null) : (row?.since.toISOString() ?? null),
       lastCheckedAt: useSnap ? new Date(snap!.checkedAt).toISOString() : (row?.lastCheckedAt.toISOString() ?? null),
       lastOkAt: row?.lastOkAt?.toISOString() ?? (snap?.state === "ok" ? new Date(snap.checkedAt).toISOString() : null),
-      uptime: uptime.get(def.key) ?? { h24: null, d7: null, d30: null },
-      hours: hourKeys.map((at): Bucket => ({ at, state: hm?.get(at) ?? null })),
-      days: dayKeys.map((at): Bucket => ({ at, state: dm?.get(at) ?? null })),
+      disabledBy: null,
+      disabledAt: null,
+      ...history,
     }
   })
 

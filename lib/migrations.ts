@@ -2254,6 +2254,17 @@ export const MIGRATIONS = [
     "n"   INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT "SearchWordBuild_pkey" PRIMARY KEY ("raw")
   )`,
+  // 🚦 Status Centre: a check can be switched off (2026-09-22) — who and when; NULL = on. ⚠ Nullable
+  // with NO default on purpose: Prisma writes a literal default into every INSERT, so a "DEFAULT TRUE"
+  // column mirrored as @default(true) would have failed every result write until this ran.
+  `ALTER TABLE "StatusService" ADD COLUMN IF NOT EXISTS "disabledAt" TIMESTAMP(3)`,
+  `ALTER TABLE "StatusService" ADD COLUMN IF NOT EXISTS "disabledBy" TEXT`,
+  // 🖼 Databases → Sales (2026-09-22): each sale's BC code and cover picture — the website's
+  // "hero" — its address on the site's S3 and our own copy in R2 once the heroes job has run.
+  `ALTER TABLE "ArchiveSale" ADD COLUMN IF NOT EXISTS "code" TEXT`,
+  `ALTER TABLE "ArchiveSale" ADD COLUMN IF NOT EXISTS "heroUrl" TEXT`,
+  `ALTER TABLE "ArchiveSale" ADD COLUMN IF NOT EXISTS "heroKey" TEXT`,
+  `ALTER TABLE "ArchiveSale" ADD COLUMN IF NOT EXISTS "heroAt" TIMESTAMP(3)`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

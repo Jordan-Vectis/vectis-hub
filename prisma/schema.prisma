@@ -1459,6 +1459,15 @@ model ArchiveSale {
   lots      Int       @default(0)
   finished  Boolean   @default(false)
   pulledAt  DateTime  @default(now())
+  /// The BC sale code (D062) for a Business Central sale — null for the old system's sales.
+  code      String?
+  /// The sale's cover picture — the "hero" the website's auction calendar shows — as its path
+  /// under the site's S3 (auction_images/large/<guid>/<guid>.webp), and our copy in R2 once the
+  /// "heroes" job has fetched it (sale-photos/<siteId>.webp). Collected by the office collector
+  /// with the lots (2026-09-22); shown on Databases → Sales.
+  heroUrl   String?
+  heroKey   String?
+  heroAt    DateTime?
 
   @@index([auctionId])
 }
@@ -3145,6 +3154,12 @@ model StatusService {
   badSince      DateTime? // when the current bad spell began, for "had problems for 25 min"
   failStreak    Int       @default(0)
   notifiedState String?   // the state the bell last rang for; null once recovered
+  // Switched off by an admin on /admin/status (2026-09-22): never checked, never counted, never rings the
+  // bell. NULL = on. ⚠ Nullable with NO default on purpose — Prisma writes a literal default into every
+  // INSERT, so a `@default(true)` column would have broken every result write between the deploy and
+  // Run Migrations; a nullable column is simply left out of writes that don't mention it.
+  disabledAt    DateTime?
+  disabledBy    String?
 }
 
 // Every check result — the uptime history behind the Status Centre's bars. Pruned after 30 days.

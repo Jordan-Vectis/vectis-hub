@@ -224,7 +224,9 @@ app.prepare().then(async () => {
         headers: { Authorization: `Bearer ${secret}` },
       })
         .then(r => r.json())
-        .then(d => console.log('[cron/db-backup] complete:', d.filename, `(${d.sizeBytes} bytes)`))
+        .then(d => d && d.folder
+          ? console.log(`[cron/db-backup] complete: ${d.tables} of ${d.requested} tables, ${d.totalRows} rows, ${d.totalBytes} bytes in ${Math.round((d.durationMs || 0) / 1000)} s${d.failed ? ` — ${d.failed} FAILED` : ''}${d.stopped ? ' — STOPPED' : ''}`)
+          : console.warn('[cron/db-backup] did not complete:', d && d.error))
         .catch(e => console.warn('[cron/db-backup] error:', e.message))
     }
     const now = new Date()

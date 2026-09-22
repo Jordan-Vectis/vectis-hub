@@ -146,7 +146,55 @@ Design decisions worth keeping:
 - The website's 202-with-nothing to Railway is expected and never red; that light is how fresh the office collection is. The Bidpath live-bid feed is checked from the viewer's own browser.
 - Staging/sandbox databases are production branches with stale timestamps, so checks test the environment first and return "off".
 
-Open points for Jordan: the Royal Mail read endpoints and ntfy's /v1/health have never been tried (the first production run may show grey "check needs looking at"); Royal Mail with no key is grey everywhere; IT emails go amber after ~2 working days of silence; the website goes amber when a sale 7+ days old is uncollected; Neon's pooler must lend ~25 server connections (check "Different connections reached" on the first production run).`,
+Open points for Jordan: the Royal Mail read endpoints and ntfy's /v1/health have never been tried (the first production run may show grey "check needs looking at"); Royal Mail with no key is grey everywhere; IT emails go amber after ~2 working days of silence; the website goes amber when a sale 7+ days old is uncollected; Neon's pooler must lend ~25 server connections (check "Different connections reached" on the first production run).
+
+## 2026-09-22 — a check can be SWITCHED OFF (staging, NEEDS Run Migrations)
+
+Jordan: *"I keep getting this error in the hub but I don't use the it emails thing anymore can I have options in the status centre to disable things"* (the IT emails → Job Board amber, "no IT email has ever reached the Job Board through Make.com").
+
+- **Where:** open a tile → the details panel → at the bottom "Not using this any more?" → **Switch this check off**. A switched-off tile stays in its group, greyed with a dotted border and a "Switched off" badge (in the key), saying who and when; opening it shows **Switch this check on** in place of Check this now.
+- **What off means:** \`runChecks\` filters it out — the loop AND Check now (the run route answers 409 by name); the banner's \`answerFor\` leaves it out and adds "N switched off, so not counted: …"; Check everything skips it; the stale-lights note ignores it; the bell never rings for it. Switching off resets \`failStreak / badSince / notifiedState\` and drops the in-memory snapshot so it can't ring "working again" when switched back on; switching on clears \`lastRun\` so the loop checks it at its next tick.
+- **Storage:** \`StatusService.disabledAt\` + \`disabledBy\` — NULL = on. \`POST /api/status/switch { service, enabled }\`, admin-only, who = session name.
+- ⚠⚠ **Nullable with NO default, on purpose.** Prisma writes a literal default into every INSERT (and its native upsert is an INSERT), so a \`@default(true)\` column would have failed EVERY result write between the deploy and Run Migrations. A nullable column with no default is simply left out. Same reason \`record()\` now selects only the columns it needs (a bare \`findUnique\` reads every column), and \`readServiceRows()\` is tiered — with the two columns, then without — so the page keeps its history until the button is pressed; \`disabledKeys()\` returns an empty set on any error, so a check can never stop running because the switch couldn't be read. Before Run Migrations the switch button says plainly "press Run Migrations, then try again".
+- Not built: switching off from the tile itself (one click too easy), a "switched off" section of its own (the tile stays in its group so it is found where it was), or a per-person switch (it is one setting for the Hub — the loop must respect it).
+`,
+  },
+  {
+    filename: "reference_backup.md",
+    content: `---
+name: database-backup-every-table
+description: "💾 Admin → Database Backup + the nightly /api/cron/db-backup, rebuilt 2026-09-22: EVERY table, streamed, one JSONL file per table + manifest.json, generic restore by information_schema (any table, any column type). Read before touching backup, restore or lib/backup-engine.ts."
+metadata:
+  type: reference
+  originSessionId: 203c0c54-04d5-40c9-89ad-52832b8a00fe
+  modified: 2026-09-22T14:00:00.000Z
+---
+
+# 💾 The database backup — every table, streamed (2026-09-22)
+
+Jordan chose this from the review list: *"Nightly backup covers 42 of 151 tables and the restore screen can't restore the induction tables. A streamed per-table backup would cover everything, ArchiveLot included."* On staging; ⚠ **not run against a real database or bucket before the push** — Auto mode blocks production reads locally and there is no test bucket. The first nightly run on production is the test: check Admin → Database Backup the next morning and the Status Centre's backup light. Rules in RULES.md → "The database backup".
+
+## What was wrong
+- \`runBackup\` had a hand-kept \`switch\` of 42 tables (\`lib/backup-sections.ts\`, deleted) out of 163 models; \`findMany()\` each, ONE \`JSON.stringify\` of the lot, one PutObject. Node's largest string is ~0.5 GB → ArchiveLot (~1 GB as JSON) could never be in it; a failed table was saved as \`null\` and the run still said ok.
+- The restore routes had THEIR OWN hand-kept map (49 tables) — the four induction tables were in the backup but not in it; the Buffer replacer never fired (JSON.stringify calls \`toJSON\` first), so MacroFile.content was saved as \`{type:"Buffer",data:[…]}\`.
+
+## What it is now — \`lib/backup-engine.ts\` (everything), \`lib/r2-multipart.ts\`
+- **The database describes itself:** \`describeTables()\` from \`pg_class\` + \`information_schema\` (columns with \`udt_name\`, primary keys, \`reltuples\` estimate, UNLOGGED flag). Backup = every base table in \`public\` except \`_prisma_migrations\` and unlogged scratch (\`SearchWordBuild\`). **No list of tables exists anywhere any more — never add one back.**
+- **Streamed both ways:** \`readRows()\` pages by keyset on a single-column PK (OFFSET only for the 6 composite-key tables), each page written through \`R2MultipartWriter\` as \`\${env}/backup-YYYY-MM-DD-HHMMSS[-partial]/tables/<Name>.jsonl\`; \`manifest.json\` last (\`version 2\`: tables[{name,rows,bytes,ok,error}], totalRows/Bytes, failed, stopped, complete, everything, by, durationMs). ⚠ **R2 insists every multipart part but the last is the SAME size** — the writer cuts at exactly 8 MiB.
+- **Generic restore:** \`restoreRows(t, rows)\` = \`INSERT … ON CONFLICT (pk) DO UPDATE SET col = EXCLUDED.col\`, every value cast to the column's type (\`castFor\`/\`scalarType\`): \`::jsonb\`, \`::timestamp\`, enums \`::"Name"\`, \`text[]\` via \`ARRAY(SELECT v::text FROM jsonb_array_elements_text($n::jsonb))\`, bytea via \`decode($n,'base64')\`. Batches of ≤500 rows / ≤30,000 params; a failed batch is retried row by row; failed rows kept in \`counts.retry\` (≤5,000) and tried once more after the table (parents in a cycle / self-references). \`tableOrder()\` = parents before children from the FK constraints. Columns the DB no longer has are dropped and named (\`skippedColumns\`); columns the backup lacks are left alone. **Upsert only, never deletes.**
+- **Job on globalThis** (\`_backupJob\`): \`runBackupJob({by, scope})\` awaited by the cron route (localhost, no proxy); \`startBackup()\` + \`backupProgress()\` + \`stopBackup()\` for the page — Railway's proxy would cut a request that lasted the whole run. Scope: \`"all"\` (nightly, always) · \`"quick"\` = all minus \`BIG_TABLES\` (ArchiveLot, BcLotWeb, WarehouseItem, SearchWord, CatalogueLotEvent, StatusCheck — rebuildable) · a list of names. Stop keeps finished tables, ABORTS the half-copied one (never left looking whole), manifest says \`stopped\`. Nightly failures ring the bell with the table names (\`createNotification\`, kind "status").
+- **Listing:** \`listBackups()\` — folders via \`Delimiter: "/"\` + the old \`.json\` files; manifests cached for good in \`_backupManifests\`; a folder with no manifest = in progress (if it is the running job's folder) or a run that died. Prune keeps the newest 30 by name across both kinds; a folder is deleted object by object.
+- **Old single-file copies still work:** \`readLegacyDump()\` parses whole (tens of MB), \`legacyTableName()\` maps camelCase-plural keys → real names (verified: all 54 old keys map, no collisions). They fall out of the 30 within a month.
+
+## Routes and page
+- \`GET /api/admin/backup\` (entries + progress) · \`POST\` \`{scope}\` → 202 · \`DELETE\` \`{key}\` · \`/progress\` · \`/stop\` · \`/tables\` (the tick list with row estimates) · \`/manifest?key=\`.
+- \`POST /api/admin/restore\` modes \`search\` (streams every table file ≤ 64 MB, names the skipped big ones, 200 hits max), \`single\`, \`batch-by-field\` (the barcode restore — table \`CatalogueLot\`, reports barcodes not found). \`POST /api/admin/restore/stream\` \`{key, tables?}\` = SSE per batch: table x of y, rows done/total, an honest % from manifest counts, Stop = abort the fetch.
+- \`app/(app)/admin/backup/page.tsx\` rewritten, full width: make a backup (Everything / without the big copies / choose tables) with live progress + Stop; stored list (Full / Partial / Stopped / N tables failed / Old style / Being written); restore tables (tick list from the manifest, CONFIRM, live progress); restore lots by barcode; find a record.
+- \`lib/status/checks/backup.ts\` reads \`listBackups(probeClient())\`: amber on \`failed > 0\` or \`stopped\` (the manifest is the evidence), grace hour 02:00 UTC (a full copy takes minutes now), names dead folders.
+- \`server.js\` log line reads the new answer; the ABC Database page no longer says it is left out of the backup.
+
+Related: [[reference_status_centre]] (the side finding about the backup is now FIXED), [[reference_lot_archive]], [[reference_data_map]].
+`,
   },
   {
     filename: "bc_database.md",
@@ -180,6 +228,17 @@ metadata:
 **Photos open in the Hub zoom viewer, not a new tab (2026-09-18).** components/zoom-photo.tsx is a client thumbnail button in front of the shared components/zoomable-lightbox.tsx, portalled to <body> — these pages are server components and cannot hold the open/closed state themselves. The full-size file loads only when the viewer OPENS, never 100 x 300 KB up front. The files were always full size (4000 px, measured); a raw storage tab just inherits the per-address zoom saved in Chrome — the whole story is in [[reference_website_search]].
 
 **⚠ The page's tools are CHIPS** (bc-tools.tsx): 🌐 Website jobs · 📥 Update the BC lots · ⬇ Export & handover. Nothing shows until one is pressed, one at a time, and **a running job opens its own panel and keeps a live dot on the chip** — hiding the tools must never hide a job that is going. Jordan, 2026-09-09: *"these should be really small options at the top that then show the square they need otherwise they should be hidden"* and *"the filtering options are still awful"* — hence sortable columns (date/sale/lot/estimate/hammer, both ways, with an arrow) and on-screen filters (search incl. unique ID, sale name or code, date range, hammer range, sold/unsold, has a photo, full vs short description), every one carried through paging AND sorting.
+
+## 🖼 Databases → Sales + sale cover pictures (2026-09-22)
+
+Jordan: *"On our current website we have the hero (preview image for the entire auction) is it possible to get them as well? … Why don't we make a new tab for them in databases?"* Built the same day; on staging; **NEEDS Run Migrations** (\`ArchiveSale.code/heroUrl/heroKey/heroAt\`). ⚠ Not run against the real site/database from here (Auto mode) — the first collector run + upload is the test.
+
+- **Fact (checked on sales 683 and 1566):** every sale page on vectis.co.uk carries ONE cover picture, \`auction_images/large/<guid>/<guid>.webp\` under \`SITE_IMAGES\` (Amazon S3) — ABC and BC sales alike. S3 answers the Hub's server, so only the ADDRESS has to come from the office; the copy is the Hub's own job.
+- **Collector (both copies, Node + browser):** for every sale id where the probe finds lots it now also fetches \`/bidding/0-x-<id>\` (\`salePage()\`: title from \`<title>Vectis Auctions | …\`, date \`d Month yyyy\`, hero regex) and pushes a sale row \`{ siteId, auctionCode, auctionId, title, date, hero, lotCount, finished, lots }\` — \`lots: []\` for pre-BC and unfinished sales. So a run over **1–1061** is how the ABC sales get pictures (their lots are still skipped). Files from before carry only \`{siteId, auctionCode, lots}\` and still load.
+- **Upload (\`POST /api/databases/bc/collect\`):** \`upsertSaleMeta()\` in lib/archive-site.ts before \`writeBcSale\` — COALESCE on everything, \`lots = GREATEST\`, \`finished = old OR new\`, a placeholder \`Sale N\` title never overwrites a real one, a NEW hero clears \`heroKey\` so it is copied again. Migration-safe (falls back to the old columns). Reply counts \`saleRows\` and \`heroes\`.
+- **Job \`heroes\`** (\`startHeroCopy\`/\`runHeroCopy\`, ArchiveJob id "heroes", via \`/api/databases/archive/site-pull\` job "heroes"): \`heroUrl IS NOT NULL AND heroKey IS NULL\`, 5 at a time, → \`sale-photos/<siteId>.webp\`; a 403/404 nulls \`heroUrl\` (the bucket answers 403 for missing files).
+- **Page \`/databases/sales\`** (server component, 60 cards a page, full width): tiles (sales, BC/ABC split, with a picture, copied), tools chips for admins (📸 Sale pictures = the job with a real count and Stop; ⬇ Export CSV \`/api/databases/sales/export\`), filters q/year/era/photo/order all carried through paging, cards link to the site page and to the lots (BC → \`/databases/bc?sale=<code>\`, ABC → \`/databases/archive?sale=<title>\`). Reached from the Databases tab bar ("Sales ↗") and the help map.
+- **Picture-only collector (same day):** Jordan: *"can't we make a new one that just gets the cover images?"* → \`scripts/collect-sale-pictures.mjs <from> <to> <folder>\` (one file \`vectis-sale-pictures.json\`, resumable, ~10 min for 1–1650) and the browser copy \`lib/sale-pictures-collector.ts\`, both handed out on the Sales tab's **📥 Get the pictures** panel (\`sales-collect.tsx\`) with the upload box — it posts to the BC page's \`/api/databases/bc/collect\`, whose sale rows have \`lots: []\`, so \`upsertSaleMeta\` fills title/date/hero and touches nothing else. Tested live on sales 683–686 before the push. The card says "not finished" only when the lot feed said so (\`lots > 0\`).
 `,
   },
   {
@@ -873,7 +932,20 @@ TO ITERATE ON ANY OF THESE: use the 🧪 Instructions Testing tab - 5-10 hand-pi
 
 ⚠ THE OVERNIGHT LOG WAS LOSING THE REASON (fixed same day). PipelineLot records only batchStatus "skipped" - no reason ever - so the sole record was a run-log line, and logText is a TAIL (.slice(-LOG_MAX), 40,000 chars). On F113's 1,547 lots both block lines had been pushed out by morning; the row sat at exactly 40,000 characters with no trace. Problem lines (any line with ✗ or ↻) are now PINNED in their own block at the TOP of logText, outside the trim, capped at 8,000 chars with the oldest dropped and a note saying so. Stored inside the text rather than a new column because the runner works in ~9-minute slices with nothing in memory between them. Also: every Gemini block now carries WHICH filter objected - safetyDetail() reads the safetyRatings that every route used to throw away, and blockMeaning() glosses RECITATION as "the answer was reproducing copyrighted material" - so a block reads as a sentence instead of one bare word. Still not recorded: the reason on the LOT, so the morning review still says only "skipped".
 
-⚠⚠⚠ 2026-08-28 - "GENERATED OK" WITH NO DESCRIPTION: 179 LOTS OF 601 (30% OF A SALE). Found while Jordan was asking about something else ("see the double check is getting blocked a lot more often?"). IT WAS NOT BLOCKED: all 179 lots showing "content blocked by AI" at Double Check simply had NO DESCRIPTION to check - photos present, key points present, aiExcluded false, batchDesc empty, CatalogueLot.description empty - and their Batch Run column said "generated OK". THE CHAIN, all three links silent: (1) the batch route pushed status "OK" UNCONDITIONALLY, so an answer with no description was reported like a good one; (2) the runner tested r.status !== "OK" and NOTHING ELSE, so it set batchStatus ok, wrote the empty string to the lot and logged a tick; (3) Key Points then skipped it, Double Check set dcStatus "skipped", and the run page rendered ANY skipped as "content blocked by AI", so an empty lot and a real refusal looked identical. FIXED, all three: the route returns FAILED with "The model returned no description."; the runner AND the browser loop treat that as a failure and re-ask up to 4 times alternating models - bounded like RECITATION, because the "never gives up" rule must not let one always-empty lot hold up the 600 behind it - and record batchStatus "empty" when they give up. Three causes are now three statuses: skipped = refused by the AI, empty = nothing came back, nothing = there was nothing to check (no photos / no description); withRetry takes an optional outcome object so the caller knows which. ⚠ NEVER collapse those three back into one label. ⚠ The 179 lots on F113 are STILL EMPTY - the fix stops it recurring, it does not repair them; they carry batchStatus "ok" so a resume will not pick them up until their pipeline statuses are cleared. ⚠⚠ FOURTH "nothing happened looked like success" in this codebase (Apply All, the Review tab's Auto-fix, Suggest conditions, now this) - the pattern is wider than empty catches: ANY success flag set without checking that work actually came out.`,
+⚠⚠⚠ 2026-08-28 - "GENERATED OK" WITH NO DESCRIPTION: 179 LOTS OF 601 (30% OF A SALE). Found while Jordan was asking about something else ("see the double check is getting blocked a lot more often?"). IT WAS NOT BLOCKED: all 179 lots showing "content blocked by AI" at Double Check simply had NO DESCRIPTION to check - photos present, key points present, aiExcluded false, batchDesc empty, CatalogueLot.description empty - and their Batch Run column said "generated OK". THE CHAIN, all three links silent: (1) the batch route pushed status "OK" UNCONDITIONALLY, so an answer with no description was reported like a good one; (2) the runner tested r.status !== "OK" and NOTHING ELSE, so it set batchStatus ok, wrote the empty string to the lot and logged a tick; (3) Key Points then skipped it, Double Check set dcStatus "skipped", and the run page rendered ANY skipped as "content blocked by AI", so an empty lot and a real refusal looked identical. FIXED, all three: the route returns FAILED with "The model returned no description."; the runner AND the browser loop treat that as a failure and re-ask up to 4 times alternating models - bounded like RECITATION, because the "never gives up" rule must not let one always-empty lot hold up the 600 behind it - and record batchStatus "empty" when they give up. Three causes are now three statuses: skipped = refused by the AI, empty = nothing came back, nothing = there was nothing to check (no photos / no description); withRetry takes an optional outcome object so the caller knows which. ⚠ NEVER collapse those three back into one label. ⚠ The 179 lots on F113 are STILL EMPTY - the fix stops it recurring, it does not repair them; they carry batchStatus "ok" so a resume will not pick them up until their pipeline statuses are cleared. ⚠⚠ FOURTH "nothing happened looked like success" in this codebase (Apply All, the Review tab's Auto-fix, Suggest conditions, now this) - the pattern is wider than empty catches: ANY success flag set without checking that work actually came out.
+
+### Model Railway — \`Vectis Jo: Model Railway\` (2026-09-18) — DELIVERED, not yet confirmed as adopted
+
+Jordan: *"Can you do me some instructions quickly for model trains in the Vectis Jo style?"* Delivered as text in chat at **6,178 characters**, six \`e.g.\` lines plus a full worked example, in the shared shape (LAYOUT · maker first · every item in order · key points are the authority · ONLY WHAT YOU KNOW · NO CONDITION · BY TYPE · FLAG · ESTIMATE ladder). ⚠ He has not yet said he has tested or saved it — ask before treating the wording below as final, and record the settled version here when he does.
+
+Three decisions that differ from the rest of the family or from the old railway presets — all flagged to him at delivery:
+- **The gauge leads with the maker** ("Hornby OO Gauge …"), not at the end where the family puts size/scale. The first 83 characters become the lot title, and gauge is what train buyers search by. In a bullet the gauge appears only when the lot mixes gauges.
+- **Catalogue numbers come only from the key points or a legible box in the photographs** — never worked out from what the model is, never "corrected". The old \`Vectis Free: Model Railway\` told the AI to Google a missing number, which is how wrong numbers get in. (A grounded run still appends the route's VERIFY NUMBERS line; the key points win regardless.)
+- **Packaging from the key points**, with one allowance: a bare "boxed" when a box is plainly in the photograph, never anything about its state. Looser than the rest of the Jo family (key points only), tighter than the old presets (always a packaging line).
+
+Railway specifics it carries: steam = wheel arrangement, class, name in single quotes, running number; diesel/electric = class, running number, name; livery and operator whenever recorded or legible; **DCC Ready / DCC Fitted / DCC Sound are three different things — never upgraded**; limited-edition numbers as written; "untested", "unchecked for completeness or correctness", "kit-built", "repainted", "renumbered", "Code 3" copied word for word; never says a model runs or a set is complete; identical stock grouped ("four 16T mineral wagons"); track, controllers and scenics as one grouped bullet, last; over ~15 items the repeats are grouped.
+
+⚠ It writes \`• \` bullets like the rest of the family — and on 2026-09-18 Jordan reported that **bullet points break BC's paperwork**. Until he chooses a permanent fix (hyphens in the instructions, or a swap at the BC boundary), every sale described with a Jo instruction needs Manage Lots → 🔁 Find & Replace before its descriptions go to BC.`,
   },
   {
     filename: "instructions_testing.md",
@@ -1597,7 +1669,7 @@ WARNING: titleFromDescription now lives in lib/lot-title.ts and BOTH the Generat
     content: `---
 name: Cataloguers who write their own descriptions (User.manualDescriptions)
 purpose: A per-user tick that hides Key Points in the wizard and marks EVERY lot that person creates as excluded from AI — enforced on the server, not by them remembering the box. Read before touching any lot-creation path.
-last_updated: 2026-08-14
+last_updated: 2026-09-21
 ---
 
 Jordan, 2026-08-14: "I need to be able to tick cataloguers as excluded from ai so they dont get the key points field and it just auto excludes them for every lot they make in the wizard. This is in an effort to combat a bug as cataloguers are making lots like this where they have somehow typed the description but it hasnt been marked as excluded from ai."
@@ -1616,6 +1688,18 @@ WARNING — worth revisiting: this also marks Photo Only, Import, Mass Create an
 Guarded against a repeat: the value is held in React state and ALWAYS written with fd.set("aiExcluded", …) in handleSubmit, alongside condition/notes/category which are handled the same way. A plain checkbox would not do — an unchecked HTML checkbox posts nothing, which is the exact shape of the original bug.
 ⚠ The lesson generalises: extractLotData turns EVERY absent boolean into false. Any new form calling updateLot must post every boolean it does not intend to clear. Checked at the time — the two desktop call sites (autosave and submit in auction-tabs.tsx) both build their FormData from the form containing the checkbox, so the tablet was the only hole.
 The control is a full-width tappable row above the Description field (which is what it governs), amber when on, stating the effect both ways — sized for the shared iPads rather than a desktop-sized checkbox. TabletLotEdit is mounted with key={editingLotId} and fully remounts on Prev/Next, so the useState initialiser re-runs per lot and cannot carry a value between lots.
+
+## 2026-09-21 — the tick was STILL being lost: three holes, all closed (staging)
+
+Jordan: *"lots have had the description typed manually and excluded from AI but is then loosing the tick at some point as when you go to the auction manager it isn't ticked then the Ai runs over it when we do an mass run"*. ⚠ **NOT MEASURED** — the Lot Change Log would say which screen un-ticked each lot (field "AI Excluded", with a source), but Auto mode blocked the read-only query. Read off the code instead. If it carries on, look a lost lot up in Admin → Lot Change Log FIRST: an "AI Excluded true → false" row names the screen; NO such row means it was never ticked at creation.
+
+1. **The desktop lot editor's tick was the ONLY field on that form with no auto-save.** Type the description (auto-saved, "✓ Saved" shows), tick the box, press Back or Next — the tick was never sent. Tick first and type second and it was, which is why it looked random. Now held in state + a ref and ALWAYS written by \`lotFormData()\` (the tablet's pattern), and a tick saves AT ONCE (\`saveNow()\`), no 800 ms wait.
+2. **Leaving a lot dropped whatever was still waiting to save.** The unmount only cleared the timer, so anything changed in the last 800 ms before Back / Prev / Next was lost — every field, not just the tick. \`flushAutoSave()\` now runs on all three.
+3. **\`updateLot\` no longer clears the tick when a form does not carry it** — \`aiExcluded\` joined \`startingBid\` / \`reserve\` in the "absent = leave alone" list. Both editors post "true" or "false" every time. It fails SAFE: a stale or partial form can at worst leave a lot excluded, never hand a typed description to the AI.
+
+- **2026-09-22 — ✍ "Looks hand-typed, not excluded" filter** in Manage Lots' AI column (\`fAi === "hand_typed"\`): a written description (ignoring OUR condition sentence — Add Conditions writes that onto AI-bound lots too), no key points, not AI-upgraded, not excluded. When it is on, an amber bar above the table counts the matches and **🚫 Exclude all N from AI** in one click (the same chunked, undoable \`bulkSetLotsAiExcluded\`; \`handleBulkToggleAiExcluded(ids?, value?)\` now takes the lots to change). Built to find the lots that lost the tick before the 2026-09-21 fix.
+
+⚠⚠ **And \`manualDescriptions\` had NEVER reached the wizard.** The desktop sale page's user lookup is an explicit \`select\` that did not include the column (the \`as any\` cast hid it from TypeScript), and the tablet never passed the prop at all — so the description-only step 3 was never shown to the people it was built for. The server half always worked, so their lots were excluded, but typed into **Key Points** with an empty description. Fixed in both pages; and the wizard's after-save reset now goes back to the person's default (\`setAiExcluded(manualDescriptions)\`), not \`false\` — with the tick hidden, \`false\` would have turned their Description box into Key Points from the second lot on. ⚠ Lesson: a User column read through \`as any\` is a column nobody checked is selected.
 `,
   },
   {
@@ -3137,7 +3221,19 @@ Reuse the bogus-DATABASE_URL trick to test anything on this boot path — it mak
 
 .env **still points at the shared Neon DB and real R2 bucket**. The guard only stops the **unattended** boot jobs. Anyone running locally and clicking around is still reading and writing **real production data**. CRON_SECRET is absent from local .env, which is a second accidental layer — do not rely on it (copying the Railway variables across to get local dev working is the obvious setup move, and would re-arm the mailbox polls). A real fix = a separate dev database; not worth it while nobody runs locally.
 
-**npx next dev** skips server.js entirely and is the lightest way to run a page locally.`,
+**npx next dev** skips server.js entirely and is the lightest way to run a page locally.
+
+## This machine's build and editing traps (2026-09-17/18)
+
+Every one of these cost time in a single two-day session; none is about the app.
+
+- **\`npm run build\` does not work here.** The script is \`… && NODE_OPTIONS='--max-old-space-size=2048' next build\`, and npm on Windows runs scripts through cmd.exe, which answers *'NODE_OPTIONS' is not recognized* — AFTER the changelog capture and prisma generate have run, so the tail of the output looks half successful and the wrapper still exits 0. Run the last step yourself from Git Bash: \`NODE_OPTIONS='--max-old-space-size=2048' npx next build\`. \`npx tsc --noEmit\` and \`npm run changelog:seed\` are fine as they are.
+- **Stopping a background build leaves an orphan.** TaskStop kills the shell, not the \`next build\` workers under it; they carry on and hold \`.next/lock\`, and the next build refuses with *Another next build process is already running*. Find them (\`Get-CimInstance Win32_Process -Filter "Name='node.exe'"\` shows the command lines — they are all under the repo), wait for the main one to exit, remove \`.next/lock\`, then build. Better: don't stop a build — let it finish and build again.
+- **A change to a source file AFTER \`tsc\` has started is not covered by it.** The shared memory page is a source file; edit it BEFORE the typecheck in the same chain, or run \`tsc\` again before committing.
+- **Escapes get decoded on the way in.** A \`\u0000\` typed into an Edit became a real NUL byte in a .tsx file (grep then called the file binary). A Bash heredoc ate the backslashes out of a regex. Anything with backslashes, \`\\u\` escapes, backticks-in-template-literals or apostrophes goes through the **Write tool to a scratch file**, applied by a small node patch script that asserts each anchor matches exactly once. Those scripts also handle CRLF (normalise to LF, write back as found).
+- **Node 24 strips types by itself** — \`node -e 'import("./lib/x.ts").then(…)'\` runs a plain TypeScript module with no build step, which is how a pure helper gets real test cases before it ships.
+- **The shared ENTRIES filenames are not the local filenames** — \`lot_archive.md\`, \`manage_lots_bulk_undo.md\`, \`ai_instruction_house_style.md\`, but \`reference_website_search.md\`. Find an entry by a phrase in its content. Its content is a template literal: no backticks, no \`\${\`.
+- ⚠ A /jordan change never goes in the shared ENTRIES or its index — local memory only.`,
   },
   {
     filename: "deploy_skew.md",
@@ -4917,31 +5013,46 @@ Core sync rules (full detail on the reference card):
 
 ---
 
-## Recent work (2026-09-15 → 18) — production is 15941188 (merged 17 Sept 16:57); the last seven commits are STAGING ONLY
+## Recent work (2026-09-15 → 18) — ALL ON PRODUCTION (main = e90a74b6, merged 18 Sept; staging is ahead only by memory updates)
 
-### On production (in the 17 Sept merge)
+### On production — the 17 Sept merge (15941188)
 - **Odd file types show everywhere a customer's photos do** — iPhone HEIC (the prebuilt sharp can't decode HEVC-HEIC, so heic-decode does it), TIFF, camera RAW, videos a browser can't play (ffmpeg makes a playable copy) and PDFs. A converted copy is kept BESIDE each original, one conversion at a time ([[reference_heic]]). Submissions: **Download all** into a folder you pick; the photo viewer steps through the photos without closing.
 - Tablet cataloguing header fits on a phone; Website Search's sale filter is the last filter.
 - **No manual status ticks left on a sale.** Auction Manager: the Photography column is gone ("Lots with photos" says it), **Ran through AI is a measured count** (lots excluded from AI are left out of the total), Catalogued sits before the counts. Auction Settings keeps only **Catalogued 🔒** and **Complete** — the addedToBC / photography / aiRan columns stay in the database and updateAuction deliberately never writes them (an absent checkbox would save false and wipe every sale's value). **Manage Lots' per-lot BC column is measured from the barcode too**, and "Mark added to BC" and its two server actions are deleted ([[reference_bc_lock_and_in_bc_column]]). Lotting Up's "locked" warning now reads Catalogued (it had read the old tick since 2 Sept).
-- Personal /jordan work (meal planner goals, costs, swaps, cooking for two; a new Gym tab) — details in local memory ONLY.
+- **BC Database: a missing marker is NOT an empty database.** "Collected up to sale N" came from max(siteSaleId) alone, and lots loaded before that column existed carry NULL — so the panel said "Nothing collected yet", the Copy-instructions-for-Claude text said "that is the whole range", and a full year was collected again for nothing (17 Sept: **220,228 lots, 382 sales, 12 files, site numbers 1062 → 1566, no sale unread** — the files are in Downloads\\vectis-bc-lots). The page, the copied instructions and the Status Centre now read count(*) beside the marker and show three states; loading any collection fills the marker in ([[reference_bc_database]]).
+- Personal /jordan work (meal planner goals, costs, swaps, cooking for two, autosave, dessert; a new Gym tab) — details in local memory ONLY.
 
-### Staging only — NOT live until I say "push to main"
+### On production — the 18 Sept merge (e90a74b6)
 - **⚠⚠ Overnight Auto Pipeline: one slice at a time.** The ~48 "[cron/pipeline-queue] error: fetch failed" lines a night were NOT an outage: server.js waited on each 9-minute slice over localhost and Node's fetch gives up waiting after 300 s. But that give-up released the only guard, and the heartbeat was once per lot, so a slow lot let a SECOND slice start on the same sale — lots sent to Gemini twice, and a description could go live after Key Points and Double Check had checked the old text. Now: an in-process lock for the whole slice (its token fences a replaced slice), a 30-second heartbeat timer, the route answers at once and the slice logs its own result, and a queue row's status only ever moves from RUNNING. Also fixed: **"skip lots that already have a description" was dropping lots the run itself had just written**, so they never got Key Points or Double Check. 17 local tests run the real runner ([[reference_pipeline_queue]]).
 - **BC sync:** the 12-hourly incremental now runs at fixed 11:00 and 17:00 London — counting from boot, it landed on the 05:00 FULL after one deploy and lit the database light at five in the morning. Both cron routes answer at once and log their own result (the cause code is printed, so a timeout reads differently from a restart); a FULL that can't start retries every 10 minutes.
 - **Mobile — the whole Hub zoomed and slid about on a phone.** The top bar was wider than a phone (644px for an admin on a 375px screen), which made every page wider than the screen, and the canvas behind the app was pure white even in dark mode (an unlayered body rule beats Tailwind v4's classes). Now a phone-only top bar that wraps (every control kept), dropdowns hanging from the bar, overflow-x: clip on the shell, a dark canvas, and 16px text fields on phones so iPhones stop zooming in on tap. RULES.md design rule 5 carries all four.
 - **Locking Check and Description Copier agree on conditions.** "Has a condition" now uses the Copier's own definition — graded on the lot OR written into the description — for EVERY lot. The AI-excluded exemption had hidden 10 F135 lots with a condition nowhere; the hand-written lots it protected (condition typed into the text) still pass. Excluded lots still aren't sent to Suggest conditions — they're marked to grade by hand. The Copier's condition banner ends with every barcode that needs a condition and a Copy all ([[reference_locking_check]]).
-- /jordan (partly from another session): five looks, the look picker collapsed, a MAKE PLAN fix — local memory ONLY.
+- **Photos open in the Hub's own zoom viewer, never a new browser tab** — Website Search's detail view and the thumbnails on the BC and ABC database pages (components/zoom-photo.tsx in front of the shared components/zoomable-lightbox.tsx, portalled to the body; the full-size file loads only when the viewer opens). ⚠ The "tap to open full size … opens really small" report was NOT a small file: the stored copy measured 4000×3733, byte-for-byte the website's xlarge. It was **Chrome's per-address zoom** left at 25% on the storage address (the magnifier icon in the address bar is the tell). Measure the object before blaming the copy job ([[reference_website_search]]).
+- **BC Corrections: Copy IDs works on lots BC Match skipped.** The button read only the unique ID saved on the Hub lot, which is blank until BC Match writes it — and 🔗 BC Match marks a lot "Receipt mismatch — skipped" when BC's receipt differs from the lot's, so the very lots on this tab never get one (F134: 45 of 47, "Copy 0 IDs"). Each row now takes BC's own ID found BY BARCODE — a loaded export first, then the last Data Sync, then the lot's own — and says which ([[reference_tote_check]]).
+- **Manage Lots → Descriptions → 🔁 Find & Replace.** Asked for because bullet points break BC's paperwork. Find / Replace with (empty removes), Match case (on), Whole words, a one-tap "• bullets → -", a live preview (count + three before/after lines) worked out with the SAME matcher the server uses (lib/find-replace.ts — literal text, never a pattern), ticked lots or all, chunked 20/400, one Undo per press, titles follow. ⚠ It changes the Hub only — a sale already in BC needs its descriptions sending again ([[reference_manage_lots_bulk_undo]]).
+- **A new instruction delivered as text: "Vectis Jo: Model Railway"** (6,178 characters, in the family's shape). Not yet confirmed as adopted — see Needs doing ([[reference_ai_instruction_house_style]]).
+- /jordan: five LOOKS (Retro, Hub, Modern, Halo, Paper) with the picker collapsed, and the MAKE PLAN dead-press fix — local memory ONLY.
 
 ### Needs doing
-- **Run Migrations on production** if any /jordan page shows the amber banner — the 17 Sept merge brought new /jordan tables and columns. Nothing that is staging-only needs one.
+- **F134 — BC was wrong, the Hub was right.** 45 lots (F134330–F134374) went into BC on R009541 / C226204 and belong on R009415 / C225360; the tote P006506 recorded on them is what points the wrong way. The job: transfer the 45 lines in BC to R009415 (their IDs were R009541-30 … R009541-74), Change Vendor by receipt R009415 on the Hub lots to clear the tote (Undo showed this done on 18 Sept), then after a Data Sync run 🔗 BC Match with a fresh export so they get their new IDs. Check where this got to before touching the sale.
+- **Bullets and BC paperwork — decide the permanent fix.** The Vectis Jo instructions write "• " bullets on purpose, so every AI-described sale needs the Find & Replace press until one of these is chosen: write "- " in the instructions, or have the Hub swap • for - automatically wherever a description goes to BC (keeps bullets on the Hub and the website). Not built; my call.
+- **Vectis Jo: Model Railway** — try it on 5–10 lots in 🧪 Instructions Testing; when the wording is settled, tell Claude so the house-style memory records the final version. Three decisions in it are worth a look: gauge leads with the maker, catalogue numbers only from the key points or a legible box (never looked up), packaging from the key points.
+- The 12 collected BC lot files (Downloads\\vectis-bc-lots) — load them on Databases → BC Database if that hasn't been done; loading also fills in the missing sale marker.
+- **Run Migrations on production** if any /jordan page shows the amber banner. Nothing in the 18 Sept merge needs one.
 - Still open from 14 Sept: the IT emails light (Make.com's scenario history) and the BC Reports cataloguing cache that remembers a failed day as "nobody catalogued".
 
 ⚠ **Working-style notes from these sessions:**
 - For anything that runs unattended or spans the whole Hub, investigating in parallel and then having a skeptic try to REFUTE each finding paid off: it confirmed the pipeline race from the code, and on the zoom sweep it threw out three plausible fixes that would not have worked.
-- When a page can't be opened (/jordan 404s for anyone else; staging needs my login), prove the logic with local tests of the REAL code — the pipeline runner was bundled against an in-memory table. In Git Bash set MSYS_NO_PATHCONV=1, or it rewrites "@/lib/..." arguments into Windows paths.
+- When a page can't be opened (/jordan 404s for anyone else; staging needs my login), prove the logic with local tests of the REAL code — the pipeline runner was bundled against an in-memory table, and the find-and-replace matcher ran 13 cases before it shipped. In Git Bash set MSYS_NO_PATHCONV=1, or it rewrites "@/lib/..." arguments into Windows paths.
 - When I reverse my own rule, find out what the old rule was protecting before deleting it. The condition exemption was keeping ~100 hand-written lots from being flagged; one shared definition kept that AND caught the 10 real ones. Deleting it would have blocked them all.
 - Another session pushes to staging at the same time — pull before every push, and expect its commits between yours.
 - If a word in my message contradicts the screenshot ("missing descriptions" when both screens count conditions), go by the screenshot and say which you assumed.
+- **Ask which side is wrong before recommending a fix that copies one side over the other.** On F134 Claude read "✓ done in BC" on the export check and told me to press ✓ Match BC — which copies FROM the tote, and the tote was the wrong thing. The Hub was right and BC was wrong; it had to take the advice back. "Done in BC" only means BC agrees with the tote.
+- **Measure before blaming.** The "small photo" took one measurement of the stored file to settle (4000 px) — the cause was the browser's saved zoom, not our copy job. Same for "it should have the ids": it did, by barcode, in the sync.
+- **When I ask for "styles" or "options", ask what should change before building.** Claude built five recolours of the same terminal; I wanted different SHAPES ("not just a colour change"). One question first would have saved a whole pass.
+- **A button must light BEFORE its first await, and guard re-entry with a ref, not state** — "sometimes you press it and nothing happens, press again and it works" is an await sitting in front of the busy flag ([[feedback_progress_feedback]]).
+- Never offer or hint at a push to main ("say the word if you want it on main" slipped out once) — finish on staging, say what is sitting there, stop.
+- **This machine's tooling:** \`npm run build\` fails under Windows (the script's NODE_OPTIONS='…' prefix is Unix-only) — run \`NODE_OPTIONS='--max-old-space-size=2048' npx next build\` from Git Bash instead. Stopping a background build leaves an orphan holding .next/lock: wait for it to exit, remove the lock, then build. Text with backslashes or \\u escapes must go through the Write tool plus a small node patch script — the Edit tool turned an escape into a real NUL byte in a source file, and a Bash heredoc eats backslashes. The shared ENTRIES filenames differ from the local memory filenames (lot_archive.md, manage_lots_bulk_undo.md, ai_instruction_house_style.md) — find an entry by its content, not its name ([[reference_local_dev_boot]]).
 
 ---
 
@@ -4965,7 +5076,8 @@ Core sync rules (full detail on the reference card):
 
 ## Recent work (2026-09-10/11) — ON PRODUCTION (merged to main 2026-09-11, main = staging)
 
-- **🚦 Status Centre + 🔔 admin bell** (/admin/status): "is it us or a supplier?" — 15 read-only checks, the loop runs on production only, the bell rings after 2 bad checks in a row. The MIGRATIONS array now lives in lib/migrations.ts.
+- **🚦 Status Centre + 🔔 admin bell** (/admin/status): "is it us or a supplier?" — 15 read-only checks, the loop runs on production only, the bell rings after 2 bad checks in a row. The MIGRATIONS array now lives in lib/migrations.ts. A check can be SWITCHED OFF from its panel (2026-09-22).
+- **💾 Database backup — every table, streamed** (/admin/backup, rebuilt 2026-09-22): information_schema describes the tables (no hand-kept list, ever), one JSONL file per table + manifest in R2, generic upsert restore with casts. The manifest is the evidence; the Status Centre goes amber on a failed table.
 - **📝 Hub Feedback surveys** (/admin/feedback): named, written answers; audience chosen per survey; "Fill it out later" is a temporary top-bar button, never a re-popup.
 - **🔎 Website Search replaced Description Finder** (deleted): ABC + BC + Hub lots in one search with photos, hammer prices, vectis.co.uk links and filters. A button in tablet cataloguing AND its own home card (Cataloguing & AI → /tools/website-search — I reversed my own "one button only"). Forgiving: punctuation, accents, capitals and plurals don't matter, and a misspelt word also searches the real spelling (the SearchWord spelling list, built in the background). Three ticks, each with an ⓘ: Exact phrase · Exact words (off by default) · Exact numbers (ON — "37" never finds 373). One "Estimate around £" box (the lot's low–high estimate covers the figure). Three across on a desktop, foldaway filter sidebar.
 - **⚠⚠ Never fold or rewrite the descriptions at search time.** translate() over the ABC table took "halo" from 3.3 s to 36 s and every search timed out on staging. Anything cleverer goes on the TYPED words or into the small indexed spelling list.
@@ -5690,7 +5802,33 @@ At the start of every new session, open the Claude Memory page (/admin/memory), 
 ## 6. Settings.json location
 
 Windows: C:\\Users\\<YourUser>\\.claude\\settings.json
-Mac: ~/.claude/settings.json`,
+Mac: ~/.claude/settings.json
+
+---
+
+## 8. Moving to a NEW COMPUTER — same account, same chats, same memory (2026-09-22)
+
+Jordan, getting a new PC: *"how do I make sure claude works exactly the same on the desktop version and has the same config memory and chats saves etc"*. Checked against this machine on 2026-09-22.
+
+**Copy these two things whole, BEFORE opening Claude on the new machine:**
+- \`C:\\Users\\Jordan.Orange\\.claude\\\` — \`settings.json\` (permissions, the rules hook, theme, the auto-mode profile), \`projects\\C--Dev-apps\\\` (every saved chat as a \`.jsonl\`, the \`memory\\\` folder, per-session folders), \`plugins\\\`, \`scheduled-tasks\\\`, \`history.jsonl\`, \`sessions\\\`.
+- \`C:\\Users\\Jordan.Orange\\.claude.json\` — per-project state: trusted folders, MCP servers, onboarding.
+Then **delete \`.claude\\.credentials.json\` from the copy and sign in fresh** — it is this machine's login token, not a setting.
+
+**⚠ Keep the SAME PATHS — this is what catches people:**
+- The repo goes back at \`C:\\Dev apps\\vectis-hub\` and Claude is opened in \`C:\\Dev apps\`. Chats and memory are filed under a slug made from the folder path (\`C--Dev-apps\`); a different path is a different, empty slug and none of it shows.
+- If the Windows username is not \`Jordan.Orange\`, edit the memory path spelt out in the hook in \`settings.json\` (section 2 above).
+
+**Not in the copy — do by hand:**
+- \`.env\` and \`.env.staging\` in the repo — git-ignored, so the clone doesn't bring them; they hold the real database and R2 keys.
+- Sign-ins: the Claude desktop app, \`gh auth login\`, and Claude in Chrome — a fresh extension install, and the allowed sites (staging AND production separately, see section 1) ticked again.
+
+**Install list:** Claude desktop app · Git (Git Bash — \`next build\` has to run from there, see [[reference_local_dev_boot]]) · Node 22 or newer · GitHub CLI · AutoHotkey (the macros) · OneDrive signed in (the BC source). Then \`git clone\`, \`npm install\`.
+
+**Not promised:** the Code tab's sidebar groups and pins live in the desktop app's own profile (\`%APPDATA%\\Claude\`); copying that folder too MAY bring them across (its encrypted parts are tied to the Windows user, so logins won't). The chats themselves come with \`.claude\\projects\` either way.
+
+Do the copy while the old PC still works and open one chat on the new one to check before wiping anything.
+`,
   },
   {
     filename: "MEMORY.md",
@@ -5721,7 +5859,7 @@ type: reference
 - [Memory Workflow](feedback_memory_workflow.md) — change a memory file → change its /admin/memory ENTRIES copy in the same push to staging
 - [File Saving](feedback_file_saving.md) — ask where a file should go before saving it
 - [App Naming](feedback_naming.md) — it's the Hub, never "the CRM"
-- [New Claude Account Setup](reference_new_claude_account.md) — replicate this Claude Code setup (permissions, hooks, memory, project config) on a new account
+- [New Claude Account Setup](reference_new_claude_account.md) — replicate this Claude Code setup (permissions, hooks, memory, project config) on a new account; §8 = moving to a NEW COMPUTER (copy ~/.claude + ~/.claude.json, SAME repo path C:\\Dev apps, .env by hand)
 - [Photo Prep — AI edit](reference_photo_ai_edit.md) — 13 Gemini image presets fix the PHOTO never the ITEM. Read before adding a preset
 - [Photography section](reference_photography_section.md) — its own Cataloguing section (sale list → Start photography); Upload Photos left Auction Manager; a new sidebar section stays hidden from users with configured sections until an admin ticks it
 - [Smart Scan photo upload](reference_smart_scan_photo_upload.md) — label reading + grouping, its failure modes, the 2026-07-15 rework
@@ -5744,7 +5882,7 @@ type: reference
 - [⚠⚠ Read-only database day (2026-09-09)](reference_db_readonly_incident.md) — Neon compute read-only + a POISONED POOLER connection (7/25) that outlived it; sample MANY connections never one; pg_is_in_recovery lies on Neon; prisma update() reads the whole row back; the MIGRATIONS array is the only route
 - [Sandbox environment](reference_sandbox_environment.md) — staging code on a Neon branch of PROD data; crons off only because CRON_SECRET unset — never add one; shares R2
 - [Deploy Skew](reference_deploy_skew.md) — "Failed to find Server Action" = deploy skew; silent reload
-- [Local Boot Safety](reference_local_dev_boot.md) — server.js gates migrations/crons on !dev; .env = REAL DB
+- [Local Boot Safety](reference_local_dev_boot.md) — server.js gates migrations/crons on !dev; .env = REAL DB; ⚠ npm run build FAILS on Windows — run next build from Git Bash; a stopped build orphans .next/lock; backslashes/escapes go via Write + a patch script
 - [Receipt Unique ID Assignment](reference_unique_id_assignment.md) — SUPERSEDED: Hub mints NO unique IDs; never re-add
 - [Phantom Cataloguing Counts](reference_phantom_catalogue_counts.md) — orphaned timing logs; never blame cataloguers
 - [Access Log + /hub Bounce](reference_access_log.md) — /admin/access-log; 3 failure shapes
@@ -5756,13 +5894,13 @@ type: reference
 - [Data & Compliance page](reference_compliance_page.md) — /admin/compliance, a static data-protection note; keep its lists in step when an integration changes
 - [Data map — every Prisma table](reference_data_map.md) — one plain-English sentence per table on Data & Compliance, with a self-check for undescribed ones. Read before adding a Prisma model
 - [🎥📸 Screen Recorder + Screenshots (IT Tools)](reference_screen_recorder.md) — record/capture into R2; retry never re-uploads; screenshots stream through the Hub; livestream NOT built
-- [🏢 BC Database (Databases)](reference_bc_database.md) — /databases/bc: BC sync + the website's FULL description/photo/link. ⚠⚠ the site answers Railway 202+empty but an OFFICE machine normally → collected by scripts/collect-bc-lots.mjs and uploaded; BC sales = site 1062–1566; ⚠ siteSaleId is NULL on lots loaded before the column — a missing marker is NOT an empty database
+- [🏢 BC Database (Databases)](reference_bc_database.md) — /databases/bc: BC sync + the website's FULL description/photo/link. 🖼 Databases → Sales (/databases/sales, 2026-09-22): every sale's cover picture — the collector reads each sale PAGE, the heroes job copies from S3; NEEDS Run Migrations. ⚠⚠ the site answers Railway 202+empty but an OFFICE machine normally → collected by scripts/collect-bc-lots.mjs and uploaded; BC sales = site 1062–1566; ⚠ siteSaleId is NULL on lots loaded before the column — a missing marker is NOT an empty database
 - [📚 ABC Database / Lot Archive (Databases)](reference_lot_archive.md) — pre-BC lots: sheet STREAMED from R2 + website pull (LotID = site unique_id, photos keyed on it, match by AuctionID+lot). Read before touching old sold prices/photos
 - [💬 Help box (top bar)](reference_help_box.md) — permissions by FILTERING context server-side (allowedHelpContext); getEffectiveSession() not auth(); DESTINATIONS list
 - [Lens — identify from photo](reference_lens.md) — Gemini + our sold prices; 4 matching traps; since 2026-09-10 checks ABC + BC full descriptions (findComparables everywhere), headline from same-number lots
 - [Measurement flags](reference_measurement_flags.md) — a size differing from the maker is never a mistake; only self-contradicting pairs
 - [Dolls & Bears Descriptions](reference_dolls_bears_descriptions.md) — no ** bold; cleanBearsDescription; strict/relaxed KP modes
-- [AI instruction house style](reference_ai_instruction_house_style.md) — the ONE shape for description instructions; repeat rules where they apply; 5,000–6,500 chars; delivered as text to paste
+- [AI instruction house style](reference_ai_instruction_house_style.md) — the ONE shape for description instructions; repeat rules where they apply; 5,000–6,500 chars; delivered as text to paste; Vectis Jo: Model Railway delivered 2026-09-18 (not yet confirmed adopted) — ⚠ the family's • bullets break BC paperwork
 - [AI Instructions Single Source](reference_ai_instructions_single_source.md) — AiPreset DB is the ONE source; archive hides from every dropdown; resolveInstruction never checks archived
 - [Auto Pipeline — appliedDesc](reference_auto_pipeline_apply.md) — appliedDesc is the only record of an apply; model read LIVE via refs
 - [⚠ AI apply keeps the condition line](reference_condition_line_on_ai_apply.md) — keepConditionLine (lib/condition.ts) in all four AI-apply paths; "Add Conditions is glitchy" was never the button
@@ -5773,7 +5911,7 @@ type: reference
 - [⚠⚠ Wrong vendors — the 2026-09-08 review](reference_vendor_flow_faults.md) — ⚠ the tote is TYPED never scanned; a mistyped-but-valid tote is invisible to every check; BC keys receipt-totes on (receipt,line) but our cache is UNIQUE on toteNo; dead duplicate guard. Wizard + cache FIXED (on production since the 2026-09-09 merge); Match BC/End of Day left alone by his decision. Read before touching the tote lookup, wizard step 1 or Match BC
 - [Review Tab — issues, kp mistakes, fix all](reference_review_tab_issues.md) — key points are upstream of the description
 - [Lot Wizard — Resume](reference_lot_wizard_resume.md) — REMOVED 2026-08-07; don't rebuild without discussing
-- [Manual cataloguers](reference_manual_cataloguer.md) — server-side in all five creation paths
+- [Manual cataloguers](reference_manual_cataloguer.md) — server-side in all five creation paths; ⚠ 2026-09-21 the tick was still being lost: desktop editor tick had no auto-save, leaving a lot dropped pending saves, and manualDescriptions never reached the wizard; ✍ "Looks hand-typed, not excluded" filter + one-click Exclude all (2026-09-22)
 - [Lot Wizard — customer banner](reference_lot_wizard_tote_banner.md) — Different tote on the LEFT + confirms; Contents from BC via a DISCOVERED field name (pickBcContents)
 - [Lot Wizard Warnings](reference_lot_wizard_warnings.md) — goNext() stop-and-warn guards
 - [Lot Change Log](reference_lot_change_log.md) — every lot mutation logs via lib/lot-log.ts

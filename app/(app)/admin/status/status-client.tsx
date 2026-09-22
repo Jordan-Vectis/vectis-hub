@@ -26,6 +26,11 @@ import type {
 // ⚠ The Bidpath live-bid feed is checked FROM THIS COMPUTER and never stored: office
 // browsers are what actually use it, and the website already refuses the Hub's
 // server (202-with-nothing, 2026-09-09), so a server-side check would prove nothing.
+//
+// ⚠ A check can be SWITCHED OFF from its details panel (Jordan, 2026-09-22: "I don't use
+// the it emails thing anymore"). The server stops running it; here it is left out of the
+// answer at the top, of "Check everything now" and of the stale-lights note, and its tile
+// stays — greyed, "Switched off", with who and when — so it can be switched back on.
 
 type ViewState = ServiceView["state"]
 type Tone = "good" | "warn" | "bad" | "neutral"
@@ -90,9 +95,16 @@ const STATE_META: Record<ViewState, { word: string; meaning: string; seg: string
     badge: "bg-white text-gray-600 ring-gray-300 dark:bg-gray-900 dark:text-gray-400 dark:ring-gray-600",
     tile: "border-dashed border-gray-300 dark:border-gray-700",
   },
+  disabled: {
+    word: "Switched off",
+    meaning: "an admin switched this check off here — not checked, not counted, never rings the bell",
+    seg: "border-2 border-dotted border-gray-400 dark:border-gray-500",
+    badge: "bg-gray-100 text-gray-500 ring-gray-400/30 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-600/50",
+    tile: "border-dotted border-gray-300 dark:border-gray-700 opacity-80",
+  },
 }
 
-const KEY_ORDER: ViewState[] = ["ok", "degraded", "down", "unknown", "off", "pending"]
+const KEY_ORDER: ViewState[] = ["ok", "degraded", "down", "unknown", "off", "pending", "disabled"]
 
 const TONE_BOX: Record<Tone, string> = {
   good: "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-50",
@@ -176,7 +188,7 @@ function safeView(v: StatusResponse): StatusResponse {
     alerts: Array.isArray(v.alerts) ? v.alerts : [],
     services: v.services.map(s => ({
       ...s,
-      state: s.state === "pending" ? "pending" : safeState(s.state),
+      state: s.state === "pending" || s.state === "disabled" ? s.state : safeState(s.state),
       cause: s.cause === "hub" ? "hub" : "supplier",
       facts: Array.isArray(s.facts) ? s.facts : [],
       hours: Array.isArray(s.hours) ? s.hours.map(bucket) : [],
@@ -367,8 +379,15 @@ function buildReport(steps: RunStep[], stopped: boolean, noFeedId: boolean): Run
 
 type Answer = { tone: Tone; headline: string; problems: ServiceView[]; notes: string[] }
 
-function answerFor(services: ServiceView[], feed: FeedResult | null): Answer {
-  if (!services.length) return { tone: "neutral", headline: "⚪ No services are set up to be checked yet", problems: [], notes: [] }
+function answerFor(all: ServiceView[], feed: FeedResult | null): Answer {
+  // Switched-off checks are not part of the answer at all — that is what switching one off is for.
+  const disabled = all.filter(s => s.state === "disabled")
+  const services = all.filter(s => s.state !== "disabled")
+  const disabledNote = disabled.length
+    ? `${disabled.length} switched off, so not counted: ${joinNames(disabled.map(s => s.name))} — open the tile to switch it back on.`
+    : null
+  if (!all.length) return { tone: "neutral", headline: "⚪ No services are set up to be checked yet", problems: [], notes: [] }
+  if (!services.length) return { tone: "neutral", headline: "⚪ Every check is switched off", problems: [], notes: disabledNote ? [disabledNote] : [] }
 
   const downFirst = (l: ServiceView[]) => [...l].sort((a, b) => (a.state === "down" ? 0 : 1) - (b.state === "down" ? 0 : 1))
   const describe = (l: ServiceView[]) => (l.length === 1 ? `${l[0].name} — ${clip(l[0].summary)}` : joinNames(l.map(s => s.name)))
@@ -422,6 +441,7 @@ function answerFor(services: ServiceView[], feed: FeedResult | null): Answer {
   if (unk.length) notes.push(`${unk.length} couldn't be checked, so ${unk.length === 1 ? "it's" : "they're"} grey — not a fault, and not proof of working: ${joinNames(unk.map(s => s.name))}.`)
   if (pen.length && !nothingChecked) notes.push(`${pen.length} not checked yet on this environment: ${joinNames(pen.map(s => s.name))}.`)
   if (off.length) notes.push(`${off.length} not used on this environment: ${joinNames(off.map(s => s.name))}.`)
+  if (disabledNote) notes.push(disabledNote)
   if (feed?.state === "down") notes.push("The Bidpath live-bid feed didn't connect from this computer — see its tile under Other suppliers.")
   return { tone, headline, problems, notes }
 }
@@ -437,7 +457,7 @@ function envNote(env: string): string | null {
 function staleNote(services: ServiceView[], env: string, nowMs: number): string | null {
   // ⚠ Only production has an automatic loop (server.js) — elsewhere old lights are expected, and envNote says so.
   if (env !== "production") return null
-  const times = services.map(s => Date.parse(s.lastCheckedAt ?? "")).filter(t => Number.isFinite(t))
+  const times = services.filter(s => s.state !== "disabled").map(s => Date.parse(s.lastCheckedAt ?? "")).filter(t => Number.isFinite(t))
   if (!times.length || !nowMs) return null
   const age = nowMs - Math.max(...times)
   if (age <= 20 * 60_000) return null
@@ -545,8 +565,14 @@ function ServiceTile({ s, nowMs, checking, onOpen }: { s: ServiceView; nowMs: nu
       )}
       {checking &&<p className="text-xs font-semibold text-sky-700 dark:text-sky-300 animate-pulse">Checking now…</p>}
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        {Number.isFinite(since) && s.state !== "pending" && <>{STATE_META[s.state].word} since {when(since, nowMs)} · </>}
-        {Number.isFinite(checked) ? <>checked {ago(checked, nowMs)}</> : <>never checked here</>}
+        {s.state === "disabled" ? (
+          <>Switched off{s.disabledBy ? ` by ${s.disabledBy}` : ""}{Number.isFinite(since) ? ` on ${when(since, nowMs)}` : ""} · open to switch on</>
+        ) : (
+          <>
+            {Number.isFinite(since) && s.state !== "pending" && <>{STATE_META[s.state].word} since {when(since, nowMs)} · </>}
+            {Number.isFinite(checked) ? <>checked {ago(checked, nowMs)}</> : <>never checked here</>}
+          </>
+        )}
       </p>
       <Uptime u={s.uptime} />
       <Strip buckets={s.hours} kind="hour" />
@@ -620,38 +646,77 @@ function SingleResultLine({ outcome }: { outcome: RunOutcome }) {
   return <p className="text-sm text-gray-700 dark:text-gray-300">Stopped waiting. The Hub may still finish the check, and the light will update if it does.</p>
 }
 
-function ServicePanel({ s, nowMs, checkingSince, result, disabled, onCheck, onStopWaiting, onClose, closeRef }: {
+function ServicePanel({ s, nowMs, checkingSince, result, disabled, onCheck, onStopWaiting, onSwitch, onClose, closeRef }: {
   s: ServiceView; nowMs: number; checkingSince: number | null; result: RunOutcome | null; disabled: boolean
-  onCheck: () => void; onStopWaiting: () => void; onClose: () => void; closeRef: RefObject<HTMLButtonElement | null>
+  onCheck: () => void; onStopWaiting: () => void
+  /** Switches the check on or off; resolves to an error sentence, or null when it worked. */
+  onSwitch: (enabled: boolean) => Promise<string | null>
+  onClose: () => void; closeRef: RefObject<HTMLButtonElement | null>
 }) {
   const since = Date.parse(s.since ?? "")
   const checked = Date.parse(s.lastCheckedAt ?? "")
   const lastOk = Date.parse(s.lastOkAt ?? "")
+  const off = s.state === "disabled"
+
+  // The switch: lit BEFORE the first await, re-entry guarded by a ref, its error beside the button (RULES.md 7b).
+  const [switching, setSwitching] = useState<"on" | "off" | null>(null)
+  const [switchError, setSwitchError] = useState<string | null>(null)
+  const switchingRef = useRef(false)
+  async function flip(enabled: boolean) {
+    if (switchingRef.current) return
+    switchingRef.current = true
+    setSwitching(enabled ? "on" : "off")
+    setSwitchError(null)
+    try {
+      const err = await onSwitch(enabled)
+      if (err) setSwitchError(`Couldn't switch it ${enabled ? "on" : "off"} — ${err}`)
+    } finally {
+      switchingRef.current = false
+      setSwitching(null)
+    }
+  }
+  const switchBtn = (enabled: boolean, cls: string) => (
+    <button type="button" onClick={() => void flip(enabled)} disabled={switching != null || checkingSince != null} className={cls}>
+      {switching ? `Switching ${switching}…` : enabled ? "Switch this check on" : "Switch this check off"}
+    </button>
+  )
+
   return (
     <PanelShell title={s.name} subtitle={`${GROUP_LABELS[s.group]} · ${sideLabel(s)}`} closeRef={closeRef} onClose={onClose}>
       <div className="space-y-2">
         <Badge state={s.state} large />
         <p className="text-base text-gray-900 dark:text-gray-100">{s.summary}</p>
         <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-0.5">
-          {Number.isFinite(since) && s.state !== "pending" && <li>{STATE_META[s.state].word} since {when(since, nowMs)} ({dur(nowMs - since)})</li>}
+          {!off && Number.isFinite(since) && s.state !== "pending" && <li>{STATE_META[s.state].word} since {when(since, nowMs)} ({dur(nowMs - since)})</li>}
           <li>{Number.isFinite(checked) ? <>Last checked {ago(checked, nowMs)} ({when(checked, nowMs)})</> : "Not checked yet on this environment."}</li>
           {s.state !== "ok" && Number.isFinite(lastOk) && <li>Last worked {when(lastOk, nowMs)} ({ago(lastOk, nowMs)})</li>}
           {s.latencyMs != null && <li>Answered in {s.latencyMs.toLocaleString("en-GB")} ms</li>}
         </ul>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={onCheck} disabled={disabled || checkingSince != null} className={BTN_PRIMARY}>
-            {checkingSince != null ? `Checking… ${secs(checkingSince, nowMs)} s` : "Check this now"}
-          </button>
-          {checkingSince != null && <button type="button" onClick={onStopWaiting} className={BTN_SECONDARY}>Stop waiting</button>}
-          {disabled && checkingSince == null && <span className="text-xs text-gray-500 dark:text-gray-400">Another check is running — wait for it to finish.</span>}
+      {off ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">{switchBtn(true, BTN_PRIMARY)}</div>
+          {switchError && <p className="text-sm text-red-700 dark:text-red-400">{switchError}</p>}
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            While it is off nothing checks it, it isn&apos;t counted in the answer at the top, and the bell never rings for it.
+            Switched on, it is checked again at the next automatic run.
+          </p>
         </div>
-        {result && <SingleResultLine outcome={result} />}
-      </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={onCheck} disabled={disabled || checkingSince != null || switching != null} className={BTN_PRIMARY}>
+              {checkingSince != null ? `Checking… ${secs(checkingSince, nowMs)} s` : "Check this now"}
+            </button>
+            {checkingSince != null && <button type="button" onClick={onStopWaiting} className={BTN_SECONDARY}>Stop waiting</button>}
+            {disabled && checkingSince == null && <span className="text-xs text-gray-500 dark:text-gray-400">Another check is running — wait for it to finish.</span>}
+          </div>
+          {result && <SingleResultLine outcome={result} />}
+        </div>
+      )}
 
-      <section>
+      {!off && <section>
         <h3 className={H3}>What the check found</h3>
         {s.facts.length ? (
           <>
@@ -678,7 +743,7 @@ function ServicePanel({ s, nowMs, checkingSince, result, disabled, onCheck, onSt
         ) : (
           <p className="text-sm text-gray-600 dark:text-gray-400">No extra detail for this check.</p>
         )}
-      </section>
+      </section>}
 
       <section>
         <h3 className={H3}>What the Hub uses it for</h3>
@@ -719,6 +784,21 @@ function ServicePanel({ s, nowMs, checkingSince, result, disabled, onCheck, onSt
           <p className="text-sm text-gray-600 dark:text-gray-400">There isn&apos;t a public status page for this one.</p>
         )}
       </section>
+
+      {!off && (
+        <section className="space-y-2">
+          <h3 className={H3}>Not using this any more?</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Switched off, it is never checked, doesn&apos;t count in the answer at the top, and never rings the bell. Its tile stays here,
+            greyed, saying who switched it off and when, so it can be switched back on.
+            {s.group === "hub" && <> <b className="text-amber-700 dark:text-amber-300">This is one of the Hub&apos;s own checks</b> — with it off, the page can no longer say a problem is inside the Hub.</>}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            {switchBtn(false, BTN_SECONDARY)}
+            {switchError && <span className="text-sm text-red-700 dark:text-red-400">{switchError}</span>}
+          </div>
+        </section>
+      )}
     </PanelShell>
   )
 }
@@ -1050,7 +1130,7 @@ export default function StatusClient() {
     setReport(null)
     setSingleResult(null)
     const feedId = feed.id
-    const steps: RunStep[] = data.services.map(s => ({ key: s.key, name: s.name }))
+    const steps: RunStep[] = data.services.filter(s => s.state !== "disabled").map(s => ({ key: s.key, name: s.name }))
     if (feedId) steps.push({ key: FEED_KEY, name: "Bidpath live-bid feed (from this computer)" })
     const t0 = Date.now()
     setNow(t0)
@@ -1107,6 +1187,26 @@ export default function StatusClient() {
     setSingleResult({ key, outcome: r })
     setSingle(null)
     await load()
+  }
+
+  /** Switches a check off or on. Resolves to an error sentence, or null once the page has reloaded with it. */
+  async function switchService(key: string, enabled: boolean): Promise<string | null> {
+    try {
+      const res = await fetch("/api/status/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service: key, enabled }),
+        cache: "no-store",
+      })
+      const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+      if (res.status === 401) return "your sign-in has run out — reload the page to sign in again."
+      if (!res.ok || !j?.ok) return j?.error ? String(j.error).slice(0, 300) : `the Hub's server answered with an error (${res.status}).`
+      setSingleResult(null)
+      await load()
+      return null
+    } catch {
+      return "the Hub's server didn't answer."
+    }
   }
 
   function saveFeedId(id: string) {
@@ -1318,6 +1418,7 @@ export default function StatusClient() {
           disabled={somethingRunning && single?.key !== openService.key}
           onCheck={() => void checkOne(openService.key)}
           onStopWaiting={() => ctlRef.current?.abort()}
+          onSwitch={enabled => switchService(openService.key, enabled)}
           onClose={closePanel} closeRef={closeBtnRef} />
       )}
       {!openService && openKey === FEED_KEY && feed.ready && (

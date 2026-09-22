@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-18, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-22, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,15 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4f67740b97d8d6cbf7ce95ac550ea7b037a864a1","author":"Jordan Orange","date":"2026-09-22T14:59:23+01:00","subject":"Databases: a Sales tab with every sale's cover picture"},
+  {"sha":"75b0ce6d7146843d4dfcfb8e21b9689eaeca3219","author":"Jordan Orange","date":"2026-09-22T12:16:00+01:00","subject":"Memory: moving Claude Code to a new computer"},
+  {"sha":"3914dd55a4201b9ebf51a0d378b1ce7f96ca65a4","author":"Jordan Orange","date":"2026-09-22T12:02:42+01:00","subject":"Manage Lots: \"Looks hand-typed, not excluded\" filter with one-click exclude"},
+  {"sha":"ef9ee912341dc05f5acb94c75335e5ec0e1d1fdd","author":"Jordan Orange","date":"2026-09-22T11:48:29+01:00","subject":"Database backup: every table, streamed, one file each"},
+  {"sha":"a08c4eb84e5ac9afaa1c14934922931d393aae68","author":"Jordan Orange","date":"2026-09-22T10:53:46+01:00","subject":"Status Centre: a check can be switched off"},
+  {"sha":"14437d0697d3523c5eaf6b0b5ff4996b4d76f471","author":"Jordan Orange","date":"2026-09-21T15:29:42+01:00","subject":"Exclude from AI: stop hand-typed lots losing the tick"},
+  {"sha":"0b7267f33383510e03d3f7b01c8985f37585cd80","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Meal planner: a reply it can't read is salvaged and asked for again, not reported"},
+  {"sha":"caa168130189c3de64be6a0921c652a219f0824f","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Memory: 18 Sept in the opening message, the Model Railway instruction, this machine's build traps"},
+  {"sha":"adada4411920341fe1eb626b8cce44f101225cda","author":"Jordan Orange","date":"2026-09-18T16:29:37+01:00","subject":"Manage Lots: Find & Replace for descriptions"},
   {"sha":"5843391a327cbef491a8055ec95cef0b157ff90d","author":"Jordan Orange","date":"2026-09-18T15:58:54+01:00","subject":"BC Corrections: Copy IDs works on lots BC Match skipped"},
   {"sha":"b7300f6257d1fd79b60d8fcf9bdd3fee7dbbf59f","author":"Jordan Orange","date":"2026-09-18T14:55:27+01:00","subject":"BC and ABC databases: a lot's photo opens in the Hub's zoom viewer, not a new tab"},
   {"sha":"26774e2a0e174e80285b7044273bf7497413632a","author":"Jordan Orange","date":"2026-09-18T14:47:57+01:00","subject":"Website Search: the photo opens in the Hub's own zoom viewer, not a browser tab"},

@@ -1,62 +1,33 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { r2 } from "@/lib/r2"
-import { ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3"
-import { runBackup } from "@/app/api/cron/db-backup/route"
+import { backupProgress, deleteBackup, listBackups, startBackup, type BackupScope } from "@/lib/backup-engine"
 
-const BACKUP_BUCKET = process.env.CLOUDFLARE_R2_BACKUP_BUCKET!
+export const dynamic = "force-dynamic"
 
-// ── GET — list all backup files ────────────────────────────────────────────────
-export async function GET(_req: NextRequest) {
+async function admin() {
+  const session = await auth()
+  return session && session.user.role === "ADMIN" ? session : null
+}
+
+// GET /api/admin/backup — every backup in this environment's folder, newest first, plus the
+// state of any run in progress.
+export async function GET() {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    }
-
-    const env = process.env.RAILWAY_ENVIRONMENT_NAME ?? "unknown"
-    const listRes = await r2.send(
-      new ListObjectsV2Command({ Bucket: BACKUP_BUCKET, Prefix: `${env}/` })
-    )
-
-    const files = (listRes.Contents ?? [])
-      .filter(o => o.Key?.endsWith(".json"))
-      .sort((a, b) => (a.Key! > b.Key! ? -1 : 1)) // descending — newest first
-      .map(o => ({
-        key: o.Key!,
-        sizeBytes: o.Size ?? 0,
-        lastModified: o.LastModified?.toISOString() ?? null,
-        partial: o.Key!.includes("-partial"),
-      }))
-
-    return NextResponse.json({ files })
+    if (!(await admin())) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    return NextResponse.json({ entries: await listBackups(), progress: backupProgress() })
   } catch (e: any) {
     console.error("[admin/backup] GET error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }
 
-// ── DELETE — remove a specific backup file ────────────────────────────────────
-// Body: { key: string }
+// DELETE /api/admin/backup  { key } — one backup: a folder (every file in it) or an old single file.
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    }
-
-    const { key } = await req.json()
-    if (!key || typeof key !== "string") {
-      return NextResponse.json({ error: "key is required" }, { status: 400 })
-    }
-
-    await r2.send(
-      new DeleteObjectsCommand({
-        Bucket: BACKUP_BUCKET,
-        Delete: { Objects: [{ Key: key }], Quiet: true },
-      })
-    )
-
+    if (!(await admin())) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    const { key } = await req.json().catch(() => ({})) as { key?: unknown }
+    if (!key || typeof key !== "string") return NextResponse.json({ error: "Say which backup." }, { status: 400 })
+    await deleteBackup(key)
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error("[admin/backup] DELETE error:", e)
@@ -64,22 +35,24 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
-// ── POST — trigger an immediate backup ────────────────────────────────────────
-// Body (optional): { sections?: string[] }
+// POST /api/admin/backup  { scope: "all" | "quick" | string[] } — starts a backup and returns at
+// once (202); the page follows it on GET /api/admin/backup/progress. ⚠ Not awaited on purpose:
+// a full copy takes minutes and Railway's proxy would cut the request off part-way.
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    const session = await admin()
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    const body = await req.json().catch(() => ({})) as { scope?: unknown }
+    let scope: BackupScope = "all"
+    if (body.scope === "quick") scope = "quick"
+    else if (Array.isArray(body.scope)) {
+      scope = body.scope.filter((s): s is string => typeof s === "string" && /^[A-Za-z0-9_]+$/.test(s))
+      if (!scope.length) return NextResponse.json({ error: "Tick at least one table." }, { status: 400 })
     }
-
-    const body = await req.json().catch(() => ({}))
-    const sections = Array.isArray(body.sections) && body.sections.length > 0
-      ? body.sections as string[]
-      : undefined
-
-    const result = await runBackup(sections)
-    return NextResponse.json(result)
+    const by = session.user.name || session.user.email || "an admin"
+    const r = startBackup({ by, scope })
+    if (!r.started) return NextResponse.json({ error: r.reason }, { status: 409 })
+    return NextResponse.json({ started: true, progress: backupProgress() }, { status: 202 })
   } catch (e: any) {
     console.error("[admin/backup] POST error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

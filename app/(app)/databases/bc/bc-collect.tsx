@@ -55,7 +55,7 @@ export default function BcCollect({ defaultFrom, defaultTo, collectedTo, held }:
         ? `The Hub already holds ${held.toLocaleString()} lots, but not a record of which website sale each one came from, so there is no way to tell here how far the last collection got. ${f} to ${t} is the whole range. Collecting a sale we already have is safe — loading the files only fills in blanks and never overwrites — but it is slow, so if you can see the range should be narrower, say so before you start rather than after.`
         : "Nothing has been collected yet, so that is the whole range.",
     "",
-    "It walks the website's own sale numbers, skips the pre-Business-Central sales with one small request each, keeps only finished sales and lots whose id looks like r009030-1, and writes JSON files of about 12 MB. Roughly half an hour for a year of sales. A red 500 in the output means there is no sale with that number and is normal.",
+    "It walks the website's own sale numbers, skips the pre-Business-Central sales' lots with one small request each, keeps only finished sales and lots whose id looks like r009030-1, and writes JSON files of about 12 MB. It also reads each sale's own page for its title, date and cover picture, so the files carry those too (Databases → Sales shows them). Roughly half an hour for a year of sales. A red 500 in the output means there is no sale with that number and is normal.",
     "",
     "When it finishes, tell me how many lots and sales it collected, how many files, the highest website sale number it reached, and whether any sale could not be read — it names those at the end. Do not try to load them into the database yourself.",
   ].join(String.fromCharCode(10))

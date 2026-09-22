@@ -53,7 +53,7 @@ const active = new Map<string, Ctl>()
 export const isActive = (id: string) => active.has(id)
 export function requestStop(id: string): boolean { const c = active.get(id); if (c) c.stop = true; return !!c }
 
-export async function getJob(id: "site" | "photos") {
+export async function getJob(id: "site" | "photos" | "heroes") {
   const j = await prisma.archiveJob.findUnique({ where: { id } })
   return j ? { ...j, running: isActive(id) } : null
 }
@@ -505,4 +505,131 @@ async function runPhotoCopy() {
     console.error("archive photo copy error:", e)
     await prisma.archiveJob.update({ where: { id: "photos" }, data: { error: e?.message ?? "Stopped with an error" } }).catch(() => {})
   } finally { active.delete("photos") }
+}
+
+// ── Sale pictures ("heroes") ─────────────────────────────────────────────────
+//
+// Every sale page on the website carries one cover picture — the one its auction calendar shows —
+// at a fixed place on Amazon S3: `auction_images/large/<sale guid>/<image guid>.webp`, old ABC
+// sales and BC ones alike (checked on sales 683 and 1566, 2026-09-22). Jordan: "is it possible to
+// get them as well? … make a new tab for them in databases". The office collector records it with
+// each sale's title and date (the site won't answer the Hub's server); the "heroes" job below then
+// copies it into R2 — S3 the server CAN reach, exactly as it fetches the lot photos.
+
+export const SALE_HERO_PREFIX = "sale-photos"
+
+export type SaleMeta = {
+  siteId: number
+  auctionId?: number | null
+  code?: string | null
+  title?: string | null
+  /** yyyy-mm-dd */
+  date?: string | null
+  /** The picture's path under SITE_IMAGES, or its full address — either is accepted. */
+  hero?: string | null
+  lotCount?: number | null
+  finished?: boolean | null
+}
+
+/** Writes what a collector learned about a SALE. Never blanks a value already held; a new picture
+ *  clears our old copy so the heroes job fetches it again. ⚠ Migration-safe: without the picture
+ *  columns it still keeps title, date and lot count. */
+export async function upsertSaleMeta(m: SaleMeta): Promise<{ hero: boolean }> {
+  const siteId = Math.round(Number(m.siteId))
+  if (!Number.isFinite(siteId) || siteId <= 0) return { hero: false }
+  const title = str(m.title) ?? `Sale ${siteId}`
+  const date = m.date && /^\d{4}-\d{2}-\d{2}/.test(m.date) ? new Date(`${m.date.slice(0, 10)}T00:00:00Z`) : null
+  const code = str(m.code)?.toUpperCase() ?? null
+  const hero = str(m.hero)?.replace(/^https?:\/\/[^/]+\/vectis\/prod\//i, "").replace(/^\/+/, "") ?? null
+  const lots = Number.isFinite(Number(m.lotCount)) ? Math.max(0, Math.round(Number(m.lotCount))) : 0
+  const finished = m.finished === true
+  const auctionId = Number.isFinite(Number(m.auctionId)) && Number(m.auctionId) > 0 ? Math.round(Number(m.auctionId)) : null
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO "ArchiveSale" ("siteId", "auctionId", "title", "saleDate", "lots", "finished", "pulledAt", "code", "heroUrl", "heroAt")
+      VALUES (${siteId}, ${auctionId}, ${title}, ${date}, ${lots}, ${finished}, now(), ${code}, ${hero}, CASE WHEN ${hero}::text IS NULL THEN NULL ELSE now() END)
+      ON CONFLICT ("siteId") DO UPDATE SET
+        "auctionId" = COALESCE(EXCLUDED."auctionId", "ArchiveSale"."auctionId"),
+        "title"     = CASE WHEN EXCLUDED."title" LIKE 'Sale %' THEN "ArchiveSale"."title" ELSE EXCLUDED."title" END,
+        "saleDate"  = COALESCE(EXCLUDED."saleDate", "ArchiveSale"."saleDate"),
+        "lots"      = GREATEST(EXCLUDED."lots", "ArchiveSale"."lots"),
+        "finished"  = "ArchiveSale"."finished" OR EXCLUDED."finished",
+        "pulledAt"  = now(),
+        "code"      = COALESCE(EXCLUDED."code", "ArchiveSale"."code"),
+        "heroUrl"   = COALESCE(EXCLUDED."heroUrl", "ArchiveSale"."heroUrl"),
+        "heroAt"    = CASE WHEN EXCLUDED."heroUrl" IS NOT NULL AND EXCLUDED."heroUrl" IS DISTINCT FROM "ArchiveSale"."heroUrl" THEN now() ELSE "ArchiveSale"."heroAt" END,
+        "heroKey"   = CASE WHEN EXCLUDED."heroUrl" IS NOT NULL AND EXCLUDED."heroUrl" IS DISTINCT FROM "ArchiveSale"."heroUrl" THEN NULL ELSE "ArchiveSale"."heroKey" END`
+    return { hero: !!hero }
+  } catch (e: any) {
+    if (!/heroUrl|heroAt|heroKey|"code"/i.test(String(e?.message ?? ""))) throw e
+    await prisma.$executeRaw`
+      INSERT INTO "ArchiveSale" ("siteId", "auctionId", "title", "saleDate", "lots", "finished", "pulledAt")
+      VALUES (${siteId}, ${auctionId}, ${title}, ${date}, ${lots}, ${finished}, now())
+      ON CONFLICT ("siteId") DO UPDATE SET
+        "auctionId" = COALESCE(EXCLUDED."auctionId", "ArchiveSale"."auctionId"),
+        "title"     = CASE WHEN EXCLUDED."title" LIKE 'Sale %' THEN "ArchiveSale"."title" ELSE EXCLUDED."title" END,
+        "saleDate"  = COALESCE(EXCLUDED."saleDate", "ArchiveSale"."saleDate"),
+        "lots"      = GREATEST(EXCLUDED."lots", "ArchiveSale"."lots"),
+        "finished"  = "ArchiveSale"."finished" OR EXCLUDED."finished",
+        "pulledAt"  = now()`
+    return { hero: false }
+  }
+}
+
+// ── "heroes" job: copy each sale's picture into R2 ──────────────────────────
+
+export async function startHeroCopy(startedBy: string) {
+  if (isActive("heroes")) return getJob("heroes")
+  let total = 0
+  try {
+    const r = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM "ArchiveSale" WHERE "heroUrl" IS NOT NULL AND "heroKey" IS NULL`
+    total = Number(r[0]?.n ?? 0)
+  } catch {
+    throw new Error("The sale-picture columns aren't on this environment yet — press Run Migrations on the Admin page first.")
+  }
+  const job = await prisma.archiveJob.upsert({
+    where: { id: "heroes" },
+    create: { id: "heroes", startedBy, total, scope: "sales" },
+    update: { error: null, startedBy, total, done: false, added: 0, note: null },
+  })
+  void runHeroCopy()
+  return { ...job, running: true }
+}
+
+async function runHeroCopy() {
+  const ctl: Ctl = { stop: false }; active.set("heroes", ctl)
+  try {
+    while (!ctl.stop) {
+      const batch = await prisma.$queryRaw<{ siteId: number; heroUrl: string }[]>`
+        SELECT "siteId", "heroUrl" FROM "ArchiveSale" WHERE "heroUrl" IS NOT NULL AND "heroKey" IS NULL ORDER BY "siteId" DESC LIMIT 20`
+      if (!batch.length) {
+        await prisma.archiveJob.update({ where: { id: "heroes" }, data: { done: true, note: "Every sale picture the website has is in the Hub" } })
+        break
+      }
+      let n = 0
+      for (let i = 0; i < batch.length && !ctl.stop; i += 5) {
+        await Promise.all(batch.slice(i, i + 5).map(async s => {
+          const res = await fetch(SITE_IMAGES + s.heroUrl, { headers: { "User-Agent": UA } })
+          // The bucket answers 403 for a missing file, like the lot photos — not a picture after all.
+          if (res.status === 404 || res.status === 403) {
+            await prisma.$executeRaw`UPDATE "ArchiveSale" SET "heroUrl" = NULL WHERE "siteId" = ${s.siteId}`
+            return
+          }
+          if (!res.ok) throw new Error(`Picture download answered ${res.status}`)
+          const buf = Buffer.from(await res.arrayBuffer())
+          const ext = (s.heroUrl.match(/\.(webp|jpe?g|png)$/i)?.[1] ?? "webp").toLowerCase()
+          const type = ext === "png" ? "image/png" : ext.startsWith("jp") ? "image/jpeg" : "image/webp"
+          const key = `${SALE_HERO_PREFIX}/${s.siteId}.${ext === "jpeg" ? "jpg" : ext}`
+          await uploadBufferToR2(buf, key, type)
+          await prisma.$executeRaw`UPDATE "ArchiveSale" SET "heroKey" = ${key} WHERE "siteId" = ${s.siteId}`
+          n++
+        }))
+        await sleep(100)
+      }
+      await prisma.archiveJob.update({ where: { id: "heroes" }, data: { added: { increment: n }, note: null } })
+    }
+  } catch (e: any) {
+    console.error("sale picture copy error:", e)
+    await prisma.archiveJob.update({ where: { id: "heroes" }, data: { error: e?.message ?? "Stopped with an error" } }).catch(() => {})
+  } finally { active.delete("heroes") }
 }

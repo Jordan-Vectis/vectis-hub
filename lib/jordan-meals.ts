@@ -578,3 +578,87 @@ export function shoppingUserPrompt(plan: Plan): string {
   }
   return lines.join("\n")
 }
+
+// ── Reading the model's reply ────────────────────────────────────────────────
+// Jordan, 2026-09-21: "im still getting a lot of can read AI answer when making the plans".
+//
+// ⚠⚠ A REPLY IS NEVER ALL-OR-NOTHING. The route used to JSON.parse the whole reply and, if that
+// failed for ANY reason, throw the lot away — two days of finished recipes lost to one trailing
+// comma, or to the model running out of room three lines into day two. Now:
+//   1. the reply is cleaned up and repaired (fences, prose either side, trailing commas, the \' and
+//      inches-mark mistakes) and parsed whole — "parsed";
+//   2. failing that, every COMPLETE day object is lifted out of it one at a time — "salvaged". A day
+//      only counts when it has a meal for every slot: half a day saved as a day would put a plan on
+//      screen with no dinner in it and totals that look like the targets were missed.
+// The plan is written a couple of days per call and each call is saved as it lands, so a salvaged
+// day is real progress — the next call simply carries on from the day after it.
+//
+// ⚠ Kept in THIS file, with no imports, so it can be run against real broken replies with plain
+// `node` before it ships. lib/model-json.ts has the same two repairs for the cataloguing routes.
+
+export type PlanReply = { plan: Plan; how: "parsed" | "salvaged" | "nothing"; dropped: number }
+
+const fixInchMarks = (s: string) => s.replace(/(\d)"(?!\s*[,}\]:])/g, '$1\\"')
+const fixCommas    = (s: string) => s.replace(/,(\s*[}\]])/g, "$1")
+
+function tryParse(s: string): unknown {
+  const t = s.trim()
+  if (!t) return undefined
+  const attempts = [t, fixCommas(t), t.replace(/\\'/g, "'"), fixInchMarks(t), fixCommas(fixInchMarks(t.replace(/\\'/g, "'")))]
+  for (const a of attempts) { try { return JSON.parse(a) } catch { /* next repair */ } }
+  return undefined
+}
+
+/** Models wrap the answer in all sorts: a bare array of days, {"plan":{…}}, {"mealPlan":{…}}. */
+function unwrap(v: unknown): unknown {
+  if (Array.isArray(v)) return { days: v }
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>
+    if (Array.isArray(o.days)) return o
+    for (const k of Object.keys(o)) {
+      const inner = o[k]
+      if (inner && typeof inner === "object" && Array.isArray((inner as Record<string, unknown>).days)) return inner
+    }
+  }
+  return v
+}
+
+export function parsePlanReply(raw: string, slotsPerDay: number): PlanReply {
+  const nothing: PlanReply = { plan: { title: "", tips: "", days: [] }, how: "nothing", dropped: 0 }
+  let text = String(raw ?? "").replace(/```(?:json)?/gi, "").trim()
+  const open = text.search(/[{[]/)
+  if (open < 0) return nothing
+  text = text.slice(open)
+
+  // 1. The whole thing, up to its last closing bracket (anything after that is chatter).
+  const close = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"))
+  if (close > 0) {
+    const whole = normalisePlan(unwrap(tryParse(text.slice(0, close + 1))))
+    if (whole.days.length) return { plan: whole, how: "parsed", dropped: 0 }
+  }
+
+  // 2. Lift the complete days out one at a time.
+  const src = fixInchMarks(text)
+  const key = src.indexOf('"days"')
+  const from = src.indexOf("[", key < 0 ? 0 : key)
+  if (from < 0) return nothing
+  const found: string[] = []
+  let depth = 0, start = -1, inStr = false, esc = false
+  for (let i = from + 1; i < src.length; i++) {
+    const ch = src[i]
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue }
+    if (ch === '"') inStr = true
+    else if (ch === "{") { if (depth === 0) start = i; depth++ }
+    else if (ch === "}") { depth--; if (depth === 0 && start >= 0) { found.push(src.slice(start, i + 1)); start = -1 } }
+    else if (ch === "]" && depth === 0) break
+  }
+  let dropped = 0
+  const days: Plan["days"] = []
+  for (const piece of found) {
+    const day = normalisePlan({ days: [tryParse(piece)] }).days[0]
+    if (day && day.meals.length >= Math.max(1, slotsPerDay)) days.push(day); else dropped++
+  }
+  if (!days.length) return { ...nothing, dropped }
+  const title = /"title"\s*:\s*"((?:[^"\\]|\\.){1,120})"/.exec(src)?.[1] ?? ""
+  return { plan: { title, tips: "", days }, how: "salvaged", dropped }
+}

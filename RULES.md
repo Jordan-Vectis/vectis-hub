@@ -247,6 +247,46 @@ rule exists. The trainer's room protocol (`trainer:*` socket events) is likewise
 Auto Clerk's side. A genuine trainer bug found during Auto Clerk work is reported to Jordan, not fixed
 in passing.
 
+## 💾 The database backup — every table, streamed, one file each (2026-09-22)
+
+Jordan picked this from the review: *"Nightly backup covers 42 of 151 tables and the restore
+screen can't restore the induction tables."* `lib/backup-engine.ts` is the whole of it; the
+routes under `/api/admin/backup`, `/api/admin/restore` and `/api/cron/db-backup` are thin.
+
+- **No list of tables anywhere.** The database describes itself (`information_schema`,
+  `pg_class`): every base table in `public` except `_prisma_migrations` and UNLOGGED scratch
+  (`SearchWordBuild`). A new table is in tonight's backup without anyone remembering it, and
+  the restore can put it back the same way. **Never reintroduce a hand-kept table list** — the
+  old one missed 109 of 151 tables and the restore's copy of it missed the induction tables.
+- **Nothing is held whole.** Rows are read a page at a time (keyset on a single-column key, OFFSET
+  on the six composite ones) and written straight to R2 through `lib/r2-multipart.ts` as
+  `tables/<Name>.jsonl`. Node's largest string is ~0.5 GB, which is why ArchiveLot (~1 GB as
+  JSON) could never join the old single file. Restore streams the file back line by line. Keep
+  both sides that way.
+- **Restore is generic and upsert-only.** `INSERT … ON CONFLICT (primary key) DO UPDATE`, every
+  value cast to the column's real type from `information_schema` (jsonb, timestamp, enums,
+  `text[]` via a JSON array, bytea via base64) — Prisma sends parameters untyped, so without the
+  casts Postgres refuses. Parents before children (`tableOrder`, from the foreign keys), a
+  failed batch retried row by row, the failed rows tried once more after their table. Columns
+  the database no longer has are dropped and named; columns it has gained are left as they are.
+  Nothing is ever deleted; rows made since the backup stay.
+- **The manifest is the evidence.** `manifest.json` names every table copied, its rows and bytes,
+  and every table that FAILED. The Status Centre's backup light reads it and goes amber on a
+  failed table; the nightly run also rings the bell with the names. The old run saved a failed
+  table as null and still said ok.
+- **A manual run is started and polled** (`POST /api/admin/backup` → 202, then
+  `/api/admin/backup/progress` once a second, `/stop` to stop): a full copy takes minutes and
+  Railway's proxy would cut off a request that lasted the whole run. The nightly one is awaited
+  by the cron route — localhost, no proxy. One job at a time, held on `globalThis`. Stop keeps
+  the tables already copied, throws the half-copied one away, and the manifest says "stopped".
+- **The old single-file copies (`backup-<ts>.json`) still list and still restore** — their
+  camelCase-plural keys are mapped onto real table names by `legacyTableName()`. They fall out
+  of the 30 in a month; the code that reads them can go then.
+- ⚠ **R2 insists every multipart part but the last is the SAME size** (S3 only asks for ≥ 5 MB) —
+  the writer cuts parts at exactly 8 MiB. Don't "simplify" that.
+- ⚠ Never "test" the backup by running it from a check or a script: it writes a real copy and
+  can prune a real one out of the 30.
+
 ## ⚠ Claude memory sync (multi-developer) — check freshness before trusting local memory
 
 The in-app memory page — the `ENTRIES` array in `app/(app)/admin/memory/page.tsx`, shown at
@@ -322,7 +362,7 @@ The database is hosted on **Neon** (console.neon.tech), not Railway. Never sugge
 
 - Neon provides point-in-time restore via branching
 - The `DATABASE_URL` env var in Railway points to the Neon connection string
-- A scheduled **JSON** backup exists: `/api/cron/db-backup` (run by a `server.js` setInterval loop at midnight UTC, 24h cadence) dumps tables to R2 (`CLOUDFLARE_R2_BACKUP_BUCKET`), keeping the last 30 per env, surfaced at `/admin/backup`. A true `pg_dump` / point-in-time dump is still not configured — Neon branching remains the primary restore path.
+- A scheduled backup exists: `/api/cron/db-backup` (run by a `server.js` setInterval loop at midnight UTC, 24h cadence) copies **every table** to R2 (`CLOUDFLARE_R2_BACKUP_BUCKET`) as one file per table plus a manifest, keeping the last 30 per env, surfaced at `/admin/backup` — see "The database backup" below. A true `pg_dump` / point-in-time dump is still not configured — Neon branching remains the primary restore path.
 
 ### ⚠ `.env` points at the REAL database — server.js only does its jobs in production
 
@@ -1272,6 +1312,16 @@ in the `hub` group are "inside the Hub", everything else is a supplier.
   an existing `key`** — it keys the history and every alert's link.
 - ⚠ **The `MIGRATIONS` array now lives in `lib/migrations.ts`** (moved the same day, so the Hub light
   can compare `MIGRATIONS_HASH` — a Next route file may only export its handlers). New SQL goes there.
+- **A check can be switched off from its details panel (2026-09-22)** — Jordan: *"I don't use the it
+  emails thing anymore can I have options in the status centre to disable things"*.
+  `StatusService.disabledAt` / `disabledBy` (**NEEDS Run Migrations**; NULL = on). Off = the engine never
+  runs it (the loop AND Check now), the banner and Check everything leave it out, the bell never rings
+  for it; the tile stays, greyed "Switched off", with who and when, and a Switch on button. Switching
+  off also resets its bell bookkeeping, so it can't ring "working again" the day it comes back.
+  ⚠ The columns are **nullable with NO default on purpose**: Prisma writes a literal default into every
+  INSERT, so a `@default(true)` column would have failed every result write between the deploy and Run
+  Migrations. For the same reason `record()` selects only the columns it needs and every read of the
+  switch is tiered (with the columns, then without). `POST /api/status/switch`, admin-only.
 
 ## 📝 Hub Feedback — surveys for the cataloguers (2026-09-10)
 
@@ -1491,3 +1541,28 @@ read with **`getFallbackModel()`** from `lib/ai-models.ts`.
 
 **⚠ The page's tools are CHIPS** (`bc-tools.tsx`): 🌐 Website jobs · 📥 Update the BC lots · ⬇ Export & handover. Nothing shows until one is pressed, one at a time, and **a running job opens its own panel and keeps a live dot on the chip** — hiding the tools must never hide a job that is going. Jordan, 2026-09-09: *"these should be really small options at the top that then show the square they need otherwise they should be hidden"* and *"the filtering options are still awful"* — hence sortable columns (date/sale/lot/estimate/hammer, both ways, with an arrow) and on-screen filters (search incl. unique ID, sale name or code, date range, hammer range, sold/unsold, has a photo, full vs short description), every one carried through paging AND sorting.
 - WarehouseItem is a sync CACHE (`reconcile-deleted` may delete rows); BcLotWeb has no FK and survives.
+
+## Databases → Sales — every sale with its cover picture (2026-09-22)
+
+`/databases/sales` (Jordan: *"On our current website we have the hero (preview image for the entire
+auction) is it possible to get them as well? … Why don't we make a new tab for them in databases?"*).
+Every sale page on vectis.co.uk carries ONE cover picture at a fixed place on the site's S3 —
+`auction_images/large/<sale guid>/<image guid>.webp`, ABC and BC sales alike (checked on sales
+683 and 1566). Rows are `ArchiveSale` (+ `code`, `heroUrl`, `heroKey`, `heroAt` — **NEEDS Run
+Migrations**; every write and read is tiered so the page lists sales without pictures until then).
+- **Collected, not fetched.** The office collector (`scripts/collect-bc-lots.mjs` and the browser
+  copy in `lib/bc-web-collector.ts` — change one, change the other) now reads each sale's own page
+  (`/bidding/0-x-<id>`) for title, date and picture, for EVERY sale that exists — old system
+  included, their lots still skipped — and the BC Database page's upload writes them through
+  `upsertSaleMeta()` (never blanks a value already held; a new picture clears our old copy). Files
+  from before this carry only lots and still load. A run over 1–1061 is how the ABC sales get theirs.
+- **Copied by the Hub.** The `heroes` job (`startHeroCopy`, same plumbing as the photo copy)
+  fetches each picture from S3 — which the server CAN reach, unlike the lot feed — into
+  `sale-photos/<siteId>.webp`. The page shows our copy first, else the website's original.
+- **A picture-only collector** — `scripts/collect-sale-pictures.mjs` and its browser copy
+  `lib/sale-pictures-collector.ts`, handed out on the Sales tab's "📥 Get the pictures" panel with
+  the upload box (the BC Database page's route reads its file too). One page per sale number,
+  never the lot feed: ten minutes for the whole site. Same page-reading as the lot collectors —
+  change one, change all three.
+- One export, `GET /api/databases/sales/export`, one row per sale, for the same handover as the
+  other two pages.

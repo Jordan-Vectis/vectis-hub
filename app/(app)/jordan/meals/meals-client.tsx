@@ -111,6 +111,9 @@ export default function MealsClient() {
   // the top of the page is off screen from down here, which is how a refusal reads as nothing.
   const [planStage, setPlanStage] = useState("")
   const [planError, setPlanError] = useState<string | null>(null)
+  // Said under the spinner while a day is being asked for again — a retry nobody is told about
+  // just looks like a slow call.
+  const [planHint, setPlanHint]   = useState<string | null>(null)
 
   const active = profiles.find(p => p.id === activeId) ?? null
   const t: Targets | null = form ? workOut(numbersOf(form)) : null
@@ -188,7 +191,8 @@ export default function MealsClient() {
   async function api(url: string, body: any, method = "POST", signal?: AbortSignal) {
     const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal })
     const j = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(j.error ?? "Something went wrong")
+    // The answer rides on the error: makePlan() needs to know a failure is worth asking again.
+    if (!r.ok) throw Object.assign(new Error(j.error ?? "Something went wrong"), { data: j })
     return j
   }
 
@@ -342,12 +346,31 @@ export default function MealsClient() {
       if (form && form.meals.length === 0) { setPlanError("Tick the meals you have first."); return }
       setPlanStage("")
       const ac = new AbortController(); abortRef.current = ac
+      // ⚠⚠ A REPLY THAT CAN'T BE READ IS ASKED FOR AGAIN, SMALLER — NOT REPORTED (Jordan,
+      // 2026-09-21: "still getting a lot of can read AI answer"). The model runs out of room or
+      // slips on a comma now and then; the same request a second time, for ONE day instead of two,
+      // nearly always lands. So the page drops to a day at a time and tries up to three times on
+      // the same day before it says anything, and says what it is doing while it does. Everything
+      // already written stays saved throughout.
+      let chunk = CHUNK_DAYS
+      let misses = 0
       while (!made || made.plan.days.length < days) {
         const from = (made?.plan.days.length ?? 0) + 1
-        const j = await api("/api/jordan/meals/plan", {
-          profileId: activeId, partnerId: partnerId || null, days, brief, model: getJordanModel(),
-          planId: made?.id ?? null, fromDay: from, toDay: Math.min(from + CHUNK_DAYS - 1, days),
-        }, "POST", ac.signal)
+        let j: any
+        try {
+          j = await api("/api/jordan/meals/plan", {
+            profileId: activeId, partnerId: partnerId || null, days, brief, model: getJordanModel(),
+            planId: made?.id ?? null, fromDay: from, toDay: Math.min(from + chunk - 1, days),
+          }, "POST", ac.signal)
+        } catch (e: any) {
+          if (e?.name === "AbortError" || !e?.data?.retryable || misses >= 3) throw e
+          misses++
+          chunk = 1
+          setPlanHint(`Day ${from} didn't come back readable — asking for it again on its own (try ${misses} of 3).`)
+          continue
+        }
+        misses = 0
+        setPlanHint(null)
         const next: SavedPlan = j.plan
         // ⚠ Stop if a chunk adds nothing, or this loops forever on a model that keeps returning
         // the same day. What is already saved still stands.
@@ -369,7 +392,7 @@ export default function MealsClient() {
       // the person who pressed it could not see, which is the whole "it did nothing" complaint.
       else setPlanError(got ? `${e.message} Days 1 to ${got} are saved.` : e.message)
       if (made) { setPlans(ps => [made!, ...ps.filter(p => p.id !== made!.id)]); setOpenId(made.id) }
-    } finally { planRef.current = false; setBusy(null); setSince(null); setMadeDays(0); setPlanStage(""); abortRef.current = null }
+    } finally { planRef.current = false; setBusy(null); setSince(null); setMadeDays(0); setPlanStage(""); setPlanHint(null); abortRef.current = null }
   }
 
   async function makeShopping(plan: SavedPlan) {
@@ -729,6 +752,7 @@ export default function MealsClient() {
                 </button>
               )}
             </div>
+            {planHint && busy === "plan" && <p className="text-xs text-amber-400">{planHint}</p>}
             {planError && <p className="text-xs text-red-300 border border-red-800 bg-red-950/40 rounded px-3 py-2">{planError}</p>}
             {t && <p className="text-[11px] opacity-50">Written for <strong>{goalDef(form.goal).label.toLowerCase()}</strong> — {t.kcal.toLocaleString()} kcal · {t.protein} g protein a day, across {chosenMeals(form.meals, form.meals.length || 3).join(", ").toLowerCase()}{form.dislikes.trim() ? ", never using what's under dislikes" : ""}.{days > CHUNK_DAYS ? ` Written ${CHUNK_DAYS} days at a time and saved as it goes.` : ""}</p>}
           </div>

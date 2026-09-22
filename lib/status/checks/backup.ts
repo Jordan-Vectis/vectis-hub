@@ -1,80 +1,41 @@
-import { ListObjectsV2Command } from "@aws-sdk/client-s3"
 import type { CheckResult, Fact, StatusCheckDef, StatusState } from "@/lib/status/types"
-import {
-  R2_CREDENTIAL_VARS, backupFolder, describeR2Error, fmtBytes, fmtWhen, missingSettings, probeClient,
-} from "./storage"
+import { KEEP, backupProgress, listBackups, type BackupEntry } from "@/lib/backup-engine"
+import { R2_CREDENTIAL_VARS, backupFolder, describeR2Error, fmtBytes, fmtWhen, missingSettings, probeClient } from "./storage"
 
-// 💾 Last night's backup — the nightly JSON copy of the database in the R2 backup bucket.
+// 💾 Last night's backup — the nightly copy of EVERY table in the R2 backup bucket.
 //
-// server.js calls /api/cron/db-backup at midnight UTC (then every 24 h); it writes
-// `${env}/backup-YYYY-MM-DD-HHMMSS.json` and keeps the newest 30 per environment.
+// server.js calls /api/cron/db-backup at midnight UTC (then every 24 h); lib/backup-engine.ts
+// writes `${env}/backup-YYYY-MM-DD-HHMMSS/` — one `tables/<Name>.jsonl` per table plus a
+// manifest.json saying what was copied and what failed — and keeps the newest 30.
 //
-// ⚠ The FILE is the only evidence a backup happened. runBackup writes no database row, and
-// the Railway log can't be trusted either: server.js does r.json() without checking r.ok,
-// so a failed run logs "complete: undefined (undefined bytes)". So this check lists this
-// environment's folder — exactly the call /admin/backup makes — and reads LastModified/Size.
+// ⚠ The manifest is the evidence. Since 2026-09-22 a table that fails to copy is NAMED there
+// (before that, a failed table was saved as null and the run still said ok — green could not
+// mean "every table was saved"). So this light goes amber on a failed table, not just on a
+// missing night. The older single-file copies (`backup-<ts>.json`) still count as full copies.
 //
 // ⚠ NEVER "test" it by calling /api/cron/db-backup or POST /api/admin/backup: that writes a
-// new file and can prune a real one out of the 30. And never download a backup — each is
-// the whole database as JSON, many megabytes.
+// new copy and can prune a real one out of the 30. Reading the list and the small manifests is
+// all this does.
 //
-// ⚠ Freshness comes from LastModified, never the filename: the name is built with the
-// server's LOCAL getHours() — UTC on Railway only because the container clock is.
-//
-// ⚠ A green light can't mean "every table was saved". fetchTable turns a failed table into
-// null and the run still reports ok, so a backup taken on a bad database day "succeeds"
-// with tables missing. Only a big drop in size shows that from outside — and a big
-// legitimate delete can cause one too — hence amber, never red. A small table failing
-// (users, induction signatures) barely moves the size and can't be seen at all.
+// ⚠ Freshness comes from the manifest's own finishedAt (or LastModified for an old file), never
+// the folder name — the name is only there to sort by.
 //
 // ⚠ The schedule is a setTimeout-to-midnight from boot with no catch-up: a crash or deploy
 // across 00:00 UTC silently skips that night. That is what the 26-hour red is for.
 
 const HOUR_MS = 3_600_000
 const DAY_MS = 24 * HOUR_MS
-/** The job builds the whole dump in memory before uploading, so give it until 01:00 UTC
- *  before expecting tonight's file; until then last night's still counts. */
-const GRACE_UTC_HOUR = 1
+/** A full copy of every table takes minutes now (the ABC archive alone is ~1 GB), so give it
+ *  until 02:00 UTC before expecting tonight's; until then last night's still counts. */
+const GRACE_UTC_HOUR = 2
 const DOWN_AFTER_MS = 26 * HOUR_MS
 /** Amber below this share of the usual size. */
 const SMALL_RATIO = 0.7
 /** "Usual size" = the middle of up to this many full copies before the newest. */
 const SIZE_SAMPLE = 7
-/** Mirrors MAX_BACKUPS in app/api/cron/db-backup/route.ts. */
-const KEEP = 30
 const CALL_TIMEOUT_MS = 10_000
-const BUDGET_MS = 20_000
-/** The folder holds ~30 files, one page; this only guards against a runaway listing. */
-const MAX_PAGES = 5
 
-interface BackupFile { key: string; size: number; at: number; partial: boolean }
-
-async function listBackups(bucket: string, prefix: string): Promise<{ files: BackupFile[]; ms: number }> {
-  const deadline = Date.now() + BUDGET_MS
-  const files: BackupFile[] = []
-  let token: string | undefined
-  let ms = 0
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const started = Date.now()
-    const timeout = Math.max(1_000, Math.min(CALL_TIMEOUT_MS, deadline - Date.now()))
-    const res = await probeClient().send(
-      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
-      { abortSignal: AbortSignal.timeout(timeout) },
-    )
-    if (page === 0) ms = Date.now() - started
-    for (const o of res.Contents ?? []) {
-      // Same filter as /api/admin/backup: .json files, "-partial" in the name = a manual
-      // backup of only some sections.
-      if (!o.Key?.endsWith(".json") || !o.LastModified) continue
-      files.push({ key: o.Key, size: o.Size ?? 0, at: o.LastModified.getTime(), partial: o.Key.includes("-partial") })
-    }
-    if (!res.IsTruncated || !res.NextContinuationToken) break
-    token = res.NextContinuationToken
-  }
-  return { files, ms }
-}
-
-// ── Wording ───────────────────────────────────────────────────────────────────────────
+// ── Wording ───────────────────────────────────────────────────────────────────────
 
 const londonYmd = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" })
 const londonTime = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" })
@@ -95,42 +56,51 @@ function median(ns: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 
-const SCHEDULE_FACT: Fact = { label: "When it runs", value: "Every night at midnight UTC (1 am UK time in summer)" }
+const at = (e: BackupEntry) => Date.parse(e.at ?? "") || 0
+
+const SCHEDULE_FACT: Fact = { label: "When it runs", value: "Every night at midnight UTC (1 am UK time in summer) — every table, one file each" }
 const PROVES_FACT: Fact = {
   label: "What green proves",
-  value: "A full copy arrived since midnight and is about its usual size. A small table failing to copy wouldn't show — the job saves it empty without an error.",
+  value: "A copy of every table arrived since midnight, its own manifest says no table failed, and it is about its usual size.",
 }
 const NOT_COVERED_FACT: Fact = {
   label: "Not in the backup",
-  value: "Photos and files, the ABC and BC Databases, the BC warehouse copy, First Aid and the lot change log. Neon's own restore covers the whole database.",
+  value: "Photos and files — they already live in R2 — and Prisma's migration bookkeeping. Neon's own restore history covers the whole database as well.",
 }
 
 /** The facts that describe what's in the folder, used whether or not backups run here. */
-function folderFacts(files: BackupFile[], nowMs: number, newestTone?: Fact["tone"]): Fact[] {
-  const full = files.filter(f => !f.partial).sort((a, b) => b.at - a.at)
-  const partial = files.filter(f => f.partial).sort((a, b) => b.at - a.at)
+function folderFacts(entries: BackupEntry[], nowMs: number, newestTone?: Fact["tone"]): Fact[] {
+  const full = entries.filter(e => !e.partial && !e.inProgress)
+  const partial = entries.filter(e => e.partial && !e.inProgress)
+  const newest = full[0]
   const facts: Fact[] = [{
     label: "Newest full copy",
-    value: full[0] ? `${fmtWhen(full[0].at, nowMs)} · ${fmtBytes(full[0].size)}` : "None in this environment's folder",
+    value: newest
+      ? `${fmtWhen(at(newest), nowMs)} · ${fmtBytes(newest.bytes)}${newest.kind === "folder" ? ` · ${newest.tables} tables, ${newest.rows.toLocaleString("en-GB")} rows` : " · old single-file style"}`
+      : "None in this environment's folder",
     ...(newestTone ? { tone: newestTone } : {}),
   }]
+  if (newest?.failed) facts.push({ label: "Tables not copied", value: `${newest.failed} — named on Admin → Database Backup`, tone: "bad" })
+  if (newest?.stopped) facts.push({ label: "Stopped", value: "Someone pressed Stop part-way, so it isn't a complete copy", tone: "warn" })
   const before = full.slice(1, 1 + SIZE_SAMPLE)
   if (before.length) {
     facts.push({
       label: "Usual size",
-      value: `About ${fmtBytes(median(before.map(f => f.size)))} (the middle of the ${before.length} full cop${before.length === 1 ? "y" : "ies"} before it)`,
+      value: `About ${fmtBytes(median(before.map(f => f.bytes)))} (the middle of the ${before.length} full cop${before.length === 1 ? "y" : "ies"} before it)`,
     })
   }
   if (partial[0]) {
-    const newer = !full[0] || partial[0].at > full[0].at
+    const newer = !newest || at(partial[0]) > at(newest)
     facts.push({
       label: "Newest partial copy",
-      value: `${fmtWhen(partial[0].at, nowMs)} · ${fmtBytes(partial[0].size)} — only some sections${newer ? ", so it doesn't count as a full backup" : ""}`,
+      value: `${fmtWhen(at(partial[0]), nowMs)} · ${fmtBytes(partial[0].bytes)} — only some tables${newer ? ", so it doesn't count as a full backup" : ""}`,
     })
   }
+  const dead = entries.filter(e => e.inProgress).length - (backupProgress().running ? 1 : 0)
+  if (dead > 0) facts.push({ label: "Unfinished", value: `${dead} folder${dead === 1 ? "" : "s"} with no manifest — a run that died before it finished. Delete ${dead === 1 ? "it" : "them"} on Admin → Database Backup.`, tone: "warn" })
   facts.push({
     label: "Copies kept",
-    value: `${files.length} of ${KEEP} (${full.length} full, ${partial.length} partial)`,
+    value: `${entries.length} of ${KEEP} (${full.length} full, ${partial.length} partial)`,
     // ⚠ Partial copies count towards the 30 the job keeps, so a burst of them pushes real
     // nightly copies out early (the prune sorts by name, not by kind).
     ...(partial.length >= 5 ? { tone: "warn" as const } : {}),
@@ -145,7 +115,7 @@ const backup: StatusCheckDef = {
   key: "backup",
   name: "Last night's backup",
   group: "hub",
-  what: "The nightly copy of the database kept in R2 (the last 30).",
+  what: "The nightly copy of every table in the database, kept in R2 (the last 30).",
   whenDown: "If data were lost, the newest in-app copy would be older than it should be.",
   intervalMin: 60,
 
@@ -154,7 +124,6 @@ const backup: StatusCheckDef = {
     const folder = backupFolder()
     const folderFact: Fact = { label: "Folder", value: `${folder} in the backup store` }
     const missing = missingSettings([...R2_CREDENTIAL_VARS, "CLOUDFLARE_R2_BACKUP_BUCKET"])
-    const bucket = process.env.CLOUDFLARE_R2_BACKUP_BUCKET?.trim() ?? ""
 
     // ⚠ FIRST: backups only run where server.js runs its background jobs (production build +
     // CRON_SECRET). Sandbox has no CRON_SECRET by design — never add one — and its folder
@@ -162,14 +131,13 @@ const backup: StatusCheckDef = {
     if (!ctx.backgroundJobsExpected) {
       const facts: Fact[] = [{
         label: "Why it's off",
-        value: "The nightly backup runs only where the Hub's background jobs do. Anything here was made by pressing Run backup on Admin → Backup.",
+        value: "The nightly backup runs only where the Hub's background jobs do. Anything here was made by pressing Run backup on Admin → Database Backup.",
       }]
       if (missing.length) {
         facts.push({ label: "Backup store", value: "Not set up on this environment" })
       } else {
         try {
-          const { files } = await listBackups(bucket, folder)
-          facts.push(...folderFacts(files, nowMs))
+          facts.push(...folderFacts(await listBackups(probeClient()), nowMs))
         } catch (e) {
           const f = describeR2Error(e, CALL_TIMEOUT_MS)
           facts.push({ label: "Backup list", value: `Couldn't be read — Cloudflare storage ${f.text}`, tone: "warn" })
@@ -188,10 +156,10 @@ const backup: StatusCheckDef = {
       }
     }
 
-    let files: BackupFile[]
-    let latencyMs: number
+    let entries: BackupEntry[]
+    const started = Date.now()
     try {
-      ;({ files, ms: latencyMs } = await listBackups(bucket, folder))
+      entries = await listBackups(probeClient())
     } catch (e) {
       const f = describeR2Error(e, CALL_TIMEOUT_MS)
       return {
@@ -200,12 +168,13 @@ const backup: StatusCheckDef = {
         facts: [{ label: "Backup list", value: `Failed — ${f.detail}`, tone: f.state === "unknown" ? "warn" : "bad" }, folderFact, SCHEDULE_FACT],
       }
     }
+    const latencyMs = Date.now() - started
 
-    const full = files.filter(f => !f.partial).sort((a, b) => b.at - a.at)
-    const partial = files.filter(f => f.partial).sort((a, b) => b.at - a.at)
+    const full = entries.filter(e => !e.partial && !e.inProgress)
+    const partial = entries.filter(e => e.partial && !e.inProgress)
     const newest = full[0]
 
-    // Before 01:00 UTC, last night means the night before.
+    // Before 02:00 UTC, last night means the night before.
     const todayUtc = Date.UTC(ctx.now.getUTCFullYear(), ctx.now.getUTCMonth(), ctx.now.getUTCDate())
     const cutoff = ctx.now.getUTCHours() < GRACE_UTC_HOUR ? todayUtc - DAY_MS : todayUtc
 
@@ -215,39 +184,44 @@ const backup: StatusCheckDef = {
     const extra: Fact[] = []
 
     // ⚠ Judged on the newest FULL copy only. A partial one is someone pressing Run backup
-    // for a few sections: it doesn't make up for a missed night, and one taken after a good
-    // nightly copy is not a problem (judgement call — the spec's "newest is partial" read
-    // literally would turn the light amber every time an admin took a quick partial copy).
+    // for a few tables: it doesn't make up for a missed night, and one taken after a good
+    // nightly copy is not a problem.
     if (!newest) {
       state = "down"; tone = "bad"
       summary = "There's no full backup for this environment in the backup store."
-    } else if (nowMs - newest.at > DOWN_AFTER_MS) {
+    } else if (nowMs - at(newest) > DOWN_AFTER_MS) {
       state = "down"; tone = "bad"
-      summary = `No full backup has been saved for ${Math.floor((nowMs - newest.at) / HOUR_MS)} hours — the newest was ${whenSaid(newest.at, nowMs)}.`
-    } else if (newest.at < cutoff) {
+      summary = `No full backup has been saved for ${Math.floor((nowMs - at(newest)) / HOUR_MS)} hours — the newest was ${whenSaid(at(newest), nowMs)}.`
+    } else if (at(newest) < cutoff) {
       state = "degraded"; tone = "warn"
-      summary = `Last night's backup hasn't arrived yet — the newest full copy was saved ${whenSaid(newest.at, nowMs)}.`
+      summary = `Last night's backup hasn't arrived yet — the newest full copy was saved ${whenSaid(at(newest), nowMs)}.`
+    } else if (newest.stopped) {
+      state = "degraded"; tone = "warn"
+      summary = `The newest backup (${whenSaid(at(newest), nowMs)}) was stopped part-way, so it isn't a complete copy.`
+    } else if (newest.failed > 0) {
+      state = "degraded"; tone = "warn"
+      summary = `Last night's backup arrived ${whenSaid(at(newest), nowMs)} but ${newest.failed} table${newest.failed === 1 ? "" : "s"} couldn't be copied — see Admin → Database Backup for which.`
     } else {
-      const before = full.slice(1, 1 + SIZE_SAMPLE).map(f => f.size)
+      const before = full.slice(1, 1 + SIZE_SAMPLE).map(f => f.bytes)
       const usual = before.length ? median(before) : 0
-      if (usual > 0 && newest.size < SMALL_RATIO * usual) {
+      if (usual > 0 && newest.bytes < SMALL_RATIO * usual) {
         state = "degraded"; tone = "warn"
-        summary = `The newest backup was saved ${whenSaid(newest.at, nowMs)} but is much smaller than usual (${fmtBytes(newest.size)} against about ${fmtBytes(usual)}), so some tables may be missing from it.`
+        summary = `The newest backup was saved ${whenSaid(at(newest), nowMs)} but is much smaller than usual (${fmtBytes(newest.bytes)} against about ${fmtBytes(usual)}), so it is worth a look.`
       } else {
         state = "ok"; tone = "good"
-        summary = `The newest full backup was saved ${whenSaid(newest.at, nowMs)} (${fmtBytes(newest.size)}).`
+        summary = `The newest full backup was saved ${whenSaid(at(newest), nowMs)}${newest.kind === "folder" ? ` — ${newest.tables} tables, ${fmtBytes(newest.bytes)}` : ` (${fmtBytes(newest.bytes)})`}.`
         if (!before.length) extra.push({ label: "Size check", value: "Not done — there's no earlier full copy to compare with" })
       }
     }
 
-    if (state !== "ok" && partial[0] && (!newest || partial[0].at > newest.at)) {
-      extra.push({ label: "Since then", value: `Only a partial copy (some sections) was saved, ${whenSaid(partial[0].at, nowMs)} — it doesn't count as a full backup.`, tone: "warn" })
+    if (state !== "ok" && partial[0] && (!newest || at(partial[0]) > at(newest))) {
+      extra.push({ label: "Since then", value: `Only a partial copy (some tables) was saved, ${whenSaid(at(partial[0]), nowMs)} — it doesn't count as a full backup.`, tone: "warn" })
     }
 
     return {
       state,
       summary,
-      facts: [...folderFacts(files, nowMs, tone), ...extra, SCHEDULE_FACT, folderFact, PROVES_FACT, NOT_COVERED_FACT],
+      facts: [...folderFacts(entries, nowMs, tone), ...extra, SCHEDULE_FACT, folderFact, PROVES_FACT, NOT_COVERED_FACT],
       latencyMs,
     }
   },

@@ -1,7 +1,8 @@
 import { timingSafeEqual } from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { checkKeys, runChecks } from "@/lib/status/engine"
+import { checkKeys, isServiceDisabled, runChecks } from "@/lib/status/engine"
+import { CHECKS } from "@/lib/status/registry"
 
 export const maxDuration = 120
 export const dynamic = "force-dynamic"
@@ -37,6 +38,12 @@ export async function POST(req: NextRequest) {
     const service = typeof body.service === "string" ? body.service : undefined
     if (service && !checkKeys().includes(service)) {
       return NextResponse.json({ error: `No such check: ${service}` }, { status: 404 })
+    }
+    // The page never asks for one that is switched off; said plainly rather than answered with
+    // nothing, which the page would read as "already being checked".
+    if (service && await isServiceDisabled(service)) {
+      const name = CHECKS.find(c => c.key === service)?.name ?? service
+      return NextResponse.json({ error: `${name} is switched off — open its tile and switch it on first.` }, { status: 409 })
     }
 
     const result = await runChecks({ only: service ? [service] : undefined, force: !loop })

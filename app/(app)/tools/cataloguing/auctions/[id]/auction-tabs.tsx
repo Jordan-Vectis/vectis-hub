@@ -10,7 +10,7 @@ import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { identityWarning } from "@/lib/lot-identity"
 import { useCategoryMap } from "@/lib/use-category-map"
-import { parseCondition, buildCondition, withConditionSentence, type BoxPrefixMode } from "@/lib/condition"
+import { parseCondition, buildCondition, withConditionSentence, stripConditionSentences, type BoxPrefixMode } from "@/lib/condition"
 import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -1648,8 +1648,16 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [fPhotos,        setFPhotos]        = useState("")   // "any" | "none" | ""
   const [fAddedBy,       setFAddedBy]       = useState("")   // exact createdByName
   const [fDateAdded,     setFDateAdded]     = useState("")   // yyyy-mm-dd, matched in UK local time
-  // One AI filter covering both flags: "" | "upgraded" | "not_upgraded" | "excluded" | "not_excluded"
+  // One AI filter covering both flags: "" | "upgraded" | "not_upgraded" | "excluded" | "not_excluded" | "hand_typed"
   const [fAi,            setFAi]            = useState("")
+
+  // ✍ "Looks hand-typed, not excluded" — a description someone wrote, no key points, never
+  // through the AI, and NOT excluded: exactly the lot a mass AI run overwrites. Finds the lots
+  // that lost their Exclude tick before the 2026-09-21 fix (Jordan, 2026-09-22). ⚠ A description
+  // that is only OUR condition sentence doesn't count — Add Conditions writes that line onto
+  // AI-bound lots too, and they would all show up here.
+  const looksHandTyped = (l: Lot) =>
+    !l.aiExcluded && !l.aiUpgraded && !l.keyPoints?.trim() && !!stripConditionSentences(l.description).trim()
   const [fAddedToBC,     setFAddedToBC]     = useState("")   // "yes" | "no" | ""
   const [fKeyPoints,     setFKeyPoints]     = useState("")   // "yes" | "no" | ""
 
@@ -1666,6 +1674,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       (fAi === "" ||
         (fAi === "upgraded"     ?  l.aiUpgraded :
          fAi === "not_upgraded" ? !l.aiUpgraded :
+         fAi === "hand_typed"   ?  looksHandTyped(l) :
          fAi === "excluded"     ?  l.aiExcluded : !l.aiExcluded)) &&
       (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.inBC       : !l.inBC      )) &&
       (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim())) &&
@@ -2084,14 +2093,14 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   // it — and the one that got forgotten was the one that mattered. The server actions went too;
   // CatalogueLot.addedToBC keeps its history but nothing writes it from this screen.
 
-  async function handleBulkToggleAiExcluded() {
-    if (selected.size === 0) return
-    const selectedLots = lots.filter(l => selected.has(l.id))
-    const anyNotExcluded = selectedLots.some(l => !l.aiExcluded)
-    const newValue = anyNotExcluded
+  async function handleBulkToggleAiExcluded(ids: string[] = Array.from(selected), value?: boolean) {
+    if (ids.length === 0) return
+    const idSet = new Set(ids)
+    const targets = lots.filter(l => idSet.has(l.id))
+    const newValue = value ?? targets.some(l => !l.aiExcluded)
     startExclude(async () => {
       try {
-        const res = await runInChunks(Array.from(selected), setMassProgress, (chunk, undoId, isLast) =>
+        const res = await runInChunks(ids, setMassProgress, (chunk, undoId, isLast) =>
           bulkSetLotsAiExcluded(chunk, auctionId, newValue, undoId, !isLast))
         const count = res.reduce((s, r) => s + r.count, 0)
         setExcludeMsg(`${newValue ? "🚫 Excluded" : "✓ Unexcluded"} ${count} lot${count === 1 ? "" : "s"} from AI`)
@@ -2367,6 +2376,28 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
           )}
         </div>
 
+        {/* ✍ One click for the whole hand-typed set — three clicks (filter, tick all, Exclude)
+            is how the wrong one gets left out. Goes through the same chunked, undoable action. */}
+        {fAi === "hand_typed" && !bcLocked && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+            {filtered.length === 0 ? (
+              <span>No lots look hand-typed without the Exclude tick — nothing here for a mass run to overwrite.</span>
+            ) : (
+              <>
+                <span>
+                  <b>{filtered.length} lot{filtered.length === 1 ? "" : "s"}</b> {filtered.length === 1 ? "has" : "have"} a written description, no key points and no AI run, but
+                  {filtered.length === 1 ? " isn't" : " aren't"} excluded from AI — a mass run would overwrite {filtered.length === 1 ? "it" : "them"}.
+                </span>
+                <button onClick={() => handleBulkToggleAiExcluded(filtered.map(l => l.id), true)} disabled={excludePending}
+                  className={`${TB_BTN} border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10`}>
+                  {excludePending ? "Updating…" : `🚫 Exclude all ${filtered.length} from AI`}
+                </button>
+                <span className="text-xs opacity-80">One undo entry; check the list first if you&apos;re not sure.</span>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Status messages from the last action, one tidy line */}
         {(undoMsg || fillMsg || bidsMsg || titlesMsg || massMsg || uniqueIdMsg || condMsg || excludeMsg || photoMsg) && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 px-1">
@@ -2402,7 +2433,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             {(() => {
               const anyNotExcluded = lots.some(l => selected.has(l.id) && !l.aiExcluded)
               return (
-                <button onClick={handleBulkToggleAiExcluded} disabled={excludePending || none}
+                <button onClick={() => handleBulkToggleAiExcluded()} disabled={excludePending || none}
                   className={`${TB_BTN} border-amber-700 text-amber-500 dark:text-amber-400 hover:bg-amber-500/10`}>
                   {excludePending ? "Updating…" : anyNotExcluded ? "🚫 Exclude from AI" : "✓ Unexclude from AI"}
                 </button>
@@ -2917,6 +2948,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <option value="">All</option>
                   <option value="excluded">🚫 Excluded from AI</option>
                   <option value="not_excluded">Not excluded</option>
+                  <option value="hand_typed">✍ Looks hand-typed, not excluded</option>
                   <option value="upgraded">✨ Upgraded</option>
                   <option value="not_upgraded">Not upgraded</option>
                 </select>
@@ -3051,6 +3083,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   }, [])
 
   function navigate(id: string, dir: "next" | "prev") {
+    flushAutoSave()
     const el = contentRef.current
     if (!el) { onEdit?.(id, dir); return }
     const endX = dir === "next" ? "-60px" : "60px"
@@ -3072,17 +3105,42 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   // Clear pending auto-save on unmount
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
+  // ⚠⚠ EXCLUDE FROM AI — held in state + a ref and ALWAYS written into the FormData, the way the
+  // tablet lot view does it (Jordan, 2026-09-21: hand-typed lots "loosing the tick at some point…
+  // then the AI runs over it when we do a mass run"). It was a bare checkbox, and the ONLY field on
+  // this form with no auto-save on it: type the description (auto-saved, "✓ Saved" shows), tick the
+  // box, press Back or Next — and the tick was never sent. Tick first and type second and it was,
+  // which is why it looked random. A tick is one deliberate action, so it saves AT ONCE, no wait.
+  const [aiExcluded, setAiExcluded] = useState(lot?.aiExcluded ?? false)
+  const aiExcludedRef = useRef(aiExcluded)
+
+  function lotFormData(form: HTMLFormElement) {
+    const fd = new FormData(form)
+    fd.set("aiExcluded", aiExcludedRef.current ? "true" : "false")
+    return fd
+  }
+
+  function saveNow() {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    if (!lot || !formRef.current) return
+    const fd = lotFormData(formRef.current)
+    start(async () => {
+      await updateLot(lot.id, auctionId, fd)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    })
+  }
+
   function triggerAutoSave() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      if (!lot || !formRef.current) return
-      const fd = new FormData(formRef.current)
-      start(async () => {
-        await updateLot(lot.id, auctionId, fd)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
-      })
-    }, 800)
+    saveTimer.current = setTimeout(() => { saveTimer.current = null; saveNow() }, 800)
+  }
+
+  // ⚠ Leaving the lot SENDS whatever is still waiting. The unmount above only clears the timer, so
+  // anything changed in the last 800 ms before Back / Prev / Next was silently dropped — every
+  // field, not just the tick.
+  function flushAutoSave() {
+    if (saveTimer.current) saveNow()
   }
 
   const [titleVal, setTitleVal] = useState(lot?.title ?? "")
@@ -3173,7 +3231,8 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!lot) return
-    const fd = new FormData(e.currentTarget)
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    const fd = lotFormData(e.currentTarget)
     start(async () => {
       await updateLot(lot.id, auctionId, fd)
       setSaved(true)
@@ -3189,7 +3248,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
     <div>
       {/* Sticky nav bar */}
       <div className="sticky top-0 z-10 flex items-center gap-2 py-2 mb-5 bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-800 -mx-3 px-3">
-        <button onClick={onDone} className="text-sm text-[#2AB4A6] hover:text-[#24a090] transition-colors flex-shrink-0">
+        <button onClick={() => { flushAutoSave(); onDone() }} className="text-sm text-[#2AB4A6] hover:text-[#24a090] transition-colors flex-shrink-0">
           ← Back to lots
         </button>
         {sortedLots.length > 0 && (
@@ -3236,7 +3295,10 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             </div>
             <div>
               <label className="flex items-center gap-2 cursor-pointer w-fit">
-                <input type="checkbox" name="aiExcluded" value="true" defaultChecked={lot.aiExcluded ?? false}
+                {/* No name on purpose — lotFormData() writes the value, ticked OR not. An unticked
+                    HTML checkbox posts nothing, which is the shape of the original bug. */}
+                <input type="checkbox" checked={aiExcluded}
+                  onChange={e => { aiExcludedRef.current = e.target.checked; setAiExcluded(e.target.checked); saveNow() }}
                   className="w-4 h-4 accent-amber-500" />
                 <span className="text-sm text-gray-400">Exclude from AI — description typed manually</span>
               </label>

@@ -1500,7 +1500,14 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
   //
   // ⚠ Fixed here rather than by adding fields to that one form, so no FUTURE partial form can do
   // it either. Add any new "not on every form" column to this list.
-  for (const field of ["startingBid", "reserve"] as const) {
+  //
+  // ⚠⚠ aiExcluded IS THE SAME TRAP A THIRD TIME (2026-09-21). `extractLotData` reads it as
+  // `formData.get("aiExcluded") === "true"`, so a form WITHOUT the field saved FALSE — the tablet
+  // lot view un-excluded every lot it saved until 2026-08-19, and hand-typed lots were still
+  // losing the tick after that. Both lot editors now ALWAYS post it ("true" or "false"); a form
+  // that posts nothing leaves the lot as it was. It fails SAFE: the worst a stale or partial form
+  // can do is leave a lot excluded, never hand a typed description to the AI.
+  for (const field of ["startingBid", "reserve", "aiExcluded"] as const) {
     if (!formData.has(field)) delete updateData[field]
   }
 

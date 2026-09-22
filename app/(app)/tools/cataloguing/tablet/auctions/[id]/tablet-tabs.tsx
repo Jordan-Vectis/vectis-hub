@@ -81,7 +81,7 @@ const lbl = "block text-sm font-semibold uppercase tracking-wider text-gray-600 
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
-export default function TabletTabs({ auction, lots, userRole, userId, userName, showScanTimer, showLotTimer, timerRedMins }: { auction: Auction; lots: Lot[]; userRole: string; userId?: string; userName?: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number }) {
+export default function TabletTabs({ auction, lots, userRole, userId, userName, showScanTimer, showLotTimer, timerRedMins, manualDescriptions }: { auction: Auction; lots: Lot[]; userRole: string; userId?: string; userName?: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; manualDescriptions?: boolean }) {
   const router = useRouter()
   const bcLocked = auction.catalogued && userRole !== "ADMIN"
   const [tab, setTab] = useState<Tab>("manage")
@@ -213,6 +213,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
               showScanTimer={showScanTimer}
               showLotTimer={showLotTimer}
               timerRedMins={timerRedMins}
+              manualDescriptions={manualDescriptions}
             />
             )}
           </div>
