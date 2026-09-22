@@ -146,7 +146,18 @@ Design decisions worth keeping:
 - The website's 202-with-nothing to Railway is expected and never red; that light is how fresh the office collection is. The Bidpath live-bid feed is checked from the viewer's own browser.
 - Staging/sandbox databases are production branches with stale timestamps, so checks test the environment first and return "off".
 
-Open points for Jordan: the Royal Mail read endpoints and ntfy's /v1/health have never been tried (the first production run may show grey "check needs looking at"); Royal Mail with no key is grey everywhere; IT emails go amber after ~2 working days of silence; the website goes amber when a sale 7+ days old is uncollected; Neon's pooler must lend ~25 server connections (check "Different connections reached" on the first production run).`,
+Open points for Jordan: the Royal Mail read endpoints and ntfy's /v1/health have never been tried (the first production run may show grey "check needs looking at"); Royal Mail with no key is grey everywhere; IT emails go amber after ~2 working days of silence; the website goes amber when a sale 7+ days old is uncollected; Neon's pooler must lend ~25 server connections (check "Different connections reached" on the first production run).
+
+## 2026-09-22 — a check can be SWITCHED OFF (staging, NEEDS Run Migrations)
+
+Jordan: *"I keep getting this error in the hub but I don't use the it emails thing anymore can I have options in the status centre to disable things"* (the IT emails → Job Board amber, "no IT email has ever reached the Job Board through Make.com").
+
+- **Where:** open a tile → the details panel → at the bottom "Not using this any more?" → **Switch this check off**. A switched-off tile stays in its group, greyed with a dotted border and a "Switched off" badge (in the key), saying who and when; opening it shows **Switch this check on** in place of Check this now.
+- **What off means:** \`runChecks\` filters it out — the loop AND Check now (the run route answers 409 by name); the banner's \`answerFor\` leaves it out and adds "N switched off, so not counted: …"; Check everything skips it; the stale-lights note ignores it; the bell never rings for it. Switching off resets \`failStreak / badSince / notifiedState\` and drops the in-memory snapshot so it can't ring "working again" when switched back on; switching on clears \`lastRun\` so the loop checks it at its next tick.
+- **Storage:** \`StatusService.disabledAt\` + \`disabledBy\` — NULL = on. \`POST /api/status/switch { service, enabled }\`, admin-only, who = session name.
+- ⚠⚠ **Nullable with NO default, on purpose.** Prisma writes a literal default into every INSERT (and its native upsert is an INSERT), so a \`@default(true)\` column would have failed EVERY result write between the deploy and Run Migrations. A nullable column with no default is simply left out. Same reason \`record()\` now selects only the columns it needs (a bare \`findUnique\` reads every column), and \`readServiceRows()\` is tiered — with the two columns, then without — so the page keeps its history until the button is pressed; \`disabledKeys()\` returns an empty set on any error, so a check can never stop running because the switch couldn't be read. Before Run Migrations the switch button says plainly "press Run Migrations, then try again".
+- Not built: switching off from the tile itself (one click too easy), a "switched off" section of its own (the tile stays in its group so it is found where it was), or a per-person switch (it is one setting for the Hub — the loop must respect it).
+`,
   },
   {
     filename: "bc_database.md",
@@ -5015,7 +5026,7 @@ Core sync rules (full detail on the reference card):
 
 ## Recent work (2026-09-10/11) — ON PRODUCTION (merged to main 2026-09-11, main = staging)
 
-- **🚦 Status Centre + 🔔 admin bell** (/admin/status): "is it us or a supplier?" — 15 read-only checks, the loop runs on production only, the bell rings after 2 bad checks in a row. The MIGRATIONS array now lives in lib/migrations.ts.
+- **🚦 Status Centre + 🔔 admin bell** (/admin/status): "is it us or a supplier?" — 15 read-only checks, the loop runs on production only, the bell rings after 2 bad checks in a row. The MIGRATIONS array now lives in lib/migrations.ts. A check can be SWITCHED OFF from its panel (2026-09-22).
 - **📝 Hub Feedback surveys** (/admin/feedback): named, written answers; audience chosen per survey; "Fill it out later" is a temporary top-bar button, never a re-popup.
 - **🔎 Website Search replaced Description Finder** (deleted): ABC + BC + Hub lots in one search with photos, hammer prices, vectis.co.uk links and filters. A button in tablet cataloguing AND its own home card (Cataloguing & AI → /tools/website-search — I reversed my own "one button only"). Forgiving: punctuation, accents, capitals and plurals don't matter, and a misspelt word also searches the real spelling (the SearchWord spelling list, built in the background). Three ticks, each with an ⓘ: Exact phrase · Exact words (off by default) · Exact numbers (ON — "37" never finds 373). One "Estimate around £" box (the lot's low–high estimate covers the figure). Three across on a desktop, foldaway filter sidebar.
 - **⚠⚠ Never fold or rewrite the descriptions at search time.** translate() over the ABC table took "halo" from 3.3 s to 36 s and every search timed out on staging. Anything cleverer goes on the TYPED words or into the small indexed spelling list.

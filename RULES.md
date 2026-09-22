@@ -1272,6 +1272,16 @@ in the `hub` group are "inside the Hub", everything else is a supplier.
   an existing `key`** — it keys the history and every alert's link.
 - ⚠ **The `MIGRATIONS` array now lives in `lib/migrations.ts`** (moved the same day, so the Hub light
   can compare `MIGRATIONS_HASH` — a Next route file may only export its handlers). New SQL goes there.
+- **A check can be switched off from its details panel (2026-09-22)** — Jordan: *"I don't use the it
+  emails thing anymore can I have options in the status centre to disable things"*.
+  `StatusService.disabledAt` / `disabledBy` (**NEEDS Run Migrations**; NULL = on). Off = the engine never
+  runs it (the loop AND Check now), the banner and Check everything leave it out, the bell never rings
+  for it; the tile stays, greyed "Switched off", with who and when, and a Switch on button. Switching
+  off also resets its bell bookkeeping, so it can't ring "working again" the day it comes back.
+  ⚠ The columns are **nullable with NO default on purpose**: Prisma writes a literal default into every
+  INSERT, so a `@default(true)` column would have failed every result write between the deploy and Run
+  Migrations. For the same reason `record()` selects only the columns it needs and every read of the
+  switch is tiered (with the columns, then without). `POST /api/status/switch`, admin-only.
 
 ## 📝 Hub Feedback — surveys for the cataloguers (2026-09-10)
 

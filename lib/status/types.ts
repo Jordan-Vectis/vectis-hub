@@ -87,8 +87,12 @@ export interface ServiceView {
   what: string
   whenDown: string
   statusPage: string | null
-  /** "pending" = never checked yet on this environment. */
-  state: StatusState | "pending"
+  /** "pending" = never checked yet on this environment · "disabled" = switched off by an admin on the page
+   *  (never checked, never counted, never rings the bell). */
+  state: StatusState | "pending" | "disabled"
+  /** Who switched it off and when; both null while it is on. */
+  disabledBy: string | null
+  disabledAt: string | null
   /** Whose side the current problem is on: always "hub" for the hub group; for a supplier, what its check said. */
   cause: "hub" | "supplier"
   summary: string

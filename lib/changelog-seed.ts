@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"14437d0697d3523c5eaf6b0b5ff4996b4d76f471","author":"Jordan Orange","date":"2026-09-21T15:29:42+01:00","subject":"Exclude from AI: stop hand-typed lots losing the tick"},
   {"sha":"0b7267f33383510e03d3f7b01c8985f37585cd80","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Meal planner: a reply it can't read is salvaged and asked for again, not reported"},
   {"sha":"caa168130189c3de64be6a0921c652a219f0824f","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Memory: 18 Sept in the opening message, the Model Railway instruction, this machine's build traps"},
   {"sha":"adada4411920341fe1eb626b8cce44f101225cda","author":"Jordan Orange","date":"2026-09-18T16:29:37+01:00","subject":"Manage Lots: Find & Replace for descriptions"},
