@@ -5013,7 +5013,32 @@ Core sync rules (full detail on the reference card):
 
 ---
 
-## Recent work (2026-09-15 → 18) — ALL ON PRODUCTION (main = e90a74b6, merged 18 Sept; staging is ahead only by memory updates)
+## Recent work (2026-09-21 → 22) — ALL ON PRODUCTION (main = 4403d2f7, merged 22 Sept)
+
+### On production — the 22 Sept merge (4403d2f7)
+- **⚠ Exclude from AI — hand-typed lots were losing the tick (21 Sept).** Three holes in the desktop lot editor: the tick was the ONLY field with no auto-save (type the description, tick, press Back — the tick never went); leaving a lot dropped the last 800 ms of edits (every field); and a save without the field cleared it on the server. Now the tick saves at once, Back/Prev/Next flush what is waiting, and \`updateLot\` leaves \`aiExcluded\` alone when a form doesn't carry it — a partial form can at worst leave a lot excluded. ⚠ AND \`manualDescriptions\` had NEVER reached the wizard (missing from the desktop page's select behind an \`as any\`, never passed on the tablet) — those cataloguers were shown Key Points, not the Description box; their lots were still excluded (the server forces it) but typed into the wrong field ([[reference_manual_cataloguer]]).
+- **Manage Lots → AI filter → "✍ Looks hand-typed, not excluded"** (a written description ignoring our condition sentence, no key points, no AI run, not excluded) with an amber bar and **🚫 Exclude all N from AI** in one click — for the lots that lost the tick before the fix. Open each sale, pick the filter, press the button.
+- **🚦 Status Centre: a check can be switched off** from its details panel ("Not using this any more?"). Off = never run, left out of the banner and Check everything, never rings the bell; the tile stays, greyed, with who and when. \`StatusService.disabledAt/disabledBy\` — **NEEDS Run Migrations**. Built for the IT emails → Job Board amber, which Jordan no longer uses ([[reference_status_centre]]).
+- **💾 The nightly backup copies EVERY table** (163, was 42 of a hand-kept list), streamed one JSONL file per table into R2 with a manifest naming any table that failed; restore is generic (any table, casts from information_schema, upsert-only), so the induction tables and ArchiveLot are covered for the first time. /admin/backup rewritten (make a backup with live progress + Stop, restore chosen tables, lots by barcode, find a record). ⚠ Not run before the push — the first nightly is the test; the Status Centre light goes amber on a failed table ([[database-backup-every-table]]). No migration.
+- **🖼 Databases → Sales** (\`/databases/sales\`): every sale, ABC and BC, with the cover picture the website's auction calendar shows, date, code, lot count, links to the site and to its lots. The picture address is collected from each sale's page (the lot collector now records it as it goes, and a **picture-only collector** — \`scripts/collect-sale-pictures.mjs\` / the browser copy on the tab's 📥 Get the pictures panel — does the whole site in ~10 minutes, tested live on sales 683–686); the **📸 Sale pictures** job copies them from the website's S3 into R2 (\`sale-photos/<siteId>.webp\`). \`ArchiveSale.code/heroUrl/heroKey/heroAt\` — **NEEDS Run Migrations** ([[reference_bc_database]]).
+- The pg Pool "no error listener" side note was ALREADY FIXED on 10 Sept (6f0cd593) — don't raise it again.
+- Personal: meal planner reply salvage (a plan that can't be read is asked for again one day at a time) — local memory only. The "new Claude account" note gained §8, moving to a new computer.
+
+### Needs doing
+- **Run Migrations on production** — the Status Centre switch and the Sales tab both need it (the Hub light says "a database update is waiting").
+- Then: Status Centre → IT emails → Job Board → **Switch this check off**. Databases → Sales → **Get the pictures** (ten minutes on an office machine), load the file, press **Copy sale pictures**.
+- **Check the first every-table backup** the morning after: Admin → Database Backup (tables, rows, any failed) and the Status Centre's backup light.
+- Sweep each open sale with the **✍ Looks hand-typed** filter and press Exclude all.
+- Still open from 18 Sept: F134 (BC wrong, Hub right — transfer the 45 lines in BC to R009415); bullets vs BC paperwork — decide the permanent fix; Vectis Jo: Model Railway — try it, then tell Claude the settled wording.
+
+⚠ **Working-style notes from these sessions:**
+- Auto mode blocks reads of the real database from this PC even for a SELECT — say so and offer the switch-off rather than routing round it; where the logic can be proved with plain \`node\` against the real module (parsePlanReply, legacyTableName, the sale-page reader against the live site), do that before pushing.
+- A "not exported / not selected" column can hide behind an \`as any\` cast for a month — when a per-user flag "never seems to do anything", grep the page's \`select\` first.
+- Nullable columns with NO default for anything read by a hot write path: Prisma writes literal defaults into every INSERT, so a \`@default(true)\` column breaks every write between the deploy and Run Migrations; a nullable column is simply left out.
+
+---
+
+## Recent work (2026-09-15 → 18) — on production since the 18 Sept merge (e90a74b6)
 
 ### On production — the 17 Sept merge (15941188)
 - **Odd file types show everywhere a customer's photos do** — iPhone HEIC (the prebuilt sharp can't decode HEVC-HEIC, so heic-decode does it), TIFF, camera RAW, videos a browser can't play (ffmpeg makes a playable copy) and PDFs. A converted copy is kept BESIDE each original, one conversion at a time ([[reference_heic]]). Submissions: **Download all** into a folder you pick; the photo viewer steps through the photos without closing.
