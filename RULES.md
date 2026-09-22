@@ -1541,3 +1541,23 @@ read with **`getFallbackModel()`** from `lib/ai-models.ts`.
 
 **⚠ The page's tools are CHIPS** (`bc-tools.tsx`): 🌐 Website jobs · 📥 Update the BC lots · ⬇ Export & handover. Nothing shows until one is pressed, one at a time, and **a running job opens its own panel and keeps a live dot on the chip** — hiding the tools must never hide a job that is going. Jordan, 2026-09-09: *"these should be really small options at the top that then show the square they need otherwise they should be hidden"* and *"the filtering options are still awful"* — hence sortable columns (date/sale/lot/estimate/hammer, both ways, with an arrow) and on-screen filters (search incl. unique ID, sale name or code, date range, hammer range, sold/unsold, has a photo, full vs short description), every one carried through paging AND sorting.
 - WarehouseItem is a sync CACHE (`reconcile-deleted` may delete rows); BcLotWeb has no FK and survives.
+
+## Databases → Sales — every sale with its cover picture (2026-09-22)
+
+`/databases/sales` (Jordan: *"On our current website we have the hero (preview image for the entire
+auction) is it possible to get them as well? … Why don't we make a new tab for them in databases?"*).
+Every sale page on vectis.co.uk carries ONE cover picture at a fixed place on the site's S3 —
+`auction_images/large/<sale guid>/<image guid>.webp`, ABC and BC sales alike (checked on sales
+683 and 1566). Rows are `ArchiveSale` (+ `code`, `heroUrl`, `heroKey`, `heroAt` — **NEEDS Run
+Migrations**; every write and read is tiered so the page lists sales without pictures until then).
+- **Collected, not fetched.** The office collector (`scripts/collect-bc-lots.mjs` and the browser
+  copy in `lib/bc-web-collector.ts` — change one, change the other) now reads each sale's own page
+  (`/bidding/0-x-<id>`) for title, date and picture, for EVERY sale that exists — old system
+  included, their lots still skipped — and the BC Database page's upload writes them through
+  `upsertSaleMeta()` (never blanks a value already held; a new picture clears our old copy). Files
+  from before this carry only lots and still load. A run over 1–1061 is how the ABC sales get theirs.
+- **Copied by the Hub.** The `heroes` job (`startHeroCopy`, same plumbing as the photo copy)
+  fetches each picture from S3 — which the server CAN reach, unlike the lot feed — into
+  `sale-photos/<siteId>.webp`. The page shows our copy first, else the website's original.
+- One export, `GET /api/databases/sales/export`, one row per sale, for the same handover as the
+  other two pages.

@@ -1459,6 +1459,15 @@ model ArchiveSale {
   lots      Int       @default(0)
   finished  Boolean   @default(false)
   pulledAt  DateTime  @default(now())
+  /// The BC sale code (D062) for a Business Central sale — null for the old system's sales.
+  code      String?
+  /// The sale's cover picture — the "hero" the website's auction calendar shows — as its path
+  /// under the site's S3 (auction_images/large/<guid>/<guid>.webp), and our copy in R2 once the
+  /// "heroes" job has fetched it (sale-photos/<siteId>.webp). Collected by the office collector
+  /// with the lots (2026-09-22); shown on Databases → Sales.
+  heroUrl   String?
+  heroKey   String?
+  heroAt    DateTime?
 
   @@index([auctionId])
 }

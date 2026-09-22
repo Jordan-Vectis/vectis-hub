@@ -249,6 +249,12 @@ export const DESTINATIONS: Destination[] = [
     what: "Every lot sold through Business Central — sale, lot, estimate and hammer from the nightly BC sync, with the full description, photo and a link to the lot on vectis.co.uk matched from the website. Search by words in the description, sale, year or price.",
     also: ["BC database", "business central lots", "recent results", "what did it sell for", "sold prices", "current system", "BC lots"],
   },
+  {
+    ask: "Where can I see the cover picture for a past sale?",
+    name: "Databases → Sales", href: "/databases/sales",   // no app key: Databases is gated on sign-in only
+    what: "Every sale on vectis.co.uk, ABC and Business Central alike, with its cover picture (the auction calendar's hero image), date, code and lot count, and a link to its lots in the ABC or BC Database.",
+    also: ["sales database", "sale pictures", "hero image", "auction picture", "cover picture", "auction calendar", "past sales", "list of sales", "sale list"],
+  },
 ]
 
 /** Every AppKey mentioned in the map really exists. Cheap guard against a typo'd key

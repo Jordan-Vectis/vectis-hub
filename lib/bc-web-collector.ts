@@ -23,6 +23,11 @@
 //     the old system;
 //   · a sale is all one era, so ten lots are enough to tell which — that probe is what stops a run
 //     downloading a thousand pre-BC sales in full.
+//
+// SINCE 2026-09-22 it also reads each sale's own page — title, date and the cover picture the
+// website's auction calendar shows — for EVERY sale that exists, old system included (their lots
+// are still skipped). One extra request per sale; a run over 1 to 1061 is how the ABC sales get
+// their pictures on Databases → Sales.
 
 export const COLLECTOR_FILE_MB = 12
 export const BC_FIRST_SITE_SALE = 1062
@@ -40,6 +45,8 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
   const PER  = 500, PAUSE = 250;
 
   const KEY = "vectisHubCollect";
+  const PAGE_URL = "/bidding/0-x-";
+  const PAGE_OPTS = { credentials: "same-origin", headers: { "Accept": "text/html,application/xhtml+xml" } };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const isBc = u => /^r\\d+-\\d+$/i.test(String(u == null ? "" : u).trim());
   const codeOf = l => { const m = String((l && l.sef_link) || "").match(/^\\/?bidding\\/([A-Za-z]\\d+)-/); return m ? m[1].toUpperCase() : null; };
@@ -49,7 +56,7 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
   let at = resuming ? saved.next : FROM;
   let part = resuming ? (saved.part || 1) : 1;
 
-  let sales = [], lots = 0, bytes = 0, bcSales = 0, oldSales = 0, unfinished = 0, gaps = 0;
+  let sales = [], lots = 0, bytes = 0, bcSales = 0, oldSales = 0, unfinished = 0, gaps = 0, heroes = 0;
   let firstBc = null, lastBc = null, refusals = 0, shortSales = 0, stopped = false;
   const failed = [];
 
@@ -73,6 +80,32 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
     console.log("%c\\u2193 Saved " + name + " — " + lots.toLocaleString() + " lots so far", "color:#2AB4A6;font-weight:bold");
     part++; sales = []; bytes = 0;
     remember(nextId);
+  }
+
+  // The sale's own page — its title, date and the cover picture the website shows on the auction
+  // calendar (one \`auction_images/large/…\` file per sale, ABC and BC alike). One small request per
+  // sale; a missing page is just "no picture", never an error.
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+  const decode = s => String(s).replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#0*39;|&apos;/g, "'").replace(/&#(\\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&nbsp;/g, " ")
+  const idOf = l => { const m = String(l && l.sef_link || "").match(/^\\/?bidding\\/(\\d+)-/); return m ? Number(m[1]) : null }
+  async function salePage(saleId) {
+    for (let go = 1; go <= 3; go++) {
+      let res
+      try { res = await fetch(PAGE_URL + saleId, PAGE_OPTS) }
+      catch (e) { await sleep(1500 * go); continue }
+      if (res.status === 404 || res.status >= 500) return {}
+      if (!res.ok) { await sleep(1500 * go); continue }
+      const html = await res.text()
+      const t = html.match(/<title>\\s*Vectis Auctions\\s*\\|\\s*([^<]*)<\\/title>/i)
+      const d = html.match(/\\b(\\d{1,2}) (January|February|March|April|May|June|July|August|September|October|November|December) (\\d{4})\\b/)
+      const h = html.match(/auction_images\\/large\\/[A-Za-z0-9-]+\\/[A-Za-z0-9-]+\\.(?:webp|jpe?g|png)/i)
+      return {
+        title: t && !/^(404|error|page not found)$/i.test(decode(t[1]).trim()) ? decode(t[1]).trim() : null,   // the error page has a title too
+        date: d ? d[3] + "-" + String(MONTHS.indexOf(d[2]) + 1).padStart(2, "0") + "-" + d[1].padStart(2, "0") : null,
+        hero: h ? h[0] : null,
+      }
+    }
+    return {}
   }
 
   async function feed(saleId, page, per) {
@@ -127,9 +160,21 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
       await sleep(PAUSE); continue;
     }
     const code = codeOf(probe.lots[0]) || codeOf(probe.lots[probe.lots.length - 1]);
+    // The sale's own page — title, date, cover picture — for EVERY sale that exists, BC or not.
+    const meta = await salePage(at);
+    const auctionId = idOf(probe.lots[0]);
+    const lotCount = Number(probe.total_lots) || probe.lots.length;
+    const finishedProbe = probe.lots.every(l => !!l.isFinished);
+    const pushMeta = extra => {
+      const row = Object.assign({ siteId: at, auctionCode: code, auctionId: auctionId, title: meta.title || null, date: meta.date || null, hero: meta.hero || null, lotCount: lotCount, finished: finishedProbe, lots: [] }, extra);
+      sales.push(row); bytes += JSON.stringify(row).length;
+      if (meta.hero) heroes++;
+      if (bytes > MB * 1048576) save(at + 1);
+    };
     if (!probe.lots.some(l => isBc(l.unique_id))) {
       oldSales++;
-      if (at % 25 === 0) console.log("… at sale " + at + " · older sales skipped so far: " + oldSales);
+      pushMeta({});
+      if (at % 25 === 0) console.log("… at sale " + at + " · older sales skipped so far: " + oldSales + " (their pictures kept)");
       await sleep(PAUSE); continue;
     }
 
@@ -153,22 +198,21 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
 
     // ⚠ Same rule as the Hub's own walk: only a sale whose lots are all finished is written.
     const finishedSale = all.every(l => !!l.isFinished);
-    if (!finishedSale) { unfinished++; console.log("sale " + at + " · " + (code || "?") + " · not finished yet, skipped"); await sleep(PAUSE); continue; }
+    if (!finishedSale) { unfinished++; console.log("sale " + at + " · " + (code || "?") + " · not finished yet, skipped"); pushMeta({ finished: false, lotCount: all.length }); await sleep(PAUSE); continue; }
 
     const keep = all.filter(l => isBc(l.unique_id)).map(l => ({
       unique_id: l.unique_id, lot_number: l.lot_number, description: l.description,
       id: l.id, sef_link: l.sef_link, image: l.image, hammer_price: l.hammer_price, sold: l.sold
     }));
     if (keep.length) {
-      const row = { siteId: at, auctionCode: code, lots: keep };
-      sales.push(row); lots += keep.length; bytes += JSON.stringify(row).length;
+      lots += keep.length;
       bcSales++; if (firstBc === null) firstBc = at; lastBc = at;
       const short = expected && all.length < expected;
       if (short) shortSales++;
       console.log("sale " + at + " · " + (code || "?") + " · " + keep.length + " BC lots" +
         (short ? "  \\u26a0 only got " + all.length + " of " + expected + " — a page did not answer" : ""));
-      if (bytes > MB * 1048576) save(at + 1);
-    }
+      pushMeta({ lots: keep, lotCount: expected || all.length, finished: true });
+    } else pushMeta({ finished: true });
     await sleep(PAUSE);
   }
 
@@ -176,7 +220,7 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
   save(finishedRun ? TO + 1 : at);
   if (finishedRun && !failed.length) { try { localStorage.removeItem(KEY); } catch (e) {} } else { remember(finishedRun ? TO + 1 : at); }
 
-  console.log("%cFinished — " + lots.toLocaleString() + " BC lots from " + bcSales + " sales, in " + (part - 1) + " file(s).",
+  console.log("%cFinished — " + lots.toLocaleString() + " BC lots from " + bcSales + " sales and " + heroes + " sale cover pictures, in " + (part - 1) + " file(s).",
     "color:#2AB4A6;font-weight:bold");
   console.log("BC sales ran from site number " + (firstBc === null ? "—" : firstBc) + " to " + (lastBc === null ? "—" : lastBc) +
     " · " + oldSales + " older sales skipped · " + unfinished + " not finished · " + gaps + " numbers with no sale" +
