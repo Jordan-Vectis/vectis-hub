@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 
 type Job = { id: string; total: number; added: number; done: boolean; error: string | null; note: string | null; running: boolean }
@@ -11,9 +11,9 @@ type Job = { id: string; total: number; added: number; done: boolean; error: str
 // Where the pictures come from: the office collector records each sale's cover picture alongside
 // its lots (the website won't answer the Hub's server), and "Copy sale pictures" then brings each
 // one into R2 from the website's own storage on Amazon S3 — which the server CAN reach.
-export default function SalesTools({ toCopy, withHero }: { toCopy: number; withHero: number }) {
+export default function SalesTools({ toCopy, withHero, collect }: { toCopy: number; withHero: number; collect: ReactNode }) {
   const router = useRouter()
-  const [open, setOpen] = useState<"pictures" | "export" | null>(null)
+  const [open, setOpen] = useState<"collect" | "pictures" | "export" | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,7 +43,7 @@ export default function SalesTools({ toCopy, withHero }: { toCopy: number; withH
     await load()
   }
 
-  const chip = (key: "pictures" | "export", label: string) => (
+  const chip = (key: "collect" | "pictures" | "export", label: string) => (
     <button type="button" onClick={() => setOpen(open === key ? null : key)} aria-expanded={open === key}
       className={`min-h-[40px] px-3 rounded-lg border text-sm transition-colors ${open === key
         ? "border-violet-500 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold"
@@ -59,9 +59,12 @@ export default function SalesTools({ toCopy, withHero }: { toCopy: number; withH
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mr-1">Tools</span>
+        {chip("collect", "📥 Get the pictures")}
         {chip("pictures", "📸 Sale pictures")}
         {chip("export", "⬇ Export")}
       </div>
+
+      {open === "collect" && collect}
 
       {open === "pictures" && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#141416] p-4 space-y-3 text-sm text-gray-700 dark:text-gray-300">
@@ -83,7 +86,7 @@ export default function SalesTools({ toCopy, withHero }: { toCopy: number; withH
           )}
           {error && <p className="text-xs text-red-700 dark:text-red-300">⚠ {error}</p>}
           <p className="text-gray-600 dark:text-gray-400">
-            {withHero.toLocaleString()} sales have a picture recorded. Pictures arrive with the lot collection on the BC Database page — the collector now notes each sale&apos;s title, date and cover picture as it goes. For the older ABC sales, run the collector once over sales 1 to 1061: it skips their lots but keeps their pictures. This copy is kept at <code className={code}>sale-photos/&#123;website sale number&#125;.webp</code> in R2.
+            {withHero.toLocaleString()} sales have a picture recorded. They arrive from the website through <b>📥 Get the pictures</b> (pictures only, ten minutes for everything) or with the lot collection on the BC Database page. This copy is kept at <code className={code}>sale-photos/&#123;website sale number&#125;.webp</code> in R2.
           </p>
         </div>
       )}

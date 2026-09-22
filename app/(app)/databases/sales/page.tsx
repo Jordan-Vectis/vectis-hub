@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/app/generated/prisma/client"
 import { getSignedImageUrl } from "@/lib/r2"
 import { SITE_IMAGES } from "@/lib/archive-site"
-import { BC_FIRST_SITE_SALE } from "@/lib/bc-web-collector"
+import { BC_FIRST_SITE_SALE, BC_LAST_SITE_SALE } from "@/lib/bc-web-collector"
 import SalesTools from "./sales-tools"
+import SalesCollect from "./sales-collect"
 
 // Databases → Sales: every sale the website knows — ABC and Business Central alike — with its
 // cover picture (the "hero" the website shows on the auction calendar), title, date, code and
@@ -24,7 +25,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 const fmtDate = (d: Date | null) => (d ? d.toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }) : "date unknown")
 
 type Row = { siteId: number; auctionId: number | null; title: string; saleDate: Date | null; lots: number; finished: boolean; code: string | null; heroUrl: string | null; heroKey: string | null; photo?: string | null }
-type Stats = { n: number; withHero: number; copied: number; bc: number; abc: number; from: Date | null; to: Date | null }
+type Stats = { n: number; withHero: number; copied: number; bc: number; abc: number; from: Date | null; to: Date | null; maxSite: number }
 
 export default async function SalesDatabasePage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await auth()
@@ -59,15 +60,16 @@ export default async function SalesDatabasePage({ searchParams }: { searchParams
         SELECT s."siteId", s."auctionId", s."title", s."saleDate", s."lots", s."finished", s."code", s."heroUrl", s."heroKey"
         FROM "ArchiveSale" s WHERE ${where} ORDER BY ${orderBy} LIMIT ${PAGE} OFFSET ${(page - 1) * PAGE}`,
       prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM "ArchiveSale" s WHERE ${where}`,
-      prisma.$queryRaw<{ n: bigint; withhero: bigint; copied: bigint; bc: bigint; from: Date | null; to: Date | null }[]>`
+      prisma.$queryRaw<{ n: bigint; withhero: bigint; copied: bigint; bc: bigint; from: Date | null; to: Date | null; maxsite: number | null }[]>`
         SELECT count(*)::bigint AS n, count(s."heroUrl")::bigint AS withhero, count(s."heroKey")::bigint AS copied,
-               count(*) FILTER (WHERE s."siteId" >= ${BC_FIRST_SITE_SALE})::bigint AS bc, min(s."saleDate") AS "from", max(s."saleDate") AS "to"
+               count(*) FILTER (WHERE s."siteId" >= ${BC_FIRST_SITE_SALE})::bigint AS bc, min(s."saleDate") AS "from", max(s."saleDate") AS "to",
+               max(s."siteId")::int AS maxsite
         FROM "ArchiveSale" s`,
       prisma.$queryRaw<{ y: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM "saleDate")::int AS y FROM "ArchiveSale" WHERE "saleDate" IS NOT NULL ORDER BY y DESC`,
     ])
     rows = r; total = Number(t[0]?.n ?? 0)
     const a = agg[0]; const n = Number(a?.n ?? 0), bc = Number(a?.bc ?? 0)
-    stats = { n, withHero: Number(a?.withhero ?? 0), copied: Number(a?.copied ?? 0), bc, abc: n - bc, from: a?.from ?? null, to: a?.to ?? null }
+    stats = { n, withHero: Number(a?.withhero ?? 0), copied: Number(a?.copied ?? 0), bc, abc: n - bc, from: a?.from ?? null, to: a?.to ?? null, maxSite: Number(a?.maxsite ?? 0) }
     years = ys.map(x => Number(x.y)).filter(Number.isFinite)
   } catch (e: any) {
     const msg = String(e?.message ?? "")
@@ -125,7 +127,10 @@ export default async function SalesDatabasePage({ searchParams }: { searchParams
           <p className="rounded-lg border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">The sale-picture columns aren&apos;t on this environment yet — press Run Migrations on the Admin page. The sales still list below, without pictures.</p>
         )}
 
-        {isAdmin && !needMigration && <SalesTools toCopy={toCopy} withHero={stats?.withHero ?? 0} />}
+        {isAdmin && !needMigration && (
+          <SalesTools toCopy={toCopy} withHero={stats?.withHero ?? 0}
+            collect={<SalesCollect defaultFrom={1} defaultTo={Math.max(BC_LAST_SITE_SALE, stats?.maxSite ?? 0) + 60} />} />
+        )}
 
         <form method="get" className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#141416] p-3 space-y-2">
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
@@ -179,7 +184,8 @@ export default async function SalesDatabasePage({ searchParams }: { searchParams
                     </a>
                     <div className="p-3 space-y-1 flex-1 flex flex-col">
                       <div className="font-semibold text-gray-900 dark:text-white leading-snug line-clamp-2" title={r.title}>{r.title}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">{fmtDate(r.saleDate)}{r.lots ? ` · ${r.lots.toLocaleString()} lots` : ""}{r.finished ? "" : " · not finished"}</div>
+                      {/* "not finished" only when the lot feed said so — a sale known only from its page has no lots and no verdict. */}
+                      <div className="text-sm text-gray-600 dark:text-gray-400">{fmtDate(r.saleDate)}{r.lots ? ` · ${r.lots.toLocaleString()} lots` : ""}{!r.finished && r.lots > 0 ? " · not finished" : ""}</div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
                         {isBc ? (r.code ?? "BC") : `ABC${r.auctionId ? ` · auction ${r.auctionId}` : ""}`} · site {r.siteId}
                       </div>

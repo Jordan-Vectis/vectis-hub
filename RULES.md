@@ -1559,5 +1559,10 @@ Migrations**; every write and read is tiered so the page lists sales without pic
 - **Copied by the Hub.** The `heroes` job (`startHeroCopy`, same plumbing as the photo copy)
   fetches each picture from S3 — which the server CAN reach, unlike the lot feed — into
   `sale-photos/<siteId>.webp`. The page shows our copy first, else the website's original.
+- **A picture-only collector** — `scripts/collect-sale-pictures.mjs` and its browser copy
+  `lib/sale-pictures-collector.ts`, handed out on the Sales tab's "📥 Get the pictures" panel with
+  the upload box (the BC Database page's route reads its file too). One page per sale number,
+  never the lot feed: ten minutes for the whole site. Same page-reading as the lot collectors —
+  change one, change all three.
 - One export, `GET /api/databases/sales/export`, one row per sale, for the same handover as the
   other two pages.
