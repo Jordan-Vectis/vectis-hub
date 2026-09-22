@@ -247,6 +247,46 @@ rule exists. The trainer's room protocol (`trainer:*` socket events) is likewise
 Auto Clerk's side. A genuine trainer bug found during Auto Clerk work is reported to Jordan, not fixed
 in passing.
 
+## 💾 The database backup — every table, streamed, one file each (2026-09-22)
+
+Jordan picked this from the review: *"Nightly backup covers 42 of 151 tables and the restore
+screen can't restore the induction tables."* `lib/backup-engine.ts` is the whole of it; the
+routes under `/api/admin/backup`, `/api/admin/restore` and `/api/cron/db-backup` are thin.
+
+- **No list of tables anywhere.** The database describes itself (`information_schema`,
+  `pg_class`): every base table in `public` except `_prisma_migrations` and UNLOGGED scratch
+  (`SearchWordBuild`). A new table is in tonight's backup without anyone remembering it, and
+  the restore can put it back the same way. **Never reintroduce a hand-kept table list** — the
+  old one missed 109 of 151 tables and the restore's copy of it missed the induction tables.
+- **Nothing is held whole.** Rows are read a page at a time (keyset on a single-column key, OFFSET
+  on the six composite ones) and written straight to R2 through `lib/r2-multipart.ts` as
+  `tables/<Name>.jsonl`. Node's largest string is ~0.5 GB, which is why ArchiveLot (~1 GB as
+  JSON) could never join the old single file. Restore streams the file back line by line. Keep
+  both sides that way.
+- **Restore is generic and upsert-only.** `INSERT … ON CONFLICT (primary key) DO UPDATE`, every
+  value cast to the column's real type from `information_schema` (jsonb, timestamp, enums,
+  `text[]` via a JSON array, bytea via base64) — Prisma sends parameters untyped, so without the
+  casts Postgres refuses. Parents before children (`tableOrder`, from the foreign keys), a
+  failed batch retried row by row, the failed rows tried once more after their table. Columns
+  the database no longer has are dropped and named; columns it has gained are left as they are.
+  Nothing is ever deleted; rows made since the backup stay.
+- **The manifest is the evidence.** `manifest.json` names every table copied, its rows and bytes,
+  and every table that FAILED. The Status Centre's backup light reads it and goes amber on a
+  failed table; the nightly run also rings the bell with the names. The old run saved a failed
+  table as null and still said ok.
+- **A manual run is started and polled** (`POST /api/admin/backup` → 202, then
+  `/api/admin/backup/progress` once a second, `/stop` to stop): a full copy takes minutes and
+  Railway's proxy would cut off a request that lasted the whole run. The nightly one is awaited
+  by the cron route — localhost, no proxy. One job at a time, held on `globalThis`. Stop keeps
+  the tables already copied, throws the half-copied one away, and the manifest says "stopped".
+- **The old single-file copies (`backup-<ts>.json`) still list and still restore** — their
+  camelCase-plural keys are mapped onto real table names by `legacyTableName()`. They fall out
+  of the 30 in a month; the code that reads them can go then.
+- ⚠ **R2 insists every multipart part but the last is the SAME size** (S3 only asks for ≥ 5 MB) —
+  the writer cuts parts at exactly 8 MiB. Don't "simplify" that.
+- ⚠ Never "test" the backup by running it from a check or a script: it writes a real copy and
+  can prune a real one out of the 30.
+
 ## ⚠ Claude memory sync (multi-developer) — check freshness before trusting local memory
 
 The in-app memory page — the `ENTRIES` array in `app/(app)/admin/memory/page.tsx`, shown at
@@ -322,7 +362,7 @@ The database is hosted on **Neon** (console.neon.tech), not Railway. Never sugge
 
 - Neon provides point-in-time restore via branching
 - The `DATABASE_URL` env var in Railway points to the Neon connection string
-- A scheduled **JSON** backup exists: `/api/cron/db-backup` (run by a `server.js` setInterval loop at midnight UTC, 24h cadence) dumps tables to R2 (`CLOUDFLARE_R2_BACKUP_BUCKET`), keeping the last 30 per env, surfaced at `/admin/backup`. A true `pg_dump` / point-in-time dump is still not configured — Neon branching remains the primary restore path.
+- A scheduled backup exists: `/api/cron/db-backup` (run by a `server.js` setInterval loop at midnight UTC, 24h cadence) copies **every table** to R2 (`CLOUDFLARE_R2_BACKUP_BUCKET`) as one file per table plus a manifest, keeping the last 30 per env, surfaced at `/admin/backup` — see "The database backup" below. A true `pg_dump` / point-in-time dump is still not configured — Neon branching remains the primary restore path.
 
 ### ⚠ `.env` points at the REAL database — server.js only does its jobs in production
 

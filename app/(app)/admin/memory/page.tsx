@@ -160,6 +160,43 @@ Jordan: *"I keep getting this error in the hub but I don't use the it emails thi
 `,
   },
   {
+    filename: "reference_backup.md",
+    content: `---
+name: database-backup-every-table
+description: "💾 Admin → Database Backup + the nightly /api/cron/db-backup, rebuilt 2026-09-22: EVERY table, streamed, one JSONL file per table + manifest.json, generic restore by information_schema (any table, any column type). Read before touching backup, restore or lib/backup-engine.ts."
+metadata:
+  type: reference
+  originSessionId: 203c0c54-04d5-40c9-89ad-52832b8a00fe
+  modified: 2026-09-22T14:00:00.000Z
+---
+
+# 💾 The database backup — every table, streamed (2026-09-22)
+
+Jordan chose this from the review list: *"Nightly backup covers 42 of 151 tables and the restore screen can't restore the induction tables. A streamed per-table backup would cover everything, ArchiveLot included."* On staging; ⚠ **not run against a real database or bucket before the push** — Auto mode blocks production reads locally and there is no test bucket. The first nightly run on production is the test: check Admin → Database Backup the next morning and the Status Centre's backup light. Rules in RULES.md → "The database backup".
+
+## What was wrong
+- \`runBackup\` had a hand-kept \`switch\` of 42 tables (\`lib/backup-sections.ts\`, deleted) out of 163 models; \`findMany()\` each, ONE \`JSON.stringify\` of the lot, one PutObject. Node's largest string is ~0.5 GB → ArchiveLot (~1 GB as JSON) could never be in it; a failed table was saved as \`null\` and the run still said ok.
+- The restore routes had THEIR OWN hand-kept map (49 tables) — the four induction tables were in the backup but not in it; the Buffer replacer never fired (JSON.stringify calls \`toJSON\` first), so MacroFile.content was saved as \`{type:"Buffer",data:[…]}\`.
+
+## What it is now — \`lib/backup-engine.ts\` (everything), \`lib/r2-multipart.ts\`
+- **The database describes itself:** \`describeTables()\` from \`pg_class\` + \`information_schema\` (columns with \`udt_name\`, primary keys, \`reltuples\` estimate, UNLOGGED flag). Backup = every base table in \`public\` except \`_prisma_migrations\` and unlogged scratch (\`SearchWordBuild\`). **No list of tables exists anywhere any more — never add one back.**
+- **Streamed both ways:** \`readRows()\` pages by keyset on a single-column PK (OFFSET only for the 6 composite-key tables), each page written through \`R2MultipartWriter\` as \`\${env}/backup-YYYY-MM-DD-HHMMSS[-partial]/tables/<Name>.jsonl\`; \`manifest.json\` last (\`version 2\`: tables[{name,rows,bytes,ok,error}], totalRows/Bytes, failed, stopped, complete, everything, by, durationMs). ⚠ **R2 insists every multipart part but the last is the SAME size** — the writer cuts at exactly 8 MiB.
+- **Generic restore:** \`restoreRows(t, rows)\` = \`INSERT … ON CONFLICT (pk) DO UPDATE SET col = EXCLUDED.col\`, every value cast to the column's type (\`castFor\`/\`scalarType\`): \`::jsonb\`, \`::timestamp\`, enums \`::"Name"\`, \`text[]\` via \`ARRAY(SELECT v::text FROM jsonb_array_elements_text($n::jsonb))\`, bytea via \`decode($n,'base64')\`. Batches of ≤500 rows / ≤30,000 params; a failed batch is retried row by row; failed rows kept in \`counts.retry\` (≤5,000) and tried once more after the table (parents in a cycle / self-references). \`tableOrder()\` = parents before children from the FK constraints. Columns the DB no longer has are dropped and named (\`skippedColumns\`); columns the backup lacks are left alone. **Upsert only, never deletes.**
+- **Job on globalThis** (\`_backupJob\`): \`runBackupJob({by, scope})\` awaited by the cron route (localhost, no proxy); \`startBackup()\` + \`backupProgress()\` + \`stopBackup()\` for the page — Railway's proxy would cut a request that lasted the whole run. Scope: \`"all"\` (nightly, always) · \`"quick"\` = all minus \`BIG_TABLES\` (ArchiveLot, BcLotWeb, WarehouseItem, SearchWord, CatalogueLotEvent, StatusCheck — rebuildable) · a list of names. Stop keeps finished tables, ABORTS the half-copied one (never left looking whole), manifest says \`stopped\`. Nightly failures ring the bell with the table names (\`createNotification\`, kind "status").
+- **Listing:** \`listBackups()\` — folders via \`Delimiter: "/"\` + the old \`.json\` files; manifests cached for good in \`_backupManifests\`; a folder with no manifest = in progress (if it is the running job's folder) or a run that died. Prune keeps the newest 30 by name across both kinds; a folder is deleted object by object.
+- **Old single-file copies still work:** \`readLegacyDump()\` parses whole (tens of MB), \`legacyTableName()\` maps camelCase-plural keys → real names (verified: all 54 old keys map, no collisions). They fall out of the 30 within a month.
+
+## Routes and page
+- \`GET /api/admin/backup\` (entries + progress) · \`POST\` \`{scope}\` → 202 · \`DELETE\` \`{key}\` · \`/progress\` · \`/stop\` · \`/tables\` (the tick list with row estimates) · \`/manifest?key=\`.
+- \`POST /api/admin/restore\` modes \`search\` (streams every table file ≤ 64 MB, names the skipped big ones, 200 hits max), \`single\`, \`batch-by-field\` (the barcode restore — table \`CatalogueLot\`, reports barcodes not found). \`POST /api/admin/restore/stream\` \`{key, tables?}\` = SSE per batch: table x of y, rows done/total, an honest % from manifest counts, Stop = abort the fetch.
+- \`app/(app)/admin/backup/page.tsx\` rewritten, full width: make a backup (Everything / without the big copies / choose tables) with live progress + Stop; stored list (Full / Partial / Stopped / N tables failed / Old style / Being written); restore tables (tick list from the manifest, CONFIRM, live progress); restore lots by barcode; find a record.
+- \`lib/status/checks/backup.ts\` reads \`listBackups(probeClient())\`: amber on \`failed > 0\` or \`stopped\` (the manifest is the evidence), grace hour 02:00 UTC (a full copy takes minutes now), names dead folders.
+- \`server.js\` log line reads the new answer; the ABC Database page no longer says it is left out of the backup.
+
+Related: [[reference_status_centre]] (the side finding about the backup is now FIXED), [[reference_lot_archive]], [[reference_data_map]].
+`,
+  },
+  {
     filename: "bc_database.md",
     content: `---
 name: bc-lots-database
@@ -5027,6 +5064,7 @@ Core sync rules (full detail on the reference card):
 ## Recent work (2026-09-10/11) — ON PRODUCTION (merged to main 2026-09-11, main = staging)
 
 - **🚦 Status Centre + 🔔 admin bell** (/admin/status): "is it us or a supplier?" — 15 read-only checks, the loop runs on production only, the bell rings after 2 bad checks in a row. The MIGRATIONS array now lives in lib/migrations.ts. A check can be SWITCHED OFF from its panel (2026-09-22).
+- **💾 Database backup — every table, streamed** (/admin/backup, rebuilt 2026-09-22): information_schema describes the tables (no hand-kept list, ever), one JSONL file per table + manifest in R2, generic upsert restore with casts. The manifest is the evidence; the Status Centre goes amber on a failed table.
 - **📝 Hub Feedback surveys** (/admin/feedback): named, written answers; audience chosen per survey; "Fill it out later" is a temporary top-bar button, never a re-popup.
 - **🔎 Website Search replaced Description Finder** (deleted): ABC + BC + Hub lots in one search with photos, hammer prices, vectis.co.uk links and filters. A button in tablet cataloguing AND its own home card (Cataloguing & AI → /tools/website-search — I reversed my own "one button only"). Forgiving: punctuation, accents, capitals and plurals don't matter, and a misspelt word also searches the real spelling (the SearchWord spelling list, built in the background). Three ticks, each with an ⓘ: Exact phrase · Exact words (off by default) · Exact numbers (ON — "37" never finds 373). One "Estimate around £" box (the lot's low–high estimate covers the figure). Three across on a desktop, foldaway filter sidebar.
 - **⚠⚠ Never fold or rewrite the descriptions at search time.** translate() over the ABC table took "halo" from 3.3 s to 36 s and every search timed out on staging. Anything cleverer goes on the TYPED words or into the small indexed spelling list.

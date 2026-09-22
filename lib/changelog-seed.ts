@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-21, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-22, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a08c4eb84e5ac9afaa1c14934922931d393aae68","author":"Jordan Orange","date":"2026-09-22T10:53:46+01:00","subject":"Status Centre: a check can be switched off"},
   {"sha":"14437d0697d3523c5eaf6b0b5ff4996b4d76f471","author":"Jordan Orange","date":"2026-09-21T15:29:42+01:00","subject":"Exclude from AI: stop hand-typed lots losing the tick"},
   {"sha":"0b7267f33383510e03d3f7b01c8985f37585cd80","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Meal planner: a reply it can't read is salvaged and asked for again, not reported"},
   {"sha":"caa168130189c3de64be6a0921c652a219f0824f","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Memory: 18 Sept in the opening message, the Model Railway instruction, this machine's build traps"},
