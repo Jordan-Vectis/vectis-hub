@@ -5791,7 +5791,33 @@ At the start of every new session, open the Claude Memory page (/admin/memory), 
 ## 6. Settings.json location
 
 Windows: C:\\Users\\<YourUser>\\.claude\\settings.json
-Mac: ~/.claude/settings.json`,
+Mac: ~/.claude/settings.json
+
+---
+
+## 8. Moving to a NEW COMPUTER — same account, same chats, same memory (2026-09-22)
+
+Jordan, getting a new PC: *"how do I make sure claude works exactly the same on the desktop version and has the same config memory and chats saves etc"*. Checked against this machine on 2026-09-22.
+
+**Copy these two things whole, BEFORE opening Claude on the new machine:**
+- \`C:\\Users\\Jordan.Orange\\.claude\\\` — \`settings.json\` (permissions, the rules hook, theme, the auto-mode profile), \`projects\\C--Dev-apps\\\` (every saved chat as a \`.jsonl\`, the \`memory\\\` folder, per-session folders), \`plugins\\\`, \`scheduled-tasks\\\`, \`history.jsonl\`, \`sessions\\\`.
+- \`C:\\Users\\Jordan.Orange\\.claude.json\` — per-project state: trusted folders, MCP servers, onboarding.
+Then **delete \`.claude\\.credentials.json\` from the copy and sign in fresh** — it is this machine's login token, not a setting.
+
+**⚠ Keep the SAME PATHS — this is what catches people:**
+- The repo goes back at \`C:\\Dev apps\\vectis-hub\` and Claude is opened in \`C:\\Dev apps\`. Chats and memory are filed under a slug made from the folder path (\`C--Dev-apps\`); a different path is a different, empty slug and none of it shows.
+- If the Windows username is not \`Jordan.Orange\`, edit the memory path spelt out in the hook in \`settings.json\` (section 2 above).
+
+**Not in the copy — do by hand:**
+- \`.env\` and \`.env.staging\` in the repo — git-ignored, so the clone doesn't bring them; they hold the real database and R2 keys.
+- Sign-ins: the Claude desktop app, \`gh auth login\`, and Claude in Chrome — a fresh extension install, and the allowed sites (staging AND production separately, see section 1) ticked again.
+
+**Install list:** Claude desktop app · Git (Git Bash — \`next build\` has to run from there, see [[reference_local_dev_boot]]) · Node 22 or newer · GitHub CLI · AutoHotkey (the macros) · OneDrive signed in (the BC source). Then \`git clone\`, \`npm install\`.
+
+**Not promised:** the Code tab's sidebar groups and pins live in the desktop app's own profile (\`%APPDATA%\\Claude\`); copying that folder too MAY bring them across (its encrypted parts are tied to the Windows user, so logins won't). The chats themselves come with \`.claude\\projects\` either way.
+
+Do the copy while the old PC still works and open one chat on the new one to check before wiping anything.
+`,
   },
   {
     filename: "MEMORY.md",
@@ -5822,7 +5848,7 @@ type: reference
 - [Memory Workflow](feedback_memory_workflow.md) — change a memory file → change its /admin/memory ENTRIES copy in the same push to staging
 - [File Saving](feedback_file_saving.md) — ask where a file should go before saving it
 - [App Naming](feedback_naming.md) — it's the Hub, never "the CRM"
-- [New Claude Account Setup](reference_new_claude_account.md) — replicate this Claude Code setup (permissions, hooks, memory, project config) on a new account
+- [New Claude Account Setup](reference_new_claude_account.md) — replicate this Claude Code setup (permissions, hooks, memory, project config) on a new account; §8 = moving to a NEW COMPUTER (copy ~/.claude + ~/.claude.json, SAME repo path C:\\Dev apps, .env by hand)
 - [Photo Prep — AI edit](reference_photo_ai_edit.md) — 13 Gemini image presets fix the PHOTO never the ITEM. Read before adding a preset
 - [Photography section](reference_photography_section.md) — its own Cataloguing section (sale list → Start photography); Upload Photos left Auction Manager; a new sidebar section stays hidden from users with configured sections until an admin ticks it
 - [Smart Scan photo upload](reference_smart_scan_photo_upload.md) — label reading + grouping, its failure modes, the 2026-07-15 rework
