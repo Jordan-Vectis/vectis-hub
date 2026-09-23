@@ -2293,6 +2293,10 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "SiteNewsArticle_publishedAt_idx" ON "SiteNewsArticle"("publishedAt")`,
   `CREATE INDEX IF NOT EXISTS "SiteNewsArticle_categoryId_idx" ON "SiteNewsArticle"("categoryId")`,
   `CREATE INDEX IF NOT EXISTS "SiteNewsArticle_alias_idx" ON "SiteNewsArticle"("alias")`,
+  // The article's own page — the real text (the feed's is flattened) and the pictures inside it.
+  `ALTER TABLE "SiteNewsArticle" ADD COLUMN IF NOT EXISTS "bodyHtml" TEXT`,
+  `ALTER TABLE "SiteNewsArticle" ADD COLUMN IF NOT EXISTS "bodyImages" JSONB`,
+  `ALTER TABLE "SiteNewsArticle" ADD COLUMN IF NOT EXISTS "bodyImageKeys" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

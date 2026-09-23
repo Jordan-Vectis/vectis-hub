@@ -2,15 +2,17 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/app/generated/prisma/client"
+import { getSignedImageUrl } from "@/lib/r2"
 import { articlePicture, gbDate, StoryCard, SITE, type Article } from "../shared"
 
-// One News & Stories article on the test website. The text is the site's own HTML, given a light
-// clean (no scripts, no inline event handlers) and its relative picture and link addresses made
-// absolute to vectis.co.uk, then rendered as it was written. Its own design, not the live site's.
+// One News & Stories article on the test website. The text is the article PAGE's own HTML as the
+// collector cleaned it (paragraphs, emojis, the pictures inside it — the feed's copy is flattened),
+// with each picture served from our R2 copy once uploaded, else from the website. Older loads that
+// only have the feed's text get it split back into paragraphs. Its own design, not the live site's.
 
 export const dynamic = "force-dynamic"
 
-const COLS = Prisma.sql`a."id", a."alias", a."title", a."category", a."tags", a."featured", a."publishedAt", a."introText", a."fullText", a."imagePath", a."imageKey"`
+const COLS = Prisma.sql`a."id", a."alias", a."title", a."category", a."tags", a."featured", a."publishedAt", a."introText", a."fullText", a."imagePath", a."imageKey", a."bodyHtml", a."bodyImages", a."bodyImageKeys"`
 
 async function loadArticle(alias: string): Promise<Article | null> {
   // The alias is unique on the site in practice (Joomla only enforces it per category) — newest wins.
@@ -18,9 +20,8 @@ async function loadArticle(alias: string): Promise<Article | null> {
   return rows[0] ?? null
 }
 
-// The site's HTML as served, made safe enough for the test site: scripts, styles and inline event
-// handlers out; pictures and links that point at the site's own root made absolute so they still
-// load from here.
+// Made safe enough for the test site: scripts, styles and inline event handlers out; links and
+// pictures that still point at the site's own root made absolute so they load from here.
 function cleanHtml(html: string): string {
   return html
     .replace(/<script\b[\s\S]*?<\/script>/gi, "")
@@ -29,6 +30,37 @@ function cleanHtml(html: string): string {
     .replace(/\shref\s*=\s*"javascript:[^"]*"/gi, "")
     .replace(/(src|href)="(?:\/)?(images\/)/gi, `$1="${SITE}$2`)
     .replace(/(src|href)="\/(?!\/)/gi, `$1="${SITE}`)
+    .replace(/<a href="(https?:\/\/[^"]+)">/gi, `<a href="$1" target="_blank" rel="noreferrer">`)
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+// The article's own pictures: our copy when it has been uploaded (news-photos/<file>), else the
+// website's file. Substituted BEFORE the general clean, while the paths are still as stored.
+async function withOurPictures(html: string, a: Article): Promise<string> {
+  const keys = new Set(a.bodyImageKeys ?? [])
+  let out = html
+  for (const im of a.bodyImages ?? []) {
+    const key = `news-photos/${im.file}`
+    const url = keys.has(key)
+      ? await getSignedImageUrl(key, 3600).catch(() => null)
+      : null
+    const fallback = /^https?:\/\//i.test(im.path) ? im.path : SITE + im.path
+    out = out.replace(new RegExp(`src="${escapeRe(im.path)}"`, "g"), `src="${url ?? fallback}"`)
+  }
+  return out
+}
+
+// A fallback for articles loaded before the page text was collected: the feed's flattened text,
+// with its runs of spaces (where the paragraphs were) turned back into paragraphs and bare
+// addresses made into links. The feed's text is already HTML-escaped (Game &amp; Watch).
+function paragraphs(text: string): string {
+  return text
+    .split(/\n{2,}|\s{3,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => `<p>${p.replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" target="_blank" rel="noreferrer">$1</a>`)}</p>`)
+    .join("\n")
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ alias: string }> }) {
@@ -42,8 +74,13 @@ export default async function ArticlePage({ params }: { params: Promise<{ alias:
   const a = await loadArticle(decodeURIComponent(alias))
   if (!a) notFound()
 
-  const photo = await articlePicture(a)
-  const body = cleanHtml(a.fullText || a.introText || "")
+  const body = a.bodyHtml
+    ? cleanHtml(await withOurPictures(a.bodyHtml, a))
+    : paragraphs(a.fullText || a.introText || "")
+  // The article's own picture is in the body when the page was collected; the cover only stands in when it isn't.
+  const bodyHasPicture = /<img\b/i.test(body)
+  const cover = bodyHasPicture ? null : await articlePicture(a)
+
   // Three more stories — from the same category when there is one.
   const sameCategory = a.category ? Prisma.sql`AND a."category" = ${a.category}` : Prisma.empty
   const moreRows = await prisma.$queryRaw<Article[]>`SELECT ${COLS} FROM "SiteNewsArticle" a WHERE a."id" <> ${a.id} ${sameCategory} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 3`
@@ -71,9 +108,9 @@ export default async function ArticlePage({ params }: { params: Promise<{ alias:
       <article className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <h1 className="text-3xl sm:text-4xl font-black text-[#32348A] leading-tight mb-5">{a.title}</h1>
 
-        {photo && (
+        {cover && (
           <div className="bg-white border border-gray-200 p-3 mb-8">
-            <img src={photo} alt="" className="w-full max-h-[560px] object-contain bg-gray-100" />
+            <img src={cover} alt="" className="w-full max-h-[560px] object-contain bg-gray-100" />
           </div>
         )}
 

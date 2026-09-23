@@ -12,6 +12,12 @@ export type Article = {
   id: number; alias: string; title: string; category: string | null; tags: string[]
   featured: boolean; publishedAt: Date | null; introText: string | null; fullText: string | null
   imagePath: string | null; imageKey: string | null
+  /** The article page's own HTML (cleaned by the collector) — null for loads made before it was collected. */
+  bodyHtml?: string | null
+  /** The pictures inside the article: the site path as it appears in bodyHtml, and the collector's file name. */
+  bodyImages?: { path: string; file: string }[] | null
+  /** Our R2 copies of those (news-photos/<file>), registered by the picture upload. */
+  bodyImageKeys?: string[] | null
 }
 
 /** Our R2 copy when the Hub has one (signed for an hour), else the website's own file — a
@@ -22,8 +28,8 @@ export async function articlePicture(a: { imageKey: string | null; imagePath: st
 }
 
 /** The first line or two of the article as plain text, without repeating the headline. */
-export function teaser(a: { introText: string | null; fullText: string | null; title: string }, max = 150): string {
-  const t = htmlToText(a.introText || a.fullText || "").replace(/\s+/g, " ").trim()
+export function teaser(a: { introText: string | null; fullText: string | null; title: string; bodyHtml?: string | null }, max = 150): string {
+  const t = htmlToText(a.bodyHtml || a.introText || a.fullText || "").replace(/\s+/g, " ").trim()
   const head = a.title.replace(/\s+/g, " ").trim()
   const body = head && t.toLowerCase().startsWith(head.toLowerCase()) ? t.slice(head.length).replace(/^[\s:–—-]+/, "") : t
   if (body.length <= max) return body

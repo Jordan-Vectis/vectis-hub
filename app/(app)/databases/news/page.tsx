@@ -74,9 +74,19 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
     cats = cs.map(c => ({ category: c.category, n: Number(c.n) }))
     years = ys.map(x => Number(x.y)).filter(Number.isFinite)
     if (isAdmin) {
-      // Which pictures the upload step still needs — the file name the collector gave each one.
-      const m = await prisma.$queryRaw<{ id: number; imagePath: string }[]>`SELECT a."id", a."imagePath" FROM "SiteNewsArticle" a WHERE a."imagePath" IS NOT NULL AND a."imageKey" IS NULL ORDER BY a."id"`
-      missing = m.map(x => ({ id: x.id, file: `${x.id}${(x.imagePath.split("?")[0].match(/\.[a-z0-9]+$/i)?.[0] ?? ".jpg").toLowerCase()}` }))
+      // Which pictures the upload step still needs — by the file name the collector gave each one:
+      // the cover ("<id>.<ext>") and the pictures inside the article ("<id>-<n>.<ext>").
+      const ext = (p: string) => (p.split("?")[0].match(/\.[a-z0-9]+$/i)?.[0] ?? ".jpg").toLowerCase()
+      const m = await prisma.$queryRaw<{ id: number; imagePath: string | null; imageKey: string | null; bodyImages: { path: string; file: string }[] | null; bodyImageKeys: string[] }[]>`
+        SELECT a."id", a."imagePath", a."imageKey", a."bodyImages", a."bodyImageKeys" FROM "SiteNewsArticle" a
+        WHERE (a."imagePath" IS NOT NULL AND a."imageKey" IS NULL)
+           OR (a."bodyImages" IS NOT NULL AND jsonb_array_length(a."bodyImages") > cardinality(a."bodyImageKeys"))
+        ORDER BY a."id"`
+      for (const x of m) {
+        if (x.imagePath && !x.imageKey) missing.push({ id: x.id, file: `${x.id}${ext(x.imagePath)}` })
+        const keys = new Set(x.bodyImageKeys ?? [])
+        for (const im of x.bodyImages ?? []) if (im?.file && !keys.has(`news-photos/${im.file}`)) missing.push({ id: x.id, file: im.file })
+      }
     }
   } catch (e: any) {
     const msg = String(e?.message ?? "")

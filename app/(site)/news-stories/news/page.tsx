@@ -30,7 +30,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
     if (q) conds.push(Prisma.sql`(a."title" ILIKE ${"%" + q + "%"} OR a."fullText" ILIKE ${"%" + q + "%"})`)
     if (cat) conds.push(Prisma.sql`a."category" = ${cat}`)
     const where = Prisma.join(conds, " AND ")
-    const cols = Prisma.sql`a."id", a."alias", a."title", a."category", a."tags", a."featured", a."publishedAt", a."introText", a."fullText", a."imagePath", a."imageKey"`
+    const cols = Prisma.sql`a."id", a."alias", a."title", a."category", a."tags", a."featured", a."publishedAt", a."introText", a."fullText", a."imagePath", a."imageKey", a."bodyHtml"`
     const [r, t, cs, f] = await Promise.all([
       prisma.$queryRaw<Article[]>`SELECT ${cols} FROM "SiteNewsArticle" a WHERE ${where} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT ${PAGE} OFFSET ${(currentPage - 1) * PAGE}`,
       prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM "SiteNewsArticle" a WHERE ${where}`,

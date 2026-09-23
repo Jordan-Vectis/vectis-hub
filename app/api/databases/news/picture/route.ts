@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { objectExistsInR2 } from "@/lib/r2"
 
 // POST /api/databases/news/picture  { id, key }
-// Registers an article's cover picture once the browser's presigned PUT has landed in R2 (the key
-// comes from /api/databases/news/picture-url). Idempotent: registering the same key twice is fine,
-// and a retry never re-uploads.
-const KEY = /^news-photos\/(\d+)\.(jpg|png|webp|gif)$/
+// Registers one of an article's pictures once the browser's presigned PUT has landed in R2 (the
+// key comes from /api/databases/news/picture-url): the cover ("news-photos/<id>.<ext>") goes on
+// imageKey, a picture from inside the article ("news-photos/<id>-<n>.<ext>") joins bodyImageKeys.
+// Idempotent: registering the same key twice is fine, and a retry never re-uploads.
+const KEY = /^news-photos\/(\d+)(-\d+)?\.(jpe?g|png|webp|gif)$/
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,7 +25,12 @@ export async function POST(req: NextRequest) {
     // ⚠ Only a definite "not there" means the upload was lost; R2 is strongly consistent, so no waiting.
     if (!(await objectExistsInR2(key))) return NextResponse.json({ error: "The picture didn't land in storage — try that one again" }, { status: 404 })
 
-    await prisma.siteNewsArticle.update({ where: { id: articleId }, data: { imageKey: key, imageAt: new Date() }, select: { id: true } })
+    if (m[2]) {
+      // Inside the article: append once, never twice.
+      await prisma.$executeRaw`UPDATE "SiteNewsArticle" SET "bodyImageKeys" = array_append("bodyImageKeys", ${key}) WHERE "id" = ${articleId} AND NOT (${key} = ANY("bodyImageKeys"))`
+    } else {
+      await prisma.siteNewsArticle.update({ where: { id: articleId }, data: { imageKey: key, imageAt: new Date() }, select: { id: true } })
+    }
     return NextResponse.json({ ok: true, id: articleId, key })
   } catch (e: any) {
     console.error("databases/news/picture error:", e)

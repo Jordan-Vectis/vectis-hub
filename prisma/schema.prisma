@@ -3283,6 +3283,9 @@ model SiteNewsArticle {
   imageAlt    String?
   imageKey    String?                       // our copy in R2, once uploaded
   imageAt     DateTime?
+  bodyHtml      String?                     // the article PAGE's own HTML, cleaned — the feed's text is flattened (2026-09-23)
+  bodyImages    Json?                       // [{ path, file }] the pictures inside the article: site path + the collector's file name
+  bodyImageKeys String[]  @default([])      // our R2 copies of those (news-photos/<file>), registered by the picture upload
   pulledAt    DateTime  @default(now())
 
   @@index([publishedAt])

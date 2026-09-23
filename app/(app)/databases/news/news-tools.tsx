@@ -16,9 +16,10 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // step 2 — the JSON file
-  const [file, setFile] = useState<File | null>(null)
+  // step 2 — the JSON parts (vectis-news-1.json, -2.json, …; an older run's single vectis-news.json loads too)
+  const [files, setFiles] = useState<File[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingAt, setLoadingAt] = useState(0)
   const [loaded, setLoaded] = useState<string | null>(null)
   const [problems, setProblems] = useState<string[]>([])
 
@@ -51,31 +52,44 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
   }
 
   async function load() {
-    if (!file || loading) return
-    setLoading(true); setError(null); setLoaded(null); setProblems([])
+    if (!files.length || loading) return
+    setLoading(true); setError(null); setLoaded(null); setProblems([]); setLoadingAt(0)
+    let written = 0, withBodyNote = "", last: any = null
+    const found: string[] = []
     try {
-      const fd = new FormData()
-      fd.append("file", file)
-      const res = await fetch("/api/databases/news/collect", { method: "POST", body: fd })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j?.error ?? `${file.name} could not be loaded (${res.status})`)
-      setLoaded(j.message ?? "Loaded.")
-      if (Array.isArray(j.problems)) setProblems(j.problems)
+      // One request per part — each stays well under the 20 MB request limit.
+      for (let i = 0; i < files.length; i++) {
+        setLoadingAt(i + 1)
+        const fd = new FormData()
+        fd.append("file", files[i])
+        const res = await fetch("/api/databases/news/collect", { method: "POST", body: fd })
+        const j = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(j?.error ?? `${files[i].name} could not be loaded (${res.status})`)
+        written += j.written ?? 0
+        last = j
+        if (Array.isArray(j.problems)) found.push(...j.problems)
+      }
+      setProblems(found)
+      withBodyNote = last?.message ?? ""
+      setLoaded(files.length === 1
+        ? withBodyNote || "Loaded."
+        : `Loaded ${written.toLocaleString()} article${written === 1 ? "" : "s"} from ${files.length} files; the Hub now holds ${Number(last?.held ?? 0).toLocaleString()}. ${last?.toUpload ? `${Number(last.toUpload).toLocaleString()} picture${last.toUpload === 1 ? "" : "s"} still to upload — choose the collector's pictures below.` : "Every picture is already in the Hub."}`)
       router.refresh()
     } catch (e: any) {
-      setError(e?.message ?? "Could not load the file")
+      setError(e?.message ?? "Could not load the files")
     } finally {
       setLoading(false)
     }
   }
 
   // Which files in the chosen folder are pictures the Hub still needs — matched on the file name
-  // the collector gave them (article id + extension).
+  // the collector gave them: "<article id>.<ext>" for the cover, "<article id>-<n>.<ext>" for the
+  // pictures inside the article.
   const wanted = new Map(missing.map(m => [m.file.toLowerCase(), m.id]))
   const byName = new Map<string, File>()
   for (const f of folder) {
     const name = (f.name || "").toLowerCase()
-    if (/^\d+\.(jpe?g|png|webp|gif)$/.test(name)) byName.set(name, f)
+    if (/^\d+(-\d+)?\.(jpe?g|png|webp|gif)$/.test(name)) byName.set(name, f)
   }
   const toUpload = missing.filter(m => byName.has(m.file.toLowerCase()))
   const spare = [...byName.keys()].filter(n => !wanted.has(n)).length
@@ -96,7 +110,7 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
         const ext = m.file.split(".").pop()!.toLowerCase()
         const contentType = f.type || TYPES[ext] || "image/jpeg"
         try {
-          const r1 = await fetch("/api/databases/news/picture-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, contentType, size: f.size }) })
+          const r1 = await fetch("/api/databases/news/picture-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, file: m.file, contentType, size: f.size }) })
           const j1 = await r1.json().catch(() => ({}))
           if (!r1.ok) throw new Error(j1?.error ?? `could not get an upload address (${r1.status})`)
           const put = await fetch(j1.url, { method: "PUT", headers: { "Content-Type": j1.contentType ?? contentType }, body: f })
@@ -157,10 +171,10 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
           </div>
 
           <div className="space-y-2">
-            <div className={step}>2 · Load the articles — vectis-news.json</div>
+            <div className={step}>2 · Load the articles — every <span className="font-mono normal-case">vectis-news-N.json</span> file, all at once</div>
             <div className="flex flex-wrap items-center gap-2">
-              <input type="file" accept=".json,application/json" onChange={e => setFile(e.target.files?.[0] ?? null)} className="file-input" />
-              <button type="button" onClick={load} disabled={!file || loading} className={`${btn} bg-violet-600 hover:bg-violet-500 text-white`}>{loading ? "Loading…" : "Load the articles"}</button>
+              <input type="file" multiple accept=".json,application/json" onChange={e => setFiles(Array.from(e.target.files ?? []))} className="file-input" />
+              <button type="button" onClick={load} disabled={!files.length || loading} className={`${btn} bg-violet-600 hover:bg-violet-500 text-white`}>{loading ? `Loading file ${loadingAt} of ${files.length}…` : `Load ${files.length || ""} file${files.length === 1 ? "" : "s"}`}</button>
             </div>
             {loaded && <p className={good}>{loaded}</p>}
             {problems.length > 0 && <ul className="list-disc pl-5 text-xs text-amber-700 dark:text-amber-300">{problems.map((p, i) => <li key={i}>{p}</li>)}</ul>}
