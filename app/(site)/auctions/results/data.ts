@@ -173,7 +173,7 @@ export async function getResultLots(sale: ResultSale, opts: { search?: string; p
       : lotNo != null ? Prisma.sql`${base} AND (${LOT_NO} = ${lotNo} OR w."description" ILIKE ${like} OR b."description" ILIKE ${like})`
       : Prisma.sql`${base} AND (w."description" ILIKE ${like} OR b."description" ILIKE ${like})`
     const [rows, count] = await Promise.all([
-      prisma.$queryRaw<LotRow[]>`SELECT w."id", ${LOT_NO} AS "lot", w."description" AS "shortDesc", b."description" AS "longDesc", w."lowEstimate" AS "estimateLow", w."highEstimate" AS "estimateHigh", NULLIF(w."hammerPrice", 0) AS "hammerPrice", b."siteHammerPrice", b."photoKey", b."photoXlKey", b."sitePhoto" ${BC_FROM} WHERE ${where} ORDER BY ${LOT_NO} ASC NULLS LAST, w."uniqueId" ASC LIMIT ${LOTS_PAGE} OFFSET ${off}`,
+      prisma.$queryRaw<LotRow[]>`SELECT w."uniqueId" AS "id", ${LOT_NO} AS "lot", w."description" AS "shortDesc", b."description" AS "longDesc", w."lowEstimate" AS "estimateLow", w."highEstimate" AS "estimateHigh", NULLIF(w."hammerPrice", 0) AS "hammerPrice", b."siteHammerPrice", b."photoKey", b."photoXlKey", b."sitePhoto" ${BC_FROM} WHERE ${where} ORDER BY ${LOT_NO} ASC NULLS LAST, w."uniqueId" ASC LIMIT ${LOTS_PAGE} OFFSET ${off}`,
       prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n ${BC_FROM} WHERE ${where}`,
     ])
     return finish(rows, count, "bc")
@@ -213,6 +213,71 @@ export async function getResultSummary(sale: ResultSale): Promise<ResultSummary 
     const a = r[0]
     if (!a) return null
     return { lots: Number(a.n), sold: Number(a.sold), hammerTotal: a.total ?? 0 }
+  } catch {
+    return null
+  }
+}
+
+// ── One lot ─────────────────────────────────────────────────────────────────────────────────────
+
+export type LotNeighbour = { id: string; lot: number | null }
+
+export type ResultLotDetail = ResultLot & {
+  category: string | null; subcategory: string | null
+  /** The lots either side in lot order, for the previous / next buttons. */
+  prev: LotNeighbour | null
+  next: LotNeighbour | null
+}
+
+type DetailRow = LotRow & { category: string | null; subcategory: string | null }
+
+/**
+ * A single lot of a sale by the id the results grid links with — the ArchiveLot row id for an
+ * old-system sale, the BC unique id (R008728-194) for a Business Central one — with the lots either
+ * side of it in the same lot order the grid uses. Null when the lot isn't in that sale.
+ */
+export async function getResultLot(sale: ResultSale, id: string): Promise<ResultLotDetail | null> {
+  const build = async (row: DetailRow, prev: LotNeighbour[], next: LotNeighbour[]): Promise<ResultLotDetail> => {
+    const [lot] = await finishLots([row])
+    return { ...lot, category: row.category, subcategory: row.subcategory, prev: prev[0] ?? null, next: next[0] ?? null }
+  }
+
+  if (sale.auctionId != null) {
+    const rows = await prisma.$queryRaw<DetailRow[]>`SELECT "id", "lot", NULL::text AS "shortDesc", "description" AS "longDesc", "estimateLow", "estimateHigh", "hammerPrice", "siteHammerPrice", "photoKey", "photoXlKey", "sitePhoto", NULL::text AS "category", NULL::text AS "subcategory" FROM "ArchiveLot" WHERE "id" = ${id} AND "auctionId" = ${sale.auctionId} LIMIT 1`
+    const row = rows[0]
+    if (!row) return null
+    const [prev, next] = await Promise.all([
+      prisma.$queryRaw<LotNeighbour[]>`SELECT "id", "lot" FROM "ArchiveLot" WHERE "auctionId" = ${sale.auctionId} AND ("lot" < ${row.lot} OR ("lot" = ${row.lot} AND "id" < ${row.id})) ORDER BY "lot" DESC, "id" DESC LIMIT 1`,
+      prisma.$queryRaw<LotNeighbour[]>`SELECT "id", "lot" FROM "ArchiveLot" WHERE "auctionId" = ${sale.auctionId} AND ("lot" > ${row.lot} OR ("lot" = ${row.lot} AND "id" > ${row.id})) ORDER BY "lot" ASC, "id" ASC LIMIT 1`,
+    ])
+    return build(row, prev, next)
+  }
+
+  const key = id.toUpperCase()
+  const code = await resolveBcCode(sale)
+  if (code) {
+    const rows = await prisma.$queryRaw<DetailRow[]>`SELECT w."uniqueId" AS "id", ${LOT_NO} AS "lot", w."description" AS "shortDesc", b."description" AS "longDesc", w."lowEstimate" AS "estimateLow", w."highEstimate" AS "estimateHigh", NULLIF(w."hammerPrice", 0) AS "hammerPrice", b."siteHammerPrice", b."photoKey", b."photoXlKey", b."sitePhoto", w."category", w."subcategory" ${BC_FROM} WHERE w."auctionCode" = ${code} AND upper(w."uniqueId") = ${key} LIMIT 1`
+    const row = rows[0]
+    if (!row) return null
+    const numbered = Prisma.sql`w."auctionCode" = ${code} AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL`
+    const [prev, next] = row.lot == null ? [[], []] : await Promise.all([
+      prisma.$queryRaw<LotNeighbour[]>`SELECT w."uniqueId" AS "id", ${LOT_NO} AS "lot" FROM "WarehouseItem" w WHERE ${numbered} AND (${LOT_NO} < ${row.lot} OR (${LOT_NO} = ${row.lot} AND w."uniqueId" < ${row.id})) ORDER BY ${LOT_NO} DESC, w."uniqueId" DESC LIMIT 1`,
+      prisma.$queryRaw<LotNeighbour[]>`SELECT w."uniqueId" AS "id", ${LOT_NO} AS "lot" FROM "WarehouseItem" w WHERE ${numbered} AND (${LOT_NO} > ${row.lot} OR (${LOT_NO} = ${row.lot} AND w."uniqueId" > ${row.id})) ORDER BY ${LOT_NO} ASC, w."uniqueId" ASC LIMIT 1`,
+    ])
+    return build(row, prev, next)
+  }
+
+  // No code known for this sale: the website collection's own rows for it.
+  try {
+    const from = Prisma.sql`FROM "BcLotWeb" b LEFT JOIN "WarehouseItem" w ON upper(w."uniqueId") = b."uniqueId"`
+    const rows = await prisma.$queryRaw<DetailRow[]>`SELECT b."uniqueId" AS "id", b."lotNumber" AS "lot", w."description" AS "shortDesc", b."description" AS "longDesc", w."lowEstimate" AS "estimateLow", w."highEstimate" AS "estimateHigh", NULLIF(w."hammerPrice", 0) AS "hammerPrice", b."siteHammerPrice", b."photoKey", b."photoXlKey", b."sitePhoto", w."category", w."subcategory" ${from} WHERE b."siteSaleId" = ${sale.siteId} AND b."uniqueId" = ${key} LIMIT 1`
+    const row = rows[0]
+    if (!row) return null
+    const [prev, next] = row.lot == null ? [[], []] : await Promise.all([
+      prisma.$queryRaw<LotNeighbour[]>`SELECT b."uniqueId" AS "id", b."lotNumber" AS "lot" FROM "BcLotWeb" b WHERE b."siteSaleId" = ${sale.siteId} AND (b."lotNumber" < ${row.lot} OR (b."lotNumber" = ${row.lot} AND b."uniqueId" < ${row.id})) ORDER BY b."lotNumber" DESC, b."uniqueId" DESC LIMIT 1`,
+      prisma.$queryRaw<LotNeighbour[]>`SELECT b."uniqueId" AS "id", b."lotNumber" AS "lot" FROM "BcLotWeb" b WHERE b."siteSaleId" = ${sale.siteId} AND (b."lotNumber" > ${row.lot} OR (b."lotNumber" = ${row.lot} AND b."uniqueId" > ${row.id})) ORDER BY b."lotNumber" ASC, b."uniqueId" ASC LIMIT 1`,
+    ])
+    return build(row, prev, next)
   } catch {
     return null
   }

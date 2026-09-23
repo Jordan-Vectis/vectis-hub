@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { format } from "date-fns"
-import ZoomPhoto from "@/components/zoom-photo"
 import { getResultSale, getResultLots, getResultSummary, type ResultLot } from "../data"
 
 // One past sale's results on the test website: its lots in lot order with photo, description,
@@ -152,7 +151,7 @@ export default async function SaleResultsPage({
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-              {lots.rows.map(lot => <ResultLotCard key={lot.id} lot={lot} />)}
+              {lots.rows.map(lot => <ResultLotCard key={lot.id} lot={lot} saleHref={base} />)}
             </div>
 
             {lots.pages > 1 && (
@@ -171,14 +170,18 @@ export default async function SaleResultsPage({
   )
 }
 
-function ResultLotCard({ lot }: { lot: ResultLot }) {
+// The whole card is one link to the lot's page (the zoom viewer lives there, not on the grid — a
+// zoom button inside a link would be a button inside an anchor, and the two clicks would fight).
+function ResultLotCard({ lot, saleHref }: { lot: ResultLot; saleHref: string }) {
   const estimate = estimateText(lot.estimateLow, lot.estimateHigh)
   return (
-    <div className="bg-white border border-gray-200 shadow-sm flex flex-col">
-      {/* Photo — taps open the Hub's zoom viewer with the full-size copy */}
+    <Link
+      href={`${saleHref}/lot/${encodeURIComponent(lot.id)}`}
+      className="group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col"
+    >
       <div className="relative bg-gray-100 aspect-square overflow-hidden">
         {lot.photo ? (
-          <ZoomPhoto thumb={lot.photo} full={lot.photoFull} className="w-full aspect-square object-cover bg-gray-100" />
+          <img src={lot.photo} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-gray-200">
             <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,7 +216,7 @@ function ResultLotCard({ lot }: { lot: ResultLot }) {
           )}
         </div>
       </div>
-    </div>
+    </Link>
   )
 }
 
