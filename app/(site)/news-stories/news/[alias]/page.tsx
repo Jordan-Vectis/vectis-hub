@@ -45,9 +45,11 @@ async function withOurPictures(html: string, a: Article): Promise<string> {
     const url = keys.has(key)
       ? await getSignedImageUrl(key, 3600).catch(() => null)
       : null
-    if (!url && im.path.startsWith("inline/")) {
-      // A picture that was pasted into the article as data (older stories) exists only as the
-      // collector's file — nothing on the website to fall back to, so it is left out until uploaded.
+    if (!url && (im.path.startsWith("inline/") || /^https?:\/\//i.test(im.path))) {
+      // Nothing to fall back to: a picture pasted into an older story as data exists only as the
+      // collector's file, and one on another host is on the old site's dead image stores (measured
+      // 2026-09-23: 220 on rackcdn.com answer 404, 124 on the old CloudFront store answer 202 and
+      // nothing) — so it is left out rather than shown broken, until a copy is uploaded.
       out = out.replace(new RegExp(`<img src="${escapeRe(im.path)}"[^>]*>`, "g"), "")
       continue
     }

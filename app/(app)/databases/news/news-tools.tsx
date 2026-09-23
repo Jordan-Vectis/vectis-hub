@@ -104,8 +104,10 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
     let ok = 0
     const bad: string[] = []
     try {
-      for (const m of toUpload) {
-        if (stopRef.current) break
+      // Four at a time — the folder can run to thousands of files and gigabytes (2,878 files,
+      // 3.4 GB on the first run), and one at a time would take the best part of an hour.
+      const queue = [...toUpload]
+      const one = async (m: Missing) => {
         const f = byName.get(m.file.toLowerCase())!
         const ext = m.file.split(".").pop()!.toLowerCase()
         const contentType = f.type || TYPES[ext] || "image/jpeg"
@@ -125,6 +127,9 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
           setFailed([...bad])
         }
       }
+      await Promise.all(Array.from({ length: 4 }, async () => {
+        while (queue.length && !stopRef.current) await one(queue.shift()!)
+      }))
       setFinished(stopRef.current
         ? `Stopped — ${ok.toLocaleString()} picture${ok === 1 ? "" : "s"} uploaded and kept${bad.length ? `, ${bad.length} failed` : ""}. Press Upload again to carry on with the rest.`
         : `${ok.toLocaleString()} picture${ok === 1 ? "" : "s"} uploaded${bad.length ? `, ${bad.length} failed — listed below` : ""}.`)

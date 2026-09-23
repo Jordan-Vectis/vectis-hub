@@ -148,7 +148,9 @@ function builderBlock(html) {
   return null
 }
 
-const attr = (s, name) => { const r = s.match(new RegExp("\\b" + name + "=\"([^\"]*)\"", "i")); return r ? r[1] : null }
+// An attribute's value with its HTML entities undone (&amp; in an address is a real "&").
+const unescape = s => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#0*39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+const attr = (s, name) => { const r = s.match(new RegExp("\\b" + name + "=\"([^\"]*)\"", "i")); return r ? unescape(r[1]) : null }
 
 // A picture address on the site → its path form ("images/2026/09/22/lot-595.jpg"), or the address
 // untouched when it lives somewhere else.
