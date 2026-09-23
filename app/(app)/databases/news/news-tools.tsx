@@ -167,9 +167,11 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
           </div>
 
           <div className="space-y-2">
-            <div className={step}>3 · Upload the pictures — choose the collector&apos;s <span className="font-mono normal-case">pictures</span> folder</div>
+            <div className={step}>3 · Upload the pictures — open the collector&apos;s <span className="font-mono normal-case">pictures</span> folder, select them all (Ctrl+A) and press Open</div>
             <div className="flex flex-wrap items-center gap-2">
-              <input type="file" multiple accept="image/*" {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+              {/* A plain multi-file picker, not a folder picker: a folder picker greys the files out and
+                  expects the folder itself to be chosen, which reads as "the photos aren't there". */}
+              <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.gif,image/*"
                 onChange={e => { setFolder(Array.from(e.target.files ?? [])); setFinished(null); setFailed([]); setDone(0) }} className="file-input" />
               {!uploading
                 ? <button type="button" onClick={upload} disabled={toUpload.length === 0} className={`${btn} bg-violet-600 hover:bg-violet-500 text-white`}>{toUpload.length ? `Upload ${toUpload.length.toLocaleString()} picture${toUpload.length === 1 ? "" : "s"}` : "Nothing to upload"}</button>
