@@ -7,6 +7,8 @@ import AuctionCalendarSidebar from "./auction-calendar-sidebar"
 import { lotPhotoUrl } from "@/lib/photo-url"
 import { getCustomerSession } from "@/lib/customer-auth"
 import RegisterToBidButton from "./register-to-bid-button"
+import ResultsList from "./results-list"
+import { resultCalendarEntries } from "./results/data"
 
 export const metadata = {
   title: "Auction Calendar",
@@ -36,9 +38,9 @@ function isPast(auctionDate: Date | null, finished: boolean, complete: boolean):
 export default async function AuctionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; tab?: string; type?: string }>
+  searchParams: Promise<{ search?: string; tab?: string; type?: string; page?: string }>
 }) {
-  const { search, tab, type } = await searchParams
+  const { search, tab, type, page } = await searchParams
   const showPast = tab === "past"
 
   // Customer session + existing registrations
@@ -86,12 +88,16 @@ export default async function AuctionsPage({
     )
   }
 
-  // Calendar sidebar data
-  const auctionEntries = allPublished
-    .filter(a => a.auctionDate)
-    .map(a => ({ date: a.auctionDate!.toISOString(), code: a.code }))
+  // Calendar sidebar data — the Hub's published sales on Upcoming; on View Results every sale that
+  // has happened, from the Hub's sale database (see ./results/data.ts)
+  const auctionEntries = showPast
+    ? await resultCalendarEntries()
+    : allPublished
+        .filter(a => a.auctionDate)
+        .map(a => ({ date: a.auctionDate!.toISOString(), href: `/auctions/${a.code}` }))
 
-  const auctionTypes = [...new Set(
+  // The category list is the Hub's auction types — it means nothing for the archive
+  const auctionTypes = showPast ? [] : [...new Set(
     allPublished.map(a => TYPE_LABELS[a.auctionType] ?? a.auctionType)
   )]
 
@@ -198,7 +204,9 @@ export default async function AuctionsPage({
 
         {/* Auction list */}
         <div className="flex-1 min-w-0">
-          {displayed.length === 0 ? (
+          {showPast ? (
+            <ResultsList search={search} page={page} />
+          ) : displayed.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-gray-400 text-lg">
                 {showPast ? "No past auctions found." : "No upcoming auctions at the moment."}
