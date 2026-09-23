@@ -194,6 +194,18 @@ Jordan chose this from the review list: *"Nightly backup covers 42 of 151 tables
 - \`server.js\` log line reads the new answer; the ABC Database page no longer says it is left out of the backup.
 
 Related: [[reference_status_centre]] (the side finding about the backup is now FIXED), [[reference_lot_archive]], [[reference_data_map]].
+
+## 2026-09-23 — the first nightly did NOT land (cause not yet known)
+
+The morning after the 22 Sept merge the Status Centre showed **"No full backup has been saved for 32 hours — the newest was yesterday at 01:00 (old single-file style)"**: no folder, no manifest, 30 of 30 copies all old-style. ⚠ Cause NOT measured from here — production's Railway log and the page's "The backup failed: …" box are the evidence; Jordan was asked for either. Candidates: the run threw before writing anything (\`progress.error\` keeps the reason), or hung on a table (a page query or an R2 call with no deadline).
+
+What the check could NOT say was which — it only knew "no new copy". Fixed the same morning (staging \`a8150ea5\`):
+- **The check reads the job in its own process** (\`backupProgress()\`): still running → amber "Last night's backup is still running — started X, on table N of M (name), rows so far"; failed → red with \`run.error\`; a finished run with failed tables → named. Facts "Running now" / "Last run".
+- **Every page of rows runs under a 2-minute \`SET LOCAL statement_timeout\`** inside a Prisma interactive transaction (\`timedPage\`, \`{ maxWait: 30 s, timeout: 135 s }\` — ⚠ the interactive-transaction default timeout is 5 s), so a hung query fails ONE table and the manifest names it. **Pages shrink for big rows**: the next page is sized from the last page's bytes (\`PAGE_BYTES\` 24 MB, floor 200 rows) — a table of big JSON rows (a run's results) would otherwise make a 5,000-row page of hundreds of MB. OFFSET paging now advances by rows returned, not by the page size.
+- **Every R2 call in \`R2MultipartWriter\` carries \`abortSignal: AbortSignal.timeout(120 s)\`** — the SDK has no timeout of its own and one stalled socket would hold the night.
+- **One log line per table** (\`[db-backup] <Table>: rows, bytes, s\`) and a "starting" line, so the Railway log shows where a run got to.
+- **The nightly run is STARTED, not awaited** (\`/api/cron/db-backup\` → \`startBackup\` → 202). Node's fetch gives up after 300 s (the same trap the pipeline queue hit on 2026-09-18), so awaiting a multi-minute run made server.js log "fetch failed" every night whatever happened, and the handler carried on unseen. server.js now logs "started — watch for [db-backup] lines".
+⚠ When the cause is known, record it here and in the opening message; until then the light on the first successful morning is the proof.
 `,
   },
   {
@@ -5027,7 +5039,7 @@ Core sync rules (full detail on the reference card):
 ### Needs doing
 - **Run Migrations on production** — the Status Centre switch and the Sales tab both need it (the Hub light says "a database update is waiting").
 - Then: Status Centre → IT emails → Job Board → **Switch this check off**. Databases → Sales → **Get the pictures** (ten minutes on an office machine), load the file, press **Copy sale pictures**.
-- **Check the first every-table backup** the morning after: Admin → Database Backup (tables, rows, any failed) and the Status Centre's backup light.
+- **⚠ The first every-table backup did NOT land (23 Sept morning):** the Status Centre said "no full backup for 32 hours", nothing new in the bucket, and the check couldn't say whether the run was still going or had failed. Cause NOT yet known — the answer is on Admin → Database Backup ("The backup failed: …" box, or a live count) or in the Railway log's \`[cron/db-backup]\` / \`[db-backup]\` lines around 01:00. On staging (a8150ea5, NOT on main yet): the light now says running/failed with the reason, each page of rows times out after 2 min (fails one table, not the night), pages shrink for big rows, R2 calls have deadlines, one log line per table, and the nightly run is started rather than awaited (Node's fetch gives up after 300 s). Get the cause, then merge.
 - Sweep each open sale with the **✍ Looks hand-typed** filter and press Exclude all.
 - Still open from 18 Sept: F134 (BC wrong, Hub right — transfer the 45 lines in BC to R009415); bullets vs BC paperwork — decide the permanent fix; Vectis Jo: Model Railway — try it, then tell Claude the settled wording.
 

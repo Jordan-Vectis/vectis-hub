@@ -31,8 +31,9 @@ import type { Readable } from "node:stream"
 // ⚠ The old single-file `backup-<ts>.json` copies are still listed and still restorable (their
 //   table keys were camelCase plurals; legacyTableName() maps them onto the real table names).
 // ⚠ One job at a time, held on globalThis like the Status Centre engine; a manual run is
-//   started and polled (Railway's proxy would time out a request that took the whole run), the
-//   nightly one is awaited by the cron route (localhost, no proxy).
+//   started and polled (Railway's proxy would time out a request that took the whole run); the
+//   nightly one is started the same way (2026-09-23 — Node's fetch gives up after 300 s, so an
+//   awaited run logged "fetch failed" every night and its outcome was never written down).
 
 // ── Where and how much ─────────────────────────────────────────────────────────
 
