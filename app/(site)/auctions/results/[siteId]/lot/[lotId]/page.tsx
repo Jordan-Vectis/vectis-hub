@@ -132,14 +132,6 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
             )}
           </div>
 
-          {/* Description */}
-          <div className="bg-white border border-gray-200 p-5">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606] mb-3">Description</h2>
-            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
-              {lot.description || <span className="text-gray-400">No description is held for this lot.</span>}
-            </p>
-          </div>
-
           {/* Key information */}
           <div className="bg-white border border-gray-200 p-5">
             <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606] mb-3">Key information</h2>
@@ -160,7 +152,104 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
           </div>
         </div>
       </div>
+
+      {/* ── Below the lot: the full description and the small print, and a nudge to sell ── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-14 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="lg:col-span-7 flex flex-col gap-4">
+          <section className="bg-white border border-gray-200 p-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606]">Lot {lot.lot ?? "—"}</p>
+            <h2 className="text-xl font-black text-[#32348A] mb-4">Full lot description</h2>
+            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+              {lot.description || <span className="text-gray-400">No description is held for this lot.</span>}
+            </p>
+            <div className="mt-6 pt-5 border-t border-gray-200 text-xs text-gray-500 leading-relaxed space-y-3">
+              <p>{DISCLAIMER}</p>
+              <p className="font-bold text-gray-600">By bidding on any lot, you agree to any and all of these terms.</p>
+            </div>
+          </section>
+
+          <Accordion kicker="Auction fees" title="Fees & VAT">
+            <p>Buyer&apos;s Premium for each lot will be 22.5% plus VAT (27%).</p>
+            <p>Payment for lots can be made by credit or debit card (we accept all major cards), by bank transfer, or by cheque provided we have a bank guarantee or alternative arrangements have been agreed.</p>
+            <h4 className="text-base font-black text-[#32348A] uppercase tracking-wide pt-2">Buyer&apos;s premium for live online bidding via the-saleroom</h4>
+            <p className="font-bold text-gray-800">Purchasers will be charged a total premium of 32.94% on the hammer price inclusive of VAT. This will include a charge made by the-saleroom which will be shown separately on your invoice.</p>
+            <p>There is no additional charge for bidding via the Vectis Live website.</p>
+            <p>If you notice an error with our catalogue descriptions please don&apos;t hesitate to contact us. In the unlikely event the catalogue description does not match the image provided, please contact us. If you notice during or after an auction, please note that we will always sell a lot based on the description rather than the image.</p>
+            <p>
+              If you have any queries please contact us on{" "}
+              <a href="tel:+441642750616" className="text-[#32348A] font-semibold hover:underline">+44 (0) 1642 750616</a> or email{" "}
+              <a href="mailto:admin@vectis.co.uk" className="text-[#32348A] font-semibold hover:underline">admin@vectis.co.uk</a>.
+            </p>
+          </Accordion>
+
+          <Accordion kicker="Post auction" title="Shipping and postage">
+            <p>UK postage starts from £14.95 for small items and £24.95+ for larger lots, with surcharges for additional items.</p>
+            <p>International shipping varies by Parcel Force destination zone (zones 6–9 for Europe; quotes provided for the rest of the world).</p>
+            <p>Average shipping time is 14 days, though peak periods may extend to 28 days.</p>
+            <p>
+              <Link href="/faq" className="text-[#32348A] font-semibold hover:underline">See the FAQs for the full post and packing details →</Link>
+            </p>
+          </Accordion>
+
+          <Link
+            href="/faq"
+            className="self-start border-2 border-[#32348A] text-[#32348A] hover:bg-[#32348A] hover:text-white text-xs font-black uppercase tracking-widest px-6 py-3 transition-colors"
+          >
+            View FAQs
+          </Link>
+        </div>
+
+        <aside className="lg:col-span-5">
+          <div className="bg-white border border-gray-200 overflow-hidden">
+            {sale.photo ? (
+              <img src={sale.photo} alt="" className="w-full h-56 object-cover" />
+            ) : (
+              <div className="h-40 bg-gradient-to-br from-[#2AB4A6] to-[#32348A]" />
+            )}
+            <div className="bg-[#32348A] text-white p-6">
+              <h3 className="text-2xl font-black mb-2">Got one to sell?</h3>
+              <p className="text-sm text-gray-200 leading-relaxed mb-5">
+                Contact our Collections Team, who will guide you through the process. We sell over 98% of all items consigned to our auctions.
+              </p>
+              <Link
+                href="/sell-with-us"
+                className="inline-flex items-center gap-2 bg-white text-[#32348A] text-xs font-black uppercase tracking-widest px-5 py-3 hover:bg-[#2AB4A6] hover:text-white transition-colors"
+              >
+                Get started <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
+  )
+}
+
+// Vectis's own wording, as it reads under every lot on vectis.co.uk.
+const DISCLAIMER =
+  "We have endeavoured to describe all toys and collectables to the best of our ability – however THIS IS NOT A WARRANTY. " +
+  "All toys and collectables are SOLD AS IS, all lots are accompanied by photographic images to enable you to determine the " +
+  "condition of the lot. Refunds cannot be provided for lots whereby the buyer has failed to notice defects, faults or issues " +
+  "which can be seen in the images or covered by the auction house grading system. Omission of information in the description " +
+  "in no way indicates the item is without flaws, missing parts/items, damage, and age wear. All items are untested unless " +
+  "otherwise stated. Specific condition questions are welcomed at least 24 hours prior to the start of the auction. If you " +
+  "cannot ascertain the information to bid with certainty, please do not bid."
+
+// A fold-out section, no JavaScript: a native <details> styled like the rest of the page.
+function Accordion({ kicker, title, children }: { kicker: string; title: string; children: React.ReactNode }) {
+  return (
+    <details className="group bg-white border border-gray-200">
+      <summary className="list-none cursor-pointer select-none px-6 py-4 flex items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606]">{kicker}</p>
+          <h3 className="text-lg font-black text-[#32348A]">{title}</h3>
+        </div>
+        <svg className="w-5 h-5 shrink-0 text-[#32348A] transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+        </svg>
+      </summary>
+      <div className="px-6 pb-6 text-sm text-gray-700 leading-relaxed space-y-3">{children}</div>
+    </details>
   )
 }
 

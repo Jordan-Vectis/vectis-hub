@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"403930fe83936a0b1458b277da7aae2b1d695fdc","author":"Jordan Orange","date":"2026-09-23T11:18:30+01:00","subject":"Test website: a lot page behind every results card"},
   {"sha":"3132726120a653a4eb4daeb3ad00e08f8e0f955b","author":"Jordan Orange","date":"2026-09-23T10:49:37+01:00","subject":"Test website: View Results reads the Hub's sale databases"},
   {"sha":"594aa6cbe1a3bd96de2b0dfa2f72ae1fdfb7fd0e","author":"Jordan Orange","date":"2026-09-23T10:29:21+01:00","subject":"Remove the BidJS integration from the test website"},
   {"sha":"47848dc6550bdffe883c4d114958129886185652","author":"Jordan Orange","date":"2026-09-23T09:49:44+01:00","subject":"Memory: the first every-table backup did not land, and what changed"},
