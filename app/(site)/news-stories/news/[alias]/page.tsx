@@ -45,6 +45,12 @@ async function withOurPictures(html: string, a: Article): Promise<string> {
     const url = keys.has(key)
       ? await getSignedImageUrl(key, 3600).catch(() => null)
       : null
+    if (!url && im.path.startsWith("inline/")) {
+      // A picture that was pasted into the article as data (older stories) exists only as the
+      // collector's file — nothing on the website to fall back to, so it is left out until uploaded.
+      out = out.replace(new RegExp(`<img src="${escapeRe(im.path)}"[^>]*>`, "g"), "")
+      continue
+    }
     const fallback = /^https?:\/\//i.test(im.path) ? im.path : SITE + im.path
     out = out.replace(new RegExp(`src="${escapeRe(im.path)}"`, "g"), `src="${url ?? fallback}"`)
   }

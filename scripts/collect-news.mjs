@@ -129,17 +129,21 @@ function normalise(a, categories) {
 
 // ── The article's page ───────────────────────────────────────────────────────
 
-// The SP Page Builder block that IS the article — from <div id="sp-page-builder"> to its own
-// closing tag, found by counting divs.
+// The block that IS the article, from its opening div to its own closing tag, found by counting
+// divs. Newer articles (2024 on) are an SP Page Builder page; the older ones (2017–2023) use the
+// classic Joomla article body — measured 2026-09-23: 591 of 1,337 pages had the builder block,
+// the other 746 none, and every one of those had com-content-article__body instead.
 function builderBlock(html) {
-  const start = html.indexOf('<div id="sp-page-builder"')
-  if (start < 0) return null
-  const re = /<div\b|<\/div>/g
-  re.lastIndex = start
-  let depth = 0, m
-  while ((m = re.exec(html))) {
-    depth += m[0] === "</div>" ? -1 : 1
-    if (depth === 0) return html.slice(start, m.index + 6)
+  for (const marker of ['<div id="sp-page-builder"', '<div class="com-content-article__body"']) {
+    const start = html.indexOf(marker)
+    if (start < 0) continue
+    const re = /<div\b|<\/div>/g
+    re.lastIndex = start
+    let depth = 0, m
+    while ((m = re.exec(html))) {
+      depth += m[0] === "</div>" ? -1 : 1
+      if (depth === 0) return html.slice(start, m.index + 6)
+    }
   }
   return null
 }
@@ -188,15 +192,30 @@ async function articlePage(a) {
   const html = await res.text()
   const block = builderBlock(html)
   if (!block) return { bodyHtml: null, bodyImages: [] }
-  const bodyHtml = cleanBlock(block)
+  let bodyHtml = cleanBlock(block)
   const seen = new Set()
   const bodyImages = []
+  let n = 0
+  // Pictures pasted straight into an older article as a data: address (one was 880 KB of base64
+  // inside the page) are written out as files here and the address replaced by a stand-in path
+  // "inline/<file>" — the Hub shows its own copy once uploaded and nothing until then.
+  bodyHtml = bodyHtml.replace(/<img src="data:image\/(png|jpe?g|gif|webp);base64,([^"]+)"/gi, (m, kind, b64) => {
+    n++
+    const file = `${a.id}-${n}.${kind.toLowerCase().replace("jpeg", "jpg")}`
+    try { fs.writeFileSync(path.join(PICS, file), Buffer.from(b64, "base64")) } catch { return "<img" }
+    const p = `inline/${file}`
+    seen.add(p)
+    bodyImages.push({ path: p, file })
+    return `<img src="${p}"`
+  })
+  bodyHtml = bodyHtml.replace(/<img(?![^>]*\bsrc="(?!data:)[^"]+")[^>]*>/gi, "")   // a data: picture that would not write, or one of another kind, or no address at all
   for (const m of bodyHtml.matchAll(/<img src="([^"]+)"/g)) {
     const p = m[1]
     if (seen.has(p)) continue
     seen.add(p)
+    n++
     const ext = (path.extname(p.split("?")[0]).toLowerCase() || ".jpg").replace(/[^.a-z0-9]/g, "")
-    bodyImages.push({ path: p, file: `${a.id}-${bodyImages.length + 1}${ext}` })
+    bodyImages.push({ path: p, file: `${a.id}-${n}${ext}` })
   }
   return { bodyHtml, bodyImages }
 }
