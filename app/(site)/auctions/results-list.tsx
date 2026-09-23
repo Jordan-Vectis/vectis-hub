@@ -52,9 +52,10 @@ export default async function ResultsList({ search, page }: { search?: string; p
           return (
             <div key={sale.siteId} className="flex border-b border-gray-200 bg-white hover:bg-gray-50 transition-colors">
               {/* Cover picture */}
-              <Link href={href} className="relative shrink-0 bg-gray-100 overflow-hidden" style={{ width: "240px", minHeight: "160px" }}>
+              {/* The cover pictures are wide banners with words on them — shown whole (contain), never cropped to fill. */}
+              <Link href={href} className="relative shrink-0 bg-gray-100 overflow-hidden" style={{ width: "280px", minHeight: "160px" }}>
                 {sale.photo ? (
-                  <img src={sale.photo} alt={sale.title} loading="lazy" className="absolute inset-0 w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
+                  <img src={sale.photo} alt={sale.title} loading="lazy" className="absolute inset-0 w-full h-full object-contain" />
                 ) : (
                   <div className="absolute inset-0 bg-[#32348A]/5 flex items-center justify-center">
                     <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
