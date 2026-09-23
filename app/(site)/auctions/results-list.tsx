@@ -77,7 +77,7 @@ export default async function ResultsList({ search, page }: { search?: string; p
                     <p className="text-gray-500 text-sm uppercase font-medium tracking-wide">{gbDate(aDate)}</p>
                   )}
                   <p className="text-gray-400 text-xs mt-1">
-                    {sale.lots > 0 ? `${sale.lots.toLocaleString("en-GB")} lots` : "Lot count not held"}
+                    {sale.lotCount > 0 ? `${sale.lotCount.toLocaleString("en-GB")} lots` : "Results not in yet"}
                     {sale.code ? ` · Sale ${sale.code}` : ""}
                   </p>
                 </div>

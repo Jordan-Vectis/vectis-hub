@@ -15,7 +15,11 @@ export const SALES_PAGE = 24
 export const LOTS_PAGE = 48
 
 export type ResultSale = {
-  siteId: number; auctionId: number | null; title: string; saleDate: Date | null; lots: number
+  siteId: number; auctionId: number | null; title: string; saleDate: Date | null
+  /** The website's own lot count at collection time — 0 when only the sale's page has been read. */
+  lots: number
+  /** Lots we hold for the sale, else the website's count, else 0 (see LOT_COUNT_FULL). */
+  lotCount: number
   finished: boolean; code: string | null; heroUrl: string | null; heroKey: string | null
   /** The cover picture to show — our R2 copy (signed, 1 h) first, else the website's own file. */
   photo: string | null
@@ -31,13 +35,25 @@ export type ResultLot = {
 
 export type ResultSummary = { lots: number; sold: number; hammerTotal: number }
 
-// Only sales that have happened: the website's own "finished" flag, or a date that has passed.
-const HAPPENED = Prisma.sql`(s."finished" OR (s."saleDate" IS NOT NULL AND s."saleDate" < now()))`
+// Only sales that have happened — from the day AFTER the sale date, because on the day itself the
+// sale is still running (the Hub's own 24-hour rule for a past sale); an undated sale counts once
+// the website says it has finished.
+const HAPPENED = Prisma.sql`((s."saleDate" IS NOT NULL AND s."saleDate" < now() - interval '1 day') OR (s."saleDate" IS NULL AND s."finished"))`
 const SALE_ORDER = Prisma.sql`s."saleDate" DESC NULLS LAST, s."siteId" DESC`
-const COLS_FULL = Prisma.sql`s."siteId", s."auctionId", s."title", s."saleDate", s."lots", s."finished", s."code", s."heroUrl", s."heroKey"`
+// How many lots we hold for the sale — counted from our own tables first (it is what the results
+// page shows), the website's figure when we hold none. ArchiveSale.lots is only what the website
+// reported when the sale was collected, and a sale whose page alone has been read carries 0.
+const LOT_COUNT_FULL = Prisma.sql`COALESCE(NULLIF(CASE
+    WHEN s."auctionId" IS NOT NULL THEN (SELECT count(*) FROM "ArchiveLot" l WHERE l."auctionId" = s."auctionId")
+    WHEN s."code" IS NOT NULL THEN (SELECT count(*) FROM "WarehouseItem" w WHERE w."auctionCode" = s."code" AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL)
+    ELSE (SELECT count(*) FROM "BcLotWeb" b WHERE b."siteSaleId" = s."siteId") END, 0), NULLIF(s."lots", 0), 0)::int AS "lotCount"`
+const LOT_COUNT_BASIC = Prisma.sql`COALESCE(NULLIF(CASE
+    WHEN s."auctionId" IS NOT NULL THEN (SELECT count(*) FROM "ArchiveLot" l WHERE l."auctionId" = s."auctionId")
+    ELSE (SELECT count(*) FROM "BcLotWeb" b WHERE b."siteSaleId" = s."siteId") END, 0), NULLIF(s."lots", 0), 0)::int AS "lotCount"`
+const COLS_FULL = Prisma.sql`s."siteId", s."auctionId", s."title", s."saleDate", s."lots", s."finished", s."code", s."heroUrl", s."heroKey", ${LOT_COUNT_FULL}`
 // Until Run Migrations has added the 2026-09-22 columns (sale code + cover picture) on an
 // environment, the sales still list — without them.
-const COLS_BASIC = Prisma.sql`s."siteId", s."auctionId", s."title", s."saleDate", s."lots", s."finished", NULL::text AS "code", NULL::text AS "heroUrl", NULL::text AS "heroKey"`
+const COLS_BASIC = Prisma.sql`s."siteId", s."auctionId", s."title", s."saleDate", s."lots", s."finished", NULL::text AS "code", NULL::text AS "heroUrl", NULL::text AS "heroKey", ${LOT_COUNT_BASIC}`
 const missingColumns = (e: unknown) => /heroUrl|heroKey|"code"/i.test(String((e as { message?: string })?.message ?? ""))
 
 type SaleRow = Omit<ResultSale, "photo">

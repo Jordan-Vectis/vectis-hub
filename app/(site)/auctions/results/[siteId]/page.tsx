@@ -142,11 +142,7 @@ export default async function SaleResultsPage({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {lots.rows.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
-            {search
-              ? "No lots match your search."
-              : lots.source === "none"
-                ? "The lots for this sale aren't held in the database yet."
-                : "No lots are held for this sale."}
+            {search ? "No lots match your search." : "The results for this sale aren't in yet."}
           </div>
         ) : (
           <>
