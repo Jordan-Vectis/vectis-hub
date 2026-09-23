@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"0c90be33b99d7778e9393782f88364c139cb1f02","author":"Jordan Orange","date":"2026-09-23T16:20:47+01:00","subject":"Departments: the website's department pages, collected and shown on the test site"},
   {"sha":"86903916ae055990a69afe2ed83e0d1028166522","author":"Jordan Orange","date":"2026-09-23T15:49:26+01:00","subject":"Double Check: an unpacked loco, its tray and its box are one item"},
   {"sha":"e9640e643fd7e6a11d4c5dc475d444553c3edac8","author":"Jordan Orange","date":"2026-09-23T15:44:51+01:00","subject":"Double Check: re-count quantities against the photos, flag what it can't"},
   {"sha":"52b919750ea4eaf7a4189fb50b5a7939a2379c32","author":"Jordan Orange","date":"2026-09-23T15:20:14+01:00","subject":"Databases -> News: dead old-host pictures left out, uploads four at a time"},

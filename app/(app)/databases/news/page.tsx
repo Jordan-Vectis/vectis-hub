@@ -55,7 +55,6 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
 
   let rows: Row[] = [], total = 0, stats: Stats | null = null, cats: Cat[] = [], years: number[] = [], tableError: string | null = null
   let missing: { id: number; file: string }[] = []
-  let departments = 0
   try {
     const [r, t, agg, cs, ys] = await Promise.all([
       prisma.$queryRaw<Row[]>`
@@ -88,18 +87,6 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
         const keys = new Set(x.bodyImageKeys ?? [])
         for (const im of x.bodyImages ?? []) if (im?.file && !keys.has(`news-photos/${im.file}`)) missing.push({ id: x.id, file: im.file })
       }
-      // The departments' pictures too — banner, tile and highlighted lots (id 0: the file name says which department).
-      try {
-        const ds = await prisma.$queryRaw<{ slug: string; heroPath: string | null; heroKey: string | null; tilePath: string | null; tileKey: string | null; highlights: { file?: string }[] | null; highlightKeys: string[] }[]>`
-          SELECT "slug", "heroPath", "heroKey", "tilePath", "tileKey", "highlights", "highlightKeys" FROM "SiteDepartment" ORDER BY "order"`
-        departments = ds.length
-        for (const d of ds) {
-          if (d.heroPath && !d.heroKey) missing.push({ id: 0, file: `dept-${d.slug}-hero${ext(d.heroPath)}` })
-          if (d.tilePath && !d.tileKey) missing.push({ id: 0, file: `dept-${d.slug}-tile${ext(d.tilePath)}` })
-          const keys = new Set(d.highlightKeys ?? [])
-          for (const h of d.highlights ?? []) if (h?.file && !keys.has(`news-photos/${h.file}`)) missing.push({ id: 0, file: h.file })
-        }
-      } catch { /* no departments table yet — Run Migrations */ }
     }
   } catch (e: any) {
     const msg = String(e?.message ?? "")
@@ -124,9 +111,6 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
           <Link href="/databases" className="text-sm text-gray-500 hover:text-gray-300">← Databases</Link>
           <h1 className="text-xl font-bold mt-1">News</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">Every News &amp; Stories article on vectis.co.uk — title, full text, category, tags, date and cover picture — collected on an office machine. The test website&apos;s News &amp; Stories pages read from here.</p>
-          {departments > 0 && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Plus the website&apos;s <b>{departments}</b> department pages (banner, copy, highlighted lots), loaded the same way — they make the test site&apos;s <Link href="/departments" className="text-violet-600 dark:text-violet-400 hover:underline">Departments menu and pages →</Link></p>
-          )}
         </div>
 
         {stats && stats.n > 0 && (

@@ -11,7 +11,8 @@ async function departmentLinks(): Promise<{ label: string; href: string }[]> {
     const rows = await prisma.$queryRaw<{ slug: string; name: string }[]>`SELECT "slug", "name" FROM "SiteDepartment" ORDER BY "order", "name"`
     if (rows.length) return rows.map(r => ({ label: r.name.toUpperCase(), href: `/departments/${r.slug}` }))
   } catch { /* table not there yet */ }
-  return DEPARTMENTS.map(dept => ({ label: dept.toUpperCase(), href: `/auctions?type=${encodeURIComponent(dept)}` }))
+  // Nothing collected yet: the names still show, and each leads to the departments page, which says so.
+  return DEPARTMENTS.map(dept => ({ label: dept.toUpperCase(), href: "/departments" }))
 }
 
 const DEPARTMENTS = [
@@ -152,11 +153,16 @@ export default async function SiteNav() {
 
             {/* Departments dropdown */}
             <DropdownNavItem label="DEPARTMENTS" href="/departments">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-0 p-4" style={{ minWidth: "520px" }}>
-                {departments.map(dept => (
-                  <DropdownLink key={dept.href} href={dept.href} label={dept.label} />
-                ))}
-                <div className="col-span-2 border-t border-gray-100 mt-2 pt-2">
+              {/* Two columns filled DOWN, as the live site's menu reads, and long names wrap rather than run into the next column. */}
+              <div className="p-4" style={{ minWidth: "600px" }}>
+                <div className="flex gap-8">
+                  {[departments.slice(0, Math.ceil(departments.length / 2)), departments.slice(Math.ceil(departments.length / 2))].map((column, i) => (
+                    <div key={i} className="flex-1 min-w-0">
+                      {column.map(dept => <DropdownLink key={dept.label} href={dept.href} label={dept.label} wrap />)}
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-gray-100 mt-2 pt-2">
                   <DropdownLink href="/departments" label="VIEW ALL DEPARTMENTS" bold />
                 </div>
               </div>
@@ -216,11 +222,11 @@ function DropdownSection({ children }: { children: React.ReactNode }) {
   return <div className="py-2 min-w-[200px]">{children}</div>
 }
 
-function DropdownLink({ href, label, bold }: { href: string; label: string; bold?: boolean }) {
+function DropdownLink({ href, label, bold, wrap }: { href: string; label: string; bold?: boolean; wrap?: boolean }) {
   return (
     <Link
       href={href}
-      className={`block px-4 py-1.5 text-[11px] tracking-wider text-gray-700 hover:bg-[#32348A] hover:text-white transition-colors whitespace-nowrap ${bold ? "font-black text-[#32348A]" : "font-semibold"}`}
+      className={`block px-4 py-1.5 text-[11px] tracking-wider text-gray-700 hover:bg-[#32348A] hover:text-white transition-colors ${wrap ? "whitespace-normal leading-snug" : "whitespace-nowrap"} ${bold ? "font-black text-[#32348A]" : "font-semibold"}`}
     >
       {label}
     </Link>
