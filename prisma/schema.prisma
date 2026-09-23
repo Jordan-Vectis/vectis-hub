@@ -3292,3 +3292,27 @@ model SiteNewsArticle {
   @@index([categoryId])
   @@index([alias])
 }
+
+/// Databases → News: the website's DEPARTMENT pages (the Departments menu), collected on an office
+/// machine with scripts/collect-departments.mjs and loaded on the same page as the news; the test
+/// website's /departments pages read it. An editor is expected to follow (Jordan, 2026-09-23).
+model SiteDepartment {
+  slug          String   @id                 // model-train-auctions
+  name          String                       // the menu wording
+  order         Int      @default(0)         // menu order
+  siteLink      String?                      // departments/<slug>
+  pageTitle     String?                      // "Trains & Model Railway Auctions"
+  heading       String?                      // "SELL TRAINS & MODEL RAILWAY AT AUCTION"
+  heroPath      String?                      // the banner, as a site path
+  heroKey       String?                      // our copy in R2 (news-photos/dept-<slug>-hero.<ext>)
+  tilePath      String?                      // the picture on the departments index
+  tileKey       String?
+  copyHtml      String?                      // the "Sell … at auction" copy, cleaned
+  highlights    Json?                        // [{ title, hammer, meta, link, imagePath, file }] the hand-picked past lots
+  highlightKeys String[] @default([])        // our R2 copies of those (news-photos/<file>)
+  newsAliases   String[] @default([])        // the stories the page showed
+  newsCategory  String?                      // seeded from those stories; editable later
+  saleKeywords  String[] @default([])        // matched against sale titles for Past Auctions; editable later
+  siteSaleIds   Int[]    @default([])        // the Past Auctions the page listed (website sale numbers)
+  pulledAt      DateTime @default(now())
+}

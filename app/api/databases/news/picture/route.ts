@@ -4,11 +4,14 @@ import { prisma } from "@/lib/prisma"
 import { objectExistsInR2 } from "@/lib/r2"
 
 // POST /api/databases/news/picture  { id, key }
-// Registers one of an article's pictures once the browser's presigned PUT has landed in R2 (the
-// key comes from /api/databases/news/picture-url): the cover ("news-photos/<id>.<ext>") goes on
-// imageKey, a picture from inside the article ("news-photos/<id>-<n>.<ext>") joins bodyImageKeys.
+// Registers a picture once the browser's presigned PUT has landed in R2 (the key comes from
+// /api/databases/news/picture-url):
+//   news-photos/<id>.<ext>             → the article's cover (imageKey)
+//   news-photos/<id>-<n>.<ext>         → joins the article's bodyImageKeys
+//   news-photos/dept-<slug>-hero.<ext> → the department's heroKey;  -tile → tileKey;  -<n> → joins highlightKeys
 // Idempotent: registering the same key twice is fine, and a retry never re-uploads.
-const KEY = /^news-photos\/(\d+)(-\d+)?\.(jpe?g|png|webp|gif)$/
+const ARTICLE_KEY = /^news-photos\/(\d+)(-\d+)?\.(jpe?g|png|webp|gif)$/
+const DEPT_KEY = /^news-photos\/dept-([a-z0-9-]+)-(hero|tile|\d+)\.(jpe?g|png|webp|gif)$/
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,21 +20,29 @@ export async function POST(req: NextRequest) {
     if (session.user?.role !== "ADMIN") return NextResponse.json({ error: "Admins only" }, { status: 403 })
 
     const { id, key } = await req.json()
-    const articleId = Math.round(Number(id))
-    const m = typeof key === "string" ? key.match(KEY) : null
-    if (!Number.isFinite(articleId) || articleId <= 0 || !m || Number(m[1]) !== articleId) {
-      return NextResponse.json({ error: "That key doesn't belong to this article" }, { status: 400 })
-    }
+    const k = typeof key === "string" ? key : ""
+    const article = k.match(ARTICLE_KEY), dept = k.match(DEPT_KEY)
+    if (!article && !dept) return NextResponse.json({ error: "That isn't a key this page hands out" }, { status: 400 })
     // ⚠ Only a definite "not there" means the upload was lost; R2 is strongly consistent, so no waiting.
-    if (!(await objectExistsInR2(key))) return NextResponse.json({ error: "The picture didn't land in storage — try that one again" }, { status: 404 })
+    if (!(await objectExistsInR2(k))) return NextResponse.json({ error: "The picture didn't land in storage — try that one again" }, { status: 404 })
 
-    if (m[2]) {
-      // Inside the article: append once, never twice.
-      await prisma.$executeRaw`UPDATE "SiteNewsArticle" SET "bodyImageKeys" = array_append("bodyImageKeys", ${key}) WHERE "id" = ${articleId} AND NOT (${key} = ANY("bodyImageKeys"))`
-    } else {
-      await prisma.siteNewsArticle.update({ where: { id: articleId }, data: { imageKey: key, imageAt: new Date() }, select: { id: true } })
+    if (article) {
+      const articleId = Number(article[1])
+      if (Math.round(Number(id)) !== articleId) return NextResponse.json({ error: "That key doesn't belong to this article" }, { status: 400 })
+      if (article[2]) {
+        // Inside the article: append once, never twice.
+        await prisma.$executeRaw`UPDATE "SiteNewsArticle" SET "bodyImageKeys" = array_append("bodyImageKeys", ${k}) WHERE "id" = ${articleId} AND NOT (${k} = ANY("bodyImageKeys"))`
+      } else {
+        await prisma.siteNewsArticle.update({ where: { id: articleId }, data: { imageKey: k, imageAt: new Date() }, select: { id: true } })
+      }
+      return NextResponse.json({ ok: true, id: articleId, key: k })
     }
-    return NextResponse.json({ ok: true, id: articleId, key })
+
+    const slug = dept![1], which = dept![2]
+    if (which === "hero") await prisma.$executeRaw`UPDATE "SiteDepartment" SET "heroKey" = ${k} WHERE "slug" = ${slug}`
+    else if (which === "tile") await prisma.$executeRaw`UPDATE "SiteDepartment" SET "tileKey" = ${k} WHERE "slug" = ${slug}`
+    else await prisma.$executeRaw`UPDATE "SiteDepartment" SET "highlightKeys" = array_append("highlightKeys", ${k}) WHERE "slug" = ${slug} AND NOT (${k} = ANY("highlightKeys"))`
+    return NextResponse.json({ ok: true, slug, key: k })
   } catch (e: any) {
     console.error("databases/news/picture error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

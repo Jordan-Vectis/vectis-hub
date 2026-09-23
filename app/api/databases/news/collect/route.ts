@@ -77,12 +77,65 @@ export async function POST(req: NextRequest) {
     const files = form.getAll("file").filter((f): f is File => f instanceof File && f.size > 0)
     if (!files.length) return NextResponse.json({ error: "No file was chosen." }, { status: 400 })
 
-    let written = 0, skipped = 0, withBody = 0
+    let written = 0, skipped = 0, withBody = 0, departmentsWritten = 0
     const problems: string[] = []
     for (const file of files) {
       let parsed: any
       try { parsed = JSON.parse(await file.text()) }
       catch { problems.push(`${file.name}: not a file this page can read — it should be the vectis-news.json the collector saved.`); continue }
+      // A departments file (scripts/collect-departments.mjs): the site's department pages. Same
+      // rules as the articles — the site's text overwrites ours, our picture copies are kept unless
+      // the site's files changed — plus two things a person may have edited on the Hub and the site
+      // must not undo: the news category and the sale keywords are only SEEDED when blank.
+      if (parsed?.kind === "departments") {
+        const depts: any[] = Array.isArray(parsed?.departments) ? parsed.departments : []
+        if (!depts.length) { problems.push(`${file.name}: no departments in it.`); continue }
+        for (const d of depts) {
+          const slug = typeof d?.slug === "string" && /^[a-z0-9-]+$/.test(d.slug) ? d.slug : null
+          if (!slug || d?.failed) { skipped++; continue }
+          const highlights = Array.isArray(d.highlights)
+            ? d.highlights.filter((h: any) => h && typeof h.file === "string" && typeof h.imagePath === "string" && /^dept-[a-z0-9-]+-\d+\.(jpe?g|png|webp|gif)$/i.test(h.file))
+                .map((h: any) => ({ title: String(h.title ?? ""), hammer: str(h.hammer), meta: str(h.meta), link: str(h.link), imagePath: String(h.imagePath), file: String(h.file).toLowerCase() }))
+                .slice(0, 24)
+            : []
+          const aliases: string[] = Array.isArray(d.newsAliases) ? d.newsAliases.map((s: any) => String(s)).slice(0, 10) : []
+          const keywords: string[] = Array.isArray(d.saleKeywords) ? d.saleKeywords.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 10) : []
+          const saleIds: number[] = Array.isArray(d.pastAuctions) ? d.pastAuctions.map((p: any) => Math.round(Number(p?.siteId))).filter((n: number) => Number.isFinite(n) && n > 0).slice(0, 50) : []
+          // The department's news category: the category most of the stories on its page carry — when we hold them.
+          let newsCategory: string | null = null
+          if (aliases.length) {
+            const cats = await prisma.$queryRaw<{ category: string | null; n: bigint }[]>`
+              SELECT "category", count(*)::bigint AS n FROM "SiteNewsArticle"
+              WHERE "alias" = ANY(ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(aliases)}::jsonb))) AND "category" IS NOT NULL
+              GROUP BY "category" ORDER BY n DESC LIMIT 1`
+            newsCategory = cats[0]?.category ?? null
+          }
+          departmentsWritten += await prisma.$executeRaw`
+            INSERT INTO "SiteDepartment" ("slug", "name", "order", "siteLink", "pageTitle", "heading", "heroPath", "tilePath", "copyHtml", "highlights",
+                                          "newsAliases", "newsCategory", "saleKeywords", "siteSaleIds", "pulledAt")
+            VALUES (${slug}, ${String(d.name ?? slug)}, ${Math.round(Number(d.order) || 0)}::int, ${str(d.siteLink)}, ${str(d.pageTitle)}, ${str(d.heading)},
+                    ${str(d.heroPath)}, ${str(d.tilePath)}, ${str(d.copyHtml)}, ${JSON.stringify(highlights)}::jsonb,
+                    ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(aliases)}::jsonb)), ${newsCategory},
+                    ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(keywords)}::jsonb)),
+                    ARRAY(SELECT (jsonb_array_elements_text(${JSON.stringify(saleIds)}::jsonb))::int), now())
+            ON CONFLICT ("slug") DO UPDATE SET
+              "name" = EXCLUDED."name", "order" = EXCLUDED."order", "siteLink" = EXCLUDED."siteLink", "pageTitle" = EXCLUDED."pageTitle", "heading" = EXCLUDED."heading",
+              "heroKey" = CASE WHEN "SiteDepartment"."heroPath" IS DISTINCT FROM EXCLUDED."heroPath" THEN NULL ELSE "SiteDepartment"."heroKey" END,
+              "heroPath" = EXCLUDED."heroPath",
+              "tileKey" = CASE WHEN "SiteDepartment"."tilePath" IS DISTINCT FROM EXCLUDED."tilePath" THEN NULL ELSE "SiteDepartment"."tileKey" END,
+              "tilePath" = EXCLUDED."tilePath",
+              "copyHtml" = EXCLUDED."copyHtml",
+              "highlightKeys" = CASE WHEN "SiteDepartment"."highlights" IS DISTINCT FROM EXCLUDED."highlights" THEN ARRAY[]::text[] ELSE "SiteDepartment"."highlightKeys" END,
+              "highlights" = EXCLUDED."highlights",
+              "newsAliases" = EXCLUDED."newsAliases",
+              "newsCategory" = COALESCE("SiteDepartment"."newsCategory", EXCLUDED."newsCategory"),
+              "saleKeywords" = CASE WHEN cardinality("SiteDepartment"."saleKeywords") > 0 THEN "SiteDepartment"."saleKeywords" ELSE EXCLUDED."saleKeywords" END,
+              "siteSaleIds" = EXCLUDED."siteSaleIds",
+              "pulledAt" = now()`
+        }
+        continue
+      }
+
       const list: Incoming[] = Array.isArray(parsed?.articles) ? parsed.articles : []
       if (!list.length) { problems.push(`${file.name}: no articles in it.`); continue }
       const rows: Row[] = []
@@ -126,15 +179,29 @@ export async function POST(req: NextRequest) {
              count(*) FILTER (WHERE "imagePath" IS NOT NULL AND "imageKey" IS NULL)::bigint AS covers,
              coalesce(sum(greatest(jsonb_array_length(coalesce("bodyImages", '[]'::jsonb)) - cardinality("bodyImageKeys"), 0)), 0)::bigint AS inside
       FROM "SiteNewsArticle"`
-    const held = Number(agg?.n ?? 0), toUpload = Number(agg?.covers ?? 0) + Number(agg?.inside ?? 0)
+    const held = Number(agg?.n ?? 0)
+    let toUpload = Number(agg?.covers ?? 0) + Number(agg?.inside ?? 0)
+    // The departments' pictures too (banner, tile, highlighted lots) — the table may not be there yet.
+    try {
+      const [dg] = await prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT (count(*) FILTER (WHERE "heroPath" IS NOT NULL AND "heroKey" IS NULL)
+              + count(*) FILTER (WHERE "tilePath" IS NOT NULL AND "tileKey" IS NULL)
+              + coalesce(sum(greatest(jsonb_array_length(coalesce("highlights", '[]'::jsonb)) - cardinality("highlightKeys"), 0)), 0))::bigint AS n
+        FROM "SiteDepartment"`
+      toUpload += Number(dg?.n ?? 0)
+    } catch { /* no departments table yet */ }
 
     // ⚠ Said in numbers, not "Done" — a silent success on an import is how nobody notices it read nothing.
+    const parts: string[] = []
+    if (written) parts.push(`Loaded ${written.toLocaleString()} article${written === 1 ? "" : "s"} (${withBody.toLocaleString()} with the article page's own text)${skipped ? `, ${skipped} unreadable rows skipped` : ""}; the Hub now holds ${held.toLocaleString()}.`)
+    if (departmentsWritten) parts.push(`${departmentsWritten.toLocaleString()} department page${departmentsWritten === 1 ? "" : "s"} recorded.`)
+    parts.push(toUpload ? `${toUpload.toLocaleString()} picture${toUpload === 1 ? "" : "s"} still to upload — choose the collector's pictures below.` : "Every picture is already in the Hub.")
     return NextResponse.json({
-      ok: true, written, skipped, held, toUpload,
+      ok: true, written, departments: departmentsWritten, skipped, held, toUpload,
       problems: problems.length ? problems : undefined,
-      message: written === 0
-        ? "Nothing was loaded — the file held no articles this page could read."
-        : `Loaded ${written.toLocaleString()} article${written === 1 ? "" : "s"} (${withBody.toLocaleString()} with the article page's own text)${skipped ? `, ${skipped} unreadable rows skipped` : ""}; the Hub now holds ${held.toLocaleString()}. ${toUpload ? `${toUpload.toLocaleString()} picture${toUpload === 1 ? "" : "s"} still to upload — choose the collector's pictures below.` : "Every picture is already in the Hub."}`,
+      message: written === 0 && departmentsWritten === 0
+        ? "Nothing was loaded — the file held nothing this page could read (it wants the collector's vectis-news-N.json or vectis-departments.json)."
+        : parts.join(" "),
     })
   } catch (e: any) {
     console.error("databases/news/collect error:", e)

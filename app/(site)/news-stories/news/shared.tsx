@@ -40,6 +40,20 @@ export function teaser(a: { introText: string | null; fullText: string | null; t
 
 export const gbDate = (d: Date | null) => (d ? format(d, "d MMMM yyyy") : "")
 
+// The site's HTML as served, made safe enough for the test site: scripts, styles and inline event
+// handlers out; pictures and links that still point at the site's own root made absolute so they
+// load from here; outside links open in a new tab. Used by the article and department pages.
+export function cleanHtml(html: string): string {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\shref\s*=\s*"javascript:[^"]*"/gi, "")
+    .replace(/(src|href)="(?:\/)?(images\/)/gi, `$1="${SITE}$2`)
+    .replace(/(src|href)="\/(?!\/)/gi, `$1="${SITE}`)
+    .replace(/<a href="(https?:\/\/[^"]+)">/gi, `<a href="$1" target="_blank" rel="noreferrer">`)
+}
+
 export function StoryCard({ a, big }: { a: Article & { photo: string | null }; big?: boolean }) {
   const href = `/news-stories/news/${encodeURIComponent(a.alias)}`
   return (

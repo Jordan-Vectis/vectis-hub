@@ -258,8 +258,8 @@ export const DESTINATIONS: Destination[] = [
   {
     ask: "Where are the website's news articles kept?",
     name: "Databases → News", href: "/databases/news",   // no app key: Databases is gated on sign-in only
-    what: "Every News & Stories article from vectis.co.uk — title, full text, category, tags, date and cover picture — collected on an office machine and loaded here; the test website's News & Stories pages read it. Search by words, filter by category or year.",
-    also: ["news", "news and stories", "news stories", "articles", "blog", "website news", "news database", "stories", "press"],
+    what: "Every News & Stories article from vectis.co.uk — title, full text, category, tags, date and cover picture — and the website's 28 department pages (banner, copy, highlighted lots), collected on an office machine and loaded here; the test website's News & Stories and Departments pages read them. Search by words, filter by category or year.",
+    also: ["news", "news and stories", "news stories", "articles", "blog", "website news", "news database", "stories", "press", "departments", "department pages", "department"],
   },
 ]
 

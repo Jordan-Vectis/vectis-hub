@@ -6,15 +6,18 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { prisma } from "@/lib/prisma"
 
 // POST /api/databases/news/picture-url  { id, file, contentType, size }
-// A presigned PUT for one of an article's pictures — its cover ("<id>.<ext>") or one from inside
-// the article ("<id>-<n>.<ext>"), named as the office collector saved them. The pictures come from
-// that folder (the website refuses the Hub's server, so it can't fetch them itself) and go STRAIGHT
-// from the browser to R2 — 1,300+ files at a few hundred KB is far more than a request body may
-// carry — exactly as screen recordings and Documents do. Nothing is written to the database here;
-// POST /api/databases/news/picture registers the file once the upload has landed.
+// A presigned PUT for one picture from the office collectors' folder, named as they saved it:
+//   <id>.<ext>            an article's cover              <id>-<n>.<ext>         a picture inside the article
+//   dept-<slug>-hero.<ext> a department's banner           dept-<slug>-tile.<ext>  its tile on the index
+//   dept-<slug>-<n>.<ext>  one of its highlighted lots
+// The pictures go STRAIGHT from the browser to R2 (the website refuses the Hub's server, and
+// thousands of files at a few hundred KB is far more than a request body may carry), exactly as
+// screen recordings and Documents do. Nothing is written to the database here; POST
+// /api/databases/news/picture registers the file once the upload has landed.
 const MAX_SIZE = 25 * 1024 * 1024
 const ALLOWED: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }
-const FILE_NAME = /^(\d+)(?:-\d+)?\.(jpe?g|png|webp|gif)$/
+const ARTICLE_FILE = /^(\d+)(?:-\d+)?\.(jpe?g|png|webp|gif)$/
+const DEPT_FILE = /^dept-([a-z0-9-]+)-(?:hero|tile|\d+)\.(jpe?g|png|webp|gif)$/
 // (Not exported — a route file may only export its handlers; the register route spells it out too.)
 const NEWS_PHOTO_PREFIX = "news-photos"
 
@@ -25,22 +28,28 @@ export async function POST(req: NextRequest) {
     if (session.user?.role !== "ADMIN") return NextResponse.json({ error: "Admins only" }, { status: 403 })
 
     const { id, file, contentType, size } = await req.json()
-    const articleId = Math.round(Number(id))
-    if (!Number.isFinite(articleId) || articleId <= 0) return NextResponse.json({ error: "Which article?" }, { status: 400 })
     const name = String(file ?? "").toLowerCase()
-    const m = name.match(FILE_NAME)
-    if (!m || Number(m[1]) !== articleId) return NextResponse.json({ error: `"${file}" isn't a picture file name the collector would give article ${articleId}` }, { status: 400 })
+    const article = name.match(ARTICLE_FILE), dept = name.match(DEPT_FILE)
+    if (!article && !dept) return NextResponse.json({ error: `"${file}" isn't a picture file name the collectors would give` }, { status: 400 })
     const type = String(contentType ?? "").split(";")[0].trim().toLowerCase()
     const ext = ALLOWED[type]
     if (!ext) return NextResponse.json({ error: `Only JPEG, PNG, WebP or GIF pictures can be saved (this one is ${type || "of no known type"})` }, { status: 400 })
     // The file's own extension must agree with what the browser says it is (jpeg and jpg are the same thing).
-    if (m[2].replace("jpeg", "jpg") !== ext) return NextResponse.json({ error: `"${file}" is ${type}, which doesn't match its name` }, { status: 400 })
+    const fileExt = (article ? article[2] : dept![2]).replace("jpeg", "jpg")
+    if (fileExt !== ext) return NextResponse.json({ error: `"${file}" is ${type}, which doesn't match its name` }, { status: 400 })
     if (typeof size !== "number" || !(size > 0)) return NextResponse.json({ error: "Missing size" }, { status: 400 })
     if (size > MAX_SIZE) return NextResponse.json({ error: "Picture too large (max 25 MB)" }, { status: 400 })
 
-    // ⚠ The article must exist BEFORE signing — fail at the free step, not after the upload.
-    const article = await prisma.siteNewsArticle.findUnique({ where: { id: articleId }, select: { id: true } })
-    if (!article) return NextResponse.json({ error: `No article ${articleId} is held — load vectis-news.json first.` }, { status: 404 })
+    // ⚠ The article or department must exist BEFORE signing — fail at the free step, not after the upload.
+    if (article) {
+      const articleId = Number(article[1])
+      if (Math.round(Number(id)) !== articleId) return NextResponse.json({ error: `"${file}" isn't article ${id}'s picture` }, { status: 400 })
+      const row = await prisma.siteNewsArticle.findUnique({ where: { id: articleId }, select: { id: true } })
+      if (!row) return NextResponse.json({ error: `No article ${articleId} is held — load the news files first.` }, { status: 404 })
+    } else {
+      const row = await prisma.siteDepartment.findUnique({ where: { slug: dept![1] }, select: { slug: true } })
+      if (!row) return NextResponse.json({ error: `No department "${dept![1]}" is held — load vectis-departments.json first.` }, { status: 404 })
+    }
 
     const key = `${NEWS_PHOTO_PREFIX}/${name}`
     const url = await getSignedUrl(

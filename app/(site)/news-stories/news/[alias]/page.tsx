@@ -3,7 +3,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/app/generated/prisma/client"
 import { getSignedImageUrl } from "@/lib/r2"
-import { articlePicture, gbDate, StoryCard, SITE, type Article } from "../shared"
+import { articlePicture, gbDate, StoryCard, SITE, cleanHtml, type Article } from "../shared"
 
 // One News & Stories article on the test website. The text is the article PAGE's own HTML as the
 // collector cleaned it (paragraphs, emojis, the pictures inside it — the feed's copy is flattened),
@@ -18,19 +18,6 @@ async function loadArticle(alias: string): Promise<Article | null> {
   // The alias is unique on the site in practice (Joomla only enforces it per category) — newest wins.
   const rows = await prisma.$queryRaw<Article[]>`SELECT ${COLS} FROM "SiteNewsArticle" a WHERE a."alias" = ${alias} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 1`
   return rows[0] ?? null
-}
-
-// Made safe enough for the test site: scripts, styles and inline event handlers out; links and
-// pictures that still point at the site's own root made absolute so they load from here.
-function cleanHtml(html: string): string {
-  return html
-    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
-    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\shref\s*=\s*"javascript:[^"]*"/gi, "")
-    .replace(/(src|href)="(?:\/)?(images\/)/gi, `$1="${SITE}$2`)
-    .replace(/(src|href)="\/(?!\/)/gi, `$1="${SITE}`)
-    .replace(/<a href="(https?:\/\/[^"]+)">/gi, `<a href="$1" target="_blank" rel="noreferrer">`)
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

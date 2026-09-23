@@ -89,7 +89,8 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
   const byName = new Map<string, File>()
   for (const f of folder) {
     const name = (f.name || "").toLowerCase()
-    if (/^\d+(-\d+)?\.(jpe?g|png|webp|gif)$/.test(name)) byName.set(name, f)
+    // "<id>.<ext>" / "<id>-<n>.<ext>" for the news; "dept-<slug>-hero|tile|<n>.<ext>" for the departments
+    if (/^(\d+(-\d+)?|dept-[a-z0-9-]+-(hero|tile|\d+))\.(jpe?g|png|webp|gif)$/.test(name)) byName.set(name, f)
   }
   const toUpload = missing.filter(m => byName.has(m.file.toLowerCase()))
   const spare = [...byName.keys()].filter(n => !wanted.has(n)).length

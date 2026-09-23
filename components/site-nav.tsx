@@ -2,6 +2,17 @@ import Link from "next/link"
 import Image from "next/image"
 import { getCustomerSession } from "@/lib/customer-auth"
 import { logoutCustomer } from "@/lib/actions/customer-auth"
+import { prisma } from "@/lib/prisma"
+
+// The Departments menu comes from the department pages collected from vectis.co.uk (Databases →
+// News); until they are loaded the list below stands in, pointing at the auction calendar.
+async function departmentLinks(): Promise<{ label: string; href: string }[]> {
+  try {
+    const rows = await prisma.$queryRaw<{ slug: string; name: string }[]>`SELECT "slug", "name" FROM "SiteDepartment" ORDER BY "order", "name"`
+    if (rows.length) return rows.map(r => ({ label: r.name.toUpperCase(), href: `/departments/${r.slug}` }))
+  } catch { /* table not there yet */ }
+  return DEPARTMENTS.map(dept => ({ label: dept.toUpperCase(), href: `/auctions?type=${encodeURIComponent(dept)}` }))
+}
 
 const DEPARTMENTS = [
   "Action Figures",
@@ -35,6 +46,7 @@ const DEPARTMENTS = [
 
 export default async function SiteNav() {
   const session = await getCustomerSession()
+  const departments = await departmentLinks()
 
   return (
     <header>
@@ -139,17 +151,13 @@ export default async function SiteNav() {
             </DropdownNavItem>
 
             {/* Departments dropdown */}
-            <DropdownNavItem label="DEPARTMENTS" href="/auctions">
+            <DropdownNavItem label="DEPARTMENTS" href="/departments">
               <div className="grid grid-cols-2 gap-x-6 gap-y-0 p-4" style={{ minWidth: "520px" }}>
-                {DEPARTMENTS.map(dept => (
-                  <DropdownLink
-                    key={dept}
-                    href={`/auctions?type=${encodeURIComponent(dept)}`}
-                    label={dept.toUpperCase()}
-                  />
+                {departments.map(dept => (
+                  <DropdownLink key={dept.href} href={dept.href} label={dept.label} />
                 ))}
                 <div className="col-span-2 border-t border-gray-100 mt-2 pt-2">
-                  <DropdownLink href="/auctions" label="VIEW ALL DEPARTMENTS" bold />
+                  <DropdownLink href="/departments" label="VIEW ALL DEPARTMENTS" bold />
                 </div>
               </div>
             </DropdownNavItem>
