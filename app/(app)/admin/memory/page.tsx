@@ -16,6 +16,27 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reference_quantity_flags.md",
+    content: `---
+name: quantity-flags-boxes-not-faces
+description: AI quantities are re-counted against the photos by Double Check (2026-09-23) — count distinct boxes, never printed faces (a box seen at an angle shows front AND side, both titled); a mismatch or an uncountable lot is a quantityFlag → aiFlagNote, the number is NEVER changed. Plus the Trains instruction wording for the describing stage.
+metadata:
+  type: reference
+---
+
+# Quantities: boxes, not printed faces (2026-09-23)
+
+**The case.** A Hornby Skaledale group lot: the photo showed 12 boxes (4 × R8621 Left Hand, 5 × R8622 Right Hand, 1 × R9856, 1 × R9857, 1 × R9861 Fish and Chip Shop); the AI wrote 16 (5, 7, 1, 1, 2). Every box's side panel carries the title as well as its front, and the AI counted printed faces. The key points listed the codes with no quantities, so nothing anchored the count. Jordan: "can you see the issue" → "Both — can the AI flags do something when it is unsure of quantity".
+
+**What was built (code — lib/double-check-instruction.ts + app/api/auction-ai/double-check/route.ts):**
+- A QUANTITIES AGAINST THE PHOTOS section in the Double Check prompt: count distinct boxes/items row by row, group by title or code, compare with each stated quantity. A mismatch, or a count it can't make with confidence (hidden boxes, a stack, items out of frame), goes in a new JSON field quantityFlag with both figures. ⚠ The number in the description is NEVER changed — same rule as product codes (Jordan, 2026-08-14: flag a possible mistake, never let the pipeline change it).
+- The route folds quantityFlag into the existing flag field as "Double Check counted the photos: …", so it reaches CatalogueLot.aiFlagNote by every path that already saves flags — the overnight runner (shouldKeepFlag drops only size-vs-spec flags), the Auction AI page's Double Check / Auto Pipeline runs (saveAiFlagNote) — and the lot shows under the Review tab's ⚠ AI-flagged filter. The parse-failure salvage reads it with extractJsonField too.
+
+**What was delivered as text (data, not code):** a paragraph for the Vectis Jo: Model Railway instruction (and worth adding to any group-lot instruction) — when the key points give no quantities, count the boxes row by row, never the printed faces; write a count only when sure; when not sure, write what can be seen and raise "FLAG: quantity not certain — …" (the batch route already lifts any FLAG line into aiFlagNote). Not yet confirmed as pasted.
+
+**Why the flag, not a correction:** the describing model miscounted from the same photos; a second model correcting the number silently could be wrong the other way. A flag puts a person on it, which is the shape Jordan has chosen for every AI doubt.`,
+  },
+  {
     filename: "project_fake_test_website.md",
     content: `---
 name: project-fake-test-website

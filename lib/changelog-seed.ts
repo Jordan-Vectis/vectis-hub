@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"52b919750ea4eaf7a4189fb50b5a7939a2379c32","author":"Jordan Orange","date":"2026-09-23T15:20:14+01:00","subject":"Databases -> News: dead old-host pictures left out, uploads four at a time"},
   {"sha":"a899029972801616df5b88ced29afb149d5dbc61","author":"Jordan Orange","date":"2026-09-23T15:02:37+01:00","subject":"Databases -> News: the older articles' pages, and pictures pasted in as data"},
   {"sha":"a055a50ae9da7721c02347e7c9324491e1d27b2e","author":"Jordan Orange","date":"2026-09-23T14:41:44+01:00","subject":"Databases -> News: the article's real text and the pictures inside it"},
   {"sha":"d8d8f0450e08a26efa32bf10663f5d6c479f432b","author":"Jordan Orange","date":"2026-09-23T13:05:28+01:00","subject":"Databases -> News: a file picker for the pictures, not a folder picker"},

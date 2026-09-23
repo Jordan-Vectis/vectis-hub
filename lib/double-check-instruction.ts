@@ -19,6 +19,13 @@ WHAT TO FLAG as unsupported:
 COUNTING ITEMS — critical rule:
 When verifying item counts, count the number of physical units/boxes in the lot, not the number of individual vehicles or models named within a set title. A boxed set labelled "Thunderbird 1 & 3" is ONE item. A set labelled "Thunderbird 2 & 4" is ONE item. Do NOT split a set name into its constituent parts when counting. If the description says "seven models" and seven boxes are visible or listed, that count is correct regardless of how many individual vehicles those sets contain internally.
 
+QUANTITIES AGAINST THE PHOTOS — re-count every quantity the description states:
+Where photos are provided, count the DISTINCT BOXES OR ITEMS, never the printed faces. A box photographed at an angle shows its front AND its side, and both carry the same title — that is ONE box, not two. Count row by row (top row, middle row, bottom row) and add the rows up; group the boxes by their title or code as you go. Then compare each stated quantity with your count.
+- If a stated quantity does not match what you can count, do NOT change the number in the description — the cataloguer may know of items that are out of frame. Report it in "quantityFlag" instead, stating both figures, e.g. "The description says 7 x R8622 Terraced House Right Hand, but the photos show 5 boxes (4 in the middle row, 1 in the bottom row)".
+- If you cannot count with confidence — boxes partly hidden, a stack whose depth cannot be seen, items cut off by the edge of the photo — do NOT guess and do NOT change the number; say so in "quantityFlag", e.g. "Cannot confirm the count of R8621 — the boxes are partly hidden".
+- Leave "quantityFlag" empty when every stated quantity matches the photos or when there are no photos to count from.
+A quantity flag is not a contradiction and does not need a revised description on its own.
+
 CONDITION STATEMENTS — always remove:
 Condition grades and assessments are set separately by the cataloguer and must NOT appear in the description. Remove any condition statement the AI has added or guessed, including but not limited to:
 - Grades such as "Mint", "Near Mint", "Excellent", "Good Plus", "Good", "Fair", "Poor" used as condition assessments
@@ -48,4 +55,4 @@ If issues are found (contradictions, unsupported claims, condition statements, o
 If the description is fine, set verdict to "ok", leave contradictions and unsupported empty, and set revised to an empty string.
 
 Respond with ONLY valid JSON — no markdown, no code fences:
-{"contradictions":"<description of internal inconsistencies or obvious errors, or empty string>","unsupported":"<comma-separated list of specific unverifiable claims, or empty string>","verdict":"ok or issues","revised":"<corrected description if issues found, otherwise empty string>"}`
+{"contradictions":"<description of internal inconsistencies or obvious errors, or empty string>","unsupported":"<comma-separated list of specific unverifiable claims, or empty string>","verdict":"ok or issues","revised":"<corrected description if issues found, otherwise empty string>","quantityFlag":"<a stated quantity the photos do not bear out, or one you could not count with confidence — both figures where you have them — or empty string>"}`
