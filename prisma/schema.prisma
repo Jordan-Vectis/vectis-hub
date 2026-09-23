@@ -3308,6 +3308,9 @@ model SiteDepartment {
   tilePath      String?                      // the picture on the departments index
   tileKey       String?
   copyHtml      String?                      // the "Sell … at auction" copy, cleaned
+  sideHtml      String?                     // the "Sell your collection" side box: video, text, GET STARTED, the prices-achieved picture
+  extraImages   Json?                       // [{ path, file }] the pictures inside the copy and the side box
+  extraImageKeys String[] @default([])      // our R2 copies of those (news-photos/dept-<slug>-x<n>.<ext>)
   highlights    Json?                        // [{ title, hammer, meta, link, imagePath, file }] the hand-picked past lots
   highlightKeys String[] @default([])        // our R2 copies of those (news-photos/<file>)
   newsAliases   String[] @default([])        // the stories the page showed

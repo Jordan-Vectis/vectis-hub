@@ -98,6 +98,11 @@ export async function POST(req: NextRequest) {
                 .map((h: any) => ({ title: String(h.title ?? ""), hammer: str(h.hammer), meta: str(h.meta), link: str(h.link), imagePath: String(h.imagePath), file: String(h.file).toLowerCase() }))
                 .slice(0, 24)
             : []
+          const extraImages = Array.isArray(d.extraImages)
+            ? d.extraImages.filter((x: any) => x && typeof x.file === "string" && typeof x.path === "string" && /^dept-[a-z0-9-]+-x\d+\.(jpe?g|png|webp|gif)$/i.test(x.file))
+                .map((x: any) => ({ path: String(x.path), file: String(x.file).toLowerCase() }))
+                .slice(0, 40)
+            : []
           const aliases: string[] = Array.isArray(d.newsAliases) ? d.newsAliases.map((s: any) => String(s)).slice(0, 10) : []
           const keywords: string[] = Array.isArray(d.saleKeywords) ? d.saleKeywords.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 10) : []
           const saleIds: number[] = Array.isArray(d.pastAuctions) ? d.pastAuctions.map((p: any) => Math.round(Number(p?.siteId))).filter((n: number) => Number.isFinite(n) && n > 0).slice(0, 50) : []
@@ -111,10 +116,10 @@ export async function POST(req: NextRequest) {
             newsCategory = cats[0]?.category ?? null
           }
           departmentsWritten += await prisma.$executeRaw`
-            INSERT INTO "SiteDepartment" ("slug", "name", "order", "siteLink", "pageTitle", "heading", "heroPath", "tilePath", "copyHtml", "highlights",
+            INSERT INTO "SiteDepartment" ("slug", "name", "order", "siteLink", "pageTitle", "heading", "heroPath", "tilePath", "copyHtml", "sideHtml", "extraImages", "highlights",
                                           "newsAliases", "newsCategory", "saleKeywords", "siteSaleIds", "pulledAt")
             VALUES (${slug}, ${String(d.name ?? slug)}, ${Math.round(Number(d.order) || 0)}::int, ${str(d.siteLink)}, ${str(d.pageTitle)}, ${str(d.heading)},
-                    ${str(d.heroPath)}, ${str(d.tilePath)}, ${str(d.copyHtml)}, ${JSON.stringify(highlights)}::jsonb,
+                    ${str(d.heroPath)}, ${str(d.tilePath)}, ${str(d.copyHtml)}, ${str(d.sideHtml)}, ${JSON.stringify(extraImages)}::jsonb, ${JSON.stringify(highlights)}::jsonb,
                     ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(aliases)}::jsonb)), ${newsCategory},
                     ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(keywords)}::jsonb)),
                     ARRAY(SELECT (jsonb_array_elements_text(${JSON.stringify(saleIds)}::jsonb))::int), now())
@@ -124,7 +129,9 @@ export async function POST(req: NextRequest) {
               "heroPath" = EXCLUDED."heroPath",
               "tileKey" = CASE WHEN "SiteDepartment"."tilePath" IS DISTINCT FROM EXCLUDED."tilePath" THEN NULL ELSE "SiteDepartment"."tileKey" END,
               "tilePath" = EXCLUDED."tilePath",
-              "copyHtml" = EXCLUDED."copyHtml",
+              "copyHtml" = EXCLUDED."copyHtml", "sideHtml" = EXCLUDED."sideHtml",
+              "extraImageKeys" = CASE WHEN "SiteDepartment"."extraImages" IS DISTINCT FROM EXCLUDED."extraImages" THEN ARRAY[]::text[] ELSE "SiteDepartment"."extraImageKeys" END,
+              "extraImages" = EXCLUDED."extraImages",
               "highlightKeys" = CASE WHEN "SiteDepartment"."highlights" IS DISTINCT FROM EXCLUDED."highlights" THEN ARRAY[]::text[] ELSE "SiteDepartment"."highlightKeys" END,
               "highlights" = EXCLUDED."highlights",
               "newsAliases" = EXCLUDED."newsAliases",

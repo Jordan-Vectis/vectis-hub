@@ -10,11 +10,31 @@ export type Highlight = { title: string; hammer: string | null; meta: string | n
 export type Department = {
   slug: string; name: string; order: number; pageTitle: string | null; heading: string | null
   heroPath: string | null; heroKey: string | null; tilePath: string | null; tileKey: string | null
-  copyHtml: string | null; highlights: Highlight[] | null; highlightKeys: string[]
+  copyHtml: string | null; sideHtml: string | null
+  extraImages: { path: string; file: string }[] | null; extraImageKeys: string[]
+  highlights: Highlight[] | null; highlightKeys: string[]
   newsCategory: string | null; saleKeywords: string[]; siteSaleIds: number[]
 }
 
-const COLS = Prisma.sql`d."slug", d."name", d."order", d."pageTitle", d."heading", d."heroPath", d."heroKey", d."tilePath", d."tileKey", d."copyHtml", d."highlights", d."highlightKeys", d."newsCategory", d."saleKeywords", d."siteSaleIds"`
+const COLS = Prisma.sql`d."slug", d."name", d."order", d."pageTitle", d."heading", d."heroPath", d."heroKey", d."tilePath", d."tileKey", d."copyHtml", d."sideHtml", d."extraImages", d."extraImageKeys", d."highlights", d."highlightKeys", d."newsCategory", d."saleKeywords", d."siteSaleIds"`
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/**
+ * The pictures inside a department's copy or side box: our R2 copy where uploaded, else the
+ * website's file — substituted while the paths are still as stored, before the general clean.
+ */
+export async function withDeptPictures(html: string, d: Department): Promise<string> {
+  const keys = new Set(d.extraImageKeys ?? [])
+  let out = html
+  for (const im of d.extraImages ?? []) {
+    const key = `news-photos/${im.file}`
+    const url = keys.has(key) ? await getSignedImageUrl(key, 3600).catch(() => null) : null
+    const fallback = /^https?:\/\//i.test(im.path) ? im.path : SITE + im.path
+    out = out.replace(new RegExp(`src="${escapeRe(im.path)}"`, "g"), `src="${url ?? fallback}"`)
+  }
+  return out
+}
 
 /** Our R2 copy when the Hub has one (signed for an hour), else the website's own file. */
 export async function sitePicture(key: string | null, path: string | null): Promise<string | null> {

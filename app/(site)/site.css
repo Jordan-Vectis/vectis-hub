@@ -46,3 +46,11 @@
 .vectis-site .news-body table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
 .vectis-site .news-body td, .vectis-site .news-body th { border: 1px solid #e5e7eb; padding: 0.4em 0.6em; }
 .vectis-site .news-body blockquote { border-left: 4px solid #DB0606; padding-left: 1em; color: #4b5563; margin: 1em 0; }
+.vectis-site .news-body h1 { color: #32348A; font-weight: 900; font-size: 1.75rem; line-height: 1.15; margin: 0 0 0.75em; }
+.vectis-site .news-body em { font-style: italic; }
+/* A department page's side box: the video sits 16:9 across the box, the prices-achieved picture full width. */
+.vectis-site .dept-side iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; margin: 0 0 1em; }
+.vectis-site .dept-side img { display: block; width: 100%; height: auto; margin: 1em 0 0; }
+.vectis-site .dept-side h3 { color: #ffffff; font-weight: 900; font-size: 1.25rem; margin: 0 0 0.5em; }
+.vectis-site .dept-side p, .vectis-site .dept-side div { color: #e5e7eb; }
+.vectis-site .dept-side a { color: #ffffff; font-weight: 700; text-decoration: underline; }

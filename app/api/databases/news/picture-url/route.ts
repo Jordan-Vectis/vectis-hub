@@ -17,7 +17,7 @@ import { prisma } from "@/lib/prisma"
 const MAX_SIZE = 25 * 1024 * 1024
 const ALLOWED: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }
 const ARTICLE_FILE = /^(\d+)(?:-\d+)?\.(jpe?g|png|webp|gif)$/
-const DEPT_FILE = /^dept-([a-z0-9-]+)-(?:hero|tile|\d+)\.(jpe?g|png|webp|gif)$/
+const DEPT_FILE = /^dept-([a-z0-9-]+)-(?:hero|tile|\d+|x\d+)\.(jpe?g|png|webp|gif)$/   // x<n>: a picture inside the copy or the side box
 // (Not exported — a route file may only export its handlers; the register route spells it out too.)
 const NEWS_PHOTO_PREFIX = "news-photos"
 

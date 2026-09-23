@@ -6,7 +6,7 @@ import { Prisma } from "@/app/generated/prisma/client"
 import { getSignedImageUrl } from "@/lib/r2"
 import { SITE_IMAGES } from "@/lib/archive-site"
 import { articlePicture, cleanHtml, gbDate, type Article } from "../../news-stories/news/shared"
-import { getDepartment, sitePicture, highlightPicture, ourLotLinks } from "../data"
+import { getDepartment, sitePicture, highlightPicture, ourLotLinks, withDeptPictures } from "../data"
 
 // One department on the test website, from the page collected from vectis.co.uk: the banner, the
 // "sell with us" copy, the hand-picked highlighted lots, plus — from our own databases — the
@@ -32,7 +32,13 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
   if (!d) notFound()
 
   const hero = await sitePicture(d.heroKey, d.heroPath)
-  const copy = d.copyHtml ? cleanHtml(d.copyHtml) : ""
+  const copy = d.copyHtml ? cleanHtml(await withDeptPictures(d.copyHtml, d)) : ""
+  // The "Sell your collection" side box as the site has it — video, text, the prices-achieved
+  // picture — with its GET STARTED pointing at our own sell-with-us page.
+  const side = d.sideHtml
+    ? cleanHtml(await withDeptPictures(d.sideHtml, d)).replace(/href="(?:https:\/\/www\.vectis\.co\.uk)?\/valuations[^"]*"(?: target="_blank" rel="noreferrer")?/gi, 'href="/sell-with-us"')
+    : ""
+  const copyHasHeading = /<h1\b/i.test(copy)
   const highlights = d.highlights ?? []
   const [pictures, lotLinks] = await Promise.all([
     Promise.all(highlights.map(h => highlightPicture(h, d.highlightKeys ?? []))),
@@ -93,25 +99,29 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* ── The copy ── */}
+        {/* ── The copy, as the site has it (its own heading, bold and italic runs, lists, pictures) ── */}
         <div className="lg:col-span-7 bg-white border border-gray-200 p-6 sm:p-8">
-          {d.heading && <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight mb-4">{d.heading}</h2>}
+          {!copyHasHeading && d.heading && <h1 className="text-3xl font-black text-[#32348A] leading-tight mb-4">{d.heading}</h1>}
           {copy
             ? <div className="news-body" dangerouslySetInnerHTML={{ __html: copy }} />
             : <p className="text-gray-400">No text is held for this department yet.</p>}
         </div>
 
-        {/* ── Sell with us + latest news ── */}
+        {/* ── The "Sell your collection" side box + latest news ── */}
         <div className="lg:col-span-5 flex flex-col gap-5">
-          <div className="bg-[#32348A] text-white p-6">
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#2AB4A6] mb-1">Selling</p>
-            <h3 className="text-2xl font-black mb-2">Sell your collection with us</h3>
-            <p className="text-sm text-gray-200 leading-relaxed mb-5">Looking to sell? From a single piece to a room of thousands, our Collections Team will guide you through the process — a free valuation, no lotting fees, and worldwide marketing at no extra cost.</p>
-            <div className="flex flex-wrap items-center gap-3">
-              <Link href="/sell-with-us" className="inline-flex items-center gap-2 bg-white text-[#32348A] text-xs font-black uppercase tracking-widest px-5 py-3 hover:bg-[#2AB4A6] hover:text-white transition-colors">Get started <span aria-hidden="true">→</span></Link>
-              <span className="text-xs text-gray-300">or call <a href="tel:+441642750616" className="text-white font-semibold hover:underline">01642 750 616</a></span>
+          {side ? (
+            <div className="dept-side bg-[#32348A] text-white p-6" dangerouslySetInnerHTML={{ __html: side }} />
+          ) : (
+            <div className="bg-[#32348A] text-white p-6">
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#2AB4A6] mb-1">Selling</p>
+              <h3 className="text-2xl font-black mb-2">Sell your collection with us</h3>
+              <p className="text-sm text-gray-200 leading-relaxed mb-5">Looking to sell? From a single piece to a room of thousands, our Collections Team will guide you through the process — a free valuation, no lotting fees, and worldwide marketing at no extra cost.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link href="/sell-with-us" className="inline-flex items-center gap-2 bg-white text-[#32348A] text-xs font-black uppercase tracking-widest px-5 py-3 hover:bg-[#2AB4A6] hover:text-white transition-colors">Get started <span aria-hidden="true">→</span></Link>
+                <span className="text-xs text-gray-300">or call <a href="tel:+441642750616" className="text-white font-semibold hover:underline">01642 750 616</a></span>
+              </div>
             </div>
-          </div>
+          )}
 
           {news.length > 0 && (
             <div className="bg-white border border-gray-200 p-5">

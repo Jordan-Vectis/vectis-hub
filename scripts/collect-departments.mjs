@@ -77,20 +77,54 @@ function builderBlock(html) {
   }
   return null
 }
+// Pictures are kept (the "prices achieved" panel, a photo in the copy) and so is an embedded Vimeo or
+// YouTube video (the "Sell Your Toys" tour) — as a bare <iframe src>; every other frame goes.
 function cleanBlock(block) {
   let h = block
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<script\b[\s\S]*?<\/script>/gi, "")
     .replace(/<style\b[\s\S]*?<\/style>/gi, "")
     .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, "")
-    .replace(/<(?:svg|button|form|input|iframe)\b[\s\S]*?<\/(?:svg|button|form|input|iframe)>/gi, "")
+  h = h.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, m => {
+    const src = attr(m, "src") || ""
+    return /^https:\/\/(player\.vimeo\.com|www\.youtube(?:-nocookie)?\.com|youtu\.be)\//i.test(src) ? `<iframe src="${src}"></iframe>` : ""
+  })
+  h = h.replace(/<(?:svg|button|form|input)\b[\s\S]*?<\/(?:svg|button|form|input)>/gi, "")
   h = h.replace(/<img\b[^>]*emoji\.php[^>]*>/gi, m => attr(m, "alt") ?? "")
-  h = h.replace(/<img\b[^>]*>/gi, "")   // the copy keeps no pictures — the banner stands for the department
+  h = h.replace(/<img\b[^>]*>/gi, m => {
+    const file = (attr(m, "data-large") || attr(m, "data-src") || attr(m, "data-original") || attr(m, "src") || "").trim()
+    if (!file || /\/media\/com_sppagebuilder\/placeholder\//.test(file) || /\/templates\/vectis\//.test(file) || /^data:/.test(file)) return ""
+    const alt = attr(m, "alt"), w = attr(m, "width"), hh = attr(m, "height")
+    return `<img src="${sitePath(file)}"${alt ? ` alt="${alt}"` : ""}${w ? ` width="${w}"` : ""}${hh ? ` height="${hh}"` : ""}>`
+  })
   h = h.replace(/<a\b([^>]*)>/gi, (m, attrs) => { const href = attr(attrs, "href"); return href ? `<a href="${href}">` : "<a>" })
-  h = h.replace(/<(?!\/)(?!a\b)([a-z][a-z0-9]*)\b[^>]*>/gi, "<$1>")
+  h = h.replace(/<(?!\/)(?!a\b)(?!img\b)(?!iframe\b)([a-z][a-z0-9]*)\b[^>]*>/gi, "<$1>")
   h = h.replace(/<p>(?:\s|&nbsp;|<br>|<strong>|<\/strong>)*<\/p>/gi, "").replace(/<li>\s*<\/li>/gi, "")
   h = h.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n")
   return h.trim()
+}
+
+// The top-level columns of a page-builder section (sppb-col-*), each from its opening div to its
+// own closing tag — the department pages put the copy in the first column and the "Sell your
+// collection" box (video, text, GET STARTED, the prices-achieved picture) in the next.
+function columnsOf(section) {
+  const out = []
+  const re = /<div class="sppb-col-/g
+  let m
+  while ((m = re.exec(section))) {
+    const start = m.index
+    const inner = /<div\b|<\/div>/g
+    inner.lastIndex = start
+    let depth = 0, x, end = -1
+    while ((x = inner.exec(section))) {
+      depth += x[0] === "</div>" ? -1 : 1
+      if (depth === 0) { end = x.index + 6; break }
+    }
+    if (end < 0) break
+    out.push(section.slice(start, end))
+    re.lastIndex = end
+  }
+  return out
 }
 const ext = p => (path.extname(String(p).split("?")[0]).toLowerCase() || ".jpg").replace(/[^.a-z0-9]/g, "")
 const norm = s => unescape(s).toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim()
@@ -131,7 +165,7 @@ for (const d of menu) {
   const out = {
     ...d, siteLink: "departments/" + d.slug,
     pageTitle: null, heading: null, heroPath: null, heroFile: null, tilePath: null, tileFile: null,
-    copyHtml: null, highlights: [], newsAliases: [], pastAuctions: [], saleKeywords: [],
+    copyHtml: null, sideHtml: null, extraImages: [], highlights: [], newsAliases: [], pastAuctions: [], saleKeywords: [],
   }
   const t = html.match(/<title>\s*Vectis Auctions\s*\|\s*([^<]*)<\/title>/i)
   out.pageTitle = t ? unescape(t[1]).trim() || null : null
@@ -146,12 +180,21 @@ for (const d of menu) {
     const h1 = block.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
     out.heading = h1 ? textOf(h1[1]) : null
     const sections = [...block.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/gi)].map(m => m[0])
-    // the copy: the section with the h1 (else the first), cut before the "Sell your collection" box
-    let copy = sections.find(s => /<h1\b/i.test(s)) || sections[0] || ""
-    const cta = copy.search(/<h3[^>]*>\s*Sell your collection/i)
-    if (cta > 0) copy = copy.slice(0, cta)
-    copy = copy.replace(/<a\b[^>]*>\s*(?:<i[^>]*>\s*<\/i>)?\s*BACK TO DEPARTMENTS\s*<\/a>/gi, "")
-    out.copyHtml = cleanBlock(copy) || null
+    // the section with the h1 (else the first): its first column is the copy, the rest the "Sell your
+    // collection" side box — video, text, GET STARTED, the prices-achieved picture
+    const first = sections.find(s => /<h1\b/i.test(s)) || sections[0] || ""
+    const cols = columnsOf(first)
+    const back = /<a\b[^>]*>\s*(?:<i[^>]*>\s*<\/i>)?\s*BACK TO DEPARTMENTS\s*<\/a>/gi
+    out.copyHtml = cleanBlock((cols[0] ?? first).replace(back, "")) || null
+    out.sideHtml = cols.length > 1 ? cleanBlock(cols.slice(1).join("\n")) || null : null
+    // the pictures inside either column become files of their own
+    for (const part of [out.copyHtml, out.sideHtml]) {
+      for (const m of (part || "").matchAll(/<img src="([^"]+)"/g)) {
+        const p = m[1]
+        if (out.extraImages.some(x => x.path === p)) continue
+        out.extraImages.push({ path: p, file: `dept-${d.slug}-x${out.extraImages.length + 1}${ext(p)}` })
+      }
+    }
     // the highlighted lots
     const hl = sections.find(s => /Highlighted Lots/i.test(s))
     if (hl) {
@@ -212,8 +255,9 @@ for (const d of departments) {
   await fetchPicture(d.heroPath, d.heroFile)
   await fetchPicture(d.tilePath, d.tileFile)
   for (const h of d.highlights || []) await fetchPicture(h.imagePath, h.file)
+  for (const x of d.extraImages || []) await fetchPicture(x.path, x.file)
 }
 const hls = departments.reduce((n, d) => n + (d.highlights || []).length, 0)
 say("FINISHED — " + departments.length + " departments in " + FILE + " (" + hls + " highlighted lots); pictures: " + got + " downloaded now, " + had + " already in the folder" + (failed.length ? ", " + failed.length + " could not be fetched" : ""))
 if (failed.length) say("⚠ Pictures that would not download: " + failed.join("; "))
-say("Now on the Hub: Databases → News → Update the news — load vectis-departments.json with the news parts, then choose every file in the pictures folder.")
+say("Now on the Hub: Databases → Departments → Update the departments — load vectis-departments.json, then choose every file in the pictures folder.")

@@ -17,7 +17,9 @@ const SITE = "https://www.vectis.co.uk/"
 type Row = {
   slug: string; name: string; order: number; pageTitle: string | null; heading: string | null
   heroPath: string | null; heroKey: string | null; tilePath: string | null; tileKey: string | null
-  copyHtml: string | null; highlights: { file?: string }[] | null; highlightKeys: string[]
+  copyHtml: string | null; sideHtml: string | null
+  extraImages: { file?: string }[] | null; extraImageKeys: string[]
+  highlights: { file?: string }[] | null; highlightKeys: string[]
   newsCategory: string | null; saleKeywords: string[]; siteSaleIds: number[]; pulledAt: Date
   picture?: string | null
 }
@@ -33,14 +35,14 @@ export default async function DepartmentsDatabasePage() {
   let picturesHeld = 0, picturesWanted = 0
   try {
     rows = await prisma.$queryRaw<Row[]>`
-      SELECT d."slug", d."name", d."order", d."pageTitle", d."heading", d."heroPath", d."heroKey", d."tilePath", d."tileKey", d."copyHtml",
-             d."highlights", d."highlightKeys", d."newsCategory", d."saleKeywords", d."siteSaleIds", d."pulledAt"
+      SELECT d."slug", d."name", d."order", d."pageTitle", d."heading", d."heroPath", d."heroKey", d."tilePath", d."tileKey", d."copyHtml", d."sideHtml",
+             d."extraImages", d."extraImageKeys", d."highlights", d."highlightKeys", d."newsCategory", d."saleKeywords", d."siteSaleIds", d."pulledAt"
       FROM "SiteDepartment" d ORDER BY d."order", d."name"`
     for (const d of rows) {
-      const keys = new Set(d.highlightKeys ?? [])
+      const keys = new Set([...(d.highlightKeys ?? []), ...(d.extraImageKeys ?? [])])
       if (d.heroPath) { picturesWanted++; if (d.heroKey) picturesHeld++; else missing.push({ file: `dept-${d.slug}-hero${ext(d.heroPath)}` }) }
       if (d.tilePath) { picturesWanted++; if (d.tileKey) picturesHeld++; else missing.push({ file: `dept-${d.slug}-tile${ext(d.tilePath)}` }) }
-      for (const h of d.highlights ?? []) {
+      for (const h of [...(d.highlights ?? []), ...(d.extraImages ?? [])]) {
         if (!h?.file) continue
         picturesWanted++
         if (keys.has(`news-photos/${h.file}`)) picturesHeld++; else missing.push({ file: h.file })

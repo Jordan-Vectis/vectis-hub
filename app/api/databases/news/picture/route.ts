@@ -11,7 +11,7 @@ import { objectExistsInR2 } from "@/lib/r2"
 //   news-photos/dept-<slug>-hero.<ext> → the department's heroKey;  -tile → tileKey;  -<n> → joins highlightKeys
 // Idempotent: registering the same key twice is fine, and a retry never re-uploads.
 const ARTICLE_KEY = /^news-photos\/(\d+)(-\d+)?\.(jpe?g|png|webp|gif)$/
-const DEPT_KEY = /^news-photos\/dept-([a-z0-9-]+)-(hero|tile|\d+)\.(jpe?g|png|webp|gif)$/
+const DEPT_KEY = /^news-photos\/dept-([a-z0-9-]+)-(hero|tile|\d+|x\d+)\.(jpe?g|png|webp|gif)$/   // x<n>: a picture inside the copy or the side box
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     const slug = dept![1], which = dept![2]
     if (which === "hero") await prisma.$executeRaw`UPDATE "SiteDepartment" SET "heroKey" = ${k} WHERE "slug" = ${slug}`
     else if (which === "tile") await prisma.$executeRaw`UPDATE "SiteDepartment" SET "tileKey" = ${k} WHERE "slug" = ${slug}`
+    else if (which.startsWith("x")) await prisma.$executeRaw`UPDATE "SiteDepartment" SET "extraImageKeys" = array_append("extraImageKeys", ${k}) WHERE "slug" = ${slug} AND NOT (${k} = ANY("extraImageKeys"))`
     else await prisma.$executeRaw`UPDATE "SiteDepartment" SET "highlightKeys" = array_append("highlightKeys", ${k}) WHERE "slug" = ${slug} AND NOT (${k} = ANY("highlightKeys"))`
     return NextResponse.json({ ok: true, slug, key: k })
   } catch (e: any) {

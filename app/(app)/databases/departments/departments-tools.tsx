@@ -71,7 +71,7 @@ export default function DepartmentsTools({ missing, held }: { missing: Missing[]
   const byName = new Map<string, File>()
   for (const f of folder) {
     const name = (f.name || "").toLowerCase()
-    if (/^dept-[a-z0-9-]+-(hero|tile|\d+)\.(jpe?g|png|webp|gif)$/.test(name)) byName.set(name, f)
+    if (/^dept-[a-z0-9-]+-(hero|tile|\d+|x\d+)\.(jpe?g|png|webp|gif)$/.test(name)) byName.set(name, f)
   }
   const toUpload = missing.filter(m => byName.has(m.file.toLowerCase()))
   const TYPES: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" }
