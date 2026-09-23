@@ -255,6 +255,12 @@ export const DESTINATIONS: Destination[] = [
     what: "Every sale on vectis.co.uk, ABC and Business Central alike, with its cover picture (the auction calendar's hero image), date, code and lot count, and a link to its lots in the ABC or BC Database.",
     also: ["sales database", "sale pictures", "hero image", "auction picture", "cover picture", "auction calendar", "past sales", "list of sales", "sale list"],
   },
+  {
+    ask: "Where are the website's news articles kept?",
+    name: "Databases → News", href: "/databases/news",   // no app key: Databases is gated on sign-in only
+    what: "Every News & Stories article from vectis.co.uk — title, full text, category, tags, date and cover picture — collected on an office machine and loaded here; the test website's News & Stories pages read it. Search by words, filter by category or year.",
+    also: ["news", "news and stories", "news stories", "articles", "blog", "website news", "news database", "stories", "press"],
+  },
 ]
 
 /** Every AppKey mentioned in the map really exists. Cheap guard against a typo'd key

@@ -200,6 +200,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "MarketingPlanObjective", what: "A target on a plan: the measure, where it started, where it should get to and by when." },
       { model: "MarketingPlanAction", what: "A job on a plan's to-do list: channel, owner, effort, impact and status." },
       { model: "HeroSlide", what: "The website's hero carousel slides — title, subtitle, button, image and whether each is live." },
+      { model: "SiteNewsArticle", what: "Every News & Stories article on vectis.co.uk — title, full text, category, tags, date and cover picture — collected on an office machine for the test website's news pages. The site's own public content; nothing personal." },
     ],
   },
   {

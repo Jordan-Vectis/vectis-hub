@@ -3260,3 +3260,32 @@ model SearchWordBuild {
   raw String @id
   n   Int    @default(0)
 }
+
+/// Databases → News: every article on vectis.co.uk's News & Stories, collected on an office machine
+/// with scripts/collect-news.mjs (the site's Joomla blog feed — the full text comes with it) and
+/// loaded on the page; the cover picture is uploaded from the same collection into R2
+/// (news-photos/<id>.<ext>). The test website's News & Stories pages read this table.
+model SiteNewsArticle {
+  id          Int       @id                 // the site's own article id
+  alias       String                        // the slug in the article's address (unique on the site in practice; the newest wins if not)
+  title       String
+  sefLink     String?                       // news-stories/news/<alias> on the site
+  categoryId  Int?
+  category    String?
+  tags        String[]  @default([])
+  featured    Boolean   @default(false)
+  hits        Int       @default(0)
+  introText   String?
+  fullText    String?                       // the site's HTML, as served
+  publishedAt DateTime?
+  modifiedAt  DateTime?
+  imagePath   String?                       // the site's file, e.g. images/2026/09/Lot-305-news-desk.jpg
+  imageAlt    String?
+  imageKey    String?                       // our copy in R2, once uploaded
+  imageAt     DateTime?
+  pulledAt    DateTime  @default(now())
+
+  @@index([publishedAt])
+  @@index([categoryId])
+  @@index([alias])
+}

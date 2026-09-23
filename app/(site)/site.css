@@ -27,3 +27,22 @@
   background-color: #f9fafb; /* gray-50 */
   color: #6b7280;            /* gray-500 */
 }
+
+/* News & Stories article bodies arrive from the site as HTML — readable defaults for that text. */
+.vectis-site .news-body { font-size: 1rem; line-height: 1.75; color: #1f2937; }
+.vectis-site .news-body p { margin: 0 0 1em; }
+.vectis-site .news-body h2, .vectis-site .news-body h3, .vectis-site .news-body h4 {
+  color: #32348A; font-weight: 900; line-height: 1.2; margin: 1.4em 0 0.5em;
+}
+.vectis-site .news-body h2 { font-size: 1.5rem; }
+.vectis-site .news-body h3 { font-size: 1.25rem; }
+.vectis-site .news-body h4 { font-size: 1.1rem; }
+.vectis-site .news-body img { max-width: 100%; height: auto; margin: 1em 0; }
+.vectis-site .news-body a { color: #32348A; text-decoration: underline; }
+.vectis-site .news-body ul { margin: 0 0 1em 1.5em; list-style: disc; }
+.vectis-site .news-body ol { margin: 0 0 1em 1.5em; list-style: decimal; }
+.vectis-site .news-body strong, .vectis-site .news-body b { font-weight: 700; }
+.vectis-site .news-body iframe, .vectis-site .news-body video { max-width: 100%; }
+.vectis-site .news-body table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
+.vectis-site .news-body td, .vectis-site .news-body th { border: 1px solid #e5e7eb; padding: 0.4em 0.6em; }
+.vectis-site .news-body blockquote { border-left: 4px solid #DB0606; padding-left: 1em; color: #4b5563; margin: 1em 0; }

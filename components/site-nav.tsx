@@ -156,7 +156,7 @@ export default async function SiteNav() {
 
             <NavItem href="/portal/register" label="HOW TO BID" />
             <NavItem href="/submit" label="SELL WITH US" />
-            <NavItem href="/auctions" label="NEWS &amp; STORIES" />
+            <NavItem href="/news-stories/news" label="NEWS &amp; STORIES" />
             <NavItem href="/auctions" label="CAREERS" />
             <NavItem href="/auctions" label="CONTACT US" />
           </ul>

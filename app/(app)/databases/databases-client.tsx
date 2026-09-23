@@ -648,6 +648,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
           <Link href="/databases/archive" className="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-gray-300 transition-colors">ABC Database ↗</Link>
           <Link href="/databases/bc" className="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-gray-300 transition-colors">BC Database ↗</Link>
           <Link href="/databases/sales" className="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-gray-300 transition-colors">Sales ↗</Link>
+          <Link href="/databases/news" className="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-gray-500 hover:text-gray-300 transition-colors">News ↗</Link>
         </div>
 
         {/* ── Customers ── */}
