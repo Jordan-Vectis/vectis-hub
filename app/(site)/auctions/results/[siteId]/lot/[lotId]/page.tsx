@@ -183,12 +183,53 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
           </Accordion>
 
           <Accordion kicker="Post auction" title="Shipping and postage">
-            <p>UK postage starts from £14.95 for small items and £24.95+ for larger lots, with surcharges for additional items.</p>
-            <p>International shipping varies by Parcel Force destination zone (zones 6–9 for Europe; quotes provided for the rest of the world).</p>
-            <p>Average shipping time is 14 days, though peak periods may extend to 28 days.</p>
-            <p>
-              <Link href="/faq" className="text-[#32348A] font-semibold hover:underline">See the FAQs for the full post and packing details →</Link>
+            <p>Whether you&apos;re buying a Star Wars figure or a Matchbox car – we can have your lots securely delivered anywhere in the world.</p>
+            <p>Our in-house shipping service means we can safely and quickly dispatch your auction lots straight to your front door.</p>
+            <p>Our website displays the shipping cost on each individual lot, with discounts for combined postage.</p>
+            <p>We endeavour to deliver your parcels as fast as possible (average shipping 14 days), however in peak times please note that shipping may take up to 28 days.</p>
+
+            <h4 className="text-base font-black text-[#32348A] uppercase tracking-wide pt-2">UK postage prices <span className="text-gray-500 font-semibold normal-case tracking-normal">(plus VAT)</span></h4>
+            <PriceTable rows={[
+              ["Small", "£15.95", "+ £2.50 per additional small lot"],
+              ["Medium", "£20.95", "+ £5.50 per additional medium lot"],
+              ["Large", "£25.95", "+ £20.50 per additional large lot"],
+              ["Extra large", "Quote or pick up only", ""],
+            ]} />
+            <div className="bg-gray-50 border border-gray-200 px-4 py-3 text-xs text-gray-600">
+              <p className="font-bold text-gray-700 mb-1">For example</p>
+              <p>1 × medium (£20.95) and 3 × small (£2.50 + £2.50 + £2.50)</p>
+              <p className="font-semibold text-gray-800">£20.95 + £2.50 + £2.50 + £2.50 = £28.45 plus VAT</p>
+            </div>
+
+            <h4 className="text-base font-black text-[#32348A] uppercase tracking-wide pt-2">European postage costs</h4>
+            <p>Shipping is automatically calculated for addresses within Parcel Force zones 6, 7, 8 and 9.</p>
+            <p className="text-xs text-gray-600">
+              <span className="font-bold text-gray-700">Zone 6</span> Netherlands, Belgium, Luxembourg, Ireland ·{" "}
+              <span className="font-bold text-gray-700">Zone 7</span> France, Germany, Denmark ·{" "}
+              <span className="font-bold text-gray-700">Zone 8</span> Italy, Spain, Portugal, Greece
             </p>
+            <PriceTable rows={[
+              ["Small", "£34.95", "+ £4.95 per additional small lot"],
+              ["Medium", "£49.95", "+ £9.95 per additional medium lot"],
+              ["Large", "£64.95", "+ £19.95 per additional large lot"],
+              ["Extra large", "Please contact us for a quote or collection option", ""],
+            ]} />
+            <p className="text-xs text-gray-600"><span className="font-bold text-gray-700">Zone 9</span> Rest of Europe — select zone 9 in the drop-down to see the list of countries.</p>
+            <PriceTable rows={[
+              ["Small", "£34.95", "+ £9.95 per additional small lot"],
+              ["Medium", "£66.95", "+ £14.95 per additional medium lot"],
+              ["Large", "£89.95", "+ £19.95 per additional large lot"],
+              ["Extra large", "Please contact us for a quote or collection option", ""],
+            ]} />
+
+            <h4 className="text-base font-black text-[#32348A] uppercase tracking-wide pt-2">Rest of the world postage costs</h4>
+            <p>For all other countries outside of these zones (e.g. USA, Canada, Japan, Australia) please contact us for a shipping quote.</p>
+            <p>Any parcels shipped to the United States may be subject to customs duty charges ranging from 10% to 50%.</p>
+            <p>
+              <a href="mailto:dispatch@vectis.co.uk" className="text-[#32348A] font-semibold hover:underline">dispatch@vectis.co.uk</a> or contact{" "}
+              <a href="tel:+441642750616" className="text-[#32348A] font-semibold hover:underline">(+44) 01642 750 616</a>
+            </p>
+            <p className="font-bold text-gray-800">PLEASE NOTE: Due to the automatic postal charges we are no longer able to combine shipping costs over multiple sale dates.</p>
           </Accordion>
 
           <Link
@@ -250,6 +291,23 @@ function Accordion({ kicker, title, children }: { kicker: string; title: string;
       </summary>
       <div className="px-6 pb-6 text-sm text-gray-700 leading-relaxed space-y-3">{children}</div>
     </details>
+  )
+}
+
+// Size / price / per-additional-lot rows for the postage charges.
+function PriceTable({ rows }: { rows: [string, string, string][] }) {
+  return (
+    <table className="w-full text-xs border border-gray-200">
+      <tbody>
+        {rows.map(([size, price, extra]) => (
+          <tr key={size} className="border-b border-gray-200 last:border-b-0">
+            <th scope="row" className="text-left font-bold text-gray-700 px-3 py-2 w-28 bg-gray-50">{size}</th>
+            <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">{price}</td>
+            <td className="px-3 py-2 text-gray-600">{extra}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
