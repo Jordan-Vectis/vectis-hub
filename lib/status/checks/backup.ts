@@ -218,6 +218,28 @@ const backup: StatusCheckDef = {
       extra.push({ label: "Since then", value: `Only a partial copy (some tables) was saved, ${whenSaid(at(partial[0]), nowMs)} — it doesn't count as a full backup.`, tone: "warn" })
     }
 
+    // ⚠ The run itself is in this process, so the check can SEE it (2026-09-23: the first nightly
+    // never landed and this light said "no backup for 32 hours" with no way of telling a run
+    // still going from one that had failed). Still running = amber and where it has got to; failed
+    // = red and the reason, so nobody has to go and find the server log.
+    const run = backupProgress()
+    const stale = state === "down" || (state === "degraded" && (!newest || at(newest) < cutoff))
+    if (run.running && run.startedAt) {
+      const startedMs = Date.parse(run.startedAt)
+      const where = run.table ? `table ${run.tableIndex} of ${run.tableTotal} (${run.table})` : "getting the table list"
+      extra.unshift({ label: "Running now", value: `Started ${whenSaid(startedMs, nowMs)} — ${where}, ${run.rows.toLocaleString("en-GB")} rows and ${fmtBytes(run.bytes)} so far`, tone: "warn" })
+      if (stale) {
+        state = "degraded"; tone = "warn"
+        summary = `Last night's backup is still running — started ${whenSaid(startedMs, nowMs)}, on ${where}, ${run.rows.toLocaleString("en-GB")} rows so far.${newest ? ` The newest finished copy is from ${whenSaid(at(newest), nowMs)}.` : ""}`
+      }
+    } else if (!run.running && run.error && run.finishedAt) {
+      const failedMs = Date.parse(run.finishedAt)
+      extra.unshift({ label: "Last run", value: `Failed ${whenSaid(failedMs, nowMs)}: ${run.error}`, tone: "bad" })
+      if (stale) summary += ` The run ${whenSaid(failedMs, nowMs)} failed: ${run.error}`
+    } else if (!run.running && run.result && run.result.failed && stale) {
+      extra.unshift({ label: "Last run", value: `Finished ${whenSaid(Date.parse(run.result.finishedAt), nowMs)} with ${run.result.failed} table(s) failed`, tone: "warn" })
+    }
+
     return {
       state,
       summary,

@@ -38,6 +38,13 @@ import type { Readable } from "node:stream"
 
 export const KEEP = 30
 export const PAGE_ROWS = 5000
+/** A page of rows that takes longer than this is abandoned and the table marked failed — a hung
+ *  query must fail one table, never hold the whole night (2026-09-23: the first nightly never
+ *  finished and nothing said why). */
+const PAGE_TIMEOUT_MS = 120_000
+/** Keep a page of rows under about this much text: a table whose rows carry big JSON (a run's
+ *  results) would otherwise make a 5,000-row page of hundreds of MB. */
+const PAGE_BYTES = 24_000_000
 export const bucket = () => process.env.CLOUDFLARE_R2_BACKUP_BUCKET ?? ""
 /** This environment's folder in the backup bucket — the same rule as before, `?? "unknown"` included. */
 export const backupPrefix = () => `${process.env.RAILWAY_ENVIRONMENT_NAME ?? "unknown"}/`
@@ -125,17 +132,28 @@ export async function tableOrder(names: string[]): Promise<string[]> {
 
 const q = (s: string) => `"${s.replace(/"/g, '""')}"`
 
+/** One page query under a statement timeout — SET LOCAL needs a transaction, so it is one. */
+async function timedPage(sql: string, ...params: unknown[]): Promise<Record<string, unknown>[]> {
+  return prisma.$transaction(async tx => {
+    await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${PAGE_TIMEOUT_MS}`)
+    return tx.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
+  }, { maxWait: 30_000, timeout: PAGE_TIMEOUT_MS + 15_000 })
+}
+
 /** Pages through a table. A single-column key walks by keyset (no OFFSET, so a million rows stay
- *  a million row reads); a composite key — six small tables — pages by OFFSET. */
-export async function* readRows(t: TableInfo, page = PAGE_ROWS): AsyncGenerator<Record<string, unknown>[]> {
+ *  a million row reads); a composite key — six small tables — pages by OFFSET. The page size is
+ *  asked for afresh each time, so a caller can shrink it when the rows turn out to be big. */
+export async function* readRows(t: TableInfo, pageSize: number | (() => number) = PAGE_ROWS): AsyncGenerator<Record<string, unknown>[]> {
   const cols = t.columns.map(c => q(c.name)).join(", ")
+  const size = () => Math.max(1, Math.floor(typeof pageSize === "function" ? pageSize() : pageSize))
   if (t.pk.length === 1) {
     const pk = q(t.pk[0])
     let last: unknown
     for (;;) {
+      const page = size()
       const rows = last === undefined
-        ? await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`SELECT ${cols} FROM ${q(t.name)} ORDER BY ${pk} LIMIT ${page}`)
-        : await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`SELECT ${cols} FROM ${q(t.name)} WHERE ${pk} > $1 ORDER BY ${pk} LIMIT ${page}`, last)
+        ? await timedPage(`SELECT ${cols} FROM ${q(t.name)} ORDER BY ${pk} LIMIT ${page}`)
+        : await timedPage(`SELECT ${cols} FROM ${q(t.name)} WHERE ${pk} > $1 ORDER BY ${pk} LIMIT ${page}`, last)
       if (!rows.length) return
       yield rows
       if (rows.length < page) return
@@ -143,11 +161,14 @@ export async function* readRows(t: TableInfo, page = PAGE_ROWS): AsyncGenerator<
     }
   }
   const order = (t.pk.length ? t.pk : t.columns.map(c => c.name)).map(q).join(", ")
-  for (let off = 0; ; off += page) {
-    const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(`SELECT ${cols} FROM ${q(t.name)} ORDER BY ${order} LIMIT ${page} OFFSET ${off}`)
+  let off = 0
+  for (;;) {
+    const page = size()
+    const rows = await timedPage(`SELECT ${cols} FROM ${q(t.name)} ORDER BY ${order} LIMIT ${page} OFFSET ${off}`)
     if (!rows.length) return
     yield rows
     if (rows.length < page) return
+    off += rows.length
   }
 }
 
@@ -267,19 +288,25 @@ export async function runBackupJob(opts: { by: string; scope?: BackupScope }): P
 
     const tables: ManifestTable[] = []
     let stopped = false
+    console.log(`[db-backup] starting ${folder} — ${chosen.length} tables, by ${opts.by}`)
     for (let i = 0; i < chosen.length; i++) {
       const t = chosen[i]
       if (j.stop) { stopped = true; break }
       Object.assign(j, { table: t.name, tableIndex: i + 1, tableRows: 0, tableEstRows: t.estRows })
       const writer = new R2MultipartWriter(r2, bucket(), `${folder}tables/${t.name}.jsonl`, "application/x-ndjson")
       let rows = 0
+      let page = PAGE_ROWS
+      const t0 = Date.now()
       try {
-        for await (const page of readRows(t)) {
+        for await (const batch of readRows(t, () => page)) {
           if (j.stop) break
-          await writer.write(page.map(r => JSON.stringify(plainRow(r))).join("\n") + "\n")
-          rows += page.length
+          const text = batch.map(r => JSON.stringify(plainRow(r))).join("\n") + "\n"
+          await writer.write(text)
+          // Size the next page by what this one weighed: big rows, smaller pages.
+          page = Math.max(200, Math.min(PAGE_ROWS, Math.floor(PAGE_BYTES / Math.max(1, text.length / batch.length))))
+          rows += batch.length
           j.tableRows = rows
-          j.rows += page.length
+          j.rows += batch.length
           j.bytes = tables.reduce((n, x) => n + x.bytes, 0) + writer.bytes
         }
         if (j.stop) {
@@ -291,6 +318,9 @@ export async function runBackupJob(opts: { by: string; scope?: BackupScope }): P
         }
         const bytes = await writer.close()
         tables.push({ name: t.name, rows, bytes, ok: true })
+        // ⚠ One line per table in the server log — the night the first run never finished, the
+        // log had nothing between "starting" and silence.
+        console.log(`[db-backup] ${t.name}: ${rows} rows, ${bytes} bytes, ${Math.round((Date.now() - t0) / 1000)} s`)
       } catch (e) {
         await writer.abort()
         tables.push({ name: t.name, rows, bytes: 0, ok: false, error: errText(e) })

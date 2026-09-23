@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"79fbc43bb077e8282bddb219627b1fc0382ef22d","author":"Jordan Orange","date":"2026-09-22T17:02:17+01:00","subject":"Memory: 21–22 Sept in the opening message, main = 4403d2f7"},
   {"sha":"5d79f8d91d72537ab7794fc6bad6a0c33293d0e3","author":"Jordan Orange","date":"2026-09-22T15:47:33+01:00","subject":"Sales: a picture-only collector, handed out on the tab"},
   {"sha":"4f67740b97d8d6cbf7ce95ac550ea7b037a864a1","author":"Jordan Orange","date":"2026-09-22T14:59:23+01:00","subject":"Databases: a Sales tab with every sale's cover picture"},
   {"sha":"75b0ce6d7146843d4dfcfb8e21b9689eaeca3219","author":"Jordan Orange","date":"2026-09-22T12:16:00+01:00","subject":"Memory: moving Claude Code to a new computer"},
