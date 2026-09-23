@@ -1,6 +1,7 @@
 import SiteNav from "@/components/site-nav"
 import Image from "next/image"
 import type { Metadata } from "next"
+import "./site.css"
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.vectis.co.uk"),
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="vectis-site min-h-screen flex flex-col bg-white">
       <SiteNav />
       <main className="flex-1">{children}</main>
 

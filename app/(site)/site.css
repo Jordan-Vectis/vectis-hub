@@ -1,0 +1,29 @@
+/* The test website is light, but it renders inside the Hub's root layout, whose <html> carries
+   class="dark" by default — and globals.css paints every form control dark for the dark theme
+   ("Dark-mode default for form controls": an UNLAYERED rule, so it beats Tailwind's layered classes
+   such as bg-transparent / text-gray-800 on the site's own inputs). That is why the search boxes
+   came out black on a white page (Jordan, 2026-09-23: "the formatting on the search bars is messed
+   up"). These rules, scoped to the site's wrapper and unlayered too but more specific, paint them
+   back. Site-only: nothing in the Hub carries the vectis-site class. */
+
+.vectis-site {
+  color-scheme: light;
+}
+
+.vectis-site :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select
+) {
+  background-color: #ffffff;
+  color: #1f2937; /* gray-800 */
+}
+
+.vectis-site :is(input, textarea, select)::placeholder {
+  color: #9ca3af; /* gray-400 */
+}
+
+.vectis-site :is(input, textarea, select):disabled {
+  background-color: #f9fafb; /* gray-50 */
+  color: #6b7280;            /* gray-500 */
+}
