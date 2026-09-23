@@ -16,6 +16,27 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "project_fake_test_website.md",
+    content: `---
+name: project-fake-test-website
+description: The customer website in app/(site) (+ the /website preview and Banner Manager) is a FAKE TEST site — a play area; work on it must never touch any other part of the Hub. BidJS removed 2026-09-23.
+metadata:
+  type: project
+---
+
+# The website is a fake test site — a play area (2026-09-23)
+
+The "website part" of the Hub — the mock customer website under app/(site) (/, /auctions, /portal, /account, /search, careers, faq, how-to-bid, sell-with-us, terms), previewed inside the Hub at /website with its Banner Manager at /website/banner — is a FAKE TEST website. Jordan, 2026-09-23: "this is just a fake test website and all other parts of the app should not be affected by the website part — we are just having a play around and a test for now to see what we can do."
+
+**Why:** It is not the real vectis.co.uk — that is hosted by the website provider (and answers Railway with 202 + empty, see the BC Database entry). No customer sees it: it sits behind the staff login (RULES.md "Public site is login-gated", 2026-07-09). Jordan wants somewhere to experiment without any risk to the tools staff use every day.
+
+**What it touches today (measured 2026-09-23):** it READS real Hub data read-only — sales ticked published, their lots and photos (CatalogueAuction / CatalogueLot), HeroSlide — and WRITES only its own tables: CustomerAccount, BidderRegistration, CommissionBid, LiveAuction. Outside app/(site) those tables are used only by the site's own lib/actions, the Databases browser and a customer-name include on the sale page and the parcels route.
+
+**How to apply:** Treat website work as a sandbox. Changes go in app/(site), app/(app)/website and their own components/tables only. A website change must never alter shared Hub code, shared components, Prisma models used by other tools, the auth gate, or any cataloguing / BC / AI flow — if an idea needs a shared piece changed, ask first. Keep the login gate (never re-add the site's paths to publicPaths). Say so plainly if something built there would only ever be a mock.
+
+**Removed 2026-09-23 (Jordan: "all the bidjs related code needs removing"):** the /auctions/bidjs SDK page, the "Auction Platform" switcher bar on /auctions, the BidJS Setup tab and "BidJS Live" nav entry on /website, the vendored vendor/bidjs-sdk folder and the @bidlogixteam/bidjs-sdk dependency (its jest/babel dev tree left the lockfile with it). Don't bring any of it back.`,
+  },
+  {
     filename: "reference_wizard_desktop.md",
     content: `---
 name: wizard-desktop-layout
@@ -3877,7 +3898,7 @@ Three whole features the memory never recorded, plus stale facts:
 Customer condition-report helpdesk grouped by auction (NEW/IN_PROGRESS/DONE, assign, manual add). Live BC lookup per report (lib/condition-bc.ts) resolves cataloguer + tote/location. Two email paths: inbound webhook POST /api/condition-reports/inbound?key= (env CONDITION_INBOUND_SECRET) and a 2nd Graph shared mailbox (lib/condition-mailbox.ts, env CONDITION_MAILBOX, OAuth /api/condition-mailbox/auth|callback|folders). Gemini fallback parse (condition-extract.ts). Models ConditionReport + ConditionMailboxAuth. Needs Run Migrations.
 
 ## Public website + customer bidder portal — app/(site)/  (NOT just an iframe)
-The Hub serves a full public Vectis site + portal: marketing pages, /auctions (+[code]/live online bidding room, /lot, /bidjs), /search, /portal/login+register, /account(+bids,sales). Own CustomerAccount cookie auth (lib/customer-auth.ts), separate from staff NextAuth. Models: CustomerAccount, BidderRegistration, LiveAuction (status + currentLotIndex, reset to PENDING on boot), CommissionBid. The /website staff tool is now THREE tabs (adds BidJS Setup).
+The Hub serves a full public Vectis site + portal: marketing pages, /auctions (+[code]/live online bidding room, /lot), /search, /portal/login+register, /account(+bids,sales). Own CustomerAccount cookie auth (lib/customer-auth.ts), separate from staff NextAuth. Models: CustomerAccount, BidderRegistration, LiveAuction (status + currentLotIndex, reset to PENDING on boot), CommissionBid. The /website staff tool has two tabs (Website, Back End Controller) plus the Banner Manager link. ⚠ The BidJS integration (the /auctions/bidjs page, the platform switcher, the BidJS Setup tab and the vendored @bidlogixteam/bidjs-sdk) was REMOVED on 2026-09-23 at Jordan's request — don't bring it back. See the "Fake test website" entry: this site is a play area and must never touch the rest of the Hub.
 
 ## Royal Mail Click & Drop parcel dispatch (inside /tools/packing)
 Create parcel then POST /api/parcels/[id]/label (lib/royal-mail.ts, env ROYAL_MAIL_API_KEY) creates the Click & Drop order + label PDF + tracking; end-of-day /api/parcels/manifest marks LABEL_CREATED to DISPATCHED. Models Parcel + ParcelLot.

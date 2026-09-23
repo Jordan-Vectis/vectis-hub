@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"47848dc6550bdffe883c4d114958129886185652","author":"Jordan Orange","date":"2026-09-23T09:49:44+01:00","subject":"Memory: the first every-table backup did not land, and what changed"},
   {"sha":"a8150ea518f42c723003baf96b12ef9371126c15","author":"Jordan Orange","date":"2026-09-23T09:13:43+01:00","subject":"Backup: the light says running or failed; no page or R2 call can hang"},
   {"sha":"79fbc43bb077e8282bddb219627b1fc0382ef22d","author":"Jordan Orange","date":"2026-09-22T17:02:17+01:00","subject":"Memory: 21–22 Sept in the opening message, main = 4403d2f7"},
   {"sha":"5d79f8d91d72537ab7794fc6bad6a0c33293d0e3","author":"Jordan Orange","date":"2026-09-22T15:47:33+01:00","subject":"Sales: a picture-only collector, handed out on the tab"},
