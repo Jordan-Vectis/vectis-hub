@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"fa56b16b9cd3c73312d10aac7bb38ac7805028b7","author":"Jordan Orange","date":"2026-09-23T11:41:19+01:00","subject":"Test website: the live site's shipping and postage wording under each lot"},
   {"sha":"b48a728334f50d8cb0973fdac8cc40c318a3b737","author":"Jordan Orange","date":"2026-09-23T11:36:15+01:00","subject":"Test website: the small print and a sell nudge below each lot"},
   {"sha":"403930fe83936a0b1458b277da7aae2b1d695fdc","author":"Jordan Orange","date":"2026-09-23T11:18:30+01:00","subject":"Test website: a lot page behind every results card"},
   {"sha":"3132726120a653a4eb4daeb3ad00e08f8e0f955b","author":"Jordan Orange","date":"2026-09-23T10:49:37+01:00","subject":"Test website: View Results reads the Hub's sale databases"},

@@ -82,10 +82,14 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* ── Photo ── */}
-        <div className="lg:col-span-7">
-          <div className="bg-white border border-gray-200 p-3">
+      {/* One grid with two columns on a desktop, so each column runs on without a gap (two stacked
+          grids left a hole under the photo whenever the right column was the taller one). On a phone
+          the column wrappers dissolve (contents) and order-N puts the result straight after the photo. */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-14 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8 items-start">
+
+        {/* ── Left: the photo, then the full description and the small print ── */}
+        <div className="contents lg:flex lg:flex-col lg:gap-4 lg:col-span-7">
+          <div className="order-1 bg-white border border-gray-200 p-3">
             <div className="bg-gray-100 flex items-center justify-center" style={{ minHeight: "320px" }}>
               {lot.photo ? (
                 <ZoomPhoto thumb={lot.photo} full={lot.photoFull} className="max-h-[640px] max-w-full object-contain bg-gray-100" />
@@ -102,61 +106,8 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
               <p className="text-[11px] text-gray-400 text-center mt-2 uppercase tracking-widest">Tap the picture to zoom</p>
             )}
           </div>
-        </div>
 
-        {/* ── Details ── */}
-        <div className="lg:col-span-5 flex flex-col gap-5">
-          <div>
-            <p className="text-xs font-black text-[#DB0606] tracking-[0.25em] uppercase">Lot {lot.lot ?? "—"}</p>
-            <h1 className="text-2xl sm:text-3xl font-black text-[#32348A] leading-tight mt-1">{title}</h1>
-          </div>
-
-          {/* The result, up front */}
-          <div className={`border-2 p-5 ${sold ? "border-[#32348A] bg-white" : "border-gray-300 bg-gray-100"}`}>
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 mb-2">Result</p>
-            {sold ? (
-              <>
-                <p className="text-4xl font-black text-[#32348A] leading-none">£{gbp(lot.hammer!)}</p>
-                <p className="text-xs text-gray-500 mt-2">Hammer price{saleDate ? `, ${saleDate}` : ""}. Excludes buyer&apos;s premium.</p>
-              </>
-            ) : (
-              <>
-                <p className="text-3xl font-black text-gray-500 leading-none uppercase tracking-wide">Unsold</p>
-                <p className="text-xs text-gray-500 mt-2">This lot did not sell on the day.</p>
-              </>
-            )}
-            {estimate && (
-              <p className="mt-4 pt-4 border-t border-gray-200 text-sm text-gray-700">
-                <span className="font-black text-[#32348A] uppercase tracking-wider text-xs mr-2">Estimate</span>{estimate}
-              </p>
-            )}
-          </div>
-
-          {/* Key information */}
-          <div className="bg-white border border-gray-200 p-5">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606] mb-3">Key information</h2>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-              <Fact label="Lot">{lot.lot ?? "—"}</Fact>
-              <Fact label="Sale"><Link href={saleHref} className="text-[#32348A] hover:underline">{sale.title}</Link></Fact>
-              {saleDate && <Fact label="Sale date">{saleDate}</Fact>}
-              {sale.code && <Fact label="Sale code">{sale.code}</Fact>}
-              {lot.category && <Fact label="Category">{lot.category}</Fact>}
-              {lot.subcategory && <Fact label="Sub-category">{lot.subcategory}</Fact>}
-              {isBcSale(sale) && <Fact label="Lot ID"><span className="font-mono text-xs">{lot.id}</span></Fact>}
-            </dl>
-          </div>
-
-          <div className="flex items-center justify-between gap-3">
-            <NeighbourLink n={lot.prev} dir="prev" saleHref={saleHref} wide />
-            <NeighbourLink n={lot.next} dir="next" saleHref={saleHref} wide />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Below the lot: the full description and the small print, and a nudge to sell ── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-14 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        <div className="lg:col-span-7 flex flex-col gap-4">
-          <section className="bg-white border border-gray-200 p-6">
+          <section className="order-3 bg-white border border-gray-200 p-6">
             <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606]">Lot {lot.lot ?? "—"}</p>
             <h2 className="text-xl font-black text-[#32348A] mb-4">Full lot description</h2>
             <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
@@ -168,7 +119,7 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
             </div>
           </section>
 
-          <Accordion kicker="Auction fees" title="Fees & VAT">
+          <Accordion className="order-4" kicker="Auction fees" title="Fees & VAT">
             <p>Buyer&apos;s Premium for each lot will be 22.5% plus VAT (27%).</p>
             <p>Payment for lots can be made by credit or debit card (we accept all major cards), by bank transfer, or by cheque provided we have a bank guarantee or alternative arrangements have been agreed.</p>
             <h4 className="text-base font-black text-[#32348A] uppercase tracking-wide pt-2">Buyer&apos;s premium for live online bidding via the-saleroom</h4>
@@ -182,7 +133,7 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
             </p>
           </Accordion>
 
-          <Accordion kicker="Post auction" title="Shipping and postage">
+          <Accordion className="order-5" kicker="Post auction" title="Shipping and postage">
             <p>Whether you&apos;re buying a Star Wars figure or a Matchbox car – we can have your lots securely delivered anywhere in the world.</p>
             <p>Our in-house shipping service means we can safely and quickly dispatch your auction lots straight to your front door.</p>
             <p>Our website displays the shipping cost on each individual lot, with discounts for combined postage.</p>
@@ -234,14 +185,62 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
 
           <Link
             href="/faq"
-            className="self-start border-2 border-[#32348A] text-[#32348A] hover:bg-[#32348A] hover:text-white text-xs font-black uppercase tracking-widest px-6 py-3 transition-colors"
+            className="order-6 justify-self-start self-start border-2 border-[#32348A] text-[#32348A] hover:bg-[#32348A] hover:text-white text-xs font-black uppercase tracking-widest px-6 py-3 transition-colors"
           >
             View FAQs
           </Link>
         </div>
 
-        <aside className="lg:col-span-5">
-          <div className="bg-white border border-gray-200 overflow-hidden">
+        {/* ── Right: the lot's headline, result and facts, then a nudge to sell ── */}
+        <div className="contents lg:flex lg:flex-col lg:gap-5 lg:col-span-5">
+          <div className="order-2 flex flex-col gap-5">
+            <div>
+              <p className="text-xs font-black text-[#DB0606] tracking-[0.25em] uppercase">Lot {lot.lot ?? "—"}</p>
+              <h1 className="text-2xl sm:text-3xl font-black text-[#32348A] leading-tight mt-1">{title}</h1>
+            </div>
+
+            {/* The result, up front */}
+            <div className={`border-2 p-5 ${sold ? "border-[#32348A] bg-white" : "border-gray-300 bg-gray-100"}`}>
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 mb-2">Result</p>
+              {sold ? (
+                <>
+                  <p className="text-4xl font-black text-[#32348A] leading-none">£{gbp(lot.hammer!)}</p>
+                  <p className="text-xs text-gray-500 mt-2">Hammer price{saleDate ? `, ${saleDate}` : ""}. Excludes buyer&apos;s premium.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-3xl font-black text-gray-500 leading-none uppercase tracking-wide">Unsold</p>
+                  <p className="text-xs text-gray-500 mt-2">This lot did not sell on the day.</p>
+                </>
+              )}
+              {estimate && (
+                <p className="mt-4 pt-4 border-t border-gray-200 text-sm text-gray-700">
+                  <span className="font-black text-[#32348A] uppercase tracking-wider text-xs mr-2">Estimate</span>{estimate}
+                </p>
+              )}
+            </div>
+
+            {/* Key information */}
+            <div className="bg-white border border-gray-200 p-5">
+              <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606] mb-3">Key information</h2>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+                <Fact label="Lot">{lot.lot ?? "—"}</Fact>
+                <Fact label="Sale"><Link href={saleHref} className="text-[#32348A] hover:underline">{sale.title}</Link></Fact>
+                {saleDate && <Fact label="Sale date">{saleDate}</Fact>}
+                {sale.code && <Fact label="Sale code">{sale.code}</Fact>}
+                {lot.category && <Fact label="Category">{lot.category}</Fact>}
+                {lot.subcategory && <Fact label="Sub-category">{lot.subcategory}</Fact>}
+                {isBcSale(sale) && <Fact label="Lot ID"><span className="font-mono text-xs">{lot.id}</span></Fact>}
+              </dl>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <NeighbourLink n={lot.prev} dir="prev" saleHref={saleHref} wide />
+              <NeighbourLink n={lot.next} dir="next" saleHref={saleHref} wide />
+            </div>
+          </div>
+
+          <div className="order-7 bg-white border border-gray-200 overflow-hidden">
             {sale.photo ? (
               <img src={sale.photo} alt="" className="w-full h-56 object-cover" />
             ) : (
@@ -260,7 +259,7 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
               </Link>
             </div>
           </div>
-        </aside>
+        </div>
       </div>
     </div>
   )
@@ -277,9 +276,9 @@ const DISCLAIMER =
   "cannot ascertain the information to bid with certainty, please do not bid."
 
 // A fold-out section, no JavaScript: a native <details> styled like the rest of the page.
-function Accordion({ kicker, title, children }: { kicker: string; title: string; children: React.ReactNode }) {
+function Accordion({ kicker, title, children, className }: { kicker: string; title: string; children: React.ReactNode; className?: string }) {
   return (
-    <details className="group bg-white border border-gray-200">
+    <details className={`group bg-white border border-gray-200 ${className ?? ""}`}>
       <summary className="list-none cursor-pointer select-none px-6 py-4 flex items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606]">{kicker}</p>
