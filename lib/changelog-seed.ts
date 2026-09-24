@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"9ad7f4b6f1934079c97aa6a94bcdb9ff84958673","author":"Jordan Orange","date":"2026-09-24T11:05:45+01:00","subject":"Test website: logo back to size, nothing over the banner picture, the four stats always shown"},
   {"sha":"be9031c07f22a2f950d2796e568b15d3f495e701","author":"Jordan Orange","date":"2026-09-24T10:33:34+01:00","subject":"Test website: home page tidied — header to the edges, hero picture shown, real figures, working menu links"},
   {"sha":"adeb45244b37ceb3438320029a8998e569e1b045","author":"Jordan Orange","date":"2026-09-24T09:57:06+01:00","subject":"Website: banner pictures show again; news categories are the site's tags; dead pictures dropped"},
   {"sha":"97bcda8ca96c926b0b5b1fc5e49dbc671303bfc5","author":"Jordan Orange","date":"2026-09-24T09:35:51+01:00","subject":"Test website: How to Bid in the live site's words and layout"},

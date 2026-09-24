@@ -51,11 +51,17 @@ export default async function ResultsList({ search, page }: { search?: string; p
           const aDate = sale.saleDate ? new Date(sale.saleDate) : null
           return (
             <div key={sale.siteId} className="flex border-b border-gray-200 bg-white hover:bg-gray-50 transition-colors">
-              {/* Cover picture */}
-              {/* The cover pictures are wide banners with words on them — shown whole (contain), never cropped to fill. */}
-              <Link href={href} className="relative shrink-0 bg-gray-100 overflow-hidden" style={{ width: "280px", minHeight: "160px" }}>
+              {/* Cover picture — every card gets the SAME box (280×190), whatever shape the picture is. The
+                  box used to stretch with the card's text, so a two-line title made its picture bigger than
+                  its neighbours' (Jordan, 2026-09-24: "the photos line up even worse"). The picture is still
+                  shown whole (contain) — the same picture, blown up and blurred, fills the box behind it, so
+                  a tall or a wide one never leaves bare grey bars and nothing is cropped away. */}
+              <Link href={href} className="relative shrink-0 self-center bg-gray-200 overflow-hidden" style={{ width: "280px", height: "190px" }}>
                 {sale.photo ? (
-                  <img src={sale.photo} alt={sale.title} loading="lazy" className="absolute inset-0 w-full h-full object-contain" />
+                  <>
+                    <img src={sale.photo} alt="" aria-hidden="true" loading="lazy" className="absolute inset-0 w-full h-full object-cover scale-125 blur-xl opacity-70" />
+                    <img src={sale.photo} alt={sale.title} loading="lazy" className="absolute inset-0 w-full h-full object-contain" />
+                  </>
                 ) : (
                   <div className="absolute inset-0 bg-[#32348A]/5 flex items-center justify-center">
                     <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
