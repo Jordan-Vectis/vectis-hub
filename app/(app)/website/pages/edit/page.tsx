@@ -55,7 +55,9 @@ export default async function EditSitePage({ searchParams }: { searchParams: Pro
     return <Notice title="No such page"><p>There&apos;s no page at {pathFor(slug)} yet — make it from the Pages list.</p></Notice>
   }
 
-  const startedFrom = row?.draft ? "draft" : row?.published ? "published" : builtIn || dept ? "built-in" : "new"
+  // A draft identical to the live version (as it is straight after a publish) is the live version.
+  const sameAsLive = !!row?.draft && !!row?.published && JSON.stringify(row.draft) === JSON.stringify(row.published)
+  const startedFrom = row?.draft && !sameAsLive ? "draft" : row?.published ? "published" : builtIn || dept ? "built-in" : "new"
   const initialData = (row?.draft ?? row?.published ?? (await seedFor(slug, row?.title ?? title))) as Data
 
   return (
