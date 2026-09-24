@@ -16,6 +16,50 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "feedback_design_corrections.md",
+    content: `---
+name: design-corrections-look-first
+description: How Jordan's look-and-feel corrections work (2026-09-24) — open the reference he names and measure it before designing; name the cause before swapping technique (the results pictures took four goes); "keep X, correct it" means the same set with the right numbers; "remove completely" means none; "too big" goes straight back; small steps on the look
+metadata:
+  type: feedback
+---
+
+**Open the reference before designing, and find the cause before changing technique.**
+
+**Why:** 2026-09-24, the auction-results cover pictures on the test website. Jordan: *"the photos line up even worse now surely the photos can be auto adjusted to fit properly"* → *"it's meant to look like this, they all fit perfectly on the vectis site"* → *"What the vectis site does show them whole?"* → *"The pokemon one is the perfect example — that didnt fit on our test site but does on vectis"*. Four versions were pushed in one afternoon: whole (contain) in a box that took its height from the card's text; whole over a blurred, blown-up copy of itself; cropped (cover) in a fixed square; whole in a fixed 220×220 square. The last is right, and it was reachable in one step: the site's cover files are SQUARE, so in a square box "whole" and "fills it" are the same thing — the only real fault was the box stretching with a two-line title. Nobody looked at the reference or the source files; each round swapped the technique instead.
+
+**How to apply:** when he names a reference ("like the Vectis site", a screenshot), open it and measure what it actually does — sizes, aspect ratios, crop or not — before writing any CSS. When a layout looks wrong, name the cause ("the box's height came from the text") before choosing a fix; if the cause isn't known, say so and find it rather than trying the next technique. Never push a second guess at the same problem without new evidence.
+
+---
+
+**"Keep the stats, just correct them" — keep means the same set; correct means the numbers.**
+
+**Why:** the home page's stats band had template numbers ("500k+ lots", "180+ countries"). Offered "the real figures or lose the band", he chose real figures — and when the first cut left out a figure that couldn't be counted, he said *"put the stats back in red, keep the stats just correct them"*. Same day: *"just remove the filter over the banner completely"* after a lighter gradient had replaced a flat wash — none means none — and *"that logo is too big, let's revert that"* after it was made half as big again.
+
+**How to apply:** a correction to content keeps its shape — same items, same place, same colour — and changes only what was wrong; a figure that can't be counted yet shows "—" in its slot rather than disappearing (and never a made-up number). "Remove completely" is zero, not less. A "too big" goes straight back to what it was, with no defence of the maths. Change the look in small steps he can judge one at a time; a big jump (a 250px logo from 172) is reverted, not tuned.`,
+  },
+  {
+    filename: "reference_prisma_set_local.md",
+    content: `---
+name: prisma-set-local-literal-only
+description: SET LOCAL statement_timeout must be a LITERAL in Prisma — a tagged template binds it as $1 and Postgres refuses a parameter in SET; use $executeRawUnsafe with a constant (2026-09-24, the website's stats band showed "—" for every count). And never catch {} into a blank without logging it.
+metadata:
+  type: reference
+---
+
+# SET LOCAL in Prisma takes a literal, never a bound parameter (2026-09-24)
+
+\`await tx.$executeRaw\\\`SET LOCAL statement_timeout = \${TIMEOUT_MS}\\\`\` looks right and fails every time: the tagged template binds the value as $1, and Postgres does not accept parameters in SET ("syntax error at or near $1"). The transaction throws before the real query runs.
+
+**Measured:** app/(site)/site-stats.ts — the test website's stats band. All three counts (lots sold, auctions a year, departments) came back null and the page showed "—" for each, because the timed() wrapper's empty catch swallowed the error. Jordan: *"the stats are just blank?"*
+
+**The pattern that works** (the way app/(site)/departments/data.ts already did it):
+- a literal in the template — SET LOCAL statement_timeout = 1500 — or,
+- when it must come from a constant, \`tx.$executeRawUnsafe("SET LOCAL statement_timeout = " + TIMEOUT_MS)\` — safe because the value is a constant number in the code, never input.
+
+**The second lesson:** a catch that turns an error into a blank or a null must console.error the message. The blank was honest ("—", never a made-up number) but it hid the cause for a whole deploy; one log line would have named it at once.`,
+  },
+  {
     filename: "reference_quantity_flags.md",
     content: `---
 name: quantity-flags-boxes-not-faces
@@ -4654,7 +4698,7 @@ name: Opening Message
 description: Copy and paste this at the start of every new Claude Code session to set expectations
 type: opening_message
 originSessionId: 30e4bce3-8e7b-41dd-9dea-f40497af1528
-modified: 2026-09-11T13:00:00.000Z
+modified: 2026-09-24T16:30:00.000Z
 ---
 # Opening Message — paste this at the start of every session
 
@@ -4677,6 +4721,14 @@ Hi Claude. Before we start, here are the rules for working with me:
 **Match the complexity of the solution to the simplicity of the request.** If I say "put a copy on the site", embed it statically — don't build a syncing system.
 
 **Don't blame the cataloguers for the phantom report counts.** I've confirmed in person that nobody is making those lots, the barcode scanner isn't used, and the X-vs-F auction code is a red herring — it's an unidentified tablet/code trigger. Do not re-litigate this or suggest the users did it themselves. (Full context in the phantom-catalogue-counts memory.)
+
+**Look at what I'm pointing at before you design (2026-09-24).** When I say "it should look like the Vectis site", open the live page and measure what it actually does before inventing a technique. The auction-results pictures took FOUR goes — whole in a box that stretched with the text, then a blurred backdrop, then cropped, then whole in a fixed square — because nobody checked that the site's cover files are square, so "whole" and "fills the square" were the same thing all along. Find the actual cause (the box was taking its height from the card's text) before swapping techniques, and never push a second guess at the same problem without new evidence.
+
+**Keep what I said to keep — correct it, don't remove it.** "Real figures or lose the stats band" meant the same four stats with the right numbers, never fewer. "Remove the filter completely" means none, not a lighter one. When I say something is too big, put it straight back — and take small steps on the look (a logo "half as big again" was a leap).
+
+**Don't tell me to press Run Migrations.** The amber banner tells me — it was built for exactly that on 2026-07-15. You said it four times on 2026-09-24 alone. Add the SQL to the array and say nothing.
+
+**A silent \`catch {}\` is how three blank figures shipped (2026-09-24).** \`SET LOCAL statement_timeout = \${n}\` in a Prisma tagged template binds \`$1\`; Postgres refuses a parameter in a SET; every count threw; the empty catch turned that into "—" on the page. Build the SET from a constant with \`$executeRawUnsafe\`, and log inside any catch that turns an error into a blank.
 
 ---
 
@@ -5558,6 +5610,8 @@ Don't give Jordan commands to run — not to fix things, and not to check them e
 
 **NEVER tell Jordan to Run Migrations — not even once. The app tells him now.**
 
+⚠ **Broken again on 2026-09-24 — four times in one session** ("press Run Migrations first", "Run Migrations on the sandbox before judging the stats", …), each time as a wrap-up line after a push. He didn't complain, which is not the same as it being fine. The rule stands: put the SQL in the array; the banner does the telling. It is now in the opening message as well.
+
 **Why:** Jordan (2026-07-01) said the reminders are annoying; he escalated on 2026-07-15 — he doesn't want them AT ALL, and asked for the app to surface it instead of me. So a **pending-migrations banner** was built (2026-07-15): admins see an amber app-wide banner with a "Run migrations now" button whenever the MIGRATIONS array has changed since it was last run; it disappears once run. See the shared /admin/memory entry.
 
 **How to apply:** Keep adding new SQL to the \`MIGRATIONS\` array in \`lib/migrations.ts\` (moved out of the run-migrations route 2026-09-10) as always (that rule stands — see [[feedback_migrations]]) — but say NOTHING to Jordan about running it: no "NEEDS Run Migrations", no wrap-up bullet, no "one time on record" note. The banner is the notification. Same spirit for any routine step he already knows (pull-before-push, etc.) — don't narrate them.
@@ -5955,10 +6009,12 @@ type: reference
 - [⚠ No long review loops before a push](feedback_no_long_review_loops.md) — tsc + build, push, tell him; never gate on multi-agent review or open a browser
 - [⚠ Ask before agents](feedback_ask_before_agents.md) — ask before spawning any subagent or workflow (2026-09-03); never for simple tasks
 - [⚠ Ask before any Workflow](feedback_ask_before_workflows.md) — review workflows / multi-agent fan-outs burn huge tokens and hit session limits mid-message
-- [General feedback](feedback_vectis.md) — keep responses short; nothing local-only; don't overcomplicate simple requests; no console commands
+- [General feedback](feedback_vectis.md) — keep responses short; nothing local-only; don't overcomplicate simple requests; no console commands; ⚠ NEVER tell him to Run Migrations (broken 4× on 2026-09-24 — the banner does it)
+- [⚠ Design corrections — look at the reference first](feedback_design_corrections.md) — 2026-09-24: open what he points at and MEASURE it before designing; name the cause before swapping technique (the results pictures took four goes); "keep X, correct it" = same set, right numbers; "remove completely" = none; "too big" = straight back; small steps on the look
 - [Full width](feedback_full_width.md) — pages and tables use the whole screen width, never a narrow centred column
 - [PDF Generation Patterns](feedback_pdf_patterns.md) — pdf-lib never pdfkit; sharp for the logo; bwip-js barcodes; drawRectangle has NO borderRadius (breaks the build); WinAnsi only, no emoji
 - [Migration Pattern](feedback_migrations.md) — every migration also goes in the run-migrations MIGRATIONS array; prisma migrate deploy is unreliable on Railway
+- [⚠ Prisma SET LOCAL = literal only](reference_prisma_set_local.md) — a tagged template binds $1 and Postgres refuses it in SET → every count silently "—" (2026-09-24); $executeRawUnsafe with a constant; never catch {} into a blank without logging
 - [Memory Workflow](feedback_memory_workflow.md) — change a memory file → change its /admin/memory ENTRIES copy in the same push to staging
 - [File Saving](feedback_file_saving.md) — ask where a file should go before saving it
 - [App Naming](feedback_naming.md) — it's the Hub, never "the CRM"
