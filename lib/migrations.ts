@@ -2336,6 +2336,8 @@ export const MIGRATIONS = [
   // ArchiveLot rows. Partial — only the sold rows — so it is small. Prisma's schema can't express
   // a partial index; this line and its migration file are its only definition (2026-09-24).
   `CREATE INDEX IF NOT EXISTS "ArchiveLot_sold_idx" ON "ArchiveLot" ("hammerPrice") WHERE "hammerPrice" > 0 OR "siteHammerPrice" > 0`,
+  // Test website's banner editor: each slide's look (colours, placement, shade, extras) as JSON (2026-09-24).
+  `ALTER TABLE "HeroSlide" ADD COLUMN IF NOT EXISTS "style" JSONB`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

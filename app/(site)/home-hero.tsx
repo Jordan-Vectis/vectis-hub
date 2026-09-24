@@ -4,23 +4,11 @@ import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { io, Socket } from "socket.io-client"
+import SlideView, { type SlideData } from "./hero-slide-view"
+import { DEFAULT_STYLE } from "./hero-style"
 
-interface Slide {
-  title: string
-  subtitle: string
-  cta: string
-  ctaHref: string
-  imageKey?: string | null
-  imageUrl?: string | null   // a signed address made by the page; the picture is shown from this
-  imageFocus?: string | null // which part of the picture to keep when it is cropped to the frame: top / center / bottom
-}
-
-// A banner picture is cropped to the frame (object-cover), so a portrait picture loses its top and
-// bottom — the Captain America face filled the frame because it was cropped at the middle. The
-// Banner Manager's focus choice decides which part stays (2026-09-24).
-const focusPosition = (f?: string | null) => (f === "top" ? "center top" : f === "bottom" ? "center bottom" : "center center")
-
-const DEFAULT_SLIDES: Slide[] = [
+// The slides shown until the Banner Manager holds at least one; they have no picture and the default look.
+const DEFAULT_SLIDES: SlideData[] = [
   {
     title: "World's No.1 Diecast Specialist",
     subtitle: "Tens of thousands of lots sold every year to collectors worldwide. Join our next auction.",
@@ -72,16 +60,8 @@ interface AuctionState {
   lots: LiveLot[]
 }
 
-interface DbSlide {
-  id: string
-  title: string
-  subtitle: string
-  cta: string
-  ctaHref: string
-  imageKey: string | null
-  imageUrl?: string | null
-  imageFocus?: string | null
-}
+/** A slide from the Banner Manager, with its picture already signed by the page and its look already parsed. */
+export type DbSlide = SlideData & { id: string }
 
 interface Props {
   initialLive: {
@@ -97,24 +77,22 @@ interface Props {
 }
 
 export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
-  const SLIDES: Slide[] = dbSlides.length > 0 ? dbSlides : DEFAULT_SLIDES
+  const SLIDES: SlideData[] = dbSlides.length > 0 ? dbSlides : DEFAULT_SLIDES
   const [slide, setSlide] = useState(0)
   const [live, setLive] = useState(initialLive)
   const [auctionState, setAuctionState] = useState<AuctionState | null>(null)
-  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
   const socketRef  = useRef<Socket | null>(null)  // kept for cleanup
 
   const isLive = !!live && ["ACTIVE", "PAUSED"].includes(live.status)
 
-  // Auto-slide (pauses when live is showing; nothing to rotate with a single slide)
+  // Auto-slide: each slide stays for its own number of seconds (set in the Banner Manager). Pauses
+  // while a live auction is showing; nothing to rotate with a single slide.
   useEffect(() => {
-    if (isLive || SLIDES.length < 2) {
-      if (timerRef.current) clearInterval(timerRef.current)
-      return
-    }
-    timerRef.current = setInterval(() => setSlide(s => (s + 1) % SLIDES.length), 5000)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [isLive])
+    if (isLive || SLIDES.length < 2) return
+    const seconds = (SLIDES[slide]?.style ?? DEFAULT_STYLE).seconds
+    const t = setTimeout(() => setSlide(s => (s + 1) % SLIDES.length), seconds * 1000)
+    return () => clearTimeout(t)
+  }, [slide, isLive, SLIDES])
 
   // Socket.IO for live updates
   useEffect(() => {
@@ -157,63 +135,15 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
         className="absolute top-0 left-0 h-full transition-all duration-700 ease-in-out"
         style={{ width: isLive ? "58%" : "100%" }}
       >
-        {SLIDES.map((s, i) => {
-          const bgImg = s.imageUrl ?? (s.imageKey ? `/api/public/photo?key=${encodeURIComponent(s.imageKey)}` : null)
-          return (
-            <div
-              key={i}
-              className={`absolute inset-0 transition-opacity duration-1000 ${i === slide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-            >
-              {/* Background — the picture at full strength, or the blue gradient when there is none */}
-              <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b3a] via-[#32348A] to-[#32348A]" />
-              {/* Nothing over the picture — no wash, no gradient (Jordan, 2026-09-24: "remove the filter completely"). */}
-              {bgImg ? (
-                <img
-                  src={bgImg}
-                  alt={s.title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  style={{ objectPosition: focusPosition(s.imageFocus) }}
-                  loading={i === 0 ? "eager" : "lazy"}
-                />
-              ) : (
-                <div className="absolute inset-0 opacity-5"
-                  style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "40px 40px" }}
-                />
-              )}
-              <div className="relative h-full flex flex-col justify-center px-12 max-w-2xl">
-                {/* Mini logo watermark */}
-                <div className="flex items-center gap-2 mb-6">
-                  <div className="h-px w-8 bg-[#DB0606]" />
-                  <p className="text-[#DB0606] text-[10px] font-black tracking-[0.35em] uppercase">
-                    Vectis Auctions · Est. 1988
-                  </p>
-                </div>
-                <h1 className="text-white font-black text-4xl sm:text-5xl leading-none mb-5 uppercase tracking-tight">
-                  {s.title}
-                </h1>
-                <p className="text-gray-300 text-sm mb-8 leading-relaxed max-w-lg">
-                  {s.subtitle}
-                </p>
-                <div className="flex gap-3">
-                  <Link
-                    href={s.ctaHref}
-                    className="bg-[#DB0606] hover:bg-[#b00505] text-white text-xs font-black uppercase tracking-widest px-7 py-3.5 transition-colors"
-                  >
-                    {s.cta}
-                  </Link>
-                  {!isLoggedIn && (
-                    <Link
-                      href="/portal/register"
-                      className="border-2 border-white/30 hover:border-white text-white text-xs font-black uppercase tracking-widest px-7 py-3.5 transition-colors"
-                    >
-                      REGISTER FREE
-                    </Link>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
-        })}
+        {/* One rendering of a slide (hero-slide-view.tsx) — the Banner Manager's preview uses the same one. */}
+        {SLIDES.map((s, i) => (
+          <div
+            key={i}
+            className={`absolute inset-0 transition-opacity duration-1000 ${i === slide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          >
+            <SlideView slide={s} isLoggedIn={isLoggedIn} eager={i === 0} />
+          </div>
+        ))}
 
         {/* Slide dots — one per slide, none at all for a single slide (a lone red dash under the
             buttons read as a stray mark). Each dot sits in a finger-sized button. */}

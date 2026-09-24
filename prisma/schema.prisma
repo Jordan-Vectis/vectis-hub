@@ -1189,6 +1189,10 @@ model HeroSlide {
   /// (null = centre). Nullable with no default on purpose, so a slide can still be saved before
   /// Run Migrations has added the column (2026-09-24).
   imageFocus String?
+  /// The slide's look — colours, where the words sit, size, shade, extras — as the JSON that
+  /// parseSlideStyle() (app/(site)/hero-style.ts) reads; null = the site's default look. Nullable
+  /// with no default for the same reason as imageFocus (2026-09-24).
+  style     Json?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

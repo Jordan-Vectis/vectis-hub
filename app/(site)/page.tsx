@@ -3,10 +3,11 @@ import Image from "next/image"
 import { prisma } from "@/lib/prisma"
 import { format } from "date-fns"
 import { lotPhotoUrl } from "@/lib/photo-url"
-import HomeHero from "./home-hero"
+import HomeHero, { type DbSlide } from "./home-hero"
 import { getCustomerSession } from "@/lib/customer-auth"
 import { getSignedImageUrl } from "@/lib/r2"
 import { getSiteStats } from "./site-stats"
+import { parseSlideStyle } from "./hero-style"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -41,18 +42,22 @@ export default async function HomePage() {
   const session = await getCustomerSession()
 
   // Hero slides from DB (fall back to empty — hero has built-in defaults)
-  let dbSlides: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null; imageUrl: string | null; imageFocus: string | null }[] = []
+  let dbSlides: DbSlide[] = []
   try {
     const cols = { id: true, title: true, subtitle: true, cta: true, ctaHref: true, imageKey: true } as const
-    let rows: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null; imageFocus: string | null }[]
+    let rows: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null; imageFocus: string | null; style: unknown }[]
     try {
-      rows = await prisma.heroSlide.findMany({ where: { active: true }, orderBy: { order: "asc" }, select: { ...cols, imageFocus: true } })
+      rows = await prisma.heroSlide.findMany({ where: { active: true }, orderBy: { order: "asc" }, select: { ...cols, imageFocus: true, style: true } })
     } catch {
-      // imageFocus arrives with Run Migrations (2026-09-24); until then the slides are read without it.
-      rows = (await prisma.heroSlide.findMany({ where: { active: true }, orderBy: { order: "asc" }, select: cols })).map(r => ({ ...r, imageFocus: null }))
+      // imageFocus and style arrive with Run Migrations (2026-09-24); until then the slides are read without them.
+      rows = (await prisma.heroSlide.findMany({ where: { active: true }, orderBy: { order: "asc" }, select: cols })).map(r => ({ ...r, imageFocus: null, style: null }))
     }
     // A signed address for each picture — the public photo proxy never served the banner keys (2026-09-24).
-    dbSlides = await Promise.all(rows.map(async s => ({ ...s, imageUrl: s.imageKey ? await getSignedImageUrl(s.imageKey, 3600).catch(() => null) : null })))
+    dbSlides = await Promise.all(rows.map(async s => ({
+      id: s.id, title: s.title, subtitle: s.subtitle, cta: s.cta, ctaHref: s.ctaHref, imageFocus: s.imageFocus,
+      imageUrl: s.imageKey ? await getSignedImageUrl(s.imageKey, 3600).catch(() => null) : null,
+      style: s.style ? parseSlideStyle(s.style) : null,
+    })))
   } catch {
     // Table may not exist yet in this environment — hero falls back to built-in slides
   }
