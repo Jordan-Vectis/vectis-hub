@@ -8,7 +8,7 @@ import "../../../../(site)/site.css"
 import "./editor.css"
 import { editorConfig } from "./editor-config"
 import {
-  deleteSitePage, getSitePageVersion, listSitePageVersions, publishSitePage, saveSitePageDraft, sitePageSeed, unpublishSitePage,
+  deleteSitePage, discardSitePageDraft, getSitePageVersion, listSitePageVersions, publishSitePage, saveSitePageDraft, sitePageSeed, unpublishSitePage,
   type VersionRow,
 } from "@/lib/actions/site-pages"
 
@@ -52,7 +52,20 @@ export default function PageEditor({ slug, path, title, initialData, live: initi
   const saving = useRef(false)
   const publishing = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [menu, setMenu] = useState(false)
+  // The More menu is drawn OUTSIDE Puck's header, at a fixed spot under its button: inside the header
+  // it was clipped and the header just grew a scrollbar (found testing on the sandbox, 2026-09-24).
+  const [menu, setMenu] = useState<{ top: number; right: number } | null>(null)
+  const moreButton = useRef<HTMLButtonElement | null>(null)
+  const openMenu = () => {
+    const r = moreButton.current?.getBoundingClientRect()
+    setMenu(m => (m || !r ? null : { top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) }))
+  }
+  useEffect(() => {
+    if (!menu) return
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(null) }
+    window.addEventListener("keydown", esc)
+    return () => window.removeEventListener("keydown", esc)
+  }, [menu])
   const [history, setHistory] = useState<VersionRow[] | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
 
@@ -112,8 +125,19 @@ export default function PageEditor({ slug, path, title, initialData, live: initi
     timer.current = setTimeout(() => void saveDraft(), 300)
   }
 
+  async function discard() {
+    setMenu(null)
+    if (!confirm(live
+      ? "Throw away the changes that aren't published? The editor goes back to what the site shows now."
+      : "Throw away this draft? The editor goes back to the page's built-in design, which is what the site shows.")) return
+    if (timer.current) clearTimeout(timer.current)
+    const res = await discardSitePageDraft(slug)
+    if (res.ok) { dirty.current = false; window.location.reload() }
+    else setStatus({ kind: "error", text: `Couldn't throw the draft away — ${res.error}` })
+  }
+
   async function startAgain() {
-    setMenu(false)
+    setMenu(null)
     if (!confirm("Replace what's in the editor with the page's built-in design? Your draft is replaced; the live page doesn't change until you publish.")) return
     setStatus({ kind: "saving", text: "Loading the built-in design…" })
     const res = await sitePageSeed(slug)
@@ -122,7 +146,7 @@ export default function PageEditor({ slug, path, title, initialData, live: initi
   }
 
   async function takeOff() {
-    setMenu(false)
+    setMenu(null)
     if (!confirm("Take the edited version off the site? The page goes back to its built-in design. Your draft and history are kept.")) return
     const res = await unpublishSitePage(slug)
     if (res.ok) { setLive(false); setStatus({ kind: "saved", text: "Taken off the site — it shows the built-in design again. Your draft is kept here." }) }
@@ -130,7 +154,7 @@ export default function PageEditor({ slug, path, title, initialData, live: initi
   }
 
   async function remove() {
-    setMenu(false)
+    setMenu(null)
     if (!confirm(`Delete this page (${path}) and its history? This can't be undone.`)) return
     const res = await deleteSitePage(slug)
     if (res.ok) { dirty.current = false; router.push("/website/pages") }
@@ -138,7 +162,7 @@ export default function PageEditor({ slug, path, title, initialData, live: initi
   }
 
   async function openHistory() {
-    setMenu(false)
+    setMenu(null)
     setHistory([])
     setHistoryError(null)
     const res = await listSitePageVersions(slug)
@@ -184,23 +208,26 @@ export default function PageEditor({ slug, path, title, initialData, live: initi
                 {live ? "Live" : builtIn ? "Built-in design on the site" : "Not on the site"}
               </span>
               <a href={path} target="_blank" rel="noreferrer" className="rounded border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:border-[#32348A]">View on site ↗</a>
-              <div className="relative">
-                <button type="button" onClick={() => setMenu(m => !m)} className="rounded border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:border-[#32348A]">More ▾</button>
-                {menu && (
-                  <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded border border-gray-200 bg-white py-1 text-left shadow-lg">
-                    <button type="button" onClick={openHistory} className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">🕘 History — earlier published versions</button>
-                    {builtIn && <button type="button" onClick={startAgain} className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">↺ Start again from the built-in design</button>}
-                    {builtIn && live && <button type="button" onClick={takeOff} className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">⤺ Take the edited version off the site</button>}
-                    {!builtIn && <button type="button" onClick={remove} className="block w-full px-4 py-2 text-left text-xs text-red-700 hover:bg-red-50">🗑 Delete this page</button>}
-                    <a href="/website/pages" className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">← All pages</a>
-                  </div>
-                )}
-              </div>
+              <button ref={moreButton} type="button" onClick={openMenu} className="rounded border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:border-[#32348A]">More ▾</button>
               {children}
             </div>
           ),
         }}
       />
+
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-[90]" onClick={() => setMenu(null)} />
+          <div className="fixed z-[95] w-72 rounded border border-gray-200 bg-white py-1 text-left text-gray-800 shadow-lg" style={{ top: menu.top, right: menu.right }}>
+            <button type="button" onClick={openHistory} className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">🕘 History — earlier published versions</button>
+            {(builtIn || live) && <button type="button" onClick={discard} className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">✕ Throw away the unpublished changes</button>}
+            {builtIn && <button type="button" onClick={startAgain} className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">↺ Start again from the built-in design</button>}
+            {builtIn && live && <button type="button" onClick={takeOff} className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">⤺ Take the edited version off the site</button>}
+            {!builtIn && <button type="button" onClick={remove} className="block w-full px-4 py-2 text-left text-xs text-red-700 hover:bg-red-50">🗑 Delete this page</button>}
+            <a href="/website/pages" className="block w-full px-4 py-2 text-left text-xs hover:bg-gray-50">← All pages</a>
+          </div>
+        </>
+      )}
 
       {/* On a narrow screen the status line has no room in the header — it sits over the canvas instead. */}
       <div className={`lg:hidden absolute bottom-2 left-2 right-2 z-40 rounded bg-white/95 px-3 py-2 text-xs font-semibold shadow ${statusColour}`}>{status.text}</div>

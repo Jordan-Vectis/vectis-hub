@@ -123,6 +123,34 @@ export async function unpublishSitePage(slug: string): Promise<Result> {
   }
 }
 
+/**
+ * Throws away the unpublished draft — the editor goes back to what the site shows (the live
+ * version, or the built-in design). A built-in page that was never published and has no history is
+ * forgotten altogether, so the Pages list reads "Built-in design" again. A new page that was never
+ * published IS its draft — that one is deleted, not discarded.
+ */
+export async function discardSitePageDraft(slug: string): Promise<Result> {
+  try {
+    if (!(await admin())) return { ok: false, error: "Only admins can change the website's pages." }
+    const row = await prisma.sitePage.findUnique({ where: { slug }, select: { published: true, _count: { select: { versions: true } } } })
+    if (!row) return { ok: true }
+    const builtIn = BUILT_IN_PAGES.some(p => p.slug === slug) || !!deptSlugOf(slug)
+    if (row.published) {
+      await prisma.sitePage.update({ where: { slug }, data: { draft: Prisma.DbNull }, select: { slug: true } })
+    } else if (!builtIn) {
+      return { ok: false, error: "This page has never been published, so the draft is all there is — delete the page instead." }
+    } else if (row._count.versions === 0) {
+      await prisma.sitePage.delete({ where: { slug }, select: { slug: true } })
+    } else {
+      await prisma.sitePage.update({ where: { slug }, data: { draft: Prisma.DbNull }, select: { slug: true } })
+    }
+    return { ok: true }
+  } catch (e) {
+    console.error("discardSitePageDraft:", e)
+    return { ok: false, error: tableHint(e) }
+  }
+}
+
 /** The page's built-in design as blocks — to start again from it in the editor. Nothing is saved. */
 export async function sitePageSeed(slug: string): Promise<Result<{ data: unknown }>> {
   try {

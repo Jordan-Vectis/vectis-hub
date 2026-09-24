@@ -50,7 +50,8 @@ export default function LiveFrame({ type, label, props }: { type: string; label:
 
   return (
     <div className="relative">
-      <span className="absolute top-2 right-2 z-10 rounded bg-[#2AB4A6] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow pointer-events-none">
+      {/* Bottom-right and see-through: at the top it sat over the block's own "See more" links. */}
+      <span className="absolute bottom-1.5 right-1.5 z-10 rounded bg-[#2AB4A6]/85 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow pointer-events-none">
         Live · {label}
       </span>
       <iframe

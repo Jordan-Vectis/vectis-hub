@@ -67,7 +67,7 @@ export type SectionProps = {
   width: string; paddingY: string; anchor: string; content: Slot
 }
 export const Section: ComponentConfig<SectionProps> = {
-  label: "Section — a band across the page",
+  label: "Section",
   fields: {
     content: { type: "slot" },
     background: colour("Background colour"),
@@ -110,7 +110,7 @@ const VALIGN: Record<string, string> = { top: "items-start", middle: "items-cent
 
 export type ColumnsProps = { layout: string; gap: string; valign: string; col1: Slot; col2: Slot; col3: Slot; col4: Slot }
 export const Columns: ComponentConfig<ColumnsProps> = {
-  label: "Columns — side by side (stack on a phone)",
+  label: "Columns",
   fields: {
     layout: { type: "select", label: "Columns", options: Object.entries(COLUMN_LAYOUTS).map(([value, l]) => ({ value, label: l.label })) },
     gap: { type: "radio", label: "Space between", options: [{ label: "Small", value: "small" }, { label: "Medium", value: "medium" }, { label: "Large", value: "large" }] },
@@ -136,7 +136,7 @@ const BORDERS: Record<string, string> = { none: "", light: "border border-gray-2
 
 export type BoxProps = { background: string; border: string; padding: string; tone: "auto" | "light" | "dark"; shadow: boolean; anchor: string; content: Slot }
 export const Box: ComponentConfig<BoxProps> = {
-  label: "Box — a panel with its own background",
+  label: "Box",
   fields: {
     content: { type: "slot" },
     background: colour("Background colour"),
@@ -347,7 +347,7 @@ export const Video: ComponentConfig<{ url: string; caption: string; width: strin
 
 export type AccordionProps = { items: { title: string; body: string }[]; style: string; openFirst: boolean }
 export const Accordion: ComponentConfig<AccordionProps> = {
-  label: "Fold-outs (questions and answers)",
+  label: "Fold-outs",
   fields: {
     items: {
       type: "array",
@@ -428,7 +428,7 @@ export type CardsProps = {
   items: { icon: string; emoji: string; kicker: string; title: string; text: string; link: string; linkLabel: string }[]
 }
 export const Cards: ComponentConfig<CardsProps> = {
-  label: "Cards — a row of short points",
+  label: "Cards",
   fields: {
     items: {
       type: "array",
@@ -558,7 +558,7 @@ export type PageHeaderProps = {
   height: string; align: string; width: string; crumbs: { label: string; link: string }[]
 }
 export const PageHeader: ComponentConfig<PageHeaderProps> = {
-  label: "Page header — the title band at the top",
+  label: "Page header",
   fields: {
     heading: { type: "text", label: "Page title (the H1)", contentEditable: true },
     kicker: { type: "text", label: "Small line above (optional)" },
