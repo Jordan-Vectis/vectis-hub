@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"dab00646fcd68a1dad74386559dabf8775f1dee0","author":"Jordan Orange","date":"2026-09-24T09:30:05+01:00","subject":"Test website: department pages answer at once, menus close, logo centred"},
   {"sha":"18666f1a6ef80d4f0410c27ae021ae958bc00817","author":"Jordan Orange","date":"2026-09-24T09:12:40+01:00","subject":"Test website: a way back to the Hub for admins, and wider department pages"},
   {"sha":"14eee90bc61b55e0da7fb1a509db25f6a30402d7","author":"Jordan Orange","date":"2026-09-23T17:06:54+01:00","subject":"Departments: the copy as the site has it, and the \"Sell Your Toys\" side box"},
   {"sha":"ed6003196bbe7e8d76de3e5028eb99e6cf104d9e","author":"Jordan Orange","date":"2026-09-23T16:40:20+01:00","subject":"Databases -> Departments: its own page, load and picture upload"},

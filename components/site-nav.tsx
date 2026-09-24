@@ -172,7 +172,7 @@ export default async function SiteNav() {
               </div>
             </DropdownNavItem>
 
-            <NavItem href="/portal/register" label="HOW TO BID" />
+            <NavItem href="/how-to-bid" label="HOW TO BID" />
             <NavItem href="/submit" label="SELL WITH US" />
             <NavItem href="/news-stories/news" label="NEWS &amp; STORIES" />
             <NavItem href="/auctions" label="CAREERS" />
