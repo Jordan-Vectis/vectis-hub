@@ -33,6 +33,8 @@ export type Destination = {
   app?: AppKey
   /** The section key within that app, when the app has per-section permissions. */
   section?: string
+  /** Admins only — for a screen that checks the ADMIN role itself inside an app everyone can open. */
+  adminOnly?: boolean
   /** One line: what you actually DO there. This is what makes an answer useful. */
   what: string
   /** Extra words someone might ask with, that are not in the name. */
@@ -255,6 +257,24 @@ export const DESTINATIONS: Destination[] = [
     what: "Every sale on vectis.co.uk, ABC and Business Central alike, with its cover picture (the auction calendar's hero image), date, code and lot count, and a link to its lots in the ABC or BC Database.",
     also: ["sales database", "sale pictures", "hero image", "auction picture", "cover picture", "auction calendar", "past sales", "list of sales", "sale list"],
   },
+  {
+    ask: "Where are the website's news articles kept?",
+    name: "Databases → News", href: "/databases/news",   // no app key: Databases is gated on sign-in only
+    what: "Every News & Stories article from vectis.co.uk — title, full text, category, tags, date and cover picture — collected on an office machine and loaded here; the test website's News & Stories pages read it. Search by words, filter by category or year.",
+    also: ["news", "news and stories", "news stories", "articles", "blog", "website news", "news database", "stories", "press"],
+  },
+  {
+    ask: "Where are the website's department pages kept?",
+    name: "Databases → Departments", href: "/databases/departments",   // no app key: Databases is gated on sign-in only
+    what: "The website's 28 department pages — the Departments menu, each page's banner, \"sell with us\" copy and highlighted lots, and the words used to find its news and past sales — collected on an office machine and loaded here; the test website's Departments menu and pages read it.",
+    also: ["departments", "department pages", "department", "sell with us pages", "department menu", "highlighted lots"],
+  },
+  {
+    ask: "How do I change a page on the test website?",
+    name: "Website → Pages", href: "/website/pages", adminOnly: true,   // the Website card is open to all; the editor checks ADMIN itself
+    what: "The page editor for the TEST website — every page (home, auction calendar, departments, how to bid, FAQ, contact, careers, terms…) built from blocks you drag in and edit: sections, columns, headings, text, pictures, buttons, videos, fold-outs, tables, plus live blocks that show upcoming sales, news and a department's lots straight from the Hub. Changes save as a draft; the site changes only when you press Publish, and every publish is kept so a page can be put back.",
+    also: ["page editor", "edit the website", "website pages", "change the website", "edit a page", "new page", "website editor", "cms", "page builder"],
+  },
 ]
 
 /** Every AppKey mentioned in the map really exists. Cheap guard against a typo'd key
@@ -292,7 +312,7 @@ export function allowedHelpContext(
     return sections === null || sections.includes(section)
   }
 
-  const destinations = DESTINATIONS.filter(d => canOpen(d.app, d.section))
+  const destinations = DESTINATIONS.filter(d => canOpen(d.app, d.section) && (!d.adminOnly || role === "ADMIN"))
 
   const cards = APP_CARD_DEFS
     .filter(c => !c.comingSoon)

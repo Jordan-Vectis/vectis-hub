@@ -1,0 +1,233 @@
+import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/app/generated/prisma/client"
+
+export const maxDuration = 300
+
+// POST /api/databases/news/collect
+// Takes vectis-news.json — what scripts/collect-news.mjs saved on an office machine — and writes
+// every article into SiteNewsArticle.
+//
+// ⚠ Why a file: the website answers the Hub's Railway server with 202 and an empty body for every
+// request, while the same request from the office works (measured 2026-09-09), so the server can
+// never read the news feed itself. Same shape as the BC lots and the sale pictures.
+//
+// The site is the authority and overwrites ours on every load — the feed's fields AND the article
+// page's own HTML (bodyHtml) with the list of pictures inside it (bodyImages). Our own copies of
+// the pictures are KEPT where the site still lists the same file: the cover (imageKey) is cleared
+// when the cover's path changes, and bodyImageKeys keeps only the keys of pictures still listed.
+//
+// A picture the collector could NOT fetch (its `missingPictures`, 2026-09-24 — the old site's dead
+// image hosts, files the site has lost) is recorded as such: a missing cover is stored as no cover,
+// a missing picture inside is kept in the list flagged `missing` so the site page drops its <img>
+// and the upload step never asks for it — and any copy the Hub took of it before the collector
+// checked what it was given (an error page saved as a .jpg) is forgotten with the key.
+type Incoming = {
+  id?: unknown; alias?: unknown; title?: unknown; sefLink?: unknown; categoryId?: unknown; category?: unknown
+  tags?: unknown; featured?: unknown; hits?: unknown; introText?: unknown; fullText?: unknown
+  publishedAt?: unknown; modifiedAt?: unknown; imagePath?: unknown; imageAlt?: unknown
+  bodyHtml?: unknown; bodyImages?: unknown; missingPictures?: unknown
+}
+type BodyImage = { path: string; file: string; missing?: true }
+type Row = {
+  id: number; alias: string; title: string; sefLink: string | null; categoryId: number | null; category: string | null
+  tags: string[]; featured: boolean; hits: number; introText: string | null; fullText: string | null
+  publishedAt: string | null; modifiedAt: string | null; imagePath: string | null; imageAlt: string | null
+  bodyHtml: string | null; bodyImages: BodyImage[]
+}
+
+const CHUNK = 50
+const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null)
+const stamp = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v) ? v : null)
+const FILE_NAME = /^\d+-\d+\.(jpe?g|png|webp|gif)$/i
+
+function clean(a: Incoming): Row | null {
+  const id = Math.round(Number(a.id))
+  if (!Number.isFinite(id) || id <= 0) return null
+  const catId = Number(a.categoryId)
+  const missing = new Set(Array.isArray(a.missingPictures) ? a.missingPictures.map(f => String(f).toLowerCase()) : [])
+  const coverMissing = [...missing].some(f => new RegExp(`^${id}\\.(jpe?g|png|webp|gif)$`).test(f))
+  const bodyImages: BodyImage[] = Array.isArray(a.bodyImages)
+    ? a.bodyImages
+        .filter((x): x is BodyImage => !!x && typeof x === "object" && typeof (x as BodyImage).path === "string" && typeof (x as BodyImage).file === "string" && FILE_NAME.test((x as BodyImage).file) && (x as BodyImage).file.startsWith(`${id}-`))
+        .map(x => { const file = x.file.toLowerCase(); return missing.has(file) ? { path: x.path, file, missing: true as const } : { path: x.path, file } })
+        .slice(0, 100)
+    : []
+  return {
+    id,
+    alias: str(a.alias) ?? String(id),
+    title: str(a.title) ?? "(untitled)",
+    sefLink: str(a.sefLink),
+    categoryId: Number.isFinite(catId) && catId > 0 ? Math.round(catId) : null,
+    // ⚠ The site's Joomla category is one container for every article ("TV & FILM", catid 8 —
+    // measured 2026-09-24: 1,337 of 1,337); what the site calls categories are the TAGS. So the
+    // category shown is the first tag, and every category filter matches any tag.
+    category: (Array.isArray(a.tags) && a.tags.length ? String(a.tags[0]).trim() : "") || str(a.category),
+    tags: Array.isArray(a.tags) ? a.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 50) : [],
+    featured: a.featured === true,
+    hits: Number.isFinite(Number(a.hits)) ? Math.max(0, Math.round(Number(a.hits))) : 0,
+    introText: str(a.introText),
+    fullText: str(a.fullText),
+    publishedAt: stamp(a.publishedAt),
+    modifiedAt: stamp(a.modifiedAt),
+    imagePath: coverMissing ? null : (str(a.imagePath)?.replace(/^\/+/, "") ?? null),
+    imageAlt: str(a.imageAlt),
+    bodyHtml: str(a.bodyHtml),
+    bodyImages,
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    if (session.user?.role !== "ADMIN") return NextResponse.json({ error: "Admins only" }, { status: 403 })
+
+    const form = await req.formData()
+    const files = form.getAll("file").filter((f): f is File => f instanceof File && f.size > 0)
+    if (!files.length) return NextResponse.json({ error: "No file was chosen." }, { status: 400 })
+
+    let written = 0, skipped = 0, withBody = 0, departmentsWritten = 0
+    const problems: string[] = []
+    for (const file of files) {
+      let parsed: any
+      try { parsed = JSON.parse(await file.text()) }
+      catch { problems.push(`${file.name}: not a file this page can read — it should be the vectis-news.json the collector saved.`); continue }
+      // A departments file (scripts/collect-departments.mjs): the site's department pages. Same
+      // rules as the articles — the site's text overwrites ours, our picture copies are kept unless
+      // the site's files changed — plus two things a person may have edited on the Hub and the site
+      // must not undo: the news category and the sale keywords are only SEEDED when blank.
+      if (parsed?.kind === "departments") {
+        const depts: any[] = Array.isArray(parsed?.departments) ? parsed.departments : []
+        if (!depts.length) { problems.push(`${file.name}: no departments in it.`); continue }
+        for (const d of depts) {
+          const slug = typeof d?.slug === "string" && /^[a-z0-9-]+$/.test(d.slug) ? d.slug : null
+          if (!slug || d?.failed) { skipped++; continue }
+          const highlights = Array.isArray(d.highlights)
+            ? d.highlights.filter((h: any) => h && typeof h.file === "string" && typeof h.imagePath === "string" && /^dept-[a-z0-9-]+-\d+\.(jpe?g|png|webp|gif)$/i.test(h.file))
+                .map((h: any) => ({ title: String(h.title ?? ""), hammer: str(h.hammer), meta: str(h.meta), link: str(h.link), imagePath: String(h.imagePath), file: String(h.file).toLowerCase() }))
+                .slice(0, 24)
+            : []
+          const extraImages = Array.isArray(d.extraImages)
+            ? d.extraImages.filter((x: any) => x && typeof x.file === "string" && typeof x.path === "string" && /^dept-[a-z0-9-]+-x\d+\.(jpe?g|png|webp|gif)$/i.test(x.file))
+                .map((x: any) => ({ path: String(x.path), file: String(x.file).toLowerCase() }))
+                .slice(0, 40)
+            : []
+          const aliases: string[] = Array.isArray(d.newsAliases) ? d.newsAliases.map((s: any) => String(s)).slice(0, 10) : []
+          const keywords: string[] = Array.isArray(d.saleKeywords) ? d.saleKeywords.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 10) : []
+          const saleIds: number[] = Array.isArray(d.pastAuctions) ? d.pastAuctions.map((p: any) => Math.round(Number(p?.siteId))).filter((n: number) => Number.isFinite(n) && n > 0).slice(0, 50) : []
+          // The department's news category: the TAG most of the stories on its page carry — when we
+          // hold them (the site's categories are its tags; see clean() above).
+          let newsCategory: string | null = null
+          if (aliases.length) {
+            const cats = await prisma.$queryRaw<{ tag: string; n: bigint }[]>`
+              SELECT t AS tag, count(*)::bigint AS n FROM "SiteNewsArticle", unnest("tags") AS t
+              WHERE "alias" = ANY(ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(aliases)}::jsonb)))
+              GROUP BY t ORDER BY n DESC, t LIMIT 1`
+            newsCategory = cats[0]?.tag ?? null
+          }
+          departmentsWritten += await prisma.$executeRaw`
+            INSERT INTO "SiteDepartment" ("slug", "name", "order", "siteLink", "pageTitle", "heading", "heroPath", "tilePath", "copyHtml", "sideHtml", "extraImages", "highlights",
+                                          "newsAliases", "newsCategory", "saleKeywords", "siteSaleIds", "pulledAt")
+            VALUES (${slug}, ${String(d.name ?? slug)}, ${Math.round(Number(d.order) || 0)}::int, ${str(d.siteLink)}, ${str(d.pageTitle)}, ${str(d.heading)},
+                    ${str(d.heroPath)}, ${str(d.tilePath)}, ${str(d.copyHtml)}, ${str(d.sideHtml)}, ${JSON.stringify(extraImages)}::jsonb, ${JSON.stringify(highlights)}::jsonb,
+                    ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(aliases)}::jsonb)), ${newsCategory},
+                    ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(keywords)}::jsonb)),
+                    ARRAY(SELECT (jsonb_array_elements_text(${JSON.stringify(saleIds)}::jsonb))::int), now())
+            ON CONFLICT ("slug") DO UPDATE SET
+              "name" = EXCLUDED."name", "order" = EXCLUDED."order", "siteLink" = EXCLUDED."siteLink", "pageTitle" = EXCLUDED."pageTitle", "heading" = EXCLUDED."heading",
+              "heroKey" = CASE WHEN "SiteDepartment"."heroPath" IS DISTINCT FROM EXCLUDED."heroPath" THEN NULL ELSE "SiteDepartment"."heroKey" END,
+              "heroPath" = EXCLUDED."heroPath",
+              "tileKey" = CASE WHEN "SiteDepartment"."tilePath" IS DISTINCT FROM EXCLUDED."tilePath" THEN NULL ELSE "SiteDepartment"."tileKey" END,
+              "tilePath" = EXCLUDED."tilePath",
+              "copyHtml" = EXCLUDED."copyHtml", "sideHtml" = EXCLUDED."sideHtml",
+              "extraImageKeys" = CASE WHEN "SiteDepartment"."extraImages" IS DISTINCT FROM EXCLUDED."extraImages" THEN ARRAY[]::text[] ELSE "SiteDepartment"."extraImageKeys" END,
+              "extraImages" = EXCLUDED."extraImages",
+              "highlightKeys" = CASE WHEN "SiteDepartment"."highlights" IS DISTINCT FROM EXCLUDED."highlights" THEN ARRAY[]::text[] ELSE "SiteDepartment"."highlightKeys" END,
+              "highlights" = EXCLUDED."highlights",
+              "newsAliases" = EXCLUDED."newsAliases",
+              "newsCategory" = COALESCE("SiteDepartment"."newsCategory", EXCLUDED."newsCategory"),
+              "saleKeywords" = CASE WHEN cardinality("SiteDepartment"."saleKeywords") > 0 THEN "SiteDepartment"."saleKeywords" ELSE EXCLUDED."saleKeywords" END,
+              "siteSaleIds" = EXCLUDED."siteSaleIds",
+              "pulledAt" = now()`
+        }
+        continue
+      }
+
+      const list: Incoming[] = Array.isArray(parsed?.articles) ? parsed.articles : []
+      if (!list.length) { problems.push(`${file.name}: no articles in it.`); continue }
+      const rows: Row[] = []
+      for (const a of list) { const r = clean(a); if (r) rows.push(r); else skipped++ }
+      withBody += rows.filter(r => r.bodyHtml).length
+
+      // The site's dates are its own wall-clock times ("2026-09-22T11:53:57") and are stored as given —
+      // cast from text, never through a JS Date, which would shift them by the BST hour.
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK)
+        const values = Prisma.join(chunk.map(r => Prisma.sql`(
+          ${r.id}::int, ${r.alias}, ${r.title}, ${r.sefLink}, ${r.categoryId}::int, ${r.category},
+          ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(r.tags)}::jsonb)),
+          ${r.featured}::boolean, ${r.hits}::int, ${r.introText}, ${r.fullText},
+          ${r.publishedAt}::timestamp, ${r.modifiedAt}::timestamp, ${r.imagePath}, ${r.imageAlt},
+          ${r.bodyHtml}, ${JSON.stringify(r.bodyImages)}::jsonb, now()
+        )`))
+        written += await prisma.$executeRaw`
+          INSERT INTO "SiteNewsArticle" ("id", "alias", "title", "sefLink", "categoryId", "category", "tags", "featured", "hits",
+                                         "introText", "fullText", "publishedAt", "modifiedAt", "imagePath", "imageAlt",
+                                         "bodyHtml", "bodyImages", "pulledAt")
+          VALUES ${values}
+          ON CONFLICT ("id") DO UPDATE SET
+            "alias" = EXCLUDED."alias", "title" = EXCLUDED."title", "sefLink" = EXCLUDED."sefLink",
+            "categoryId" = EXCLUDED."categoryId", "category" = EXCLUDED."category", "tags" = EXCLUDED."tags",
+            "featured" = EXCLUDED."featured", "hits" = EXCLUDED."hits", "introText" = EXCLUDED."introText",
+            "fullText" = EXCLUDED."fullText", "publishedAt" = EXCLUDED."publishedAt", "modifiedAt" = EXCLUDED."modifiedAt",
+            "imageAlt" = EXCLUDED."imageAlt",
+            "imageKey" = CASE WHEN "SiteNewsArticle"."imagePath" IS DISTINCT FROM EXCLUDED."imagePath" THEN NULL ELSE "SiteNewsArticle"."imageKey" END,
+            "imageAt"  = CASE WHEN "SiteNewsArticle"."imagePath" IS DISTINCT FROM EXCLUDED."imagePath" THEN NULL ELSE "SiteNewsArticle"."imageAt" END,
+            "imagePath" = EXCLUDED."imagePath",
+            "bodyHtml" = EXCLUDED."bodyHtml",
+            "bodyImageKeys" = ARRAY(SELECT k FROM unnest("SiteNewsArticle"."bodyImageKeys") AS k
+                                    WHERE k = ANY(ARRAY(SELECT 'news-photos/' || (e->>'file') FROM jsonb_array_elements(EXCLUDED."bodyImages") AS e
+                                                        WHERE NOT coalesce((e->>'missing')::boolean, false)))),
+            "bodyImages" = EXCLUDED."bodyImages",
+            "pulledAt" = now()`
+      }
+    }
+
+    const [agg] = await prisma.$queryRaw<{ n: bigint; covers: bigint; inside: bigint }[]>`
+      SELECT count(*)::bigint AS n,
+             count(*) FILTER (WHERE "imagePath" IS NOT NULL AND "imageKey" IS NULL)::bigint AS covers,
+             coalesce(sum(greatest((SELECT count(*) FROM jsonb_array_elements(coalesce("bodyImages", '[]'::jsonb)) AS e WHERE NOT coalesce((e->>'missing')::boolean, false))
+                                   - cardinality("bodyImageKeys"), 0)), 0)::bigint AS inside
+      FROM "SiteNewsArticle"`
+    const held = Number(agg?.n ?? 0)
+    let toUpload = Number(agg?.covers ?? 0) + Number(agg?.inside ?? 0)
+    // The departments' pictures too (banner, tile, highlighted lots) — the table may not be there yet.
+    try {
+      const [dg] = await prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT (count(*) FILTER (WHERE "heroPath" IS NOT NULL AND "heroKey" IS NULL)
+              + count(*) FILTER (WHERE "tilePath" IS NOT NULL AND "tileKey" IS NULL)
+              + coalesce(sum(greatest(jsonb_array_length(coalesce("highlights", '[]'::jsonb)) - cardinality("highlightKeys"), 0)), 0))::bigint AS n
+        FROM "SiteDepartment"`
+      toUpload += Number(dg?.n ?? 0)
+    } catch { /* no departments table yet */ }
+
+    // ⚠ Said in numbers, not "Done" — a silent success on an import is how nobody notices it read nothing.
+    const parts: string[] = []
+    if (written) parts.push(`Loaded ${written.toLocaleString()} article${written === 1 ? "" : "s"} (${withBody.toLocaleString()} with the article page's own text)${skipped ? `, ${skipped} unreadable rows skipped` : ""}; the Hub now holds ${held.toLocaleString()}.`)
+    if (departmentsWritten) parts.push(`${departmentsWritten.toLocaleString()} department page${departmentsWritten === 1 ? "" : "s"} recorded.`)
+    parts.push(toUpload ? `${toUpload.toLocaleString()} picture${toUpload === 1 ? "" : "s"} still to upload — choose the collector's pictures below.` : "Every picture is already in the Hub.")
+    return NextResponse.json({
+      ok: true, written, departments: departmentsWritten, skipped, held, toUpload,
+      problems: problems.length ? problems : undefined,
+      message: written === 0 && departmentsWritten === 0
+        ? "Nothing was loaded — the file held nothing this page could read (it wants the collector's vectis-news-N.json or vectis-departments.json)."
+        : parts.join(" "),
+    })
+  } catch (e: any) {
+    console.error("databases/news/collect error:", e)
+    const msg = String(e?.message ?? "")
+    return NextResponse.json({ error: /does not exist|relation|column/i.test(msg) ? "The news table isn't up to date on this environment — press Run Migrations first." : (msg || "Could not read the file") }, { status: 500 })
+  }
+}

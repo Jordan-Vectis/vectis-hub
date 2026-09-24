@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-22, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-24, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,43 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2779fcb8d7c0a8c23168893577e733f4372e9108","author":"Jordan Orange","date":"2026-09-24T13:00:30+01:00","subject":"Page editor: publish and save times in UK time"},
+  {"sha":"f2d048d800079afff3529f35455c65acc1af96e6","author":"Jordan Orange","date":"2026-09-24T12:54:26+01:00","subject":"Page editor: More menu opens, short block names, live labels out of the way, throw away a draft"},
+  {"sha":"33a874c84817f372619aa6c1317b9c0ae556d952","author":"Jordan Orange","date":"2026-09-24T12:31:27+01:00","subject":"Test website: a page editor for every page (Website → Pages)"},
+  {"sha":"f0fdc9524b229d55b798b45f5924babf972c174b","author":"Jordan Orange","date":"2026-09-24T11:47:04+01:00","subject":"Memory: today's lessons — look at the reference first, keep-and-correct, no Run Migrations reminders, SET LOCAL"},
+  {"sha":"0ad539b490e1b1d455babc7286da4daf6dacce55","author":"Jordan Orange","date":"2026-09-24T11:38:57+01:00","subject":"Test website: View Results covers whole inside one fixed square, as vectis.co.uk shows them"},
+  {"sha":"c76274fb7d3333a5d7ca5b2c1543aec04fc0d464","author":"Jordan Orange","date":"2026-09-24T11:38:56+01:00","subject":"Test website: a proper banner editor — colours, placement, size, shade, extras, with a true preview"},
+  {"sha":"3b9e11a57143186a167dd442bb37c8e77d5e9549","author":"Jordan Orange","date":"2026-09-24T11:28:40+01:00","subject":"Test website: the stats band counts again — the timeout was sent as a bound parameter"},
+  {"sha":"9afa3496737d666718cce33810d19a9e1367b05e","author":"Jordan Orange","date":"2026-09-24T11:11:35+01:00","subject":"Test website: View Results cover pictures line up — one box for every card"},
+  {"sha":"9ad7f4b6f1934079c97aa6a94bcdb9ff84958673","author":"Jordan Orange","date":"2026-09-24T11:05:45+01:00","subject":"Test website: logo back to size, nothing over the banner picture, the four stats always shown"},
+  {"sha":"be9031c07f22a2f950d2796e568b15d3f495e701","author":"Jordan Orange","date":"2026-09-24T10:33:34+01:00","subject":"Test website: home page tidied — header to the edges, hero picture shown, real figures, working menu links"},
+  {"sha":"adeb45244b37ceb3438320029a8998e569e1b045","author":"Jordan Orange","date":"2026-09-24T09:57:06+01:00","subject":"Website: banner pictures show again; news categories are the site's tags; dead pictures dropped"},
+  {"sha":"97bcda8ca96c926b0b5b1fc5e49dbc671303bfc5","author":"Jordan Orange","date":"2026-09-24T09:35:51+01:00","subject":"Test website: How to Bid in the live site's words and layout"},
+  {"sha":"dab00646fcd68a1dad74386559dabf8775f1dee0","author":"Jordan Orange","date":"2026-09-24T09:30:05+01:00","subject":"Test website: department pages answer at once, menus close, logo centred"},
+  {"sha":"18666f1a6ef80d4f0410c27ae021ae958bc00817","author":"Jordan Orange","date":"2026-09-24T09:12:40+01:00","subject":"Test website: a way back to the Hub for admins, and wider department pages"},
+  {"sha":"14eee90bc61b55e0da7fb1a509db25f6a30402d7","author":"Jordan Orange","date":"2026-09-23T17:06:54+01:00","subject":"Departments: the copy as the site has it, and the \"Sell Your Toys\" side box"},
+  {"sha":"ed6003196bbe7e8d76de3e5028eb99e6cf104d9e","author":"Jordan Orange","date":"2026-09-23T16:40:20+01:00","subject":"Databases -> Departments: its own page, load and picture upload"},
+  {"sha":"0c90be33b99d7778e9393782f88364c139cb1f02","author":"Jordan Orange","date":"2026-09-23T16:20:47+01:00","subject":"Departments: the website's department pages, collected and shown on the test site"},
+  {"sha":"86903916ae055990a69afe2ed83e0d1028166522","author":"Jordan Orange","date":"2026-09-23T15:49:26+01:00","subject":"Double Check: an unpacked loco, its tray and its box are one item"},
+  {"sha":"e9640e643fd7e6a11d4c5dc475d444553c3edac8","author":"Jordan Orange","date":"2026-09-23T15:44:51+01:00","subject":"Double Check: re-count quantities against the photos, flag what it can't"},
+  {"sha":"52b919750ea4eaf7a4189fb50b5a7939a2379c32","author":"Jordan Orange","date":"2026-09-23T15:20:14+01:00","subject":"Databases -> News: dead old-host pictures left out, uploads four at a time"},
+  {"sha":"a899029972801616df5b88ced29afb149d5dbc61","author":"Jordan Orange","date":"2026-09-23T15:02:37+01:00","subject":"Databases -> News: the older articles' pages, and pictures pasted in as data"},
+  {"sha":"a055a50ae9da7721c02347e7c9324491e1d27b2e","author":"Jordan Orange","date":"2026-09-23T14:41:44+01:00","subject":"Databases -> News: the article's real text and the pictures inside it"},
+  {"sha":"d8d8f0450e08a26efa32bf10663f5d6c479f432b","author":"Jordan Orange","date":"2026-09-23T13:05:28+01:00","subject":"Databases -> News: a file picker for the pictures, not a folder picker"},
+  {"sha":"bd6a72e758f0993e38e8580ec11d64ca638ffc90","author":"Jordan Orange","date":"2026-09-23T12:55:46+01:00","subject":"Test website: sale cover pictures shown whole on the results list"},
+  {"sha":"4783bfdc67a7fbecdffb857ca85b43389126600a","author":"Jordan Orange","date":"2026-09-23T12:50:35+01:00","subject":"Databases -> News: the website's News & Stories, text and pictures"},
+  {"sha":"153e8d69899cfb99b8152b6a6446a15c68435bcb","author":"Jordan Orange","date":"2026-09-23T12:22:44+01:00","subject":"Test website: real lot counts, and a sale joins Results the day after"},
+  {"sha":"2133e2e90a5d8a697acb8346e59059e11911aebe","author":"Jordan Orange","date":"2026-09-23T12:17:54+01:00","subject":"Test website: light form controls on the light site"},
+  {"sha":"bacc6b670adc8ac8d72cda3d6d06f6346d44612b","author":"Jordan Orange","date":"2026-09-23T12:07:25+01:00","subject":"Test website: no hole under the photo on the lot page"},
+  {"sha":"fa56b16b9cd3c73312d10aac7bb38ac7805028b7","author":"Jordan Orange","date":"2026-09-23T11:41:19+01:00","subject":"Test website: the live site's shipping and postage wording under each lot"},
+  {"sha":"b48a728334f50d8cb0973fdac8cc40c318a3b737","author":"Jordan Orange","date":"2026-09-23T11:36:15+01:00","subject":"Test website: the small print and a sell nudge below each lot"},
+  {"sha":"403930fe83936a0b1458b277da7aae2b1d695fdc","author":"Jordan Orange","date":"2026-09-23T11:18:30+01:00","subject":"Test website: a lot page behind every results card"},
+  {"sha":"3132726120a653a4eb4daeb3ad00e08f8e0f955b","author":"Jordan Orange","date":"2026-09-23T10:49:37+01:00","subject":"Test website: View Results reads the Hub's sale databases"},
+  {"sha":"594aa6cbe1a3bd96de2b0dfa2f72ae1fdfb7fd0e","author":"Jordan Orange","date":"2026-09-23T10:29:21+01:00","subject":"Remove the BidJS integration from the test website"},
+  {"sha":"47848dc6550bdffe883c4d114958129886185652","author":"Jordan Orange","date":"2026-09-23T09:49:44+01:00","subject":"Memory: the first every-table backup did not land, and what changed"},
+  {"sha":"a8150ea518f42c723003baf96b12ef9371126c15","author":"Jordan Orange","date":"2026-09-23T09:13:43+01:00","subject":"Backup: the light says running or failed; no page or R2 call can hang"},
+  {"sha":"79fbc43bb077e8282bddb219627b1fc0382ef22d","author":"Jordan Orange","date":"2026-09-22T17:02:17+01:00","subject":"Memory: 21–22 Sept in the opening message, main = 4403d2f7"},
+  {"sha":"5d79f8d91d72537ab7794fc6bad6a0c33293d0e3","author":"Jordan Orange","date":"2026-09-22T15:47:33+01:00","subject":"Sales: a picture-only collector, handed out on the tab"},
   {"sha":"4f67740b97d8d6cbf7ce95ac550ea7b037a864a1","author":"Jordan Orange","date":"2026-09-22T14:59:23+01:00","subject":"Databases: a Sales tab with every sale's cover picture"},
   {"sha":"75b0ce6d7146843d4dfcfb8e21b9689eaeca3219","author":"Jordan Orange","date":"2026-09-22T12:16:00+01:00","subject":"Memory: moving Claude Code to a new computer"},
   {"sha":"3914dd55a4201b9ebf51a0d378b1ce7f96ca65a4","author":"Jordan Orange","date":"2026-09-22T12:02:42+01:00","subject":"Manage Lots: \"Looks hand-typed, not excluded\" filter with one-click exclude"},

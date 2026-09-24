@@ -2265,6 +2265,109 @@ export const MIGRATIONS = [
   `ALTER TABLE "ArchiveSale" ADD COLUMN IF NOT EXISTS "heroUrl" TEXT`,
   `ALTER TABLE "ArchiveSale" ADD COLUMN IF NOT EXISTS "heroKey" TEXT`,
   `ALTER TABLE "ArchiveSale" ADD COLUMN IF NOT EXISTS "heroAt" TIMESTAMP(3)`,
+
+  // Databases → News (2026-09-23): every News & Stories article on vectis.co.uk — text and cover
+  // picture — collected on an office machine (scripts/collect-news.mjs) and loaded on the page; the
+  // test website's news pages read it.
+  `CREATE TABLE IF NOT EXISTS "SiteNewsArticle" (
+    "id"          INTEGER NOT NULL,
+    "alias"       TEXT NOT NULL,
+    "title"       TEXT NOT NULL,
+    "sefLink"     TEXT,
+    "categoryId"  INTEGER,
+    "category"    TEXT,
+    "tags"        TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "featured"    BOOLEAN NOT NULL DEFAULT false,
+    "hits"        INTEGER NOT NULL DEFAULT 0,
+    "introText"   TEXT,
+    "fullText"    TEXT,
+    "publishedAt" TIMESTAMP(3),
+    "modifiedAt"  TIMESTAMP(3),
+    "imagePath"   TEXT,
+    "imageAlt"    TEXT,
+    "imageKey"    TEXT,
+    "imageAt"     TIMESTAMP(3),
+    "pulledAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "SiteNewsArticle_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "SiteNewsArticle_publishedAt_idx" ON "SiteNewsArticle"("publishedAt")`,
+  `CREATE INDEX IF NOT EXISTS "SiteNewsArticle_categoryId_idx" ON "SiteNewsArticle"("categoryId")`,
+  `CREATE INDEX IF NOT EXISTS "SiteNewsArticle_alias_idx" ON "SiteNewsArticle"("alias")`,
+  // The article's own page — the real text (the feed's is flattened) and the pictures inside it.
+  `ALTER TABLE "SiteNewsArticle" ADD COLUMN IF NOT EXISTS "bodyHtml" TEXT`,
+  `ALTER TABLE "SiteNewsArticle" ADD COLUMN IF NOT EXISTS "bodyImages" JSONB`,
+  `ALTER TABLE "SiteNewsArticle" ADD COLUMN IF NOT EXISTS "bodyImageKeys" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+
+  // Databases → News (2026-09-23): the website's department pages, collected alongside the news.
+  `CREATE TABLE IF NOT EXISTS "SiteDepartment" (
+    "slug"          TEXT NOT NULL,
+    "name"          TEXT NOT NULL,
+    "order"         INTEGER NOT NULL DEFAULT 0,
+    "siteLink"      TEXT,
+    "pageTitle"     TEXT,
+    "heading"       TEXT,
+    "heroPath"      TEXT,
+    "heroKey"       TEXT,
+    "tilePath"      TEXT,
+    "tileKey"       TEXT,
+    "copyHtml"      TEXT,
+    "highlights"    JSONB,
+    "highlightKeys" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "newsAliases"   TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "newsCategory"  TEXT,
+    "saleKeywords"  TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "siteSaleIds"   INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[],
+    "pulledAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "SiteDepartment_pkey" PRIMARY KEY ("slug")
+  )`,
+  // The department page's side box (video, text, prices-achieved picture) and the pictures inside its copy.
+  `ALTER TABLE "SiteDepartment" ADD COLUMN IF NOT EXISTS "sideHtml" TEXT`,
+  `ALTER TABLE "SiteDepartment" ADD COLUMN IF NOT EXISTS "extraImages" JSONB`,
+  `ALTER TABLE "SiteDepartment" ADD COLUMN IF NOT EXISTS "extraImageKeys" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+
+  // The department pages look a highlighted lot up by the WEBSITE'S lot id to link to our own results
+  // page — without these, every department page scanned ArchiveLot (956k rows) and BcLotWeb (2026-09-24).
+  `CREATE INDEX IF NOT EXISTS "ArchiveLot_siteLotId_idx" ON "ArchiveLot"("siteLotId")`,
+  `CREATE INDEX IF NOT EXISTS "BcLotWeb_siteLotId_idx" ON "BcLotWeb"("siteLotId")`,
+
+  // Test website's banner: which part of a slide's picture stays when it is cropped (2026-09-24).
+  `ALTER TABLE "HeroSlide" ADD COLUMN IF NOT EXISTS "imageFocus" TEXT`,
+  // The test website's stats band counts the sold lots; without this the count read all 956k
+  // ArchiveLot rows. Partial — only the sold rows — so it is small. Prisma's schema can't express
+  // a partial index; this line and its migration file are its only definition (2026-09-24).
+  `CREATE INDEX IF NOT EXISTS "ArchiveLot_sold_idx" ON "ArchiveLot" ("hammerPrice") WHERE "hammerPrice" > 0 OR "siteHammerPrice" > 0`,
+  // Test website's banner editor: each slide's look (colours, placement, shade, extras) as JSON (2026-09-24).
+  `ALTER TABLE "HeroSlide" ADD COLUMN IF NOT EXISTS "style" JSONB`,
+
+  // Test website's page editor (Website → Pages, 2026-09-24): each page's blocks, and every publish kept.
+  `CREATE TABLE IF NOT EXISTS "SitePage" (
+    "slug" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "draft" JSONB,
+    "published" JSONB,
+    "seoTitle" TEXT,
+    "seoDescription" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedBy" TEXT,
+    "publishedAt" TIMESTAMP(3),
+    "publishedBy" TEXT,
+    CONSTRAINT "SitePage_pkey" PRIMARY KEY ("slug")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "SitePageVersion" (
+    "id" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "data" JSONB NOT NULL,
+    "seoTitle" TEXT,
+    "seoDescription" TEXT,
+    "publishedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "publishedBy" TEXT,
+    CONSTRAINT "SitePageVersion_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "SitePageVersion_slug_publishedAt_idx" ON "SitePageVersion"("slug", "publishedAt")`,
+  `DO $$ BEGIN
+    ALTER TABLE "SitePageVersion" ADD CONSTRAINT "SitePageVersion_slug_fkey" FOREIGN KEY ("slug") REFERENCES "SitePage"("slug") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -2,6 +2,19 @@ import Link from "next/link"
 import Image from "next/image"
 import { getCustomerSession } from "@/lib/customer-auth"
 import { logoutCustomer } from "@/lib/actions/customer-auth"
+import { prisma } from "@/lib/prisma"
+import DropdownNavItem from "@/components/site-nav-dropdown"
+
+// The Departments menu comes from the department pages collected from vectis.co.uk (Databases →
+// News); until they are loaded the list below stands in, pointing at the auction calendar.
+async function departmentLinks(): Promise<{ label: string; href: string }[]> {
+  try {
+    const rows = await prisma.$queryRaw<{ slug: string; name: string }[]>`SELECT "slug", "name" FROM "SiteDepartment" ORDER BY "order", "name"`
+    if (rows.length) return rows.map(r => ({ label: r.name.toUpperCase(), href: `/departments/${r.slug}` }))
+  } catch { /* table not there yet */ }
+  // Nothing collected yet: the names still show, and each leads to the departments page, which says so.
+  return DEPARTMENTS.map(dept => ({ label: dept.toUpperCase(), href: "/departments" }))
+}
 
 const DEPARTMENTS = [
   "Action Figures",
@@ -35,6 +48,7 @@ const DEPARTMENTS = [
 
 export default async function SiteNav() {
   const session = await getCustomerSession()
+  const departments = await departmentLinks()
 
   return (
     <header>
@@ -43,10 +57,15 @@ export default async function SiteNav() {
 
       {/* ── Middle tier: search / logo / account ── */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-6">
+        {/* Three columns, not justify-between: the search and the account buttons differ in width, so a
+            space-between layout put the logo off-centre (Jordan, 2026-09-24). The middle column is the
+            logo, exactly centred; the outer two are equal and stretch. The row runs to the page edges —
+            search hard left, account hard right, the hero's own gutter — rather than sitting in a
+            narrower box than the blue bar and the hero under it, which read as three different widths. */}
+        <div className="px-4 sm:px-12 h-20 grid grid-cols-[1fr_auto_1fr] items-center gap-6">
 
           {/* Search */}
-          <form method="GET" action="/search" className="flex items-stretch shrink-0 shadow-sm" style={{ width: "300px" }}>
+          <form method="GET" action="/search" className="flex items-stretch shrink-0 shadow-sm w-full max-w-[360px]">
             <div className="relative shrink-0">
               <select
                 name="filter"
@@ -91,7 +110,7 @@ export default async function SiteNav() {
           </Link>
 
           {/* Account */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 justify-self-end">
             {session ? (
               <>
                 <form action={logoutCustomer}>
@@ -139,26 +158,28 @@ export default async function SiteNav() {
             </DropdownNavItem>
 
             {/* Departments dropdown */}
-            <DropdownNavItem label="DEPARTMENTS" href="/auctions">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-0 p-4" style={{ minWidth: "520px" }}>
-                {DEPARTMENTS.map(dept => (
-                  <DropdownLink
-                    key={dept}
-                    href={`/auctions?type=${encodeURIComponent(dept)}`}
-                    label={dept.toUpperCase()}
-                  />
-                ))}
-                <div className="col-span-2 border-t border-gray-100 mt-2 pt-2">
-                  <DropdownLink href="/auctions" label="VIEW ALL DEPARTMENTS" bold />
+            <DropdownNavItem label="DEPARTMENTS" href="/departments">
+              {/* Two columns filled DOWN, as the live site's menu reads, and long names wrap rather than run into the next column. */}
+              <div className="p-4" style={{ minWidth: "600px" }}>
+                <div className="flex gap-8">
+                  {[departments.slice(0, Math.ceil(departments.length / 2)), departments.slice(Math.ceil(departments.length / 2))].map((column, i) => (
+                    <div key={i} className="flex-1 min-w-0">
+                      {column.map(dept => <DropdownLink key={dept.label} href={dept.href} label={dept.label} wrap />)}
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-gray-100 mt-2 pt-2">
+                  <DropdownLink href="/departments" label="VIEW ALL DEPARTMENTS" bold />
                 </div>
               </div>
             </DropdownNavItem>
 
-            <NavItem href="/portal/register" label="HOW TO BID" />
-            <NavItem href="/submit" label="SELL WITH US" />
-            <NavItem href="/auctions" label="NEWS &amp; STORIES" />
-            <NavItem href="/auctions" label="CAREERS" />
-            <NavItem href="/auctions" label="CONTACT US" />
+            <NavItem href="/how-to-bid" label="HOW TO BID" />
+            <NavItem href="/sell-with-us" label="SELL WITH US" />
+            <NavItem href="/news-stories/news" label="NEWS &amp; STORIES" />
+            {/* Careers and Contact Us pointed at the auction list until 2026-09-24 (Jordan). */}
+            <NavItem href="/careers" label="CAREERS" />
+            <NavItem href="/contact" label="CONTACT US" />
           </ul>
         </div>
       </nav>
@@ -179,40 +200,17 @@ function NavItem({ href, label }: { href: string; label: string }) {
   )
 }
 
-function DropdownNavItem({
-  href, label, children,
-}: {
-  href: string
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <li className="relative group">
-      <Link
-        href={href}
-        className="flex items-center gap-1 px-4 py-3 hover:bg-white/10 transition-colors whitespace-nowrap"
-      >
-        {label}
-        <svg className="w-2.5 h-2.5 opacity-70 group-hover:rotate-180 transition-transform duration-200" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-        </svg>
-      </Link>
-      <div className="absolute top-full left-0 bg-white shadow-xl border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-50">
-        {children}
-      </div>
-    </li>
-  )
-}
+// DropdownNavItem lives in components/site-nav-dropdown.tsx (a client component: it closes itself when a link inside is chosen).
 
 function DropdownSection({ children }: { children: React.ReactNode }) {
   return <div className="py-2 min-w-[200px]">{children}</div>
 }
 
-function DropdownLink({ href, label, bold }: { href: string; label: string; bold?: boolean }) {
+function DropdownLink({ href, label, bold, wrap }: { href: string; label: string; bold?: boolean; wrap?: boolean }) {
   return (
     <Link
       href={href}
-      className={`block px-4 py-1.5 text-[11px] tracking-wider text-gray-700 hover:bg-[#32348A] hover:text-white transition-colors whitespace-nowrap ${bold ? "font-black text-[#32348A]" : "font-semibold"}`}
+      className={`block px-4 py-1.5 text-[11px] tracking-wider text-gray-700 hover:bg-[#32348A] hover:text-white transition-colors ${wrap ? "whitespace-normal leading-snug" : "whitespace-nowrap"} ${bold ? "font-black text-[#32348A]" : "font-semibold"}`}
     >
       {label}
     </Link>

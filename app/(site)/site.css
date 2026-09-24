@@ -1,0 +1,85 @@
+/* The test website is light, but it renders inside the Hub's root layout, whose <html> carries
+   class="dark" by default — and globals.css paints every form control dark for the dark theme
+   ("Dark-mode default for form controls": an UNLAYERED rule, so it beats Tailwind's layered classes
+   such as bg-transparent / text-gray-800 on the site's own inputs). That is why the search boxes
+   came out black on a white page (Jordan, 2026-09-23: "the formatting on the search bars is messed
+   up"). These rules, scoped to the site's wrapper and unlayered too but more specific, paint them
+   back. Site-only: nothing in the Hub carries the vectis-site class. */
+
+.vectis-site {
+  color-scheme: light;
+}
+
+.vectis-site :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select
+) {
+  background-color: #ffffff;
+  color: #1f2937; /* gray-800 */
+}
+
+.vectis-site :is(input, textarea, select)::placeholder {
+  color: #9ca3af; /* gray-400 */
+}
+
+.vectis-site :is(input, textarea, select):disabled {
+  background-color: #f9fafb; /* gray-50 */
+  color: #6b7280;            /* gray-500 */
+}
+
+/* News & Stories article bodies arrive from the site as HTML — readable defaults for that text. */
+.vectis-site .news-body { font-size: 1rem; line-height: 1.75; color: #1f2937; }
+.vectis-site .news-body p { margin: 0 0 1em; }
+.vectis-site .news-body h2, .vectis-site .news-body h3, .vectis-site .news-body h4 {
+  color: #32348A; font-weight: 900; line-height: 1.2; margin: 1.4em 0 0.5em;
+}
+.vectis-site .news-body h2 { font-size: 1.5rem; }
+.vectis-site .news-body h3 { font-size: 1.25rem; }
+.vectis-site .news-body h4 { font-size: 1.1rem; }
+.vectis-site .news-body img { max-width: 100%; height: auto; margin: 1em 0; }
+.vectis-site .news-body a { color: #32348A; text-decoration: underline; }
+.vectis-site .news-body ul { margin: 0 0 1em 1.5em; list-style: disc; }
+.vectis-site .news-body ol { margin: 0 0 1em 1.5em; list-style: decimal; }
+.vectis-site .news-body strong, .vectis-site .news-body b { font-weight: 700; }
+.vectis-site .news-body iframe, .vectis-site .news-body video { max-width: 100%; }
+.vectis-site .news-body table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
+.vectis-site .news-body td, .vectis-site .news-body th { border: 1px solid #e5e7eb; padding: 0.4em 0.6em; }
+.vectis-site .news-body blockquote { border-left: 4px solid #DB0606; padding-left: 1em; color: #4b5563; margin: 1em 0; }
+.vectis-site .news-body h1 { color: #32348A; font-weight: 900; font-size: 1.75rem; line-height: 1.15; margin: 0 0 0.75em; }
+.vectis-site .news-body em { font-style: italic; }
+/* A department page's side box: the video sits 16:9 across the box, the prices-achieved picture full width. */
+.vectis-site .dept-side iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; margin: 0 0 1em; }
+.vectis-site .dept-side img { display: block; width: 100%; height: auto; margin: 1em 0 0; }
+.vectis-site .dept-side h3 { color: #ffffff; font-weight: 900; font-size: 1.25rem; margin: 0 0 0.5em; }
+.vectis-site .dept-side p, .vectis-site .dept-side div { color: #e5e7eb; }
+.vectis-site .dept-side a { color: #ffffff; font-weight: 700; text-decoration: underline; }
+
+/* The page editor's Text, Fold-out and HTML blocks (Website → Pages). Colours come from the
+   --pe-* variables a Section or Box sets (page-editor/look.ts), so the same text reads on light and
+   dark backgrounds. Puck wraps rich text in its own .rich-text div. */
+.vectis-site .pe-text { line-height: 1.7; }
+.vectis-site .pe-text p { margin: 0 0 0.9em; }
+.vectis-site .pe-text .rich-text > :last-child, .vectis-site .pe-text > :last-child { margin-bottom: 0; }
+.vectis-site .pe-text h1, .vectis-site .pe-text h2, .vectis-site .pe-text h3, .vectis-site .pe-text h4 {
+  color: var(--pe-heading, #32348A); font-weight: 900; line-height: 1.2; margin: 1.2em 0 0.45em;
+}
+.vectis-site .pe-text h1 { font-size: 1.75rem; }
+.vectis-site .pe-text h2 { font-size: 1.45rem; }
+.vectis-site .pe-text h3 { font-size: 1.15rem; }
+.vectis-site .pe-text h4 { font-size: 1.02rem; }
+.vectis-site .pe-text a { color: var(--pe-link, #32348A); text-decoration: underline; text-underline-offset: 2px; }
+.vectis-site .pe-text ul { list-style: disc; margin: 0 0 1em 1.4em; }
+.vectis-site .pe-text ol { list-style: decimal; margin: 0 0 1em 1.4em; }
+.vectis-site .pe-text li { margin: 0.2em 0; }
+.vectis-site .pe-text li > p { margin: 0; }
+.vectis-site .pe-text strong, .vectis-site .pe-text b { font-weight: 700; }
+.vectis-site .pe-text em, .vectis-site .pe-text i { font-style: italic; }
+.vectis-site .pe-text blockquote { border-left: 4px solid var(--pe-kicker, #DB0606); padding-left: 1em; margin: 1em 0; }
+.vectis-site .pe-text hr { border: 0; height: 1px; background: var(--pe-line, #e5e7eb); margin: 1.5em 0; }
+.vectis-site .pe-text code { font-family: ui-monospace, monospace; background: rgba(0, 0, 0, 0.05); padding: 0 0.25em; }
+.vectis-site .pe-text img { max-width: 100%; height: auto; }
+.vectis-site .pe-text table { border-collapse: collapse; margin: 1em 0; }
+.vectis-site .pe-text td, .vectis-site .pe-text th { border: 1px solid var(--pe-line, #e5e7eb); padding: 0.4em 0.6em; }
+/* The fold-outs' own arrow replaces the browser's marker. */
+.vectis-site summary::-webkit-details-marker { display: none; }

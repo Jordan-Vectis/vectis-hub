@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
     let contradictions = ""
     let unsupported    = ""
     let revised        = ""
+    let quantityFlag   = ""
     let verdict: "ok" | "issues" = "ok"
 
     const parsed = parseModelJson(raw)
@@ -81,11 +82,13 @@ export async function POST(req: NextRequest) {
       contradictions = (parsed.contradictions ?? "").toString().trim()
       unsupported    = (parsed.unsupported ?? "").toString().trim()
       revised        = (parsed.revised ?? "").toString().trim()
+      quantityFlag   = (parsed.quantityFlag ?? "").toString().trim()
       verdict        = contradictions || unsupported ? "issues" : "ok"
     } else {
       // Couldn't parse the JSON (e.g. an invalid \' escape from the model). Salvage the
       // revised description if we can; NEVER dump the raw JSON into the contradictions field.
       revised = extractJsonField(raw, "revised") ?? ""
+      quantityFlag = extractJsonField(raw, "quantityFlag") ?? ""
       verdict = revised ? "issues" : "ok"
     }
 
@@ -119,6 +122,13 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // ── A quantity the photos do not bear out ──────────────────────────────
+    // Jordan, 2026-09-23, a Hornby Skaledale group lot: the description said 5, 7 and 2 boxes
+    // where the photo showed 4, 5 and 1 — every box's side panel carries the title too, and the
+    // AI had counted printed faces, not boxes. Same rule as product codes: the number is never
+    // changed here, the doubt is raised as a flag so a person counts.
+    if (quantityFlag) flag = [flag, `Double Check counted the photos: ${quantityFlag}`].filter(Boolean).join(" ")
 
     // ⚠ The Dolls/Bears mechanical clean-up runs HERE, as the last thing to touch the text.
     // Batch cleans its own output, but Double Check is the FINAL stage of the pipeline — a

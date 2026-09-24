@@ -199,7 +199,11 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "MarketingPlan", what: "A saved business plan — its summary, audience and competitors, plus a FROZEN copy of the analytics figures as they were when the plan was made." },
       { model: "MarketingPlanObjective", what: "A target on a plan: the measure, where it started, where it should get to and by when." },
       { model: "MarketingPlanAction", what: "A job on a plan's to-do list: channel, owner, effort, impact and status." },
-      { model: "HeroSlide", what: "The website's hero carousel slides — title, subtitle, button, image and whether each is live." },
+      { model: "HeroSlide", what: "The website's hero carousel slides — title, subtitle, button, image, each slide's look (colours, placement, shade) and whether it is live." },
+      { model: "SiteDepartment", what: "The website's 28 department pages — menu name, banner and tile pictures, the \"sell with us\" copy, the hand-picked highlighted lots, and the words used to find each department's past sales and news — collected from vectis.co.uk for the test website. Public content; nothing personal." },
+      { model: "SiteNewsArticle", what: "Every News & Stories article on vectis.co.uk — title, full text, category, tags, date and cover picture — collected on an office machine for the test website's news pages. The site's own public content; nothing personal." },
+      { model: "SitePage", what: "The test website's pages as built in the page editor (Website → Pages) — each page's blocks, its draft and published versions, its search-engine title and description, and who last saved and published it." },
+      { model: "SitePageVersion", what: "Every publish of a test-website page, kept so a page can be put back to how it was — the page's blocks and who published them, when." },
     ],
   },
   {

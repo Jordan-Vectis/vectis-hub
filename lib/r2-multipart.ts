@@ -10,6 +10,11 @@ import {
 // parts are cut at precisely `partSize` bytes and the remainder carried into the next one.
 // ⚠ `write()` awaits the upload when a part is full — that is the backpressure. Call it in a
 // plain loop and never fire several writes at once.
+// ⚠ Every call to R2 carries a deadline: the SDK has none of its own, and one stalled socket
+// would otherwise hold a backup for ever (the SDK still retries a failed attempt).
+const CALL_TIMEOUT_MS = 120_000
+const deadline = () => ({ abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS) })
+
 export class R2MultipartWriter {
   private chunks: Buffer[] = []
   private held = 0
@@ -47,12 +52,12 @@ export class R2MultipartWriter {
 
   private async uploadPart(body: Buffer): Promise<void> {
     if (!this.uploadId) {
-      const r = await this.client.send(new CreateMultipartUploadCommand({ Bucket: this.bucket, Key: this.key, ContentType: this.contentType }))
+      const r = await this.client.send(new CreateMultipartUploadCommand({ Bucket: this.bucket, Key: this.key, ContentType: this.contentType }), deadline())
       if (!r.UploadId) throw new Error("R2 gave no upload id")
       this.uploadId = r.UploadId
     }
     const PartNumber = ++this.partNo
-    const r = await this.client.send(new UploadPartCommand({ Bucket: this.bucket, Key: this.key, UploadId: this.uploadId, PartNumber, Body: body }))
+    const r = await this.client.send(new UploadPartCommand({ Bucket: this.bucket, Key: this.key, UploadId: this.uploadId, PartNumber, Body: body }), deadline())
     if (!r.ETag) throw new Error(`R2 gave no ETag for part ${PartNumber}`)
     this.parts.push({ ETag: r.ETag, PartNumber })
   }
@@ -65,13 +70,13 @@ export class R2MultipartWriter {
     this.chunks = []
     this.held = 0
     if (!this.uploadId) {
-      await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: this.key, Body: tail, ContentType: this.contentType }))
+      await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: this.key, Body: tail, ContentType: this.contentType }), deadline())
       return this.bytes
     }
     if (tail.length) await this.uploadPart(tail)
     await this.client.send(new CompleteMultipartUploadCommand({
       Bucket: this.bucket, Key: this.key, UploadId: this.uploadId, MultipartUpload: { Parts: this.parts },
-    }))
+    }), deadline())
     return this.bytes
   }
 
@@ -82,7 +87,7 @@ export class R2MultipartWriter {
     this.held = 0
     if (!this.uploadId) return
     try {
-      await this.client.send(new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: this.key, UploadId: this.uploadId }))
+      await this.client.send(new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: this.key, UploadId: this.uploadId }), deadline())
     } catch { /* an abandoned upload is tidied by the bucket's own lifecycle */ }
   }
 }

@@ -1,11 +1,16 @@
-import type { Metadata } from "next"
+import { PageBlocks, pageMetadata, publishedPage } from "../page-editor/render"
 
-export const metadata: Metadata = {
-  title: "Terms & Conditions",
-  description: "Vectis Auctions terms and conditions for buyers and sellers.",
+export async function generateMetadata() {
+  return pageMetadata("terms", {
+    title: "Terms & Conditions",
+    description: "Vectis Auctions terms and conditions for buyers and sellers.",
+  })
 }
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  // The page editor's published version (Website → Pages) when there is one; the built-in design otherwise.
+  const page = await publishedPage("terms")
+  if (page) return <PageBlocks data={page.data} />
   return (
     <div className="bg-white">
 

@@ -1185,6 +1185,14 @@ model HeroSlide {
   cta       String
   ctaHref   String
   imageKey  String?
+  /// Which part of the picture stays when it is cropped to the banner: "top", "center" or "bottom"
+  /// (null = centre). Nullable with no default on purpose, so a slide can still be saved before
+  /// Run Migrations has added the column (2026-09-24).
+  imageFocus String?
+  /// The slide's look — colours, where the words sit, size, shade, extras — as the JSON that
+  /// parseSlideStyle() (app/(site)/hero-style.ts) reads; null = the site's default look. Nullable
+  /// with no default for the same reason as imageFocus (2026-09-24).
+  style     Json?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1422,6 +1430,7 @@ model ArchiveLot {
   // skipDuplicates dedupes on lotId.
   @@unique([lotId])
   @@index([auctionId, lot])
+  @@index([siteLotId])
   @@index([auctionDate])
   @@index([hammerPrice])
 }
@@ -1447,6 +1456,7 @@ model BcLotWeb {
 
   @@index([auctionCode])
   @@index([siteSaleId])
+  @@index([siteLotId])
 }
 
 // One sale as the website lists it: its own sequential id, the AuctionID it shares
@@ -3259,4 +3269,97 @@ model SearchWordState {
 model SearchWordBuild {
   raw String @id
   n   Int    @default(0)
+}
+
+/// Databases → News: every article on vectis.co.uk's News & Stories, collected on an office machine
+/// with scripts/collect-news.mjs (the site's Joomla blog feed — the full text comes with it) and
+/// loaded on the page; the cover picture is uploaded from the same collection into R2
+/// (news-photos/<id>.<ext>). The test website's News & Stories pages read this table.
+model SiteNewsArticle {
+  id          Int       @id                 // the site's own article id
+  alias       String                        // the slug in the article's address (unique on the site in practice; the newest wins if not)
+  title       String
+  sefLink     String?                       // news-stories/news/<alias> on the site
+  categoryId  Int?
+  category    String?
+  tags        String[]  @default([])
+  featured    Boolean   @default(false)
+  hits        Int       @default(0)
+  introText   String?
+  fullText    String?                       // the site's HTML, as served
+  publishedAt DateTime?
+  modifiedAt  DateTime?
+  imagePath   String?                       // the site's file, e.g. images/2026/09/Lot-305-news-desk.jpg
+  imageAlt    String?
+  imageKey    String?                       // our copy in R2, once uploaded
+  imageAt     DateTime?
+  bodyHtml      String?                     // the article PAGE's own HTML, cleaned — the feed's text is flattened (2026-09-23)
+  bodyImages    Json?                       // [{ path, file }] the pictures inside the article: site path + the collector's file name
+  bodyImageKeys String[]  @default([])      // our R2 copies of those (news-photos/<file>), registered by the picture upload
+  pulledAt    DateTime  @default(now())
+
+  @@index([publishedAt])
+  @@index([categoryId])
+  @@index([alias])
+}
+
+/// Databases → News: the website's DEPARTMENT pages (the Departments menu), collected on an office
+/// machine with scripts/collect-departments.mjs and loaded on the same page as the news; the test
+/// website's /departments pages read it. An editor is expected to follow (Jordan, 2026-09-23).
+model SiteDepartment {
+  slug          String   @id                 // model-train-auctions
+  name          String                       // the menu wording
+  order         Int      @default(0)         // menu order
+  siteLink      String?                      // departments/<slug>
+  pageTitle     String?                      // "Trains & Model Railway Auctions"
+  heading       String?                      // "SELL TRAINS & MODEL RAILWAY AT AUCTION"
+  heroPath      String?                      // the banner, as a site path
+  heroKey       String?                      // our copy in R2 (news-photos/dept-<slug>-hero.<ext>)
+  tilePath      String?                      // the picture on the departments index
+  tileKey       String?
+  copyHtml      String?                      // the "Sell … at auction" copy, cleaned
+  sideHtml      String?                     // the "Sell your collection" side box: video, text, GET STARTED, the prices-achieved picture
+  extraImages   Json?                       // [{ path, file }] the pictures inside the copy and the side box
+  extraImageKeys String[] @default([])      // our R2 copies of those (news-photos/dept-<slug>-x<n>.<ext>)
+  highlights    Json?                        // [{ title, hammer, meta, link, imagePath, file }] the hand-picked past lots
+  highlightKeys String[] @default([])        // our R2 copies of those (news-photos/<file>)
+  newsAliases   String[] @default([])        // the stories the page showed
+  newsCategory  String?                      // seeded from those stories; editable later
+  saleKeywords  String[] @default([])        // matched against sale titles for Past Auctions; editable later
+  siteSaleIds   Int[]    @default([])        // the Past Auctions the page listed (website sale numbers)
+  pulledAt      DateTime @default(now())
+}
+
+/// A page of the TEST website built in the page editor (Website → Pages, 2026-09-24 — Jordan: "a
+/// full blown page editor … I need it for every page"). The page is Puck's JSON: blocks and their
+/// settings. `slug` is the page's address without the leading slash ("home" is /, "how-to-bid",
+/// "departments/model-train-auctions", or a new page's own name). While `published` is null the
+/// site shows the page's built-in design; `draft` is what the editor last saved.
+model SitePage {
+  slug           String    @id
+  title          String                       // the page's name in the Hub's list
+  draft          Json?
+  published      Json?
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?                      // who last saved the draft
+  publishedAt    DateTime?
+  publishedBy    String?
+  versions       SitePageVersion[]
+}
+
+/// Every publish of a SitePage, kept so a page can be put back to how it was.
+model SitePageVersion {
+  id             String    @id @default(cuid())
+  slug           String
+  page           SitePage  @relation(fields: [slug], references: [slug], onDelete: Cascade)
+  data           Json
+  seoTitle       String?
+  seoDescription String?
+  publishedAt    DateTime  @default(now())
+  publishedBy    String?
+
+  @@index([slug, publishedAt])
 }

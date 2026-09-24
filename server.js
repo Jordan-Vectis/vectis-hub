@@ -224,9 +224,10 @@ app.prepare().then(async () => {
         headers: { Authorization: `Bearer ${secret}` },
       })
         .then(r => r.json())
-        .then(d => d && d.folder
-          ? console.log(`[cron/db-backup] complete: ${d.tables} of ${d.requested} tables, ${d.totalRows} rows, ${d.totalBytes} bytes in ${Math.round((d.durationMs || 0) / 1000)} s${d.failed ? ` — ${d.failed} FAILED` : ''}${d.stopped ? ' — STOPPED' : ''}`)
-          : console.warn('[cron/db-backup] did not complete:', d && d.error))
+        // The run is started, not awaited — it logs a line per table and its own summary as it goes.
+        .then(d => d && d.started
+          ? console.log('[cron/db-backup] started — watch for "[db-backup]" lines')
+          : console.warn('[cron/db-backup] did not start:', d && d.error))
         .catch(e => console.warn('[cron/db-backup] error:', e.message))
     }
     const now = new Date()

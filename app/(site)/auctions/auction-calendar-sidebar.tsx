@@ -5,7 +5,7 @@ import Link from "next/link"
 
 interface AuctionEntry {
   date: string   // ISO date string
-  code: string   // auction code for URL
+  href: string   // where that day links to (a Hub sale's catalogue, or a past sale's results)
 }
 
 interface Props {
@@ -23,13 +23,13 @@ export default function AuctionCalendarSidebar({ auctionEntries, auctionTypes, s
   const [year,  setYear]  = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
 
-  // Build a map of "year-month-day" → first auction code on that date
+  // Build a map of "year-month-day" → the first auction on that date
   const auctionDateMap = new Map<string, string>()
   for (const entry of auctionEntries) {
     const dt = new Date(entry.date)
     const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`
     if (!auctionDateMap.has(key)) {
-      auctionDateMap.set(key, entry.code)
+      auctionDateMap.set(key, entry.href)
     }
   }
 
@@ -53,7 +53,7 @@ export default function AuctionCalendarSidebar({ auctionEntries, auctionTypes, s
   const isToday = (d: number) =>
     d === today.getDate() && month === today.getMonth() && year === today.getFullYear()
 
-  const getAuctionCode = (d: number) =>
+  const getAuctionHref = (d: number) =>
     auctionDateMap.get(`${year}-${month}-${d}`) ?? null
 
   return (
@@ -89,15 +89,15 @@ export default function AuctionCalendarSidebar({ auctionEntries, auctionTypes, s
         <div className="grid grid-cols-7 px-2 pb-3 gap-y-0.5">
           {cells.map((d, i) => {
             if (!d) return <div key={`e-${i}`} />
-            const code    = getAuctionCode(d)
+            const href    = getAuctionHref(d)
             const todayEl = isToday(d)
 
-            if (code) {
+            if (href) {
               // Clickable — has an auction on this date
               return (
                 <Link
                   key={d}
-                  href={`/auctions/${code}`}
+                  href={href}
                   title="View auction"
                   className="relative flex items-center justify-center rounded-full w-7 h-7 mx-auto text-xs font-bold bg-[#32348A] text-white hover:bg-[#28296e] transition-colors cursor-pointer"
                 >
