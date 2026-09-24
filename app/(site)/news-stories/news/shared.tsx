@@ -14,8 +14,9 @@ export type Article = {
   imagePath: string | null; imageKey: string | null
   /** The article page's own HTML (cleaned by the collector) — null for loads made before it was collected. */
   bodyHtml?: string | null
-  /** The pictures inside the article: the site path as it appears in bodyHtml, and the collector's file name. */
-  bodyImages?: { path: string; file: string }[] | null
+  /** The pictures inside the article: the site path as it appears in bodyHtml, and the collector's file name.
+   *  `missing` = the collector could not fetch it (gone from the site, or a dead host) — never shown. */
+  bodyImages?: { path: string; file: string; missing?: boolean }[] | null
   /** Our R2 copies of those (news-photos/<file>), registered by the picture upload. */
   bodyImageKeys?: string[] | null
 }

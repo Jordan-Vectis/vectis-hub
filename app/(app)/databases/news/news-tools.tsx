@@ -92,7 +92,12 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
     // "<id>.<ext>" / "<id>-<n>.<ext>" for the news; "dept-<slug>-hero|tile|<n>.<ext>" for the departments
     if (/^(\d+(-\d+)?|dept-[a-z0-9-]+-(hero|tile|\d+))\.(jpe?g|png|webp|gif)$/.test(name)) byName.set(name, f)
   }
-  const toUpload = missing.filter(m => byName.has(m.file.toLowerCase()))
+  // "Replace" sends every valid-named file chosen, even ones the Hub already holds — for a picture
+  // that was wrong (2026-09-24: nine covers were the site's error page saved as a .jpg).
+  const [replace, setReplace] = useState(false)
+  const toUpload: Missing[] = replace
+    ? [...byName.keys()].map(name => ({ id: Number(name.match(/^(\d+)/)?.[1] ?? 0), file: name })).filter(m => m.id > 0)
+    : missing.filter(m => byName.has(m.file.toLowerCase()))
   const spare = [...byName.keys()].filter(n => !wanted.has(n)).length
 
   const TYPES: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" }
@@ -194,8 +199,12 @@ export default function NewsTools({ missing, held }: { missing: Missing[]; held:
               <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.gif,image/*"
                 onChange={e => { setFolder(Array.from(e.target.files ?? [])); setFinished(null); setFailed([]); setDone(0) }} className="file-input" />
               {!uploading
-                ? <button type="button" onClick={upload} disabled={toUpload.length === 0} className={`${btn} bg-violet-600 hover:bg-violet-500 text-white`}>{toUpload.length ? `Upload ${toUpload.length.toLocaleString()} picture${toUpload.length === 1 ? "" : "s"}` : "Nothing to upload"}</button>
+                ? <button type="button" onClick={upload} disabled={toUpload.length === 0} className={`${btn} bg-violet-600 hover:bg-violet-500 text-white`}>{toUpload.length ? `${replace ? "Replace" : "Upload"} ${toUpload.length.toLocaleString()} picture${toUpload.length === 1 ? "" : "s"}` : "Nothing to upload"}</button>
                 : <button type="button" onClick={() => { stopRef.current = true }} className={`${btn} border border-gray-300 dark:border-gray-700 hover:border-violet-500`}>⏹ Stop</button>}
+              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 min-h-[44px]">
+                <input type="checkbox" checked={replace} onChange={e => setReplace(e.target.checked)} disabled={uploading} className="h-4 w-4" />
+                Replace pictures the Hub already has (for a picture that was wrong — choose just those files)
+              </label>
             </div>
             {folder.length > 0 && !uploading && !finished && (
               <p className="text-xs text-gray-600 dark:text-gray-400">

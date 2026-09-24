@@ -28,13 +28,13 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
   try {
     const conds: Prisma.Sql[] = [Prisma.sql`1 = 1`]
     if (q) conds.push(Prisma.sql`(a."title" ILIKE ${"%" + q + "%"} OR a."fullText" ILIKE ${"%" + q + "%"})`)
-    if (cat) conds.push(Prisma.sql`a."category" = ${cat}`)
+    if (cat) conds.push(Prisma.sql`${cat} = ANY(a."tags")`)   // the site's categories are its tags
     const where = Prisma.join(conds, " AND ")
     const cols = Prisma.sql`a."id", a."alias", a."title", a."category", a."tags", a."featured", a."publishedAt", a."introText", a."fullText", a."imagePath", a."imageKey", a."bodyHtml"`
     const [r, t, cs, f] = await Promise.all([
       prisma.$queryRaw<Article[]>`SELECT ${cols} FROM "SiteNewsArticle" a WHERE ${where} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT ${PAGE} OFFSET ${(currentPage - 1) * PAGE}`,
       prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM "SiteNewsArticle" a WHERE ${where}`,
-      prisma.$queryRaw<{ category: string; n: bigint }[]>`SELECT a."category", count(*)::bigint AS n FROM "SiteNewsArticle" a WHERE a."category" IS NOT NULL GROUP BY a."category" ORDER BY a."category"`,
+      prisma.$queryRaw<{ category: string; n: bigint }[]>`SELECT t AS category, count(*)::bigint AS n FROM "SiteNewsArticle" a, unnest(a."tags") AS t GROUP BY t ORDER BY t`,
       !filtering && currentPage === 1
         ? prisma.$queryRaw<Article[]>`SELECT ${cols} FROM "SiteNewsArticle" a WHERE a."featured" ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 3`
         : Promise.resolve([] as Article[]),

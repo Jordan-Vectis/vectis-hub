@@ -15,15 +15,21 @@ export const maxDuration = 300
 //
 // The site is the authority and overwrites ours on every load — the feed's fields AND the article
 // page's own HTML (bodyHtml) with the list of pictures inside it (bodyImages). Our own copies of
-// the pictures (imageKey for the cover, bodyImageKeys for the ones inside) are KEPT unless the
-// site's files have changed, when they are cleared so the new ones are asked for again.
+// the pictures are KEPT where the site still lists the same file: the cover (imageKey) is cleared
+// when the cover's path changes, and bodyImageKeys keeps only the keys of pictures still listed.
+//
+// A picture the collector could NOT fetch (its `missingPictures`, 2026-09-24 — the old site's dead
+// image hosts, files the site has lost) is recorded as such: a missing cover is stored as no cover,
+// a missing picture inside is kept in the list flagged `missing` so the site page drops its <img>
+// and the upload step never asks for it — and any copy the Hub took of it before the collector
+// checked what it was given (an error page saved as a .jpg) is forgotten with the key.
 type Incoming = {
   id?: unknown; alias?: unknown; title?: unknown; sefLink?: unknown; categoryId?: unknown; category?: unknown
   tags?: unknown; featured?: unknown; hits?: unknown; introText?: unknown; fullText?: unknown
   publishedAt?: unknown; modifiedAt?: unknown; imagePath?: unknown; imageAlt?: unknown
-  bodyHtml?: unknown; bodyImages?: unknown
+  bodyHtml?: unknown; bodyImages?: unknown; missingPictures?: unknown
 }
-type BodyImage = { path: string; file: string }
+type BodyImage = { path: string; file: string; missing?: true }
 type Row = {
   id: number; alias: string; title: string; sefLink: string | null; categoryId: number | null; category: string | null
   tags: string[]; featured: boolean; hits: number; introText: string | null; fullText: string | null
@@ -40,10 +46,12 @@ function clean(a: Incoming): Row | null {
   const id = Math.round(Number(a.id))
   if (!Number.isFinite(id) || id <= 0) return null
   const catId = Number(a.categoryId)
+  const missing = new Set(Array.isArray(a.missingPictures) ? a.missingPictures.map(f => String(f).toLowerCase()) : [])
+  const coverMissing = [...missing].some(f => new RegExp(`^${id}\\.(jpe?g|png|webp|gif)$`).test(f))
   const bodyImages: BodyImage[] = Array.isArray(a.bodyImages)
     ? a.bodyImages
         .filter((x): x is BodyImage => !!x && typeof x === "object" && typeof (x as BodyImage).path === "string" && typeof (x as BodyImage).file === "string" && FILE_NAME.test((x as BodyImage).file) && (x as BodyImage).file.startsWith(`${id}-`))
-        .map(x => ({ path: x.path, file: x.file.toLowerCase() }))
+        .map(x => { const file = x.file.toLowerCase(); return missing.has(file) ? { path: x.path, file, missing: true as const } : { path: x.path, file } })
         .slice(0, 100)
     : []
   return {
@@ -52,7 +60,10 @@ function clean(a: Incoming): Row | null {
     title: str(a.title) ?? "(untitled)",
     sefLink: str(a.sefLink),
     categoryId: Number.isFinite(catId) && catId > 0 ? Math.round(catId) : null,
-    category: str(a.category),
+    // ⚠ The site's Joomla category is one container for every article ("TV & FILM", catid 8 —
+    // measured 2026-09-24: 1,337 of 1,337); what the site calls categories are the TAGS. So the
+    // category shown is the first tag, and every category filter matches any tag.
+    category: (Array.isArray(a.tags) && a.tags.length ? String(a.tags[0]).trim() : "") || str(a.category),
     tags: Array.isArray(a.tags) ? a.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 50) : [],
     featured: a.featured === true,
     hits: Number.isFinite(Number(a.hits)) ? Math.max(0, Math.round(Number(a.hits))) : 0,
@@ -60,7 +71,7 @@ function clean(a: Incoming): Row | null {
     fullText: str(a.fullText),
     publishedAt: stamp(a.publishedAt),
     modifiedAt: stamp(a.modifiedAt),
-    imagePath: str(a.imagePath)?.replace(/^\/+/, "") ?? null,
+    imagePath: coverMissing ? null : (str(a.imagePath)?.replace(/^\/+/, "") ?? null),
     imageAlt: str(a.imageAlt),
     bodyHtml: str(a.bodyHtml),
     bodyImages,
@@ -106,14 +117,15 @@ export async function POST(req: NextRequest) {
           const aliases: string[] = Array.isArray(d.newsAliases) ? d.newsAliases.map((s: any) => String(s)).slice(0, 10) : []
           const keywords: string[] = Array.isArray(d.saleKeywords) ? d.saleKeywords.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 10) : []
           const saleIds: number[] = Array.isArray(d.pastAuctions) ? d.pastAuctions.map((p: any) => Math.round(Number(p?.siteId))).filter((n: number) => Number.isFinite(n) && n > 0).slice(0, 50) : []
-          // The department's news category: the category most of the stories on its page carry — when we hold them.
+          // The department's news category: the TAG most of the stories on its page carry — when we
+          // hold them (the site's categories are its tags; see clean() above).
           let newsCategory: string | null = null
           if (aliases.length) {
-            const cats = await prisma.$queryRaw<{ category: string | null; n: bigint }[]>`
-              SELECT "category", count(*)::bigint AS n FROM "SiteNewsArticle"
-              WHERE "alias" = ANY(ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(aliases)}::jsonb))) AND "category" IS NOT NULL
-              GROUP BY "category" ORDER BY n DESC LIMIT 1`
-            newsCategory = cats[0]?.category ?? null
+            const cats = await prisma.$queryRaw<{ tag: string; n: bigint }[]>`
+              SELECT t AS tag, count(*)::bigint AS n FROM "SiteNewsArticle", unnest("tags") AS t
+              WHERE "alias" = ANY(ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(aliases)}::jsonb)))
+              GROUP BY t ORDER BY n DESC, t LIMIT 1`
+            newsCategory = cats[0]?.tag ?? null
           }
           departmentsWritten += await prisma.$executeRaw`
             INSERT INTO "SiteDepartment" ("slug", "name", "order", "siteLink", "pageTitle", "heading", "heroPath", "tilePath", "copyHtml", "sideHtml", "extraImages", "highlights",
@@ -175,7 +187,9 @@ export async function POST(req: NextRequest) {
             "imageAt"  = CASE WHEN "SiteNewsArticle"."imagePath" IS DISTINCT FROM EXCLUDED."imagePath" THEN NULL ELSE "SiteNewsArticle"."imageAt" END,
             "imagePath" = EXCLUDED."imagePath",
             "bodyHtml" = EXCLUDED."bodyHtml",
-            "bodyImageKeys" = CASE WHEN "SiteNewsArticle"."bodyImages" IS DISTINCT FROM EXCLUDED."bodyImages" THEN ARRAY[]::text[] ELSE "SiteNewsArticle"."bodyImageKeys" END,
+            "bodyImageKeys" = ARRAY(SELECT k FROM unnest("SiteNewsArticle"."bodyImageKeys") AS k
+                                    WHERE k = ANY(ARRAY(SELECT 'news-photos/' || (e->>'file') FROM jsonb_array_elements(EXCLUDED."bodyImages") AS e
+                                                        WHERE NOT coalesce((e->>'missing')::boolean, false)))),
             "bodyImages" = EXCLUDED."bodyImages",
             "pulledAt" = now()`
       }
@@ -184,7 +198,8 @@ export async function POST(req: NextRequest) {
     const [agg] = await prisma.$queryRaw<{ n: bigint; covers: bigint; inside: bigint }[]>`
       SELECT count(*)::bigint AS n,
              count(*) FILTER (WHERE "imagePath" IS NOT NULL AND "imageKey" IS NULL)::bigint AS covers,
-             coalesce(sum(greatest(jsonb_array_length(coalesce("bodyImages", '[]'::jsonb)) - cardinality("bodyImageKeys"), 0)), 0)::bigint AS inside
+             coalesce(sum(greatest((SELECT count(*) FROM jsonb_array_elements(coalesce("bodyImages", '[]'::jsonb)) AS e WHERE NOT coalesce((e->>'missing')::boolean, false))
+                                   - cardinality("bodyImageKeys"), 0)), 0)::bigint AS inside
       FROM "SiteNewsArticle"`
     const held = Number(agg?.n ?? 0)
     let toUpload = Number(agg?.covers ?? 0) + Number(agg?.inside ?? 0)

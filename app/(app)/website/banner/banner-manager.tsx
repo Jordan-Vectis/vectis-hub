@@ -1,7 +1,6 @@
 ﻿"use client"
 
 import { useState, useTransition, useRef } from "react"
-import Image from "next/image"
 import {
   createHeroSlide,
   updateHeroSlide,
@@ -17,6 +16,8 @@ interface Slide {
   cta: string
   ctaHref: string
   imageKey: string | null
+  /** A signed address for the picture, made by the page (an hour's worth) — the public photo proxy never served banner keys. */
+  imageUrl: string | null
   active: boolean
 }
 
@@ -26,6 +27,7 @@ const DEFAULT_FORM = {
   cta: "VIEW UPCOMING AUCTIONS",
   ctaHref: "/auctions",
   imageKey: null as string | null,
+  imageUrl: null as string | null,
   active: true,
 }
 
@@ -34,29 +36,30 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
   const [editing, setEditing]   = useState<string | null>(null)  // slide id or "new"
   const [form, setForm]         = useState(DEFAULT_FORM)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [dragOver, setDragOver]  = useState(false)
   const [pending, startTransition] = useTransition()
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const photoUrl = (key: string | null) =>
-    key ? `/api/public/photo?key=${encodeURIComponent(key)}` : null
-
   // ── Image upload ─────────────────────────────────────────────────────────
+  // Straight to R2 on a presigned PUT under hero-slides/ (the banners' own place), then shown by
+  // the signed address the route hands back. A refused upload says so — it used to fail silently.
   async function uploadImage(file: File) {
     setUploading(true)
+    setUploadError(null)
     try {
-      const res = await fetch("/api/upload-url", {
+      const res = await fetch("/api/website/banner-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          size: file.size,
-        }),
+        body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
       })
-      const { url, key } = await res.json()
-      await fetch(url, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
-      setForm(f => ({ ...f, imageKey: key }))
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error ?? `Could not get an upload address (${res.status})`)
+      const put = await fetch(j.url, { method: "PUT", body: file, headers: { "Content-Type": j.contentType ?? file.type } })
+      if (!put.ok) throw new Error(`Storage refused the picture (${put.status})`)
+      setForm(f => ({ ...f, imageKey: j.key, imageUrl: j.viewUrl ?? null }))
+    } catch (e: any) {
+      setUploadError(e?.message ?? "The picture could not be uploaded")
     } finally {
       setUploading(false)
     }
@@ -65,23 +68,18 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
   // ── Save (create or update) ───────────────────────────────────────────────
   function save() {
     startTransition(async () => {
+      // The signed picture address is for the screen only — the row keeps the key.
+      const { imageUrl, ...data } = form
       if (editing === "new") {
-        const res = await fetch("/api/hero-slides", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        }).catch(() => null)
-        // Use server action directly
-        await createHeroSlide(form)
-        // Refresh from server — simple: reload slides via router, but we optimistically update
+        await createHeroSlide(data)
         setSlides(prev => [
           ...prev,
-          { id: Date.now().toString(), order: prev.length, ...form },
+          { id: Date.now().toString(), order: prev.length, ...data, imageUrl },
         ])
       } else if (editing) {
-        await updateHeroSlide(editing, form)
+        await updateHeroSlide(editing, data)
         setSlides(prev =>
-          prev.map(s => (s.id === editing ? { ...s, ...form } : s))
+          prev.map(s => (s.id === editing ? { ...s, ...data, imageUrl } : s))
         )
       }
       setEditing(null)
@@ -126,6 +124,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
       cta: slide.cta,
       ctaHref: slide.ctaHref,
       imageKey: slide.imageKey,
+      imageUrl: slide.imageUrl,
       active: slide.active,
     })
   }
@@ -137,10 +136,10 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
             Hero Banner Manager
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
             {activeCount} active slide{activeCount !== 1 ? "s" : ""} · changes go live instantly
           </p>
         </div>
@@ -165,7 +164,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
         )}
 
         {slides.map((slide, idx) => {
-          const img = photoUrl(slide.imageKey)
+          const img = slide.imageUrl
           return (
             <div
               key={slide.id}
@@ -200,7 +199,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
                 {/* Thumbnail */}
                 <div className="w-32 h-20 shrink-0 bg-gradient-to-br from-[#1a1b3a] to-[#32348A] relative">
                   {img && (
-                    <Image src={img} alt={slide.title} fill className="object-cover" unoptimized />
+                    <img src={img} alt={slide.title} className="absolute inset-0 w-full h-full object-cover" />
                   )}
                   {!img && (
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -310,16 +309,10 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
                   onClick={() => fileRef.current?.click()}
                 >
                   {form.imageKey ? (
-                    <div className="relative w-full h-full rounded-lg overflow-hidden">
-                      <Image
-                        src={`/api/public/photo?key=${encodeURIComponent(form.imageKey)}`}
-                        alt="Slide background"
-                        fill
-                        className="object-cover"
-                        unoptimized
-                      />
+                    <div className="relative w-full h-full rounded-lg overflow-hidden bg-gradient-to-br from-[#1a1b3a] to-[#32348A]">
+                      {form.imageUrl && <img src={form.imageUrl} alt="Slide background" className="absolute inset-0 w-full h-full object-cover" />}
                       <button
-                        onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, imageKey: null })) }}
+                        onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, imageKey: null, imageUrl: null })) }}
                         className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -346,6 +339,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
                   const file = e.target.files?.[0]
                   if (file) uploadImage(file)
                 }} />
+                {uploadError && <p className="mt-2 text-xs text-red-700">⚠ {uploadError}</p>}
               </div>
 
               {/* Title */}
@@ -422,14 +416,8 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
 
             {/* Preview strip */}
             <div className="mx-6 mb-5 rounded-lg overflow-hidden bg-gradient-to-br from-[#1a1b3a] to-[#32348A] relative" style={{ height: "80px" }}>
-              {form.imageKey && (
-                <Image
-                  src={`/api/public/photo?key=${encodeURIComponent(form.imageKey)}`}
-                  alt="Preview"
-                  fill
-                  className="object-cover opacity-40"
-                  unoptimized
-                />
+              {form.imageUrl && (
+                <img src={form.imageUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover opacity-40" />
               )}
               <div className="absolute inset-0 flex flex-col justify-center px-5">
                 <p className="text-white font-black text-sm uppercase tracking-tight leading-tight truncate">

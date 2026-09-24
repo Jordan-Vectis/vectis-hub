@@ -28,6 +28,13 @@ async function withOurPictures(html: string, a: Article): Promise<string> {
   const keys = new Set(a.bodyImageKeys ?? [])
   let out = html
   for (const im of a.bodyImages ?? []) {
+    // The collector could not fetch it (the file is gone from the site, or its host is dead), so
+    // there is nothing to show — not even a copy we hold, which would be an error page it saved
+    // before it checked what it was given (2026-09-24).
+    if (im.missing) {
+      out = out.replace(new RegExp(`<img src="${escapeRe(im.path)}"[^>]*>`, "g"), "")
+      continue
+    }
     const key = `news-photos/${im.file}`
     const url = keys.has(key)
       ? await getSignedImageUrl(key, 3600).catch(() => null)
@@ -76,8 +83,8 @@ export default async function ArticlePage({ params }: { params: Promise<{ alias:
   const bodyHasPicture = /<img\b/i.test(body)
   const cover = bodyHasPicture ? null : await articlePicture(a)
 
-  // Three more stories — from the same category when there is one.
-  const sameCategory = a.category ? Prisma.sql`AND a."category" = ${a.category}` : Prisma.empty
+  // Three more stories — sharing this one's category (its first tag; the site's categories are its tags).
+  const sameCategory = a.category ? Prisma.sql`AND ${a.category} = ANY(a."tags")` : Prisma.empty
   const moreRows = await prisma.$queryRaw<Article[]>`SELECT ${COLS} FROM "SiteNewsArticle" a WHERE a."id" <> ${a.id} ${sameCategory} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 3`
   const more = await Promise.all(moreRows.map(async m => ({ ...m, photo: await articlePicture(m) })))
   const listHref = a.category ? `/news-stories/news?category=${encodeURIComponent(a.category)}` : "/news-stories/news"

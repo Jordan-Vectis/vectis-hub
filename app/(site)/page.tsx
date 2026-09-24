@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { lotPhotoUrl } from "@/lib/photo-url"
 import HomeHero from "./home-hero"
 import { getCustomerSession } from "@/lib/customer-auth"
+import { getSignedImageUrl } from "@/lib/r2"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -39,12 +40,14 @@ export default async function HomePage() {
   const session = await getCustomerSession()
 
   // Hero slides from DB (fall back to empty — hero has built-in defaults)
-  let dbSlides: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null }[] = []
+  let dbSlides: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null; imageUrl: string | null }[] = []
   try {
-    dbSlides = await prisma.heroSlide.findMany({
+    const rows = await prisma.heroSlide.findMany({
       where: { active: true },
       orderBy: { order: "asc" },
     })
+    // A signed address for each picture — the public photo proxy never served the banner keys (2026-09-24).
+    dbSlides = await Promise.all(rows.map(async s => ({ ...s, imageUrl: s.imageKey ? await getSignedImageUrl(s.imageKey, 3600).catch(() => null) : null })))
   } catch {
     // Table may not exist yet in this environment — hero falls back to built-in slides
   }

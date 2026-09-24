@@ -240,14 +240,25 @@ fs.writeFileSync(FILE, JSON.stringify({ collectedAt: new Date().toISOString(), k
 // 4 · The pictures
 let had = 0, got = 0
 const failed = []
+// ⚠ The same address-building and picture check as scripts/collect-news.mjs — change one, change
+// the other: a path may carry %20 already (decode, then encode once), and only a real JPEG, PNG,
+// WebP or GIF is written — the site's error page arrives with status 200.
+const pictureUrl = p => {
+  if (/^https?:\/\//i.test(p)) return p
+  let clean = p
+  try { clean = decodeURIComponent(p) } catch {}
+  return SITE + encodeURI(clean)
+}
+const isPicture = buf => buf.length > 12 && (
+  (buf[0] === 0xFF && buf[1] === 0xD8) || (buf[0] === 0x89 && buf[1] === 0x50) ||
+  buf.toString("ascii", 0, 4) === "RIFF" || buf.toString("ascii", 0, 3) === "GIF")
 async function fetchPicture(p, file) {
   if (!p || !file) return
   const target = path.join(PICS, file)
   try { if (fs.statSync(target).size > 0) { had++; return } } catch {}
-  const url = /^https?:\/\//i.test(p) ? p : SITE + encodeURI(p)
-  const res = await get(url, "image/*")
+  const res = await get(pictureUrl(p), "image/*")
   let ok = false
-  if (res) { try { const buf = Buffer.from(await res.arrayBuffer()); if (buf.length) { fs.writeFileSync(target, buf); ok = true } } catch {} }
+  if (res) { try { const buf = Buffer.from(await res.arrayBuffer()); if (isPicture(buf)) { fs.writeFileSync(target, buf); ok = true } } catch {} }
   if (ok) got++; else failed.push(file + " ← " + p)
   await sleep(PIC_PAUSE)
 }

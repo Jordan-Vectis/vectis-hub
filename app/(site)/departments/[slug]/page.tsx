@@ -60,7 +60,7 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
   let news: (NewsRow & { photo: string | null })[] = []
   try {
     const where = d.newsCategory
-      ? Prisma.sql`a."category" = ${d.newsCategory}`
+      ? Prisma.sql`${d.newsCategory} = ANY(a."tags")`   // the site's categories are its tags
       : patterns.length ? Prisma.join(patterns.map(p => Prisma.sql`a."title" ILIKE ${p}`), " OR ") : Prisma.sql`false`
     const rows = await prisma.$queryRaw<NewsRow[]>`
       SELECT a."id", a."alias", a."title", a."category", a."publishedAt", a."imagePath", a."imageKey"

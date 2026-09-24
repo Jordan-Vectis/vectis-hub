@@ -295,26 +295,44 @@ say("Pages done — " + pagesRead + " read now, " + pagesKept + " unchanged sinc
 // 4 · The pictures: cover pictures as <id>.<ext>, pictures inside the article as <id>-<n>.<ext>
 let had = 0, got = 0
 const failed = []
+// A site path as an address: some carry %20 for a space already, so decode first and encode once —
+// encoding the % again ("%2520") made the site answer with its error page, which was then saved as
+// a .jpg (9 covers on 2026-09-24). And only a real picture is kept: the first bytes must be a
+// JPEG, PNG, WebP or GIF, or the file is counted as failed, never written.
+const pictureUrl = p => {
+  if (/^https?:\/\//i.test(p)) return p
+  let clean = p
+  try { clean = decodeURIComponent(p) } catch {}
+  return SITE + encodeURI(clean)
+}
+const isPicture = buf => buf.length > 12 && (
+  (buf[0] === 0xFF && buf[1] === 0xD8) || (buf[0] === 0x89 && buf[1] === 0x50) ||
+  buf.toString("ascii", 0, 4) === "RIFF" || buf.toString("ascii", 0, 3) === "GIF")
 async function fetchPicture(sitePathOrUrl, file) {
   const target = path.join(PICS, file)
-  try { if (fs.statSync(target).size > 0) { had++; return } } catch {}
-  const url = /^https?:\/\//i.test(sitePathOrUrl) ? sitePathOrUrl : SITE + encodeURI(sitePathOrUrl)
-  const res = await get(url, "image/*")
+  try { if (fs.statSync(target).size > 0) { had++; return true } } catch {}
+  const res = await get(pictureUrl(sitePathOrUrl), "image/*")
   let ok = false
   if (res) {
-    try { const buf = Buffer.from(await res.arrayBuffer()); if (buf.length) { fs.writeFileSync(target, buf); ok = true } } catch {}
+    try { const buf = Buffer.from(await res.arrayBuffer()); if (isPicture(buf)) { fs.writeFileSync(target, buf); ok = true } } catch {}
   }
   if (ok) { got++; if ((had + got) % 100 === 0) say("… " + (had + got) + " pictures in the folder") }
   else failed.push(file + " ← " + sitePathOrUrl)
   await sleep(PIC_PAUSE)
+  return ok
 }
+// Each article also records which of its pictures could NOT be fetched — the old site's dead
+// image hosts, files the site has lost — so the Hub can drop them rather than show them broken
+// (and forget a copy it took of an error page before this check existed).
 for (const a of articles) {
+  a.missingPictures = []
   if (a.imagePath) {
     const ext = (path.extname(a.imagePath.split("?")[0]).toLowerCase() || ".jpg").replace(/[^.a-z0-9]/g, "")
-    await fetchPicture(a.imagePath, a.id + ext)
+    if (!(await fetchPicture(a.imagePath, a.id + ext))) a.missingPictures.push(a.id + ext)
   }
-  for (const im of a.bodyImages) await fetchPicture(im.path, im.file)
+  for (const im of a.bodyImages) if (!(await fetchPicture(im.path, im.file))) a.missingPictures.push(im.file)
 }
+save()
 
 const bodyPics = articles.reduce((n, a) => n + a.bodyImages.length, 0)
 say("FINISHED — " + articles.length + " articles in " + parts + " file" + (parts === 1 ? "" : "s") + " (vectis-news-1.json …) in " + OUT + " (" + withCover + " cover pictures, " + bodyPics + " pictures inside the articles); pictures: " + got + " downloaded now, " + had + " already in the folder" + (failed.length ? ", " + failed.length + " could not be fetched" : ""))

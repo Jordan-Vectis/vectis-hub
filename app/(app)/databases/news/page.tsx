@@ -38,7 +38,7 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
 
   const conds: Prisma.Sql[] = [Prisma.sql`1 = 1`]
   if (q) conds.push(Prisma.sql`(a."title" ILIKE ${"%" + q + "%"} OR a."fullText" ILIKE ${"%" + q + "%"} OR a."id"::text = ${q})`)
-  if (cat) conds.push(Prisma.sql`a."category" = ${cat}`)
+  if (cat) conds.push(Prisma.sql`${cat} = ANY(a."tags")`)   // the site's categories are its tags
   if (/^\d{4}$/.test(year)) conds.push(Prisma.sql`EXTRACT(YEAR FROM a."publishedAt") = ${Number(year)}`)
   if (photo === "yes") conds.push(Prisma.sql`a."imagePath" IS NOT NULL`)
   if (photo === "no") conds.push(Prisma.sql`a."imagePath" IS NULL`)
@@ -65,7 +65,7 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
         SELECT count(*)::bigint AS n, count(a."imagePath")::bigint AS withpicture, count(a."imageKey")::bigint AS inhub,
                count(*) FILTER (WHERE a."featured")::bigint AS featured, min(a."publishedAt") AS "from", max(a."publishedAt") AS "to"
         FROM "SiteNewsArticle" a`,
-      prisma.$queryRaw<{ category: string; n: bigint }[]>`SELECT a."category", count(*)::bigint AS n FROM "SiteNewsArticle" a WHERE a."category" IS NOT NULL GROUP BY a."category" ORDER BY a."category"`,
+      prisma.$queryRaw<{ category: string; n: bigint }[]>`SELECT t AS category, count(*)::bigint AS n FROM "SiteNewsArticle" a, unnest(a."tags") AS t GROUP BY t ORDER BY t`,
       prisma.$queryRaw<{ y: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM "publishedAt")::int AS y FROM "SiteNewsArticle" WHERE "publishedAt" IS NOT NULL ORDER BY y DESC`,
     ])
     rows = r; total = Number(t[0]?.n ?? 0)
@@ -77,7 +77,8 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
       // Which pictures the upload step still needs — by the file name the collector gave each one:
       // the cover ("<id>.<ext>") and the pictures inside the article ("<id>-<n>.<ext>").
       const ext = (p: string) => (p.split("?")[0].match(/\.[a-z0-9]+$/i)?.[0] ?? ".jpg").toLowerCase()
-      const m = await prisma.$queryRaw<{ id: number; imagePath: string | null; imageKey: string | null; bodyImages: { path: string; file: string }[] | null; bodyImageKeys: string[] }[]>`
+      // A picture the collector could not fetch (`missing`) is not asked for: there is no file to choose.
+      const m = await prisma.$queryRaw<{ id: number; imagePath: string | null; imageKey: string | null; bodyImages: { path: string; file: string; missing?: boolean }[] | null; bodyImageKeys: string[] }[]>`
         SELECT a."id", a."imagePath", a."imageKey", a."bodyImages", a."bodyImageKeys" FROM "SiteNewsArticle" a
         WHERE (a."imagePath" IS NOT NULL AND a."imageKey" IS NULL)
            OR (a."bodyImages" IS NOT NULL AND jsonb_array_length(a."bodyImages") > cardinality(a."bodyImageKeys"))
@@ -85,7 +86,7 @@ export default async function NewsDatabasePage({ searchParams }: { searchParams:
       for (const x of m) {
         if (x.imagePath && !x.imageKey) missing.push({ id: x.id, file: `${x.id}${ext(x.imagePath)}` })
         const keys = new Set(x.bodyImageKeys ?? [])
-        for (const im of x.bodyImages ?? []) if (im?.file && !keys.has(`news-photos/${im.file}`)) missing.push({ id: x.id, file: im.file })
+        for (const im of x.bodyImages ?? []) if (im?.file && !im.missing && !keys.has(`news-photos/${im.file}`)) missing.push({ id: x.id, file: im.file })
       }
     }
   } catch (e: any) {

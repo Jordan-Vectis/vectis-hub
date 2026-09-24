@@ -11,6 +11,7 @@ interface Slide {
   cta: string
   ctaHref: string
   imageKey?: string | null
+  imageUrl?: string | null   // a signed address made by the page; the picture is shown from this
 }
 
 const DEFAULT_SLIDES: Slide[] = [
@@ -72,6 +73,7 @@ interface DbSlide {
   cta: string
   ctaHref: string
   imageKey: string | null
+  imageUrl?: string | null
 }
 
 interface Props {
@@ -149,9 +151,7 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
         style={{ width: isLive ? "58%" : "100%" }}
       >
         {SLIDES.map((s, i) => {
-          const bgImg = s.imageKey
-            ? `/api/public/photo?key=${encodeURIComponent(s.imageKey)}`
-            : null
+          const bgImg = s.imageUrl ?? (s.imageKey ? `/api/public/photo?key=${encodeURIComponent(s.imageKey)}` : null)
           return (
             <div
               key={i}
@@ -160,13 +160,11 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
               {/* Background — image or gradient */}
               <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b3a] via-[#32348A] to-[#32348A]" />
               {bgImg && (
-                <Image
+                <img
                   src={bgImg}
                   alt={s.title}
-                  fill
-                  className="object-cover opacity-40"
-                  unoptimized
-                  priority={i === 0}
+                  className="absolute inset-0 w-full h-full object-cover opacity-40"
+                  loading={i === 0 ? "eager" : "lazy"}
                 />
               )}
               {/* Decorative pattern */}
