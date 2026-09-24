@@ -5154,6 +5154,18 @@ Core sync rules (full detail on the reference card):
 
 ---
 
+## Recent work (2026-09-23 → 24) — ALL ON PRODUCTION (main = 6f708fd2, merged 24 Sept; main = staging)
+
+- **🌐 The TEST website** (app/(site), behind the login; a play area that must not touch the rest of the Hub — [[project_fake_test_website]]): BidJS removed; Auction Calendar → View Results reads the Hub's sale databases with a lot page behind every card (Fees & VAT, shipping, disclaimer, sell nudge); News & Stories and all 28 department pages collected from vectis.co.uk (Databases → News / → Departments — collectors on an office PC, pictures uploaded straight to R2); How to Bid, Contact Us, Careers links; home page tidied (header to the edges, stats COUNTED, Est. 1988); Banner Manager fixed and grown into a real editor (colours, placement, size, shade, crop).
+- **📄 Page editor — Website → Pages** (Puck; admins only): every page built from blocks, drafts save themselves, nothing changes on the site until Publish, History, take off, throw away. Tested end to end on the sandbox in Jordan's Chrome.
+- **Double Check re-counts quantities against the photos** (boxes, not printed faces; an unpacked loco + tray + box is ONE item) and FLAGS a mismatch — never changes the number ([[reference_quantity_flags]]).
+- **Backup hang fix is now on production** (a8150ea5): the light says running/failed with the reason; pages and R2 calls have deadlines; the nightly run is started, not awaited. The cause of the first failed nightly (23 Sept) was never found — the next nightly is the test.
+
+### Needs doing
+- On PRODUCTION the website's news and departments are empty until loaded there: Databases → News (the six vectis-news-N.json + pictures) and Databases → Departments (vectis-departments.json + pictures), from Downloads on this PC.
+- Watch the first nightly backup on production after this merge.
+- Vectis JO: Trains — the rewritten instruction (≈5,000 chars, quantities as "x4" at the end) was delivered as text; not yet confirmed pasted.
+
 ## Recent work (2026-09-21 → 22) — ALL ON PRODUCTION (main = 4403d2f7, merged 22 Sept)
 
 ### On production — the 22 Sept merge (4403d2f7)
@@ -5168,7 +5180,7 @@ Core sync rules (full detail on the reference card):
 ### Needs doing
 - **Run Migrations on production** — the Status Centre switch and the Sales tab both need it (the Hub light says "a database update is waiting").
 - Then: Status Centre → IT emails → Job Board → **Switch this check off**. Databases → Sales → **Get the pictures** (ten minutes on an office machine), load the file, press **Copy sale pictures**.
-- **⚠ The first every-table backup did NOT land (23 Sept morning):** the Status Centre said "no full backup for 32 hours", nothing new in the bucket, and the check couldn't say whether the run was still going or had failed. Cause NOT yet known — the answer is on Admin → Database Backup ("The backup failed: …" box, or a live count) or in the Railway log's \`[cron/db-backup]\` / \`[db-backup]\` lines around 01:00. On staging (a8150ea5, NOT on main yet): the light now says running/failed with the reason, each page of rows times out after 2 min (fails one table, not the night), pages shrink for big rows, R2 calls have deadlines, one log line per table, and the nightly run is started rather than awaited (Node's fetch gives up after 300 s). Get the cause, then merge.
+- **⚠ The first every-table backup did NOT land (23 Sept morning):** the Status Centre said "no full backup for 32 hours", nothing new in the bucket, and the check couldn't say whether the run was still going or had failed. Cause NOT yet known — the answer is on Admin → Database Backup ("The backup failed: …" box, or a live count) or in the Railway log's \`[cron/db-backup]\` / \`[db-backup]\` lines around 01:00. Merged to production 24 Sept (a8150ea5, in 6f708fd2): the light now says running/failed with the reason, each page of rows times out after 2 min (fails one table, not the night), pages shrink for big rows, R2 calls have deadlines, one log line per table, and the nightly run is started rather than awaited (Node's fetch gives up after 300 s). Get the cause, then merge.
 - Sweep each open sale with the **✍ Looks hand-typed** filter and press Exclude all.
 - Still open from 18 Sept: F134 (BC wrong, Hub right — transfer the 45 lines in BC to R009415); bullets vs BC paperwork — decide the permanent fix; Vectis Jo: Model Railway — try it, then tell Claude the settled wording.
 

@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"6f708fd2ba76e627245218666240970bcfe77e8a","author":"Jordan Orange","date":"2026-09-24T16:59:31+01:00","subject":"Merge staging into main: page editor for the test website, banner editor, home page, results covers, news and department pages, Double Check quantities, backup hang fix"},
+  {"sha":"b641510941c575bb425103ddfec519dc9ef6d456","author":"Jordan Orange","date":"2026-09-24T13:07:40+01:00","subject":"Page editor: a page straight after Publish opens as the live version"},
   {"sha":"2779fcb8d7c0a8c23168893577e733f4372e9108","author":"Jordan Orange","date":"2026-09-24T13:00:30+01:00","subject":"Page editor: publish and save times in UK time"},
   {"sha":"f2d048d800079afff3529f35455c65acc1af96e6","author":"Jordan Orange","date":"2026-09-24T12:54:26+01:00","subject":"Page editor: More menu opens, short block names, live labels out of the way, throw away a draft"},
   {"sha":"33a874c84817f372619aa6c1317b9c0ae556d952","author":"Jordan Orange","date":"2026-09-24T12:31:27+01:00","subject":"Test website: a page editor for every page (Website → Pages)"},
@@ -55,6 +57,7 @@ export const CHANGELOG_SEED: SeedCommit[] = [
   {"sha":"47848dc6550bdffe883c4d114958129886185652","author":"Jordan Orange","date":"2026-09-23T09:49:44+01:00","subject":"Memory: the first every-table backup did not land, and what changed"},
   {"sha":"a8150ea518f42c723003baf96b12ef9371126c15","author":"Jordan Orange","date":"2026-09-23T09:13:43+01:00","subject":"Backup: the light says running or failed; no page or R2 call can hang"},
   {"sha":"79fbc43bb077e8282bddb219627b1fc0382ef22d","author":"Jordan Orange","date":"2026-09-22T17:02:17+01:00","subject":"Memory: 21–22 Sept in the opening message, main = 4403d2f7"},
+  {"sha":"4403d2f7904ead044a59c3f22b85addfa7a28085","author":"Jordan Orange","date":"2026-09-22T16:57:02+01:00","subject":"Merge staging into main: Status Centre switch, every-table backup, hand-typed filter, Sales tab with cover pictures, Exclude-from-AI fix"},
   {"sha":"5d79f8d91d72537ab7794fc6bad6a0c33293d0e3","author":"Jordan Orange","date":"2026-09-22T15:47:33+01:00","subject":"Sales: a picture-only collector, handed out on the tab"},
   {"sha":"4f67740b97d8d6cbf7ce95ac550ea7b037a864a1","author":"Jordan Orange","date":"2026-09-22T14:59:23+01:00","subject":"Databases: a Sales tab with every sale's cover picture"},
   {"sha":"75b0ce6d7146843d4dfcfb8e21b9689eaeca3219","author":"Jordan Orange","date":"2026-09-22T12:16:00+01:00","subject":"Memory: moving Claude Code to a new computer"},
@@ -64,6 +67,7 @@ export const CHANGELOG_SEED: SeedCommit[] = [
   {"sha":"14437d0697d3523c5eaf6b0b5ff4996b4d76f471","author":"Jordan Orange","date":"2026-09-21T15:29:42+01:00","subject":"Exclude from AI: stop hand-typed lots losing the tick"},
   {"sha":"0b7267f33383510e03d3f7b01c8985f37585cd80","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Meal planner: a reply it can't read is salvaged and asked for again, not reported"},
   {"sha":"caa168130189c3de64be6a0921c652a219f0824f","author":"Jordan Orange","date":"2026-09-21T09:24:55+01:00","subject":"Memory: 18 Sept in the opening message, the Model Railway instruction, this machine's build traps"},
+  {"sha":"e90a74b6335719254fd3ea5b876294343f790c34","author":"Jordan Orange","date":"2026-09-18T16:55:28+01:00","subject":"Merge staging into main"},
   {"sha":"adada4411920341fe1eb626b8cce44f101225cda","author":"Jordan Orange","date":"2026-09-18T16:29:37+01:00","subject":"Manage Lots: Find & Replace for descriptions"},
   {"sha":"5843391a327cbef491a8055ec95cef0b157ff90d","author":"Jordan Orange","date":"2026-09-18T15:58:54+01:00","subject":"BC Corrections: Copy IDs works on lots BC Match skipped"},
   {"sha":"b7300f6257d1fd79b60d8fcf9bdd3fee7dbbf59f","author":"Jordan Orange","date":"2026-09-18T14:55:27+01:00","subject":"BC and ABC databases: a lot's photo opens in the Hub's zoom viewer, not a new tab"},
@@ -76,6 +80,7 @@ export const CHANGELOG_SEED: SeedCommit[] = [
   {"sha":"a7ff0c2c2da409ab7cdc7bc507cdfa76f88a9e05","author":"Jordan Orange","date":"2026-09-18T09:33:36+01:00","subject":"JORDAN.SYS: five LOOKS, not just colours — Retro, Hub, Modern, Halo, Paper"},
   {"sha":"f64cc38637690672d832d5ab04576afd5bc20583","author":"Jordan Orange","date":"2026-09-18T09:14:42+01:00","subject":"JORDAN.SYS: five looks to choose from, not just green on black"},
   {"sha":"b88249d95697ab1dacc0a48ebd6ca4ce37bb3091","author":"Jordan Orange","date":"2026-09-17T17:08:48+01:00","subject":"Meal planner: MAKE PLAN no longer reads as a dead press"},
+  {"sha":"15941188cb7605a866ef14472f8cbdf310ecc9af","author":"Jordan Orange","date":"2026-09-17T16:57:07+01:00","subject":"Merge staging into main"},
   {"sha":"91925f3e7a44b04261f3030f8b368a707084b82e","author":"Jordan Orange","date":"2026-09-17T16:54:24+01:00","subject":"Meal planner: numbers save themselves, macro split lights up, and a dessert slot"},
   {"sha":"aec488ecb9d98b7cb0e448248409f77c6005f104","author":"Jordan Orange","date":"2026-09-17T15:12:56+01:00","subject":"BC Database: a missing sale marker no longer reads as an empty database"},
   {"sha":"daf782e2ec6c9e70f4b25c58ef57012947ed8f79","author":"Jordan Orange","date":"2026-09-17T10:53:43+01:00","subject":"Meal planner: plan for two, one recipe cooked once and split"},
