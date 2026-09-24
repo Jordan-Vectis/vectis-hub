@@ -57,15 +57,16 @@ export default async function HomePage() {
     // Table may not exist yet in this environment — hero falls back to built-in slides
   }
 
-  // The stats band's figures, counted from the Hub's own tables (cached; see site-stats.ts).
+  // The stats band's figures, counted from the Hub's own tables (cached; see site-stats.ts). Always
+  // the same four — a count that isn't in yet shows as "—" rather than a made-up number or a gap.
   const stats = await getSiteStats()
   const big = (n: number) => (n >= 1_000_000 ? `${Math.floor(n / 100_000) / 10}M+` : n >= 1000 ? `${Math.floor(n / 1000)}k+` : String(n))
   const statItems = [
     { value: String(stats.years), label: "Years of Experience" },
-    stats.lotsSold ? { value: big(stats.lotsSold), label: "Lots Sold" } : null,
-    stats.auctionsLastYear ? { value: stats.auctionsLastYear >= 10 ? `${Math.floor(stats.auctionsLastYear / 10) * 10}+` : String(stats.auctionsLastYear), label: "Auctions in the Last Year" } : null,
-    stats.departments ? { value: String(stats.departments), label: "Specialist Departments" } : null,
-  ].filter((s): s is { value: string; label: string } => s !== null)
+    { value: stats.lotsSold ? big(stats.lotsSold) : "—", label: "Lots Sold" },
+    { value: stats.auctionsLastYear ? (stats.auctionsLastYear >= 10 ? `${Math.floor(stats.auctionsLastYear / 10) * 10}+` : String(stats.auctionsLastYear)) : "—", label: "Auctions a Year" },
+    { value: stats.departments ? String(stats.departments) : "—", label: "Specialist Departments" },
+  ]
 
   // Check for live auction
   const liveAuction = await prisma.liveAuction.findFirst({
@@ -197,12 +198,12 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── Stats strip — real figures only; one that couldn't be counted is left off (2026-09-24) ── */}
+      {/* ── Stats strip — the four figures, counted not typed (2026-09-24) ── */}
       <section className="bg-[#32348A] py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex flex-wrap justify-center gap-x-16 gap-y-8 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
             {statItems.map(s => (
-              <div key={s.label} className="min-w-[160px]">
+              <div key={s.label}>
                 <p className="text-[#DB0606] font-black text-4xl mb-1">{s.value}</p>
                 <p className="text-gray-400 text-xs uppercase tracking-widest">{s.label}</p>
               </div>

@@ -443,13 +443,10 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
               </div>
             </div>
 
-            {/* Preview strip — cropped and shaded the way the site's hero shows it */}
+            {/* Preview strip — cropped the way the site's hero shows it, with nothing laid over the picture */}
             <div className="mx-6 mb-5 rounded-lg overflow-hidden bg-gradient-to-br from-[#1a1b3a] to-[#32348A] relative" style={{ height: "120px" }}>
               {form.imageUrl && (
-                <>
-                  <img src={form.imageUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: focusPosition(form.imageFocus) }} />
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#12134a]/90 via-[#12134a]/55 to-[#12134a]/5" />
-                </>
+                <img src={form.imageUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: focusPosition(form.imageFocus) }} />
               )}
               <div className="absolute inset-0 flex flex-col justify-center px-5">
                 <p className="text-white font-black text-sm uppercase tracking-tight leading-tight truncate">

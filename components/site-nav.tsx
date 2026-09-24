@@ -62,7 +62,7 @@ export default async function SiteNav() {
             logo, exactly centred; the outer two are equal and stretch. The row runs to the page edges —
             search hard left, account hard right, the hero's own gutter — rather than sitting in a
             narrower box than the blue bar and the hero under it, which read as three different widths. */}
-        <div className="px-4 sm:px-12 min-h-28 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-6">
+        <div className="px-4 sm:px-12 h-20 grid grid-cols-[1fr_auto_1fr] items-center gap-6">
 
           {/* Search */}
           <form method="GET" action="/search" className="flex items-stretch shrink-0 shadow-sm w-full max-w-[360px]">
@@ -102,9 +102,9 @@ export default async function SiteNav() {
             <Image
               src="/vectis-logo.svg"
               alt="Vectis Auctions — Collectables Specialists"
-              width={250}
-              height={102}
-              className="object-contain w-[180px] sm:w-[250px] h-auto"
+              width={172}
+              height={70}
+              className="object-contain"
               priority
             />
           </Link>

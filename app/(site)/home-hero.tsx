@@ -166,19 +166,15 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
             >
               {/* Background — the picture at full strength, or the blue gradient when there is none */}
               <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b3a] via-[#32348A] to-[#32348A]" />
+              {/* Nothing over the picture — no wash, no gradient (Jordan, 2026-09-24: "remove the filter completely"). */}
               {bgImg ? (
-                <>
-                  <img
-                    src={bgImg}
-                    alt={s.title}
-                    className="absolute inset-0 w-full h-full object-cover"
-                    style={{ objectPosition: focusPosition(s.imageFocus) }}
-                    loading={i === 0 ? "eager" : "lazy"}
-                  />
-                  {/* The words sit on a dark band at the left that fades out to the right, so the picture
-                      shows instead of sitting under a flat purple wash (Jordan, 2026-09-24: "washed out"). */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#12134a]/90 via-[#12134a]/55 to-[#12134a]/5" />
-                </>
+                <img
+                  src={bgImg}
+                  alt={s.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ objectPosition: focusPosition(s.imageFocus) }}
+                  loading={i === 0 ? "eager" : "lazy"}
+                />
               ) : (
                 <div className="absolute inset-0 opacity-5"
                   style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "40px 40px" }}

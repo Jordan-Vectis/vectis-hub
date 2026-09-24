@@ -2332,6 +2332,10 @@ export const MIGRATIONS = [
 
   // Test website's banner: which part of a slide's picture stays when it is cropped (2026-09-24).
   `ALTER TABLE "HeroSlide" ADD COLUMN IF NOT EXISTS "imageFocus" TEXT`,
+  // The test website's stats band counts the sold lots; without this the count read all 956k
+  // ArchiveLot rows. Partial — only the sold rows — so it is small. Prisma's schema can't express
+  // a partial index; this line and its migration file are its only definition (2026-09-24).
+  `CREATE INDEX IF NOT EXISTS "ArchiveLot_sold_idx" ON "ArchiveLot" ("hammerPrice") WHERE "hammerPrice" > 0 OR "siteHammerPrice" > 0`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
