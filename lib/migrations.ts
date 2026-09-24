@@ -2329,6 +2329,9 @@ export const MIGRATIONS = [
   // page — without these, every department page scanned ArchiveLot (956k rows) and BcLotWeb (2026-09-24).
   `CREATE INDEX IF NOT EXISTS "ArchiveLot_siteLotId_idx" ON "ArchiveLot"("siteLotId")`,
   `CREATE INDEX IF NOT EXISTS "BcLotWeb_siteLotId_idx" ON "BcLotWeb"("siteLotId")`,
+
+  // Test website's banner: which part of a slide's picture stays when it is cropped (2026-09-24).
+  `ALTER TABLE "HeroSlide" ADD COLUMN IF NOT EXISTS "imageFocus" TEXT`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

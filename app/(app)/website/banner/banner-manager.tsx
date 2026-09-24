@@ -18,6 +18,8 @@ interface Slide {
   imageKey: string | null
   /** A signed address for the picture, made by the page (an hour's worth) — the public photo proxy never served banner keys. */
   imageUrl: string | null
+  /** Which part of the picture stays when it is cropped to the banner: "top" | "center" | "bottom" (null = centre). */
+  imageFocus: string | null
   active: boolean
 }
 
@@ -28,8 +30,14 @@ const DEFAULT_FORM = {
   ctaHref: "/auctions",
   imageKey: null as string | null,
   imageUrl: null as string | null,
+  imageFocus: null as string | null,
   active: true,
 }
+
+// The banner is wide and most pictures are not, so the frame crops the top and bottom off — the
+// focus says which part to keep. Same mapping as the site's hero (home-hero.tsx).
+const FOCUS_CHOICES: { value: string; label: string }[] = [{ value: "top", label: "Top" }, { value: "center", label: "Centre" }, { value: "bottom", label: "Bottom" }]
+const focusPosition = (f?: string | null) => (f === "top" ? "center top" : f === "bottom" ? "center bottom" : "center center")
 
 export default function BannerManager({ initialSlides }: { initialSlides: Slide[] }) {
   const [slides, setSlides] = useState<Slide[]>(initialSlides)
@@ -125,6 +133,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
       ctaHref: slide.ctaHref,
       imageKey: slide.imageKey,
       imageUrl: slide.imageUrl,
+      imageFocus: slide.imageFocus,
       active: slide.active,
     })
   }
@@ -199,7 +208,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
                 {/* Thumbnail */}
                 <div className="w-32 h-20 shrink-0 bg-gradient-to-br from-[#1a1b3a] to-[#32348A] relative">
                   {img && (
-                    <img src={img} alt={slide.title} className="absolute inset-0 w-full h-full object-cover" />
+                    <img src={img} alt={slide.title} className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: focusPosition(slide.imageFocus) }} />
                   )}
                   {!img && (
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -310,7 +319,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
                 >
                   {form.imageKey ? (
                     <div className="relative w-full h-full rounded-lg overflow-hidden bg-gradient-to-br from-[#1a1b3a] to-[#32348A]">
-                      {form.imageUrl && <img src={form.imageUrl} alt="Slide background" className="absolute inset-0 w-full h-full object-cover" />}
+                      {form.imageUrl && <img src={form.imageUrl} alt="Slide background" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: focusPosition(form.imageFocus) }} />}
                       <button
                         onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, imageKey: null, imageUrl: null })) }}
                         className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
@@ -340,6 +349,26 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
                   if (file) uploadImage(file)
                 }} />
                 {uploadError && <p className="mt-2 text-xs text-red-700">⚠ {uploadError}</p>}
+                {/* Keep in frame — which part of the picture the banner shows; the preview strip below crops the same way. */}
+                {form.imageKey && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black text-gray-700 uppercase tracking-wider mr-1">Keep in frame</span>
+                    {FOCUS_CHOICES.map(c => {
+                      const on = (form.imageFocus ?? "center") === c.value
+                      return (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, imageFocus: c.value === "center" ? null : c.value }))}
+                          className={`min-h-[36px] px-4 text-xs font-bold tracking-wider border transition-colors ${on ? "bg-[#32348A] border-[#32348A] text-white" : "border-gray-300 text-gray-700 hover:border-[#32348A]"}`}
+                        >
+                          {c.label}
+                        </button>
+                      )
+                    })}
+                    <span className="text-[11px] text-gray-400">The banner is wide, so a tall picture loses its top or bottom — choose which part to keep.</span>
+                  </div>
+                )}
               </div>
 
               {/* Title */}
@@ -414,10 +443,13 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
               </div>
             </div>
 
-            {/* Preview strip */}
-            <div className="mx-6 mb-5 rounded-lg overflow-hidden bg-gradient-to-br from-[#1a1b3a] to-[#32348A] relative" style={{ height: "80px" }}>
+            {/* Preview strip — cropped and shaded the way the site's hero shows it */}
+            <div className="mx-6 mb-5 rounded-lg overflow-hidden bg-gradient-to-br from-[#1a1b3a] to-[#32348A] relative" style={{ height: "120px" }}>
               {form.imageUrl && (
-                <img src={form.imageUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+                <>
+                  <img src={form.imageUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: focusPosition(form.imageFocus) }} />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#12134a]/90 via-[#12134a]/55 to-[#12134a]/5" />
+                </>
               )}
               <div className="absolute inset-0 flex flex-col justify-center px-5">
                 <p className="text-white font-black text-sm uppercase tracking-tight leading-tight truncate">

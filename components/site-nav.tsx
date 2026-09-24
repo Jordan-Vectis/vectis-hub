@@ -59,11 +59,13 @@ export default async function SiteNav() {
       <div className="bg-white border-b border-gray-200">
         {/* Three columns, not justify-between: the search and the account buttons differ in width, so a
             space-between layout put the logo off-centre (Jordan, 2026-09-24). The middle column is the
-            logo, exactly centred; the outer two are equal and stretch. */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 grid grid-cols-[1fr_auto_1fr] items-center gap-6">
+            logo, exactly centred; the outer two are equal and stretch. The row runs to the page edges —
+            search hard left, account hard right, the hero's own gutter — rather than sitting in a
+            narrower box than the blue bar and the hero under it, which read as three different widths. */}
+        <div className="px-4 sm:px-12 min-h-28 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-6">
 
           {/* Search */}
-          <form method="GET" action="/search" className="flex items-stretch shrink-0 shadow-sm" style={{ width: "300px" }}>
+          <form method="GET" action="/search" className="flex items-stretch shrink-0 shadow-sm w-full max-w-[360px]">
             <div className="relative shrink-0">
               <select
                 name="filter"
@@ -100,9 +102,9 @@ export default async function SiteNav() {
             <Image
               src="/vectis-logo.svg"
               alt="Vectis Auctions — Collectables Specialists"
-              width={172}
-              height={70}
-              className="object-contain"
+              width={250}
+              height={102}
+              className="object-contain w-[180px] sm:w-[250px] h-auto"
               priority
             />
           </Link>
@@ -173,10 +175,11 @@ export default async function SiteNav() {
             </DropdownNavItem>
 
             <NavItem href="/how-to-bid" label="HOW TO BID" />
-            <NavItem href="/submit" label="SELL WITH US" />
+            <NavItem href="/sell-with-us" label="SELL WITH US" />
             <NavItem href="/news-stories/news" label="NEWS &amp; STORIES" />
-            <NavItem href="/auctions" label="CAREERS" />
-            <NavItem href="/auctions" label="CONTACT US" />
+            {/* Careers and Contact Us pointed at the auction list until 2026-09-24 (Jordan). */}
+            <NavItem href="/careers" label="CAREERS" />
+            <NavItem href="/contact" label="CONTACT US" />
           </ul>
         </div>
       </nav>

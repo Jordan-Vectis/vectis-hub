@@ -1185,6 +1185,10 @@ model HeroSlide {
   cta       String
   ctaHref   String
   imageKey  String?
+  /// Which part of the picture stays when it is cropped to the banner: "top", "center" or "bottom"
+  /// (null = centre). Nullable with no default on purpose, so a slide can still be saved before
+  /// Run Migrations has added the column (2026-09-24).
+  imageFocus String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

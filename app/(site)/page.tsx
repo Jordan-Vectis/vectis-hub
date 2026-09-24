@@ -6,6 +6,7 @@ import { lotPhotoUrl } from "@/lib/photo-url"
 import HomeHero from "./home-hero"
 import { getCustomerSession } from "@/lib/customer-auth"
 import { getSignedImageUrl } from "@/lib/r2"
+import { getSiteStats } from "./site-stats"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -40,17 +41,31 @@ export default async function HomePage() {
   const session = await getCustomerSession()
 
   // Hero slides from DB (fall back to empty — hero has built-in defaults)
-  let dbSlides: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null; imageUrl: string | null }[] = []
+  let dbSlides: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null; imageUrl: string | null; imageFocus: string | null }[] = []
   try {
-    const rows = await prisma.heroSlide.findMany({
-      where: { active: true },
-      orderBy: { order: "asc" },
-    })
+    const cols = { id: true, title: true, subtitle: true, cta: true, ctaHref: true, imageKey: true } as const
+    let rows: { id: string; title: string; subtitle: string; cta: string; ctaHref: string; imageKey: string | null; imageFocus: string | null }[]
+    try {
+      rows = await prisma.heroSlide.findMany({ where: { active: true }, orderBy: { order: "asc" }, select: { ...cols, imageFocus: true } })
+    } catch {
+      // imageFocus arrives with Run Migrations (2026-09-24); until then the slides are read without it.
+      rows = (await prisma.heroSlide.findMany({ where: { active: true }, orderBy: { order: "asc" }, select: cols })).map(r => ({ ...r, imageFocus: null }))
+    }
     // A signed address for each picture — the public photo proxy never served the banner keys (2026-09-24).
     dbSlides = await Promise.all(rows.map(async s => ({ ...s, imageUrl: s.imageKey ? await getSignedImageUrl(s.imageKey, 3600).catch(() => null) : null })))
   } catch {
     // Table may not exist yet in this environment — hero falls back to built-in slides
   }
+
+  // The stats band's figures, counted from the Hub's own tables (cached; see site-stats.ts).
+  const stats = await getSiteStats()
+  const big = (n: number) => (n >= 1_000_000 ? `${Math.floor(n / 100_000) / 10}M+` : n >= 1000 ? `${Math.floor(n / 1000)}k+` : String(n))
+  const statItems = [
+    { value: String(stats.years), label: "Years of Experience" },
+    stats.lotsSold ? { value: big(stats.lotsSold), label: "Lots Sold" } : null,
+    stats.auctionsLastYear ? { value: stats.auctionsLastYear >= 10 ? `${Math.floor(stats.auctionsLastYear / 10) * 10}+` : String(stats.auctionsLastYear), label: "Auctions in the Last Year" } : null,
+    stats.departments ? { value: String(stats.departments), label: "Specialist Departments" } : null,
+  ].filter((s): s is { value: string; label: string } => s !== null)
 
   // Check for live auction
   const liveAuction = await prisma.liveAuction.findFirst({
@@ -182,17 +197,12 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── Stats strip ── */}
+      {/* ── Stats strip — real figures only; one that couldn't be counted is left off (2026-09-24) ── */}
       <section className="bg-[#32348A] py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
-            {[
-              { value: "30+", label: "Years of Experience" },
-              { value: "500k+", label: "Lots Sold" },
-              { value: "100+", label: "Auctions Per Year" },
-              { value: "180+", label: "Countries Reached" },
-            ].map(s => (
-              <div key={s.label}>
+          <div className="flex flex-wrap justify-center gap-x-16 gap-y-8 text-center">
+            {statItems.map(s => (
+              <div key={s.label} className="min-w-[160px]">
                 <p className="text-[#DB0606] font-black text-4xl mb-1">{s.value}</p>
                 <p className="text-gray-400 text-xs uppercase tracking-widest">{s.label}</p>
               </div>
@@ -226,7 +236,7 @@ export default async function HomePage() {
                   </svg>
                 ),
                 title: "Global Reach",
-                desc: "We attract buyers from over 180 countries, giving your collection maximum exposure and the best possible prices.",
+                desc: "Every sale is held live online, with buyers from around the world bidding — giving your collection the widest exposure and the best possible price.",
               },
               {
                 icon: (

@@ -12,7 +12,13 @@ interface Slide {
   ctaHref: string
   imageKey?: string | null
   imageUrl?: string | null   // a signed address made by the page; the picture is shown from this
+  imageFocus?: string | null // which part of the picture to keep when it is cropped to the frame: top / center / bottom
 }
+
+// A banner picture is cropped to the frame (object-cover), so a portrait picture loses its top and
+// bottom — the Captain America face filled the frame because it was cropped at the middle. The
+// Banner Manager's focus choice decides which part stays (2026-09-24).
+const focusPosition = (f?: string | null) => (f === "top" ? "center top" : f === "bottom" ? "center bottom" : "center center")
 
 const DEFAULT_SLIDES: Slide[] = [
   {
@@ -74,6 +80,7 @@ interface DbSlide {
   ctaHref: string
   imageKey: string | null
   imageUrl?: string | null
+  imageFocus?: string | null
 }
 
 interface Props {
@@ -99,9 +106,9 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
 
   const isLive = !!live && ["ACTIVE", "PAUSED"].includes(live.status)
 
-  // Auto-slide (pauses when live is showing)
+  // Auto-slide (pauses when live is showing; nothing to rotate with a single slide)
   useEffect(() => {
-    if (isLive) {
+    if (isLive || SLIDES.length < 2) {
       if (timerRef.current) clearInterval(timerRef.current)
       return
     }
@@ -157,26 +164,32 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
               key={i}
               className={`absolute inset-0 transition-opacity duration-1000 ${i === slide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
             >
-              {/* Background — image or gradient */}
+              {/* Background — the picture at full strength, or the blue gradient when there is none */}
               <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b3a] via-[#32348A] to-[#32348A]" />
-              {bgImg && (
-                <img
-                  src={bgImg}
-                  alt={s.title}
-                  className="absolute inset-0 w-full h-full object-cover opacity-40"
-                  loading={i === 0 ? "eager" : "lazy"}
+              {bgImg ? (
+                <>
+                  <img
+                    src={bgImg}
+                    alt={s.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    style={{ objectPosition: focusPosition(s.imageFocus) }}
+                    loading={i === 0 ? "eager" : "lazy"}
+                  />
+                  {/* The words sit on a dark band at the left that fades out to the right, so the picture
+                      shows instead of sitting under a flat purple wash (Jordan, 2026-09-24: "washed out"). */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#12134a]/90 via-[#12134a]/55 to-[#12134a]/5" />
+                </>
+              ) : (
+                <div className="absolute inset-0 opacity-5"
+                  style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "40px 40px" }}
                 />
               )}
-              {/* Decorative pattern */}
-              <div className="absolute inset-0 opacity-5"
-                style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "40px 40px" }}
-              />
               <div className="relative h-full flex flex-col justify-center px-12 max-w-2xl">
                 {/* Mini logo watermark */}
                 <div className="flex items-center gap-2 mb-6">
                   <div className="h-px w-8 bg-[#DB0606]" />
                   <p className="text-[#DB0606] text-[10px] font-black tracking-[0.35em] uppercase">
-                    Vectis Auctions · Est. 1995
+                    Vectis Auctions · Est. 1988
                   </p>
                 </div>
                 <h1 className="text-white font-black text-4xl sm:text-5xl leading-none mb-5 uppercase tracking-tight">
@@ -206,15 +219,21 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
           )
         })}
 
-        {/* Slide dots */}
-        {!isLive && (
-          <div className="absolute bottom-6 left-12 flex gap-2">
-            {SLIDES.map((_, i) => (
+        {/* Slide dots — one per slide, none at all for a single slide (a lone red dash under the
+            buttons read as a stray mark). Each dot sits in a finger-sized button. */}
+        {!isLive && SLIDES.length > 1 && (
+          <div className="absolute bottom-3 left-9 flex">
+            {SLIDES.map((s, i) => (
               <button
                 key={i}
+                type="button"
                 onClick={() => setSlide(i)}
-                className={`h-1 rounded-none transition-all ${i === slide ? "bg-[#DB0606] w-8" : "bg-white/30 w-4 hover:bg-white/60"}`}
-              />
+                aria-label={`Slide ${i + 1}: ${s.title}`}
+                aria-current={i === slide}
+                className="p-3 group"
+              >
+                <span className={`block h-2.5 w-2.5 rounded-full transition-colors ${i === slide ? "bg-[#DB0606]" : "bg-white/40 group-hover:bg-white/80"}`} />
+              </button>
             ))}
           </div>
         )}
