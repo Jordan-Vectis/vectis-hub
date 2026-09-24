@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c76274fb7d3333a5d7ca5b2c1543aec04fc0d464","author":"Jordan Orange","date":"2026-09-24T11:38:56+01:00","subject":"Test website: a proper banner editor — colours, placement, size, shade, extras, with a true preview"},
+  {"sha":"3b9e11a57143186a167dd442bb37c8e77d5e9549","author":"Jordan Orange","date":"2026-09-24T11:28:40+01:00","subject":"Test website: the stats band counts again — the timeout was sent as a bound parameter"},
   {"sha":"9afa3496737d666718cce33810d19a9e1367b05e","author":"Jordan Orange","date":"2026-09-24T11:11:35+01:00","subject":"Test website: View Results cover pictures line up — one box for every card"},
   {"sha":"9ad7f4b6f1934079c97aa6a94bcdb9ff84958673","author":"Jordan Orange","date":"2026-09-24T11:05:45+01:00","subject":"Test website: logo back to size, nothing over the banner picture, the four stats always shown"},
   {"sha":"be9031c07f22a2f950d2796e568b15d3f495e701","author":"Jordan Orange","date":"2026-09-24T10:33:34+01:00","subject":"Test website: home page tidied — header to the edges, hero picture shown, real figures, working menu links"},
