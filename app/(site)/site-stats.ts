@@ -42,10 +42,14 @@ export async function getSiteStats(): Promise<SiteStats> {
 async function timed<T>(run: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>): Promise<T | null> {
   try {
     return await prisma.$transaction(async tx => {
-      await tx.$executeRaw`SET LOCAL statement_timeout = ${TIMEOUT_MS}`
+      // ⚠ A literal, never a bound parameter: Postgres refuses "$1" in a SET, so the tagged form
+      // (`SET LOCAL … = ${TIMEOUT_MS}`) threw on every count and the band showed "—" for all three
+      // (2026-09-24). TIMEOUT_MS is a constant number, so building the string is safe.
+      await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${TIMEOUT_MS}`)
       return run(tx)
     })
-  } catch {
+  } catch (e) {
+    console.error("site-stats: a count failed —", (e as { message?: string })?.message)
     return null
   }
 }
