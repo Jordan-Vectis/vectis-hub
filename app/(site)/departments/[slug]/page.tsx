@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/app/generated/prisma/client"
 import { getSignedImageUrl } from "@/lib/r2"
 import { SITE_IMAGES } from "@/lib/archive-site"
+import { htmlToText } from "@/lib/html-text"
 import { articlePicture, cleanHtml, gbDate, type Article } from "../../news-stories/news/shared"
 import { getDepartment, sitePicture, highlightPicture, ourLotLinks, withDeptPictures } from "../data"
 
@@ -20,10 +21,19 @@ type SaleRow = { siteId: number; title: string; saleDate: Date | null; lots: num
 
 const fmtSale = (d: Date | null) => (d ? format(d, "EEEE d MMMM yyyy") : "")
 
+// These pages exist to be found — the title is the site's own page title and the description the
+// first line or two of the copy, so a search result reads like the page.
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const d = await getDepartment(slug).catch(() => null)
-  return { title: d ? (d.pageTitle ?? d.name) : "Departments" }
+  if (!d) return { title: "Departments" }
+  const text = htmlToText(d.copyHtml ?? "").replace(/\s+/g, " ").trim()
+  const cut = text.length > 160 ? text.slice(0, 160).replace(/\s+\S*$/, "") + "…" : text
+  return {
+    title: d.pageTitle ?? d.name,
+    description: cut || `Sell ${d.name} at auction with Vectis, the world's leading collectable toy specialist.`,
+    openGraph: { title: d.pageTitle ?? d.name, description: cut || undefined, type: "website" },
+  }
 }
 
 export default async function DepartmentPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -88,7 +98,7 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
           <div className="absolute inset-0 bg-gradient-to-br from-[#32348A] to-[#4446a8]" />
         )}
         <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
-        <div className="relative h-full max-w-7xl mx-auto px-4 sm:px-6 flex flex-col justify-end pb-8">
+        <div className="relative h-full w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 flex flex-col justify-end pb-8">
           <div className="flex items-center gap-2 text-xs text-gray-300 mb-3">
             <Link href="/departments" className="hover:text-white transition-colors uppercase tracking-wider font-semibold">Departments</Link>
             <span>/</span>
@@ -98,9 +108,9 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* ── The copy, as the site has it (its own heading, bold and italic runs, lists, pictures) ── */}
-        <div className="lg:col-span-7 bg-white border border-gray-200 p-6 sm:p-8">
+        <div className="lg:col-span-8 bg-white border border-gray-200 p-6 sm:p-8 xl:p-10">
           {!copyHasHeading && d.heading && <h1 className="text-3xl font-black text-[#32348A] leading-tight mb-4">{d.heading}</h1>}
           {copy
             ? <div className="news-body" dangerouslySetInnerHTML={{ __html: copy }} />
@@ -108,7 +118,7 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
         </div>
 
         {/* ── The "Sell your collection" side box + latest news ── */}
-        <div className="lg:col-span-5 flex flex-col gap-5">
+        <div className="lg:col-span-4 flex flex-col gap-5">
           {side ? (
             <div className="dept-side bg-[#32348A] text-white p-6" dangerouslySetInnerHTML={{ __html: side }} />
           ) : (
@@ -151,12 +161,12 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
 
       {/* ── Highlighted lots ── */}
       {highlights.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-10">
+        <section className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 pb-10">
           <div className="mb-5">
             <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">From the archive</p>
             <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">Highlighted lots</h2>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-5">
             {highlights.map((h, i) => {
               const siteLotId = Number((h.link ?? "").match(/[?&]el=(\d+)/)?.[1])
               const ours = lotLinks.get(siteLotId)
@@ -188,7 +198,7 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
 
       {/* ── Past auctions ── */}
       {sales.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-14">
+        <section className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 pb-14">
           <div className="flex flex-wrap items-end justify-between gap-2 mb-5">
             <div>
               <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">Results</p>

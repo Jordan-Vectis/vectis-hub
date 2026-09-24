@@ -1,6 +1,8 @@
 import SiteNav from "@/components/site-nav"
 import Image from "next/image"
 import type { Metadata } from "next"
+import { auth } from "@/auth"
+import HubReturn from "./hub-return"
 import "./site.css"
 
 export const metadata: Metadata = {
@@ -27,11 +29,15 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 }
 
-export default function SiteLayout({ children }: { children: React.ReactNode }) {
+export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  // Staff see the test site while signed in to the Hub; admins get a small way back to it.
+  const session = await auth().catch(() => null)
+  const isAdmin = session?.user?.role === "ADMIN"
   return (
     <div className="vectis-site min-h-screen flex flex-col bg-white">
       <SiteNav />
       <main className="flex-1">{children}</main>
+      {isAdmin && <HubReturn />}
 
       {/* Footer */}
       <footer className="bg-[#1e1f5e] text-white mt-16">

@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"14eee90bc61b55e0da7fb1a509db25f6a30402d7","author":"Jordan Orange","date":"2026-09-23T17:06:54+01:00","subject":"Departments: the copy as the site has it, and the \"Sell Your Toys\" side box"},
   {"sha":"ed6003196bbe7e8d76de3e5028eb99e6cf104d9e","author":"Jordan Orange","date":"2026-09-23T16:40:20+01:00","subject":"Databases -> Departments: its own page, load and picture upload"},
   {"sha":"0c90be33b99d7778e9393782f88364c139cb1f02","author":"Jordan Orange","date":"2026-09-23T16:20:47+01:00","subject":"Departments: the website's department pages, collected and shown on the test site"},
   {"sha":"86903916ae055990a69afe2ed83e0d1028166522","author":"Jordan Orange","date":"2026-09-23T15:49:26+01:00","subject":"Double Check: an unpacked loco, its tray and its box are one item"},
