@@ -54,3 +54,32 @@
 .vectis-site .dept-side h3 { color: #ffffff; font-weight: 900; font-size: 1.25rem; margin: 0 0 0.5em; }
 .vectis-site .dept-side p, .vectis-site .dept-side div { color: #e5e7eb; }
 .vectis-site .dept-side a { color: #ffffff; font-weight: 700; text-decoration: underline; }
+
+/* The page editor's Text, Fold-out and HTML blocks (Website → Pages). Colours come from the
+   --pe-* variables a Section or Box sets (page-editor/look.ts), so the same text reads on light and
+   dark backgrounds. Puck wraps rich text in its own .rich-text div. */
+.vectis-site .pe-text { line-height: 1.7; }
+.vectis-site .pe-text p { margin: 0 0 0.9em; }
+.vectis-site .pe-text .rich-text > :last-child, .vectis-site .pe-text > :last-child { margin-bottom: 0; }
+.vectis-site .pe-text h1, .vectis-site .pe-text h2, .vectis-site .pe-text h3, .vectis-site .pe-text h4 {
+  color: var(--pe-heading, #32348A); font-weight: 900; line-height: 1.2; margin: 1.2em 0 0.45em;
+}
+.vectis-site .pe-text h1 { font-size: 1.75rem; }
+.vectis-site .pe-text h2 { font-size: 1.45rem; }
+.vectis-site .pe-text h3 { font-size: 1.15rem; }
+.vectis-site .pe-text h4 { font-size: 1.02rem; }
+.vectis-site .pe-text a { color: var(--pe-link, #32348A); text-decoration: underline; text-underline-offset: 2px; }
+.vectis-site .pe-text ul { list-style: disc; margin: 0 0 1em 1.4em; }
+.vectis-site .pe-text ol { list-style: decimal; margin: 0 0 1em 1.4em; }
+.vectis-site .pe-text li { margin: 0.2em 0; }
+.vectis-site .pe-text li > p { margin: 0; }
+.vectis-site .pe-text strong, .vectis-site .pe-text b { font-weight: 700; }
+.vectis-site .pe-text em, .vectis-site .pe-text i { font-style: italic; }
+.vectis-site .pe-text blockquote { border-left: 4px solid var(--pe-kicker, #DB0606); padding-left: 1em; margin: 1em 0; }
+.vectis-site .pe-text hr { border: 0; height: 1px; background: var(--pe-line, #e5e7eb); margin: 1.5em 0; }
+.vectis-site .pe-text code { font-family: ui-monospace, monospace; background: rgba(0, 0, 0, 0.05); padding: 0 0.25em; }
+.vectis-site .pe-text img { max-width: 100%; height: auto; }
+.vectis-site .pe-text table { border-collapse: collapse; margin: 1em 0; }
+.vectis-site .pe-text td, .vectis-site .pe-text th { border: 1px solid var(--pe-line, #e5e7eb); padding: 0.4em 0.6em; }
+/* The fold-outs' own arrow replaces the browser's marker. */
+.vectis-site summary::-webkit-details-marker { display: none; }

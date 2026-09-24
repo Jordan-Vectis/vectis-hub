@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f0fdc9524b229d55b798b45f5924babf972c174b","author":"Jordan Orange","date":"2026-09-24T11:47:04+01:00","subject":"Memory: today's lessons — look at the reference first, keep-and-correct, no Run Migrations reminders, SET LOCAL"},
   {"sha":"0ad539b490e1b1d455babc7286da4daf6dacce55","author":"Jordan Orange","date":"2026-09-24T11:38:57+01:00","subject":"Test website: View Results covers whole inside one fixed square, as vectis.co.uk shows them"},
   {"sha":"c76274fb7d3333a5d7ca5b2c1543aec04fc0d464","author":"Jordan Orange","date":"2026-09-24T11:38:56+01:00","subject":"Test website: a proper banner editor — colours, placement, size, shade, extras, with a true preview"},
   {"sha":"3b9e11a57143186a167dd442bb37c8e77d5e9549","author":"Jordan Orange","date":"2026-09-24T11:28:40+01:00","subject":"Test website: the stats band counts again — the timeout was sent as a bound parameter"},

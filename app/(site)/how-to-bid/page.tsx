@@ -3,9 +3,13 @@
 // increments as a two-column table. Prose reads best at a measured width, so the text sits in a
 // wide-but-bounded column on the left of a full-width page.
 
-export const metadata = {
-  title: "How to Bid",
-  description: "Bid online, leave a commission bid before the sale, or bid by telephone — how bidding at Vectis works, with the bidding increments and the buyer's premium.",
+import { PageBlocks, pageMetadata, publishedPage } from "../page-editor/render"
+
+export async function generateMetadata() {
+  return pageMetadata("how-to-bid", {
+    title: "How to Bid",
+    description: "Bid online, leave a commission bid before the sale, or bid by telephone — how bidding at Vectis works, with the bidding increments and the buyer's premium.",
+  })
 }
 
 const INCREMENTS: [string, string][] = [
@@ -23,7 +27,10 @@ function H({ children }: { children: React.ReactNode }) {
   return <h2 className="text-xs font-black uppercase tracking-wider text-gray-900 mt-8 mb-3">{children}</h2>
 }
 
-export default function HowToBidPage() {
+export default async function HowToBidPage() {
+  // The page editor's published version (Website → Pages) when there is one; the built-in design otherwise.
+  const page = await publishedPage("how-to-bid")
+  if (page) return <PageBlocks data={page.data} />
   return (
     <div className="bg-white">
       <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 py-10">

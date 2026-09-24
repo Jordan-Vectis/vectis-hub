@@ -2338,6 +2338,36 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "ArchiveLot_sold_idx" ON "ArchiveLot" ("hammerPrice") WHERE "hammerPrice" > 0 OR "siteHammerPrice" > 0`,
   // Test website's banner editor: each slide's look (colours, placement, shade, extras) as JSON (2026-09-24).
   `ALTER TABLE "HeroSlide" ADD COLUMN IF NOT EXISTS "style" JSONB`,
+
+  // Test website's page editor (Website → Pages, 2026-09-24): each page's blocks, and every publish kept.
+  `CREATE TABLE IF NOT EXISTS "SitePage" (
+    "slug" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "draft" JSONB,
+    "published" JSONB,
+    "seoTitle" TEXT,
+    "seoDescription" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedBy" TEXT,
+    "publishedAt" TIMESTAMP(3),
+    "publishedBy" TEXT,
+    CONSTRAINT "SitePage_pkey" PRIMARY KEY ("slug")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "SitePageVersion" (
+    "id" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "data" JSONB NOT NULL,
+    "seoTitle" TEXT,
+    "seoDescription" TEXT,
+    "publishedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "publishedBy" TEXT,
+    CONSTRAINT "SitePageVersion_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "SitePageVersion_slug_publishedAt_idx" ON "SitePageVersion"("slug", "publishedAt")`,
+  `DO $$ BEGIN
+    ALTER TABLE "SitePageVersion" ADD CONSTRAINT "SitePageVersion_slug_fkey" FOREIGN KEY ("slug") REFERENCES "SitePage"("slug") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

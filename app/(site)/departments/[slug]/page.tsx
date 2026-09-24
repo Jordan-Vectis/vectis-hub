@@ -1,25 +1,21 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { format } from "date-fns"
-import { prisma } from "@/lib/prisma"
-import { Prisma } from "@/app/generated/prisma/client"
-import { getSignedImageUrl } from "@/lib/r2"
-import { SITE_IMAGES } from "@/lib/archive-site"
 import { htmlToText } from "@/lib/html-text"
-import { articlePicture, cleanHtml, gbDate, type Article } from "../../news-stories/news/shared"
-import { getDepartment, sitePicture, highlightPicture, ourLotLinks, withDeptPictures } from "../data"
+import { cleanHtml } from "../../news-stories/news/shared"
+import { getDepartment, sitePicture, withDeptPictures } from "../data"
+import { DeptHighlights, DeptPastAuctions, NewsList } from "../sections"
+import { PageBlocks, pageMetadata, publishedPage } from "../../page-editor/render"
 
 // One department on the test website, from the page collected from vectis.co.uk: the banner, the
 // "sell with us" copy, the hand-picked highlighted lots, plus — from our own databases — the
 // department's latest news (by its news category, else its keywords) and its past auctions (the
 // sales the site's page listed, plus any whose title matches the keywords). Its own design.
+//
+// Built in the page editor (Website → Pages → Departments) once published there; until then the
+// built-in design below. The lots, news and past auctions are ../sections.tsx — the editor's live
+// blocks show the same ones.
 
 export const dynamic = "force-dynamic"
-
-type NewsRow = Pick<Article, "id" | "alias" | "title" | "category" | "publishedAt" | "imagePath" | "imageKey">
-type SaleRow = { siteId: number; title: string; saleDate: Date | null; lots: number; heroUrl: string | null; heroKey: string | null }
-
-const fmtSale = (d: Date | null) => (d ? format(d, "EEEE d MMMM yyyy") : "")
 
 // These pages exist to be found — the title is the site's own page title and the description the
 // first line or two of the copy, so a search result reads like the page.
@@ -29,17 +25,20 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!d) return { title: "Departments" }
   const text = htmlToText(d.copyHtml ?? "").replace(/\s+/g, " ").trim()
   const cut = text.length > 160 ? text.slice(0, 160).replace(/\s+\S*$/, "") + "…" : text
-  return {
+  return pageMetadata(`departments/${slug}`, {
     title: d.pageTitle ?? d.name,
     description: cut || `Sell ${d.name} at auction with Vectis, the world's leading collectable toy specialist.`,
     openGraph: { title: d.pageTitle ?? d.name, description: cut || undefined, type: "website" },
-  }
+  })
 }
 
 export default async function DepartmentPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const d = await getDepartment(slug)
   if (!d) notFound()
+
+  const edited = await publishedPage(`departments/${slug}`)
+  if (edited) return <PageBlocks data={edited.data} />
 
   const hero = await sitePicture(d.heroKey, d.heroPath)
   const copy = d.copyHtml ? cleanHtml(await withDeptPictures(d.copyHtml, d)) : ""
@@ -49,43 +48,6 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
     ? cleanHtml(await withDeptPictures(d.sideHtml, d)).replace(/href="(?:https:\/\/www\.vectis\.co\.uk)?\/valuations[^"]*"(?: target="_blank" rel="noreferrer")?/gi, 'href="/sell-with-us"')
     : ""
   const copyHasHeading = /<h1\b/i.test(copy)
-  const highlights = d.highlights ?? []
-  const [pictures, lotLinks] = await Promise.all([
-    Promise.all(highlights.map(h => highlightPicture(h, d.highlightKeys ?? []))),
-    ourLotLinks(highlights),
-  ])
-  const patterns = (d.saleKeywords ?? []).map(k => `%${k}%`)
-
-  // Latest news: the department's news category when it has one, else its keywords against the titles.
-  let news: (NewsRow & { photo: string | null })[] = []
-  try {
-    const where = d.newsCategory
-      ? Prisma.sql`${d.newsCategory} = ANY(a."tags")`   // the site's categories are its tags
-      : patterns.length ? Prisma.join(patterns.map(p => Prisma.sql`a."title" ILIKE ${p}`), " OR ") : Prisma.sql`false`
-    const rows = await prisma.$queryRaw<NewsRow[]>`
-      SELECT a."id", a."alias", a."title", a."category", a."publishedAt", a."imagePath", a."imageKey"
-      FROM "SiteNewsArticle" a WHERE ${where} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 3`
-    news = await Promise.all(rows.map(async a => ({ ...a, photo: await articlePicture(a) })))
-  } catch { news = [] }
-
-  // Past auctions: the sales the site's page listed, plus any whose title carries a keyword — that
-  // have happened (the day after the sale date, as the auction calendar's results tab counts them).
-  let sales: (SaleRow & { photo: string | null })[] = []
-  try {
-    const ids = d.siteSaleIds ?? []
-    const byId = ids.length ? Prisma.sql`s."siteId" = ANY(ARRAY(SELECT (jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))::int))` : Prisma.sql`false`
-    const byWord = patterns.length ? Prisma.join(patterns.map(p => Prisma.sql`s."title" ILIKE ${p}`), " OR ") : Prisma.sql`false`
-    const rows = await prisma.$queryRaw<SaleRow[]>`
-      SELECT s."siteId", s."title", s."saleDate", s."lots", s."heroUrl", s."heroKey" FROM "ArchiveSale" s
-      WHERE (${byId} OR ${byWord})
-        AND ((s."saleDate" IS NOT NULL AND s."saleDate" < now() - interval '1 day') OR (s."saleDate" IS NULL AND s."finished"))
-      ORDER BY s."saleDate" DESC NULLS LAST, s."siteId" DESC LIMIT 8`
-    sales = await Promise.all(rows.map(async s => ({
-      ...s,
-      photo: s.heroKey ? await getSignedImageUrl(s.heroKey, 3600).catch(() => null) : s.heroUrl ? SITE_IMAGES + s.heroUrl : null,
-    })))
-  } catch { sales = [] }
-
   const title = d.pageTitle ?? d.name
 
   return (
@@ -133,95 +95,15 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
             </div>
           )}
 
-          {news.length > 0 && (
-            <div className="bg-white border border-gray-200 p-5">
-              <div className="flex items-baseline justify-between gap-2 mb-3">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606]">Latest news</h3>
-                <Link href={d.newsCategory ? `/news-stories/news?category=${encodeURIComponent(d.newsCategory)}` : "/news-stories/news"} className="text-[11px] font-bold uppercase tracking-wider text-[#32348A] hover:underline">See more →</Link>
-              </div>
-              <ul className="divide-y divide-gray-100">
-                {news.map(a => (
-                  <li key={a.id}>
-                    <Link href={`/news-stories/news/${encodeURIComponent(a.alias)}`} className="group flex gap-3 py-3">
-                      <div className="w-24 aspect-[16/10] shrink-0 bg-gray-100 overflow-hidden">
-                        {a.photo && <img src={a.photo} alt="" loading="lazy" className="w-full h-full object-cover" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-black text-[#32348A] leading-snug line-clamp-2 group-hover:underline">{a.title}</p>
-                        {a.publishedAt && <p className="text-[11px] text-gray-400 uppercase tracking-wide mt-1">{gbDate(a.publishedAt)}</p>}
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <NewsList department={slug} heading="Latest news" count={3} layout="list" />
         </div>
       </div>
 
       {/* ── Highlighted lots ── */}
-      {highlights.length > 0 && (
-        <section className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 pb-10">
-          <div className="mb-5">
-            <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">From the archive</p>
-            <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">Highlighted lots</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-5">
-            {highlights.map((h, i) => {
-              const siteLotId = Number((h.link ?? "").match(/[?&]el=(\d+)/)?.[1])
-              const ours = lotLinks.get(siteLotId)
-              const body = (
-                <>
-                  <div className="relative bg-gray-100 aspect-square overflow-hidden">
-                    {pictures[i]
-                      ? <img src={pictures[i]!} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                      : <div className="absolute inset-0 bg-[#32348A]/5" />}
-                  </div>
-                  <div className="p-3 flex flex-col flex-1">
-                    <p className="text-sm font-bold text-gray-800 leading-snug line-clamp-2 mb-2 group-hover:text-[#32348A]">{h.title}</p>
-                    {h.hammer && <p className="text-lg font-black text-[#32348A] leading-none mb-2">Hammer {h.hammer}</p>}
-                    {h.meta && <p className="text-[11px] text-gray-500 leading-snug line-clamp-3">{h.meta}</p>}
-                    <span className="mt-auto pt-3 text-[10px] font-black uppercase tracking-widest text-[#32348A]">{ours ? "View lot →" : "On vectis.co.uk ↗"}</span>
-                  </div>
-                </>
-              )
-              const cls = "group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col"
-              return ours
-                ? <Link key={i} href={ours} className={cls}>{body}</Link>
-                : h.link
-                  ? <a key={i} href={h.link} target="_blank" rel="noreferrer" className={cls}>{body}</a>
-                  : <div key={i} className={cls}>{body}</div>
-            })}
-          </div>
-        </section>
-      )}
+      <DeptHighlights slug={slug} />
 
       {/* ── Past auctions ── */}
-      {sales.length > 0 && (
-        <section className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 pb-14">
-          <div className="flex flex-wrap items-end justify-between gap-2 mb-5">
-            <div>
-              <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">Results</p>
-              <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">Past auctions</h2>
-            </div>
-            <Link href="/auctions?tab=past" className="text-[11px] font-bold uppercase tracking-wider text-[#32348A] hover:underline">See the full calendar →</Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {sales.map(s => (
-              <Link key={s.siteId} href={`/auctions/results/${s.siteId}`} className="group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col">
-                <div className="relative bg-gray-100 aspect-[16/10] overflow-hidden">
-                  {s.photo && <img src={s.photo} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-contain" />}
-                </div>
-                <div className="p-3">
-                  <p className="text-sm font-black text-[#32348A] leading-snug line-clamp-2 group-hover:underline">{s.title}</p>
-                  <p className="text-[11px] text-gray-400 uppercase tracking-wide mt-1">{fmtSale(s.saleDate)}</p>
-                  <span className="block mt-2 text-[10px] font-black uppercase tracking-widest text-[#32348A]">View results →</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      <DeptPastAuctions slug={slug} />
     </div>
   )
 }

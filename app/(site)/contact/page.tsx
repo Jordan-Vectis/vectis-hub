@@ -1,12 +1,14 @@
-import type { Metadata } from "next"
 import Link from "next/link"
+import { PageBlocks, pageMetadata, publishedPage } from "../page-editor/render"
 
 // Contact Us on the test website — the nav's CONTACT US used to lead to the auction list (Jordan,
 // 2026-09-24). Everything here is from the company facts: the Thornaby address, the phone number,
 // the office hours and the four mailboxes with what each is for. Nothing is invented.
-export const metadata: Metadata = {
-  title: "Contact Us",
-  description: "How to reach Vectis Auctions in Thornaby — phone, email and office hours, and which address to write to about selling, an order, or a parcel.",
+export async function generateMetadata() {
+  return pageMetadata("contact", {
+    title: "Contact Us",
+    description: "How to reach Vectis Auctions in Thornaby — phone, email and office hours, and which address to write to about selling, an order, or a parcel.",
+  })
 }
 
 const MAILBOXES: { email: string; about: string; blurb: string }[] = [
@@ -16,7 +18,10 @@ const MAILBOXES: { email: string; about: string; blurb: string }[] = [
   { email: "dispatch@vectis.co.uk", about: "Postage & packing", blurb: "Where your parcel is, shipping costs, and collecting in person." },
 ]
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  // The page editor's published version (Website → Pages) when there is one; the built-in design otherwise.
+  const page = await publishedPage("contact")
+  if (page) return <PageBlocks data={page.data} />
   return (
     <div className="bg-white">
       <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 py-10">

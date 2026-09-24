@@ -1,9 +1,10 @@
-import type { Metadata } from "next"
-import Link from "next/link"
+import { PageBlocks, pageMetadata, publishedPage } from "../page-editor/render"
 
-export const metadata: Metadata = {
-  title: "Careers",
-  description: "Join the team at Vectis — the world's largest toy and collectables auction house. View current vacancies.",
+export async function generateMetadata() {
+  return pageMetadata("careers", {
+    title: "Careers",
+    description: "Join the team at Vectis — the world's largest toy and collectables auction house. View current vacancies.",
+  })
 }
 
 const jobs = [
@@ -124,7 +125,10 @@ const jobs = [
   },
 ]
 
-export default function CareersPage() {
+export default async function CareersPage() {
+  // The page editor's published version (Website → Pages) when there is one; the built-in design otherwise.
+  const page = await publishedPage("careers")
+  if (page) return <PageBlocks data={page.data} />
   return (
     <div className="bg-white">
 

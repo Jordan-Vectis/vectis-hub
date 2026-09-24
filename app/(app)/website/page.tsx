@@ -66,6 +66,14 @@ export default function WebsitePreviewPage() {
           🖼 Banner Manager
         </Link>
 
+        {/* Page editor link — every page of the test website, built from blocks (admins) */}
+        <Link
+          href="/website/pages"
+          className="flex items-center gap-1.5 px-4 py-3 text-xs font-bold tracking-wide border-b-2 border-transparent text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+        >
+          📄 Pages
+        </Link>
+
         {/* Divider */}
         <div className="w-px h-5 bg-gray-700 mx-2" />
 

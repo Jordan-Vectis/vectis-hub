@@ -1,0 +1,18 @@
+/* The page editor runs inside the Hub, whose <html> is dark by default — and globals.css paints every
+   form control dark with an UNLAYERED rule, which beats Puck's own (layered) field styles. Puck's
+   panels are light, so its fields came out dark-on-light. Painted back here, scoped to the editor:
+   nothing else in the Hub carries this class. */
+
+.page-editor-light {
+  color-scheme: light;
+  background: #ffffff;
+}
+
+.page-editor-light :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select
+) {
+  background-color: #ffffff;
+  color: #111827;
+}
