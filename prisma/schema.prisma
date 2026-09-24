@@ -1422,6 +1422,7 @@ model ArchiveLot {
   // skipDuplicates dedupes on lotId.
   @@unique([lotId])
   @@index([auctionId, lot])
+  @@index([siteLotId])
   @@index([auctionDate])
   @@index([hammerPrice])
 }
@@ -1447,6 +1448,7 @@ model BcLotWeb {
 
   @@index([auctionCode])
   @@index([siteSaleId])
+  @@index([siteLotId])
 }
 
 // One sale as the website lists it: its own sequential id, the AuctionID it shares

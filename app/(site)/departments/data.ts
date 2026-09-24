@@ -75,15 +75,22 @@ export async function ourLotLinks(highlights: Highlight[]): Promise<Map<number, 
   if (!ids.length) return out
   const list = Prisma.sql`ARRAY(SELECT (jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))::int)`
   try {
-    const [abc, bc] = await Promise.all([
-      prisma.$queryRaw<{ siteLotId: number; id: string; siteId: number | null }[]>`
-        SELECT l."siteLotId", l."id", s."siteId" FROM "ArchiveLot" l LEFT JOIN "ArchiveSale" s ON s."auctionId" = l."auctionId"
-        WHERE l."siteLotId" = ANY(${list})`,
-      prisma.$queryRaw<{ siteLotId: number; uniqueId: string; siteSaleId: number | null }[]>`
-        SELECT b."siteLotId", b."uniqueId", b."siteSaleId" FROM "BcLotWeb" b WHERE b."siteLotId" = ANY(${list})`,
-    ])
+    // ⚠ Capped at 1.5 s: this is a nicety, and an environment without the siteLotId indexes
+    // (Run Migrations adds them) would otherwise scan 956k ArchiveLot rows and hold the whole
+    // page for seconds — which is exactly what Jordan saw on 2026-09-24. Past the cap the
+    // website's own links stand and the page still loads.
+    const [abc, bc] = await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SET LOCAL statement_timeout = 1500`
+      return Promise.all([
+        tx.$queryRaw<{ siteLotId: number; id: string; siteId: number | null }[]>`
+          SELECT l."siteLotId", l."id", s."siteId" FROM "ArchiveLot" l LEFT JOIN "ArchiveSale" s ON s."auctionId" = l."auctionId"
+          WHERE l."siteLotId" = ANY(${list})`,
+        tx.$queryRaw<{ siteLotId: number; uniqueId: string; siteSaleId: number | null }[]>`
+          SELECT b."siteLotId", b."uniqueId", b."siteSaleId" FROM "BcLotWeb" b WHERE b."siteLotId" = ANY(${list})`,
+      ])
+    })
     for (const r of abc) if (r.siteId) out.set(r.siteLotId, `/auctions/results/${r.siteId}/lot/${encodeURIComponent(r.id)}`)
     for (const r of bc) if (r.siteSaleId && !out.has(r.siteLotId)) out.set(r.siteLotId, `/auctions/results/${r.siteSaleId}/lot/${encodeURIComponent(r.uniqueId)}`)
-  } catch { /* an environment without those tables — the website links stand */ }
+  } catch { /* timed out, or an environment without those tables — the website links stand */ }
   return out
 }

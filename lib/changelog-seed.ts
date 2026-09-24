@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-23, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-24, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"18666f1a6ef80d4f0410c27ae021ae958bc00817","author":"Jordan Orange","date":"2026-09-24T09:12:40+01:00","subject":"Test website: a way back to the Hub for admins, and wider department pages"},
   {"sha":"14eee90bc61b55e0da7fb1a509db25f6a30402d7","author":"Jordan Orange","date":"2026-09-23T17:06:54+01:00","subject":"Departments: the copy as the site has it, and the \"Sell Your Toys\" side box"},
   {"sha":"ed6003196bbe7e8d76de3e5028eb99e6cf104d9e","author":"Jordan Orange","date":"2026-09-23T16:40:20+01:00","subject":"Databases -> Departments: its own page, load and picture upload"},
   {"sha":"0c90be33b99d7778e9393782f88364c139cb1f02","author":"Jordan Orange","date":"2026-09-23T16:20:47+01:00","subject":"Departments: the website's department pages, collected and shown on the test site"},

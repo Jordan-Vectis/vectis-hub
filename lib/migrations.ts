@@ -2324,6 +2324,11 @@ export const MIGRATIONS = [
   `ALTER TABLE "SiteDepartment" ADD COLUMN IF NOT EXISTS "sideHtml" TEXT`,
   `ALTER TABLE "SiteDepartment" ADD COLUMN IF NOT EXISTS "extraImages" JSONB`,
   `ALTER TABLE "SiteDepartment" ADD COLUMN IF NOT EXISTS "extraImageKeys" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+
+  // The department pages look a highlighted lot up by the WEBSITE'S lot id to link to our own results
+  // page — without these, every department page scanned ArchiveLot (956k rows) and BcLotWeb (2026-09-24).
+  `CREATE INDEX IF NOT EXISTS "ArchiveLot_siteLotId_idx" ON "ArchiveLot"("siteLotId")`,
+  `CREATE INDEX IF NOT EXISTS "BcLotWeb_siteLotId_idx" ON "BcLotWeb"("siteLotId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

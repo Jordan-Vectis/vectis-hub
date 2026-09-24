@@ -3,6 +3,7 @@ import Image from "next/image"
 import { getCustomerSession } from "@/lib/customer-auth"
 import { logoutCustomer } from "@/lib/actions/customer-auth"
 import { prisma } from "@/lib/prisma"
+import DropdownNavItem from "@/components/site-nav-dropdown"
 
 // The Departments menu comes from the department pages collected from vectis.co.uk (Databases →
 // News); until they are loaded the list below stands in, pointing at the auction calendar.
@@ -56,7 +57,10 @@ export default async function SiteNav() {
 
       {/* ── Middle tier: search / logo / account ── */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-6">
+        {/* Three columns, not justify-between: the search and the account buttons differ in width, so a
+            space-between layout put the logo off-centre (Jordan, 2026-09-24). The middle column is the
+            logo, exactly centred; the outer two are equal and stretch. */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 grid grid-cols-[1fr_auto_1fr] items-center gap-6">
 
           {/* Search */}
           <form method="GET" action="/search" className="flex items-stretch shrink-0 shadow-sm" style={{ width: "300px" }}>
@@ -104,7 +108,7 @@ export default async function SiteNav() {
           </Link>
 
           {/* Account */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 justify-self-end">
             {session ? (
               <>
                 <form action={logoutCustomer}>
@@ -193,30 +197,7 @@ function NavItem({ href, label }: { href: string; label: string }) {
   )
 }
 
-function DropdownNavItem({
-  href, label, children,
-}: {
-  href: string
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <li className="relative group">
-      <Link
-        href={href}
-        className="flex items-center gap-1 px-4 py-3 hover:bg-white/10 transition-colors whitespace-nowrap"
-      >
-        {label}
-        <svg className="w-2.5 h-2.5 opacity-70 group-hover:rotate-180 transition-transform duration-200" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-        </svg>
-      </Link>
-      <div className="absolute top-full left-0 bg-white shadow-xl border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-50">
-        {children}
-      </div>
-    </li>
-  )
-}
+// DropdownNavItem lives in components/site-nav-dropdown.tsx (a client component: it closes itself when a link inside is chosen).
 
 function DropdownSection({ children }: { children: React.ReactNode }) {
   return <div className="py-2 min-w-[200px]">{children}</div>
