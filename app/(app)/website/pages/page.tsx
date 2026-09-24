@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic"
 type Row = { slug: string; title: string; hasDraft: boolean; live: boolean; changed: boolean; publishedAt: Date | null; publishedBy: string | null; updatedAt: Date; updatedBy: string | null }
 type Entry = { slug: string; label: string; group: PageGroup; row: Row | null }
 
-const when = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+// ⚠ UK time, always — the server runs in UTC, so without the zone it read an hour early all summer.
+const when = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" })
 
 function State({ e }: { e: Entry }) {
   const r = e.row

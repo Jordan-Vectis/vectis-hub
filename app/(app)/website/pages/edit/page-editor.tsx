@@ -33,7 +33,7 @@ export type EditorProps = {
   startedFrom: "draft" | "published" | "built-in" | "new"
 }
 
-const clock = (iso: string) => new Date(iso).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })
+const clock = (iso: string) => new Date(iso).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short", timeZone: "Europe/London" })
 
 export default function PageEditor({ slug, path, title, initialData, live: initiallyLive, publishedAt, builtIn, startedFrom }: EditorProps) {
   const router = useRouter()
