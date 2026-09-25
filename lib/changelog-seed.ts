@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4371e5cc1cfdf017b44f6d8ee213eba6f262e8aa","author":"Jordan Orange","date":"2026-09-25T14:36:37+01:00","subject":"BC lot collector: --upcoming takes catalogues of sales not yet held, marked not finished"},
   {"sha":"c3cd3a9a4e26f11b371b77d11a3b72c0a960b23a","author":"Jordan Orange","date":"2026-09-25T14:29:11+01:00","subject":"BC lot collector: only write sales that have actually been held; Photo in Hub column"},
   {"sha":"76120741885aa896810d152a09e08ab085eabb0d","author":"Jordan Orange","date":"2026-09-25T09:41:53+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"3e077ccf9ff7d6b1af710d92892402177500fb8c","author":"Jordan Orange","date":"2026-09-25T09:41:52+01:00","subject":"Move the Databases home card from Operations to IT & Admin"},
