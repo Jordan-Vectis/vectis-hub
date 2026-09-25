@@ -284,6 +284,10 @@ routes under `/api/admin/backup`, `/api/admin/restore` and `/api/cron/db-backup`
   of the 30 in a month; the code that reads them can go then.
 - ⚠ **R2 insists every multipart part but the last is the SAME size** (S3 only asks for ≥ 5 MB) —
   the writer cuts parts at exactly 8 MiB. Don't "simplify" that.
+- ⚠⚠ **Cast pg_catalog's one-byte `"char"` columns to text** (`relpersistence`, `relkind`, `contype`…)
+  when you SELECT them. The Prisma pg adapter can't read that type — `Failed to deserialize column of
+  type 'char'` — and because `describeTables()` selected `relpersistence` bare, **every backup and every
+  restore failed** from the rewrite on 22 Sept until 25 Sept. Filtering on them in a WHERE is fine.
 - ⚠ Never "test" the backup by running it from a check or a script: it writes a real copy and
   can prune a real one out of the 30.
 

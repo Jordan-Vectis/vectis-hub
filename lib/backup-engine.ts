@@ -65,8 +65,11 @@ export interface TableInfo { name: string; columns: ColumnInfo[]; pk: string[]; 
 /** Every base table in `public`, with its columns, primary key and the planner's row estimate. */
 export async function describeTables(): Promise<TableInfo[]> {
   const [tables, columns, pks] = await Promise.all([
+    // ⚠ relpersistence is Postgres's one-byte "char" type, which the Prisma pg adapter cannot read
+    // ("Failed to deserialize column of type 'char'") — it failed every backup and restore until
+    // cast to text. Cast any other pg_catalog "char" column the same way.
     prisma.$queryRawUnsafe<{ name: string; est: number; p: string }[]>(
-      `SELECT c.relname AS name, GREATEST(c.reltuples, 0)::float8 AS est, c.relpersistence AS p
+      `SELECT c.relname AS name, GREATEST(c.reltuples, 0)::float8 AS est, c.relpersistence::text AS p
        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
        WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname`),
     prisma.$queryRawUnsafe<{ t: string; name: string; udt: string; dataType: string }[]>(
