@@ -40,6 +40,10 @@ import path from "node:path"
 const FROM = Number(process.argv[2] ?? 1062)
 const TO = Number(process.argv[3] ?? 1700)
 const OUT = process.argv[4] ?? "."
+// --upcoming: also take sales NOT yet held (their catalogue is already on the site). They are written
+// marked finished:false with their date, so the Hub still starts the next run from the first of them,
+// and loading them again after the sale replaces the description and adds the hammer (newer wins).
+const UPCOMING = process.argv.includes("--upcoming")
 const STATE = path.join(OUT, "vectis-bc-lots-state.json")
 const MB = 12, PER = 500, PAUSE = 250
 
@@ -207,6 +211,16 @@ for (; at <= TO; at++) {
   if (!held || !all.every(l => !!l.isFinished)) {
     unfinished++
     if (firstWaiting === null) firstWaiting = at
+    if (UPCOMING && meta.date) {
+      const early = all.filter(l => isBc(l.unique_id)).map(l => ({
+        unique_id: l.unique_id, lot_number: l.lot_number, description: l.description,
+        id: l.id, sef_link: l.sef_link, image: l.image, hammer_price: null, sold: null,
+      }))
+      lots += early.length
+      say("sale " + at + " · " + (code ?? "?") + " · " + early.length + " BC lots · UPCOMING (" + meta.date + ") — catalogue only, collect again after the sale")
+      pushMeta({ lots: early, lotCount: expected || all.length, finished: false })
+      await sleep(PAUSE); continue
+    }
     say("sale " + at + " · " + (code ?? "?") + " · " + (!meta.date ? "no date on its page — not written, run it again later" : !held ? "not held yet (" + meta.date + "), skipped" : "not finished yet, skipped"))
     pushMeta({ finished: false, lotCount: all.length })
     await sleep(PAUSE); continue
