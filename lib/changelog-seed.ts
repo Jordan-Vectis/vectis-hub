@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-24, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-25, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"ec74ebf5caccc8dcc7f0a01798171a994f7031d9","author":"Jordan Orange","date":"2026-09-25T09:13:30+01:00","subject":"Memory: testing in Jordan's browser when he offers, UK time on the server, merge-only drift"},
   {"sha":"203709277cec91089eff6e0e134f6077249fe6d9","author":"Jordan Orange","date":"2026-09-24T17:01:26+01:00","subject":"Memory: the 24 Sept merge to main in the opening message"},
   {"sha":"6f708fd2ba76e627245218666240970bcfe77e8a","author":"Jordan Orange","date":"2026-09-24T16:59:31+01:00","subject":"Merge staging into main: page editor for the test website, banner editor, home page, results covers, news and department pages, Double Check quantities, backup hang fix"},
   {"sha":"b641510941c575bb425103ddfec519dc9ef6d456","author":"Jordan Orange","date":"2026-09-24T13:07:40+01:00","subject":"Page editor: a page straight after Publish opens as the live version"},
