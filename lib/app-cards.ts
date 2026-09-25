@@ -326,7 +326,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-violet-400",
     btnBg:              "bg-violet-600 hover:bg-violet-500",
     glow:               "hover:shadow-violet-900/40",
-    group:              "OPERATIONS",
+    group:              "IT_ADMIN",
     allUsers:           true,
   },
   {

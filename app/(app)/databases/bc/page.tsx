@@ -38,8 +38,13 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
   const FILTERS = ["q", "sale", "from", "to", "min", "max", "status", "photo", "desc"] as const
   const anyFilter = FILTERS.some(k => one(sp[k]).trim())
 
-  // Only lots that have been through a sale that has happened: a sale code, a lot number, a date not in the future.
-  const conds: Prisma.Sql[] = [Prisma.sql`w."auctionCode" IS NOT NULL AND w."auctionDate" IS NOT NULL AND w."auctionDate" <= to_char(now(), 'YYYY-MM-DD') AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL`]
+  // Lots given a sale and a lot number. Sales still to come are listed too, marked Upcoming (Jordan,
+  // 2026-09-25: "show upcoming ones marked as upcoming") — their catalogue is collected from the site
+  // before the sale. ⚠ The summary tiles stay on HELD sales only, so sold/unsold figures aren't
+  // diluted by lots that haven't been offered yet; upcoming ones get their own line.
+  const TODAY_SQL = Prisma.sql`to_char(now() AT TIME ZONE 'Europe/London', 'YYYY-MM-DD')`
+  const todayLondon = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date())
+  const conds: Prisma.Sql[] = [Prisma.sql`w."auctionCode" IS NOT NULL AND w."auctionDate" IS NOT NULL AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL`]
   // ⚠ The search covers the unique ID too — looking a known lot up by "R009030-1" is the commonest
   // reason anyone opens this page, and it used to find nothing.
   if (q) conds.push(Prisma.sql`(w."description" ILIKE ${"%" + q + "%"} OR b."description" ILIKE ${"%" + q + "%"} OR w."auctionName" ILIKE ${"%" + q + "%"} OR w."uniqueId" ILIKE ${"%" + q + "%"})`)
@@ -48,8 +53,10 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
   if (/^\d{4}-\d{2}-\d{2}$/.test(dTo)) conds.push(Prisma.sql`w."auctionDate" <= ${dTo}`)
   if (Number.isFinite(min)) conds.push(Prisma.sql`w."hammerPrice" >= ${min}`)
   if (Number.isFinite(max)) conds.push(Prisma.sql`w."hammerPrice" <= ${max} AND w."hammerPrice" > 0`)
-  if (status === "sold") conds.push(Prisma.sql`w."hammerPrice" > 0`)
-  if (status === "unsold") conds.push(Prisma.sql`COALESCE(w."hammerPrice", 0) = 0`)
+  if (status === "sold") conds.push(Prisma.sql`w."hammerPrice" > 0 AND w."auctionDate" <= ${TODAY_SQL}`)
+  if (status === "unsold") conds.push(Prisma.sql`COALESCE(w."hammerPrice", 0) = 0 AND w."auctionDate" <= ${TODAY_SQL}`)
+  if (status === "held") conds.push(Prisma.sql`w."auctionDate" <= ${TODAY_SQL}`)
+  if (status === "upcoming") conds.push(Prisma.sql`w."auctionDate" > ${TODAY_SQL}`)
   if (photo === "yes") conds.push(Prisma.sql`(b."photoKey" IS NOT NULL OR b."sitePhoto" IS NOT NULL)`)
   if (photo === "no") conds.push(Prisma.sql`(b."photoKey" IS NULL AND b."sitePhoto" IS NULL)`)
   if (desc === "full") conds.push(Prisma.sql`b."description" IS NOT NULL`)
@@ -77,6 +84,7 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
 
   type Stats = { n: number; sales: number; from: string | null; to: string | null; hammer: number; sold: number; longDesc: number; inHub: number; fullSize: number; siteOnly: number; noPhoto: number }
   let rows: Row[] = [], total = 0, stats: Stats | null = null, tableError: string | null = null
+  let upcoming: { n: number; sales: number } | null = null
   try {
     const [r, t, agg] = await Promise.all([
       prisma.$queryRaw<Row[]>`
@@ -94,9 +102,17 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
                count(b."description")::bigint AS longdesc, count(b."photoKey")::bigint AS inhub,
                count(*) FILTER (WHERE b."photoXlKey" LIKE 'bc-photos/xl/%')::bigint AS fullsize,
                count(*) FILTER (WHERE b."photoKey" IS NULL AND b."sitePhoto" IS NOT NULL)::bigint AS siteonly
-        ${from} WHERE w."auctionCode" IS NOT NULL AND w."auctionDate" IS NOT NULL AND w."auctionDate" <= to_char(now(), 'YYYY-MM-DD') AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL`,
+        ${from} WHERE w."auctionCode" IS NOT NULL AND w."auctionDate" IS NOT NULL AND w."auctionDate" <= ${TODAY_SQL} AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL`,
     ])
     rows = r; total = Number(t[0]?.n ?? 0)
+    try {
+      const u = await prisma.$queryRaw<{ n: bigint; sales: bigint }[]>`
+        SELECT count(*)::bigint AS n, count(DISTINCT w."auctionCode")::bigint AS sales FROM "WarehouseItem" w
+         WHERE w."auctionCode" IS NOT NULL AND w."auctionDate" > ${TODAY_SQL} AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL`
+      upcoming = { n: Number(u[0]?.n ?? 0), sales: Number(u[0]?.sales ?? 0) }
+    } catch (e) {
+      console.error("[databases/bc] upcoming count failed:", e)
+    }
     const a = agg[0]; const n = Number(a?.n ?? 0), inHub = Number(a?.inhub ?? 0), siteOnly = Number(a?.siteonly ?? 0)
     stats = { n, sales: Number(a?.sales ?? 0), from: a?.from ?? null, to: a?.to ?? null, hammer: a?.hammer ?? 0, sold: Number(a?.sold ?? 0), longDesc: Number(a?.longdesc ?? 0), inHub, fullSize: Number(a?.fullsize ?? 0), siteOnly, noPhoto: n - inHub - siteOnly }
     await Promise.all(rows.map(async row => {
@@ -124,12 +140,38 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
   // pulling in data we already have?"). A MISSING MARKER IS NOT AN EMPTY DATABASE — never write
   // anything here that lets one imply the other.
   let collectedTo: number | null = null
+  let waitingFrom: number | null = null
   let held = 0
   if (isAdmin) {
     try {
       const r = await prisma.$queryRaw<{ n: number; m: number | null }[]>`SELECT count(*)::int AS n, max("siteSaleId") AS m FROM "BcLotWeb"`
       held = Number(r[0]?.n ?? 0)
       collectedTo = r[0]?.m != null ? Number(r[0].m) : null
+      // ⚠⚠ THE HIGHEST SALE COLLECTED IS NOT WHERE TO CARRY ON (2026-09-25). Sale numbers are given
+      // when a sale is LISTED, and the website marked sales weeks away as finished, so a run took
+      // F115–F127 before they were held and max() said "up to 1566" — the next run started at 1567
+      // and a sale held since was never picked up. The next run starts from the FIRST sale not yet
+      // properly in: one dated today or later (from its page, recorded on ArchiveSale), or one near
+      // the top whose lots came in with no hammer price at all (taken early, before this fix).
+      if (collectedTo != null) {
+        try {
+          const w = await prisma.$queryRaw<{ m: number | null }[]>`
+            SELECT min(x) AS m FROM (
+              SELECT min(s."siteId") AS x FROM "ArchiveSale" s
+               WHERE s."siteId" >= ${BC_FIRST_SITE_SALE} AND s."siteId" <= ${collectedTo}
+                 AND s."saleDate" >= (now() AT TIME ZONE 'Europe/London')::date
+              UNION ALL
+              SELECT min(g.id) FROM (
+                SELECT b."siteSaleId" AS id FROM "BcLotWeb" b
+                 WHERE b."siteSaleId" > ${collectedTo - 60}
+                 GROUP BY b."siteSaleId" HAVING count(b."siteHammerPrice") = 0
+              ) g
+            ) t`
+          waitingFrom = w[0]?.m != null ? Number(w[0].m) : null
+        } catch (e) {
+          console.error("[databases/bc] couldn't work out the first sale still waiting:", e)
+        }
+      }
     } catch {
       // No siteSaleId column here yet — the count still answers "is there anything at all?".
       try {
@@ -139,7 +181,7 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
       collectedTo = null
     }
   }
-  const collect = { from: collectedTo ? collectedTo + 1 : BC_FIRST_SITE_SALE, to: Math.max(BC_LAST_SITE_SALE, collectedTo ?? 0) + 60 }
+  const collect = { from: waitingFrom ?? (collectedTo ? collectedTo + 1 : BC_FIRST_SITE_SALE), to: Math.max(BC_LAST_SITE_SALE, collectedTo ?? 0) + 60 }
   // ⚠ EVERY filter travels with a page change and with a sort. Page 2 quietly reverting to
   // unfiltered and newest-first is what made the filters feel broken.
   const carry = () => {
@@ -178,7 +220,8 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
         {stats && stats.n > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className={tile}><div className={lbl}>Lots in the BC database</div><div className={big}>{stats.n.toLocaleString()}</div>
-              <div className={sub}>{stats.sales.toLocaleString()} sales · {fmtDate(stats.from)} → {fmtDate(stats.to)}</div></div>
+              <div className={sub}>{stats.sales.toLocaleString()} sales held · {fmtDate(stats.from)} → {fmtDate(stats.to)}</div>
+              {upcoming && upcoming.n > 0 && <div className={`${sub} text-sky-600 dark:text-sky-400`}>+ {upcoming.n.toLocaleString()} upcoming lots in {upcoming.sales.toLocaleString()} sales</div>}</div>
             <div className={tile}><div className={lbl}>Sold</div><div className={big}>{stats.sold.toLocaleString()}</div>
               <div className={sub}>hammer total {fmtGBP(stats.hammer)} · {(stats.n - stats.sold).toLocaleString()} unsold</div></div>
             <div className={tile}><div className={lbl}>Photos in the Hub</div><div className={big}>{stats.inHub.toLocaleString()} <span className="text-base font-semibold text-gray-500">({pct(stats.inHub)}%)</span></div>
@@ -230,10 +273,12 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
             <input name="sale" defaultValue={sale} placeholder="Sale — name or code (F111)" className={input} />
             <label className="flex items-center gap-2"><span className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 shrink-0">From</span><input type="date" name="from" defaultValue={dFrom} className={`${input} w-full dark:[color-scheme:dark]`} /></label>
             <label className="flex items-center gap-2"><span className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 shrink-0">To</span><input type="date" name="to" defaultValue={dTo} className={`${input} w-full dark:[color-scheme:dark]`} /></label>
-            <select name="status" defaultValue={status} className={input} aria-label="Sold or unsold">
-              <option value="">Sold and unsold</option>
+            <select name="status" defaultValue={status} className={input} aria-label="Sold, unsold or upcoming">
+              <option value="">Held and upcoming</option>
+              <option value="held">Held only</option>
               <option value="sold">Sold only</option>
               <option value="unsold">Unsold only</option>
+              <option value="upcoming">Upcoming only</option>
             </select>
             <input name="min" defaultValue={one(sp.min)} placeholder="Hammer from £" inputMode="numeric" className={input} />
             <input name="max" defaultValue={one(sp.max)} placeholder="Hammer to £" inputMode="numeric" className={input} />
@@ -259,7 +304,8 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
           <p className="text-sm text-gray-600 dark:text-gray-400">Nothing here yet — the BC sync hasn't loaded any sold lots. Run Data Sync first.</p>
         ) : (
           <>
-            <p className="text-sm text-gray-600 dark:text-gray-400">{total.toLocaleString()} {total === 1 ? "lot" : "lots"}{anyFilter ? " match" : ""} · page {page} of {pages}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{total.toLocaleString()} {total === 1 ? "lot" : "lots"}{anyFilter ? " match" : ""} · page {page} of {pages}
+              <span className="ml-3 text-xs">Photo in Hub: <span className="font-bold text-emerald-600 dark:text-emerald-400">✓</span> copied into the Hub · <span className="text-amber-600 dark:text-amber-400">website only</span> not copied yet · — no photo · <span className="font-semibold text-sky-700 dark:text-sky-300">Upcoming</span> = sale not held yet</span></p>
             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-[#141416]">
@@ -271,6 +317,7 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
                     <th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2 text-right"><Link href={sortHref("est")} className={sortCls}>Estimate{arrow("est")}</Link></th>
                     <th className="px-3 py-2 text-right"><Link href={sortHref("hammer")} className={sortCls}>Hammer{arrow("hammer")}</Link></th>
+                    <th className="px-3 py-2 text-center whitespace-nowrap" title="Whether this lot's photo has been copied into the Hub">Photo in Hub</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -279,7 +326,10 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
                       <td className="px-2 py-2 w-16">
                         {r.photo ? <ZoomPhoto thumb={r.photo} full={r.photoFull} /> : <div className="h-14 w-14 rounded-md bg-gray-100 dark:bg-gray-800/60" />}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(r.auctionDate)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">
+                        {fmtDate(r.auctionDate)}
+                        {r.auctionDate && r.auctionDate > todayLondon && <div className="mt-1 inline-block rounded bg-sky-100 dark:bg-sky-900/40 px-1.5 py-0.5 text-xs font-semibold text-sky-700 dark:text-sky-300" title="This sale hasn't been held yet">Upcoming</div>}
+                      </td>
                       <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-[220px]">{r.auctionName || `Sale ${r.auctionCode}`}<div className="text-xs text-gray-400">{r.auctionCode}</div></td>
                       <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
                         {r.lotNo ?? "—"}
@@ -293,8 +343,18 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap text-gray-600 dark:text-gray-400">{r.estimateLow == null && r.estimateHigh == null ? "—" : `${fmtGBP(r.estimateLow)} – ${fmtGBP(r.estimateHigh)}`}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
-                        {r.hammerPrice == null ? <span className="font-normal text-gray-400">unsold</span> : fmtGBP(r.hammerPrice)}
+                        {r.hammerPrice == null
+                          ? <span className="font-normal text-gray-400">{r.auctionDate && r.auctionDate > todayLondon ? "—" : "unsold"}</span>
+                          : fmtGBP(r.hammerPrice)}
                         {r.siteHammerPrice != null && r.siteHammerPrice !== r.hammerPrice && <div className="text-xs font-normal text-amber-600 dark:text-amber-400" title="The website shows a different hammer price for this lot">site {fmtGBP(r.siteHammerPrice)}</div>}
+                      </td>
+                      {/* Our own copy in R2 (photoKey) = downloaded. The website's path alone means it is still only on vectis.co.uk. */}
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        {r.photoKey
+                          ? <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400" title="Photo copied into the Hub">✓</span>
+                          : r.sitePhoto
+                            ? <span className="text-xs text-amber-600 dark:text-amber-400" title="Photo is on the website but not copied into the Hub yet">website only</span>
+                            : <span className="text-gray-400" title="No photo found for this lot">—</span>}
                       </td>
                     </tr>
                   ))}
