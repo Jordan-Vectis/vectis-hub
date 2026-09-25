@@ -4741,6 +4741,8 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 **A silent \`catch {}\` is how three blank figures shipped (2026-09-24).** \`SET LOCAL statement_timeout = \${n}\` in a Prisma tagged template binds \`$1\`; Postgres refuses a parameter in a SET; every count threw; the empty catch turned that into "—" on the page. Build the SET from a constant with \`$executeRawUnsafe\`, and log inside any catch that turns an error into a blank.
 
+**Testing in my browser — only when I offer (2026-09-24).** By default I test on the sandbox myself; never open a browser unasked. When I offer ("do your own testing"), use **Claude in Chrome** — my Chrome is already signed in to the Hub (the built-in browser isn't, and can't be signed in for me) — on the **SANDBOX only**, in a new tab, closed when done. Reading and drafts are fine; ask me once before anything that publishes, deletes or runs migrations, and put things back afterwards. The browser's own confirm() boxes can't be clicked remotely: set \`window.confirm = () => true\` in that tab for the actions I've agreed. The page-editor pass found five bugs the build never could (a clipped menu, overlapping labels, a covered link, UTC times, wrong wording) — so after a big new screen, a one-line offer to test it is fine.
+
 ---
 
 ## The app
@@ -4793,7 +4795,7 @@ Key config notes:
 - Default branch for ALL work: **\`staging\`** — never push to \`main\` unless I explicitly say "push to main" or "merge to production"
 - "Push it" or "deploy it" are NOT permission to push to main — I must say "push to main" specifically
 - Always \`git pull origin staging\` before pushing — another developer also pushes to this branch
-- **Merge to production:** a plain fast-forward often fails because hotfixes get committed straight to \`main\` and never back-merged (branches diverge). Procedure: trial \`git merge --no-commit --no-ff origin/staging\` first to check for conflicts → \`git merge --no-ff origin/staging\` into \`main\` → push \`main\` → then \`git checkout staging; git merge --ff-only main; git push origin staging\` so both branches realign. Only when I say "push to main".
+- **Merge to production:** a plain fast-forward often fails because hotfixes get committed straight to \`main\` and never back-merged (branches diverge). Procedure: trial \`git merge --no-commit --no-ff origin/staging\` first to check for conflicts → \`git merge --no-ff origin/staging\` into \`main\` → push \`main\` → then \`git checkout staging; git merge --ff-only main; git push origin staging\` so both branches realign. Only when I say "push to main". ⚠ "main has N commits staging lacks" is usually just earlier MERGE commits (staging not fast-forwarded after them) — \`git diff --stat origin/staging...origin/main\` empty = no real drift (2026-09-24: three such, nothing to bring back).
 - ⚠ **Refresh the changelog seed as part of EVERY push** (\`npm run changelog:seed\`, commit the result). Railway's build has no \`.git\` at all, so a release can only record its own headline commit — the committed seed is the ONLY route by which anything else reaches Admin → Patches & Changes. It went stale by 33 commits and a full day's work showed as one line (2026-08-17). It refuses to shrink the file, so running it can only ever help.
 
 ---
@@ -4974,6 +4976,7 @@ DO NOT change the design or behaviour of the Location History tab in \`/tools/bc
 - Hub cards / app permissions: distinguish "key not configured" (default all-on) from "key present but empty" (respect empty). Don't use array length as the configured signal
 - Mass-select async: use server-side atomic ops, not client-side list arithmetic — React state is async
 - CORS preflight blocks custom headers on ntfy.sh — use JSON body POST format
+- **Any date or time formatted on the SERVER passes \`timeZone: "Europe/London"\`** — Railway runs in UTC, so without it every time reads an hour early all summer. It has shipped twice: Unaccounted Time, then the Website → Pages list (2026-09-24).
 - Auction codes get reused across years — sort by date DESC and pick most recent
 - \`WarehouseItem.auctionName\` is a cache — use "Refresh auction names from BC" button to re-pull
 
@@ -5655,6 +5658,8 @@ Don't give Jordan commands to run — not to fix things, and not to check them e
 
 **How to apply:** Default to no browser. Ship on typecheck/lint/build, say plainly what was and wasn't verified, and let Jordan look on staging. Reach for the browser only when it is the ONLY way to settle a real question, and say why in one line first. It genuinely earned its keep once — the [[reference_deploy_skew]] fix, where faking a post-deploy 404 was the only way to prove the auto-reload fired, and it caught a blank-page bug that review had missed. That bar — "the answer is unknowable without it" — is the test, not "the change is visible". ⚠ Note \`/jordan\` pages can't be browser-verified at all (account-gated; never use his credentials) — build-verify those and say so.
 
+**⚠ Update 2026-09-24 — he OFFERED his browser, and it paid off.** After the page editor (a big new screen) he asked *"you wanna open in my browser and do your own testing?"*. Used **Claude in Chrome** (his real Chrome, already signed in — the built-in browser can't be signed in for him) on the **SANDBOX**, asked once before publishing test pages there, drove the browser's confirm() boxes by setting \`window.confirm = () => true\` in that tab for the agreed clean-up, put everything back (pages taken off, drafts thrown away) and closed the tabs. It found five bugs that tsc and the build could not: the More menu clipped inside Puck's header, long block names overlapping the panel heading, a Live label covering "See more", UTC times on the Pages list, and "Your saved draft is open" straight after a publish. **So:** the default above stands — no browser unasked — but when he offers, take it; after a big new screen a one-line offer is fine.
+
 ## ⚠⚠ "It is glitchy" — read the change log first (2026-09-02)
 
 Twice in one session a screen Jordan called broken was working perfectly, and the
@@ -5755,6 +5760,8 @@ Another developer works on the same staging branch. Always pull before pushing, 
 **How to apply:** Every time I'm about to push to staging, pull first. At the start of a session is ideal.
 
 **Releasing staging → main (production):** A plain fast-forward often fails because hotfixes get committed straight to \`main\` and never back-merged, so the branches diverge. Procedure that worked (2026-06-17): (1) \`git merge --no-ff origin/staging\` into \`main\`, (2) push \`main\`, (3) then \`git checkout staging; git merge --ff-only main; git push origin staging\` so both branches realign and don't drift again. Always do a trial \`git merge --no-commit --no-ff\` first to confirm no conflicts before pushing to production. Only do this when Jordan explicitly says "push to main".
+
+**⚠ "main has N commits staging lacks" is usually NOT drift (2026-09-24).** Those were the merge commits of 17, 18 and 22 Sept — staging hadn't been fast-forwarded after them. Check \`git diff --stat origin/staging...origin/main\` (empty = nothing to bring back) before worrying, and always finish a release with the \`--ff-only\` realign so they don't pile up. Glance at the trial merge's files by folder too (\`git diff --cached --name-only | awk -F/ '{print $1"/"$2}' | sort | uniq -c | sort -rn\`): 569 files on 24 Sept looked alarming and was 470 BidJS SDK deletions, as he'd asked for.
 
 **A successful git push is NOT a successful deploy.** Railway builds the pushed commit afterwards; if that build fails the change never goes live. next.config.ts has NO ignoreBuildErrors, so any TypeScript/compile error fails the whole build. If recent staging changes "still aren't showing", suspect a broken build — often a compile error in another developer's commit (2026-06-17: a duplicate const [deselected] in the Accounts tool silently broke every staging build until fixed). Run \`npx tsc --noEmit\` before/after touching shared files to catch it.`,
   },
@@ -6027,12 +6034,12 @@ type: reference
 - [Vectis Company Facts](vectis_company_facts.md) — Thornaby HQ, 1988, departments, brand voice — use in any AI-content prompt
 - [🌍 Vendor Locations report](reference_vendor_locations_report.md) — BC holds NO country for ANY vendor (0 of 28,998); worked out from the address. bcApiUrl path is per publisher: evo/base, api/v2.0, eva/tot
 - [BC OData API Reference](bc_api_reference.md) — endpoint names + gotchas; cache was upsert-only until 2026-08-19 (reconcile-deleted = stage 8); bcPersonName(); numbering TOP-UP sync. Read before any BC integration
-- [Git workflow](feedback_git_workflow.md) — work on staging; pull before every push (another dev pushes too); NEVER ask to push to main, Jordan says when
+- [Git workflow](feedback_git_workflow.md) — work on staging; pull before every push (another dev pushes too); NEVER ask to push to main, Jordan says when; "main ahead of staging" is usually old merge commits — diff --stat first
 - [⚠⚠ Slow buttons must show REAL progress](feedback_progress_feedback.md) — Jordan called this a REPEATED failing; a number that moves, client-driven paging, a Stop, never a fake percentage
-- [⚠ No long review loops before a push](feedback_no_long_review_loops.md) — tsc + build, push, tell him; never gate on multi-agent review or open a browser
+- [⚠ No long review loops before a push](feedback_no_long_review_loops.md) — tsc + build, push, tell him; never gate on multi-agent review; no browser unless he OFFERS — then his Chrome on the sandbox (2026-09-24, found 5 bugs)
 - [⚠ Ask before agents](feedback_ask_before_agents.md) — ask before spawning any subagent or workflow (2026-09-03); never for simple tasks
 - [⚠ Ask before any Workflow](feedback_ask_before_workflows.md) — review workflows / multi-agent fan-outs burn huge tokens and hit session limits mid-message
-- [General feedback](feedback_vectis.md) — keep responses short; nothing local-only; don't overcomplicate simple requests; no console commands; ⚠ NEVER tell him to Run Migrations (broken 4× on 2026-09-24 — the banner does it)
+- [General feedback](feedback_vectis.md) — keep responses short; nothing local-only; don't overcomplicate simple requests; no console commands; ⚠ NEVER tell him to Run Migrations (broken 4× on 2026-09-24 — the banner does it); browser testing only when he offers (Claude in Chrome, sandbox, ask before publishing)
 - [⚠ Design corrections — look at the reference first](feedback_design_corrections.md) — 2026-09-24: open what he points at and MEASURE it before designing; name the cause before swapping technique (the results pictures took four goes); "keep X, correct it" = same set, right numbers; "remove completely" = none; "too big" = straight back; small steps on the look
 - [Full width](feedback_full_width.md) — pages and tables use the whole screen width, never a narrow centred column
 - [PDF Generation Patterns](feedback_pdf_patterns.md) — pdf-lib never pdfkit; sharp for the logo; bwip-js barcodes; drawRectangle has NO borderRadius (breaks the build); WinAnsi only, no emoji

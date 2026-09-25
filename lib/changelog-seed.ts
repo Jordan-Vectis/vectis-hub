@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"203709277cec91089eff6e0e134f6077249fe6d9","author":"Jordan Orange","date":"2026-09-24T17:01:26+01:00","subject":"Memory: the 24 Sept merge to main in the opening message"},
   {"sha":"6f708fd2ba76e627245218666240970bcfe77e8a","author":"Jordan Orange","date":"2026-09-24T16:59:31+01:00","subject":"Merge staging into main: page editor for the test website, banner editor, home page, results covers, news and department pages, Double Check quantities, backup hang fix"},
   {"sha":"b641510941c575bb425103ddfec519dc9ef6d456","author":"Jordan Orange","date":"2026-09-24T13:07:40+01:00","subject":"Page editor: a page straight after Publish opens as the live version"},
   {"sha":"2779fcb8d7c0a8c23168893577e733f4372e9108","author":"Jordan Orange","date":"2026-09-24T13:00:30+01:00","subject":"Page editor: publish and save times in UK time"},
