@@ -25,6 +25,15 @@
 // website's auction calendar shows — for EVERY sale that exists, old system included (their lots
 // are still skipped). That is one extra request per sale, so a run over the old sales (1 to
 // 1061) is how the ABC sales get their pictures on Databases → Sales.
+//
+// ⚠⚠ "FINISHED" ON THE WEBSITE DOES NOT MEAN THE SALE HAS BEEN HELD (measured 2026-09-25). The feed
+// marks every lot isFinished on sales still WEEKS away (F120 dated 1 Oct, F127 dated 16 Oct, taken
+// on 17 Sept), so a run took their descriptions with no hammer prices, and the Hub's "collected up
+// to N" jumped past sales that had not happened yet — the next run started beyond them and a sale
+// held since was never picked up. A sale is now written only when its lots say finished AND its own
+// page's date is before TODAY in London. No date on the page = not written, and said so. Sale
+// numbers are given when a sale is LISTED, not when it is held, so the first sale left waiting can
+// sit below sales that are done — the closing lines name it as where the next run must start.
 import fs from "node:fs"
 import path from "node:path"
 
@@ -122,6 +131,8 @@ async function readWholeSale(saleId, expected) {
 let sales = [], lots = 0, bytes = 0, part = 1, heroes = 0
 let bcSales = 0, oldSales = 0, unfinished = 0, gaps = 0, shortSales = 0
 let firstBc = null, lastBc = null
+let firstWaiting = null
+const TODAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date())   // YYYY-MM-DD
 
 const prev = (() => { try { return JSON.parse(fs.readFileSync(STATE, "utf8")) } catch { return null } })()
 let at = (prev && prev.from === FROM && prev.to === TO && prev.next > FROM) ? prev.next : FROM
@@ -190,10 +201,13 @@ for (; at <= TO; at++) {
     await sleep(PAUSE); continue
   }
 
-  // ⚠ Same rule as the Hub's own walk: only a sale whose lots are all finished is written.
-  if (!all.every(l => !!l.isFinished)) {
+  // ⚠ Only a sale that has actually been HELD is written — its lots all finished AND its date before
+  // today. The website's isFinished alone is true on sales weeks away (see the top of this file).
+  const held = !!meta.date && meta.date < TODAY
+  if (!held || !all.every(l => !!l.isFinished)) {
     unfinished++
-    say("sale " + at + " · " + (code ?? "?") + " · not finished yet, skipped")
+    if (firstWaiting === null) firstWaiting = at
+    say("sale " + at + " · " + (code ?? "?") + " · " + (!meta.date ? "no date on its page — not written, run it again later" : !held ? "not held yet (" + meta.date + "), skipped" : "not finished yet, skipped"))
     pushMeta({ finished: false, lotCount: all.length })
     await sleep(PAUSE); continue
   }
@@ -221,4 +235,5 @@ say("BC sales ran from site number " + firstBc + " to " + lastBc + " · " + oldS
     (shortSales ? " · ⚠ " + shortSales + " sale(s) came back short" : "") +
     (refusals ? " · ⚠ " + refusals + " unreadable replies" : "") +
     (hardFails ? " · ⚠ " + hardFails + " requests gave up after 4 tries" : ""))
+if (firstWaiting !== null) say("NEXT TIME START FROM SALE " + firstWaiting + " — the first sale in this range that has not been held yet")
 if (failed.length) say("⚠ " + failed.length + " sale(s) could NOT be read and are missing: " + failed.join(", ") + " — run it again to pick them up")

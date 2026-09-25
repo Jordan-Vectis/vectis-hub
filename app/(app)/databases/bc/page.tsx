@@ -124,12 +124,38 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
   // pulling in data we already have?"). A MISSING MARKER IS NOT AN EMPTY DATABASE — never write
   // anything here that lets one imply the other.
   let collectedTo: number | null = null
+  let waitingFrom: number | null = null
   let held = 0
   if (isAdmin) {
     try {
       const r = await prisma.$queryRaw<{ n: number; m: number | null }[]>`SELECT count(*)::int AS n, max("siteSaleId") AS m FROM "BcLotWeb"`
       held = Number(r[0]?.n ?? 0)
       collectedTo = r[0]?.m != null ? Number(r[0].m) : null
+      // ⚠⚠ THE HIGHEST SALE COLLECTED IS NOT WHERE TO CARRY ON (2026-09-25). Sale numbers are given
+      // when a sale is LISTED, and the website marked sales weeks away as finished, so a run took
+      // F115–F127 before they were held and max() said "up to 1566" — the next run started at 1567
+      // and a sale held since was never picked up. The next run starts from the FIRST sale not yet
+      // properly in: one dated today or later (from its page, recorded on ArchiveSale), or one near
+      // the top whose lots came in with no hammer price at all (taken early, before this fix).
+      if (collectedTo != null) {
+        try {
+          const w = await prisma.$queryRaw<{ m: number | null }[]>`
+            SELECT min(x) AS m FROM (
+              SELECT min(s."siteId") AS x FROM "ArchiveSale" s
+               WHERE s."siteId" >= ${BC_FIRST_SITE_SALE} AND s."siteId" <= ${collectedTo}
+                 AND s."saleDate" >= (now() AT TIME ZONE 'Europe/London')::date
+              UNION ALL
+              SELECT min(g.id) FROM (
+                SELECT b."siteSaleId" AS id FROM "BcLotWeb" b
+                 WHERE b."siteSaleId" > ${collectedTo - 60}
+                 GROUP BY b."siteSaleId" HAVING count(b."siteHammerPrice") = 0
+              ) g
+            ) t`
+          waitingFrom = w[0]?.m != null ? Number(w[0].m) : null
+        } catch (e) {
+          console.error("[databases/bc] couldn't work out the first sale still waiting:", e)
+        }
+      }
     } catch {
       // No siteSaleId column here yet — the count still answers "is there anything at all?".
       try {
@@ -139,7 +165,7 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
       collectedTo = null
     }
   }
-  const collect = { from: collectedTo ? collectedTo + 1 : BC_FIRST_SITE_SALE, to: Math.max(BC_LAST_SITE_SALE, collectedTo ?? 0) + 60 }
+  const collect = { from: waitingFrom ?? (collectedTo ? collectedTo + 1 : BC_FIRST_SITE_SALE), to: Math.max(BC_LAST_SITE_SALE, collectedTo ?? 0) + 60 }
   // ⚠ EVERY filter travels with a page change and with a sort. Page 2 quietly reverting to
   // unfiltered and newest-first is what made the filters feel broken.
   const carry = () => {
@@ -259,7 +285,8 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
           <p className="text-sm text-gray-600 dark:text-gray-400">Nothing here yet — the BC sync hasn't loaded any sold lots. Run Data Sync first.</p>
         ) : (
           <>
-            <p className="text-sm text-gray-600 dark:text-gray-400">{total.toLocaleString()} {total === 1 ? "lot" : "lots"}{anyFilter ? " match" : ""} · page {page} of {pages}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{total.toLocaleString()} {total === 1 ? "lot" : "lots"}{anyFilter ? " match" : ""} · page {page} of {pages}
+              <span className="ml-3 text-xs">Photo in Hub: <span className="font-bold text-emerald-600 dark:text-emerald-400">✓</span> copied into the Hub · <span className="text-amber-600 dark:text-amber-400">website only</span> not copied yet · — no photo</span></p>
             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-[#141416]">
@@ -271,6 +298,7 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
                     <th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2 text-right"><Link href={sortHref("est")} className={sortCls}>Estimate{arrow("est")}</Link></th>
                     <th className="px-3 py-2 text-right"><Link href={sortHref("hammer")} className={sortCls}>Hammer{arrow("hammer")}</Link></th>
+                    <th className="px-3 py-2 text-center whitespace-nowrap" title="Whether this lot's photo has been copied into the Hub">Photo in Hub</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -295,6 +323,14 @@ export default async function BcDatabasePage({ searchParams }: { searchParams: P
                       <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
                         {r.hammerPrice == null ? <span className="font-normal text-gray-400">unsold</span> : fmtGBP(r.hammerPrice)}
                         {r.siteHammerPrice != null && r.siteHammerPrice !== r.hammerPrice && <div className="text-xs font-normal text-amber-600 dark:text-amber-400" title="The website shows a different hammer price for this lot">site {fmtGBP(r.siteHammerPrice)}</div>}
+                      </td>
+                      {/* Our own copy in R2 (photoKey) = downloaded. The website's path alone means it is still only on vectis.co.uk. */}
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        {r.photoKey
+                          ? <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400" title="Photo copied into the Hub">✓</span>
+                          : r.sitePhoto
+                            ? <span className="text-xs text-amber-600 dark:text-amber-400" title="Photo is on the website but not copied into the Hub yet">website only</span>
+                            : <span className="text-gray-400" title="No photo found for this lot">—</span>}
                       </td>
                     </tr>
                   ))}

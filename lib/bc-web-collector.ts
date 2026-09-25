@@ -57,7 +57,8 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
   let part = resuming ? (saved.part || 1) : 1;
 
   let sales = [], lots = 0, bytes = 0, bcSales = 0, oldSales = 0, unfinished = 0, gaps = 0, heroes = 0;
-  let firstBc = null, lastBc = null, refusals = 0, shortSales = 0, stopped = false;
+  let firstBc = null, lastBc = null, refusals = 0, shortSales = 0, stopped = false, firstWaiting = null;
+  const TODAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());   // YYYY-MM-DD
   const failed = [];
 
   window.vectisStop  = () => { stopped = true; console.log("Stopping after this sale — the file will be saved."); };
@@ -196,9 +197,17 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
       await sleep(PAUSE); continue;
     }
 
-    // ⚠ Same rule as the Hub's own walk: only a sale whose lots are all finished is written.
-    const finishedSale = all.every(l => !!l.isFinished);
-    if (!finishedSale) { unfinished++; console.log("sale " + at + " · " + (code || "?") + " · not finished yet, skipped"); pushMeta({ finished: false, lotCount: all.length }); await sleep(PAUSE); continue; }
+    // ⚠⚠ Only a sale that has actually been HELD is written — its lots all finished AND its page's
+    // date before today in London. The website marks lots isFinished on sales still weeks away
+    // (measured 2026-09-25), which let a run take them early and push the Hub's marker past them.
+    const held = !!meta.date && meta.date < TODAY;
+    const finishedSale = held && all.every(l => !!l.isFinished);
+    if (!finishedSale) {
+      unfinished++;
+      if (firstWaiting === null) firstWaiting = at;
+      console.log("sale " + at + " · " + (code || "?") + " · " + (!meta.date ? "no date on its page — not written, run it again later" : !held ? "not held yet (" + meta.date + "), skipped" : "not finished yet, skipped"));
+      pushMeta({ finished: false, lotCount: all.length }); await sleep(PAUSE); continue;
+    }
 
     const keep = all.filter(l => isBc(l.unique_id)).map(l => ({
       unique_id: l.unique_id, lot_number: l.lot_number, description: l.description,
@@ -226,6 +235,7 @@ export function bcCollectorScript(opts: { from: number; to: number }): string {
     " · " + oldSales + " older sales skipped · " + unfinished + " not finished · " + gaps + " numbers with no sale" +
     (shortSales ? " · \\u26a0 " + shortSales + " sale(s) came back short" : "") +
     (refusals ? " · \\u26a0 " + refusals + " unreadable replies" : ""));
+  if (firstWaiting !== null) console.log("%cNEXT TIME START FROM SALE " + firstWaiting + " — the first sale in this range that has not been held yet.", "color:#d97706;font-weight:bold");
   if (failed.length) console.log("%c\\u26a0 " + failed.length + " sale(s) could NOT be read and are missing: " + failed.join(", ") + ". Run it again to pick them up.", "color:#dc2626;font-weight:bold");
   if (!finishedRun) console.log("Stopped at sale " + at + " — run it again and it carries on from there.");
   console.log("Now load the file(s) on the Hub: Databases → BC Database → Load lot files.");

@@ -19,6 +19,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"76120741885aa896810d152a09e08ab085eabb0d","author":"Jordan Orange","date":"2026-09-25T09:41:53+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"3e077ccf9ff7d6b1af710d92892402177500fb8c","author":"Jordan Orange","date":"2026-09-25T09:41:52+01:00","subject":"Move the Databases home card from Operations to IT & Admin"},
+  {"sha":"62be4ec8f71cfba8a76e4bcccfc5158b93dbb18b","author":"Claude","date":"2026-09-25T08:32:45Z","subject":"Fix the nightly backup: read relpersistence as text"},
   {"sha":"ec74ebf5caccc8dcc7f0a01798171a994f7031d9","author":"Jordan Orange","date":"2026-09-25T09:13:30+01:00","subject":"Memory: testing in Jordan's browser when he offers, UK time on the server, merge-only drift"},
   {"sha":"203709277cec91089eff6e0e134f6077249fe6d9","author":"Jordan Orange","date":"2026-09-24T17:01:26+01:00","subject":"Memory: the 24 Sept merge to main in the opening message"},
   {"sha":"6f708fd2ba76e627245218666240970bcfe77e8a","author":"Jordan Orange","date":"2026-09-24T16:59:31+01:00","subject":"Merge staging into main: page editor for the test website, banner editor, home page, results covers, news and department pages, Double Check quantities, backup hang fix"},
