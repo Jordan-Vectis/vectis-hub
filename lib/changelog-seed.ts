@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-25, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-28, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5d06aed070b93414aa3f8643c73f408ae0ab4119","author":"Jordan Orange","date":"2026-09-28T10:42:36+01:00","subject":"Who catalogued this sale: lots catalogued straight in BC show BC's own cataloguer"},
   {"sha":"37801947d52648ecc4c9328cc673c7a8a032cbbd","author":"Jordan Orange","date":"2026-09-25T16:55:23+01:00","subject":"Merge staging into main: BC lot collector only takes held sales (+ --upcoming), BC Database shows upcoming sales and Photo in Hub, Databases card to IT & Admin"},
   {"sha":"c469fc5480852dbc19575c9aa469c778bfa2d8ff","author":"Jordan Orange","date":"2026-09-25T14:45:05+01:00","subject":"BC Database lists upcoming sales, marked Upcoming, with a filter"},
   {"sha":"4371e5cc1cfdf017b44f6d8ee213eba6f262e8aa","author":"Jordan Orange","date":"2026-09-25T14:36:37+01:00","subject":"BC lot collector: --upcoming takes catalogues of sales not yet held, marked not finished"},
