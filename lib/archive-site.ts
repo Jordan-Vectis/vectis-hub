@@ -406,7 +406,7 @@ export async function startPhotoCopy(startedBy: string, scope: Scope = "both") {
   const job = await prisma.archiveJob.upsert({
     where: { id: "photos" },
     create: { id: "photos", startedBy, total, scope },
-    update: { error: null, startedBy, total, scope, done: false, added: 0, note: null },
+    update: { error: null, startedBy, total, scope, done: false, added: 0, matched: 0, note: null },
   })
   void runPhotoCopy()
   return { ...job, running: true }
@@ -440,7 +440,11 @@ async function runPhotoCopy() {
       return data
     }
     while (!ctl.stop) {
-      let n = 0
+      // ⚠ n = copied, gone = the website LISTS a photo but the file isn't there (404/403). Gone ones
+      // are cleared and never tried again — and they must be COUNTED, or the job ends "Finished"
+      // hundreds short of its total with nothing saying why (Jordan, 2026-09-28: "why does it say
+      // finished if the counter isnt complete"). The photos job keeps that count in `matched`.
+      let n = 0, gone = 0
       // ABC lots first, then BC lots — same treatment, different folders.
       // ⚠⚠ SCOPE IS WHY THIS EXISTS. The copy did every ABC photo before it started a single BC one,
       // so the BC Database sat at 0 photos behind 948,000 ABC lots. Running it from the BC page now
@@ -456,7 +460,7 @@ async function runPhotoCopy() {
               data:   data ?? { sitePhoto: null },
               select: { id: true },
             })
-            if (data) n++
+            if (data) n++; else gone++
           }))
           await sleep(100)
         }
@@ -468,14 +472,17 @@ async function runPhotoCopy() {
           // reads as success when nothing has happened.
           const [siteJob, photoJob] = await Promise.all([
             prisma.archiveJob.findUnique({ where: { id: "site" },   select: { sales: true } }),
-            prisma.archiveJob.findUnique({ where: { id: "photos" }, select: { added: true } }),
+            prisma.archiveJob.findUnique({ where: { id: "photos" }, select: { added: true, matched: true, scope: true } }),
           ])
+          const which = photoJob?.scope === "bc" ? "the BC database" : photoJob?.scope === "abc" ? "the ABC archive" : "both databases"
+          const missing = photoJob?.matched ?? 0
           await prisma.archiveJob.update({
             where: { id: "photos" },
             data: {
               done: true,
               note: (photoJob?.added ?? 0) > 0 || (siteJob?.sales ?? 0) > 0
-                ? "Every photo the site has is in the Hub, display and full-size, for both databases"
+                ? `Every photo the site has is in the Hub, display and full-size, for ${which}` +
+                  (missing ? ` · ${missing.toLocaleString()} lot${missing === 1 ? "" : "s"} had no photo file on the website (it lists one, but the file isn't there) — nothing to copy for ${missing === 1 ? "it" : "them"}` : "")
                 : "Nothing to copy yet — run \"Pull from the website\" first, so the lots have a photo to copy.",
             },
           })
@@ -494,12 +501,12 @@ async function runPhotoCopy() {
               data:   data ?? { sitePhoto: null },
               select: { uniqueId: true },
             })
-            if (data) n++
+            if (data) n++; else gone++
           }))
           await sleep(100)
         }
       }
-      await prisma.archiveJob.update({ where: { id: "photos" }, data: { added: { increment: n }, note: null } })
+      await prisma.archiveJob.update({ where: { id: "photos" }, data: { added: { increment: n }, matched: { increment: gone }, note: null } })
     }
   } catch (e: any) {
     console.error("archive photo copy error:", e)

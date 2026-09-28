@@ -11,6 +11,7 @@ const KNOWN_ENDPOINTS = [
   { label: "Receipt Lines",          value: "Receipt_Lines_Excel" },
   { label: "Receipt Totes",          value: "Receipt_Totes_Excel" },
   { label: "Totes",                  value: "Totes_Excel" },
+  { label: "Contact Search",         value: "Contact_Search_Excel" },
   { label: "Change Log Entries",     value: "ChangeLogEntries" },
   { label: "Shipment Requests",      value: "ShipmentRequestAPI" },
   { label: "Collection List",        value: "CollectionList" },
@@ -24,7 +25,7 @@ const KNOWN_ENDPOINTS = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FieldInfo = { name: string; sample: any; allNull: boolean }
-type Result = { endpoint: string; fields: FieldInfo[]; rows: any[]; count: number }
+type Result = { endpoint: string; source?: string; fields: FieldInfo[]; rows: any[]; count: number }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,7 @@ export default function BcApiViewerPage() {
             <span className="text-sm text-gray-600 dark:text-gray-400">
               <span className="text-gray-900 dark:text-white font-semibold">{result.count}</span> rows returned from{" "}
               <span className="font-mono text-[#C8A96E]">{result.endpoint}</span>
+              {result.source && <span className="text-gray-500"> ({result.source})</span>}
             </span>
             <span className="text-xs text-gray-600">·</span>
             <span className="text-xs text-gray-600 dark:text-gray-500">{result.fields.length} fields</span>

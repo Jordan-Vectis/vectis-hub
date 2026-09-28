@@ -143,9 +143,12 @@ export default function ArchiveSite({ scope = "both" }: { scope?: "abc" | "bc" |
                   </span>
                 )}
               </span>
-              <span className="font-mono shrink-0">{photos.added.toLocaleString()} of {photos.total.toLocaleString()}</span>
+              {/* The photos job keeps "no file on the website" in `matched` — copied + missing is how far it has got. */}
+              <span className="font-mono shrink-0">
+                {photos.added.toLocaleString()} copied{photos.matched ? <span className="text-amber-600 dark:text-amber-400"> · {photos.matched.toLocaleString()} no file on the site</span> : null} · of {photos.total.toLocaleString()}
+              </span>
             </div>
-            <div className="h-1.5 rounded bg-gray-200 dark:bg-gray-800 overflow-hidden"><div className="h-full bg-violet-500 transition-all" style={{ width: `${photos.total ? Math.min(100, Math.round((photos.added / photos.total) * 100)) : photos.done ? 100 : 0}%` }} /></div>
+            <div className="h-1.5 rounded bg-gray-200 dark:bg-gray-800 overflow-hidden"><div className="h-full bg-violet-500 transition-all" style={{ width: `${photos.total ? Math.min(100, Math.round(((photos.added + (photos.matched || 0)) / photos.total) * 100)) : photos.done ? 100 : 0}%` }} /></div>
             {photos.error && <p className="mt-1 text-xs text-red-700 dark:text-red-300">⚠ {photos.error} — press Resume to carry on.</p>}
           </div>
         )}
