@@ -6,7 +6,8 @@
 // but BC's own "catalogued by" is worthless — lots are pushed across in bulk, so
 // every lot in a sale carries whoever ran the import rather than the person who
 // catalogued it. So the lot number is read from BC and the cataloguer from the
-// Hub (CatalogueLot.createdByName), joined on the barcode / unique ID.
+// Hub (CatalogueLot.createdByName), joined on the barcode / unique ID. A lot with no
+// Hub lot was catalogued straight in BC, so BC's own name is shown for it, marked as such.
 //
 // Same house style as the other two tabs: large type, large hit targets.
 
@@ -17,7 +18,7 @@ type Sale = { code: string; name: string; date: string; lots: number }
 type Row  = {
   key: string; lotNo: string; lotSort: number; uniqueId: string; barcode: string; title: string
   vendor: string; location: string; tote: string; photos: number
-  inHub: boolean; hubLotId: string; cataloguedBy: string; cataloguedAt: string
+  inHub: boolean; hubLotId: string; cataloguedBy: string; cataloguedAt: string; cataloguedIn?: "hub" | "bc"
   bcStampCode: string; bcStampName: string; bcCatalogued: boolean; hubSaleCode: string
 }
 type Result = {
@@ -289,6 +290,9 @@ export default function BySaleTab({ controlled }: { controlled?: SaleControlled 
                     {one.cataloguedAt && (
                       <p className="text-lg text-gray-700 dark:text-gray-300 mt-3">on {formatDay(one.cataloguedAt)}</p>
                     )}
+                    {one.cataloguedIn === "bc" && (
+                      <p className="text-base text-sky-700 dark:text-sky-300 mt-2">Catalogued straight in Business Central — not in the Hub, so this is BC&rsquo;s own record</p>
+                    )}
                   </>
                 ) : one.inHub ? (
                   <>
@@ -303,8 +307,7 @@ export default function BySaleTab({ controlled }: { controlled?: SaleControlled 
                     <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">Not in the Hub</p>
                     <p className="text-base text-gray-600 dark:text-gray-400 mt-3 max-w-2xl">
                       This lot is in Business Central but has no matching lot in the Hub cataloguing tool, so there is no
-                      cataloguer to show
-                      {one.bcStampCode ? ` (BC's import stamp says ${one.bcStampName || one.bcStampCode}, which is whoever ran the import)` : ""}.
+                      cataloguer to show, and Business Central has no name recorded on it either.
                     </p>
                   </>
                 )}
@@ -378,7 +381,10 @@ export default function BySaleTab({ controlled }: { controlled?: SaleControlled 
                         </td>
                         <td className="px-6 py-4">
                           {r.cataloguedBy ? (
-                            <span className="text-lg font-semibold text-gray-900 dark:text-white">{r.cataloguedBy}</span>
+                            <>
+                              <span className="text-lg font-semibold text-gray-900 dark:text-white">{r.cataloguedBy}</span>
+                              {r.cataloguedIn === "bc" && <span className="block text-sm text-sky-700 dark:text-sky-300">Straight in BC</span>}
+                            </>
                           ) : r.inHub ? (
                             <>
                               <span className="text-base font-semibold text-gray-500 dark:text-gray-400">No name recorded</span>
@@ -388,8 +394,7 @@ export default function BySaleTab({ controlled }: { controlled?: SaleControlled 
                             <>
                               <span className="text-base font-semibold text-orange-600 dark:text-orange-400">Not in the Hub</span>
                               <span className={`block ${HINT}`}>
-                                No matching lot, so there is no cataloguer to show
-                                {r.bcStampCode ? ` (BC's import stamp: ${r.bcStampName || r.bcStampCode})` : ""}
+                                No matching lot, and Business Central has no name on it either
                               </span>
                             </>
                           )}

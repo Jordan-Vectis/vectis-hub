@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
-import { lookupCataloguerByCode } from "@/lib/cataloguer-directory"
+import { lookupCataloguerByCode, bcPersonName } from "@/lib/cataloguer-directory"
 
 export const dynamic = "force-dynamic"
 
@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic"
 //
 // So this route reads the sale FROM BC (for the lot numbers) and joins each item
 // back to its Hub lot on the barcode / unique ID to get the person who actually
-// catalogued it.
+// catalogued it. A lot with NO Hub lot was catalogued straight in BC, so for those
+// BC's own fields are the cataloguer (see cataloguedIn).
 //
 //   ?sales=1        → the list of sales BC knows about, for the picker
 //   ?sale=F088      → every item in that sale, lot number + real cataloguer
@@ -82,6 +83,7 @@ export async function GET(req: NextRequest) {
       select: {
         uniqueId: true, barcode: true, description: true, receiptNo: true,
         vendorNo: true, vendorName: true, catalogued: true, cataloguedBy: true,
+        cataloguedByUser: true, bcCreatedBy: true, cataloguedAt: true,
         auctionCode: true, auctionName: true, auctionDate: true,
         lotNo: true, currentLotNo: true, location: true, binCode: true,
       },
@@ -145,11 +147,16 @@ export async function GET(req: NextRequest) {
         location: [w.location, w.binCode].filter(Boolean).join(" · "),
         tote: hub?.tote ?? "",
         photos: hub?.imageUrls.length ?? 0,
-        // The answer: who entered the lot in the Hub.
+        // The answer: who entered the lot in the Hub — or, for a lot catalogued STRAIGHT IN BC
+        // (no Hub lot), BC's own fields. ⚠ BC's stamp is only the importer for lots that CAME from
+        // the Hub; a lot typed into BC directly was never imported, so there it is the real person
+        // (Jordan, 2026-09-28: F125 "was catalogued straight in BC and its not picking up the user").
+        // bcPersonName reads the code, then EVA_CataloguedByUser, then EVA_CreatedBy.
         inHub: !!hub,
         hubLotId: hub?.id ?? "",
-        cataloguedBy: hub?.createdByName ?? "",
-        cataloguedAt: hub?.createdAt.toISOString() ?? "",
+        cataloguedBy: hub ? (hub.createdByName ?? "") : bcPersonName(w.cataloguedBy, w.cataloguedByUser, w.bcCreatedBy),
+        cataloguedAt: hub ? hub.createdAt.toISOString() : (w.cataloguedAt?.toISOString() ?? ""),
+        cataloguedIn: hub ? "hub" : "bc",
         // Kept only so a mismatch is visible — this is the import stamp, not a
         // cataloguer, which is the whole reason this page exists.
         bcStampCode: w.cataloguedBy?.trim() ?? "",

@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"37801947d52648ecc4c9328cc673c7a8a032cbbd","author":"Jordan Orange","date":"2026-09-25T16:55:23+01:00","subject":"Merge staging into main: BC lot collector only takes held sales (+ --upcoming), BC Database shows upcoming sales and Photo in Hub, Databases card to IT & Admin"},
+  {"sha":"c469fc5480852dbc19575c9aa469c778bfa2d8ff","author":"Jordan Orange","date":"2026-09-25T14:45:05+01:00","subject":"BC Database lists upcoming sales, marked Upcoming, with a filter"},
   {"sha":"4371e5cc1cfdf017b44f6d8ee213eba6f262e8aa","author":"Jordan Orange","date":"2026-09-25T14:36:37+01:00","subject":"BC lot collector: --upcoming takes catalogues of sales not yet held, marked not finished"},
   {"sha":"c3cd3a9a4e26f11b371b77d11a3b72c0a960b23a","author":"Jordan Orange","date":"2026-09-25T14:29:11+01:00","subject":"BC lot collector: only write sales that have actually been held; Photo in Hub column"},
   {"sha":"76120741885aa896810d152a09e08ab085eabb0d","author":"Jordan Orange","date":"2026-09-25T09:41:53+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
