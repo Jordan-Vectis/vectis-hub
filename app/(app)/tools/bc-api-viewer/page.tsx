@@ -11,6 +11,7 @@ const KNOWN_ENDPOINTS = [
   { label: "Receipt Lines",          value: "Receipt_Lines_Excel" },
   { label: "Receipt Totes",          value: "Receipt_Totes_Excel" },
   { label: "Totes",                  value: "Totes_Excel" },
+  { label: "Contact Search",         value: "Contact_Search_Excel" },
   { label: "Change Log Entries",     value: "ChangeLogEntries" },
   { label: "Shipment Requests",      value: "ShipmentRequestAPI" },
   { label: "Collection List",        value: "CollectionList" },
