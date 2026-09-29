@@ -3481,7 +3481,7 @@ last_updated: 2026-08-04
 
 # Photo Prep → 🎨 AI edit (built 2026-08-04)
 
-Photo Prep is now **tabbed**: **🪄 Prepare photos** (the original local crop/brighten run) and **🎨 AI edit** (Gemini's image model, "nano banana"). A separate tab was chosen over folding it into the batch, so each tab's privacy promise stays unambiguous.
+Photo Prep is now **tabbed**: **🪄 Prepare photos** (the original local crop/brighten run) and **🎨 AI edit** (Gemini's image model, "nano banana"). A separate tab was chosen over folding it into the batch, so each tab's privacy promise stays unambiguous. **💬 Image chat** (2026-09-29, third tab): type what you want (posters, banners, social posts), attach up to 4 pictures, keep asking for changes, download. Route app/api/photo-prep/create, slot photo_prep_create. STATELESS: each follow-up sends the latest picture back (previous_interaction_id never tested). Nothing saved in the Hub. ⚠ Marketing only — the model redraws what it is given, so a lot photo out of here is no longer evidence of condition; the tab says so. The image-reply readers (extractImage/extractText) now live in lib/gemini-image.ts, shared with AI edit.
 
 ## ⚠⚠ CONDITION INTEGRITY — the rule the whole feature hangs on
 

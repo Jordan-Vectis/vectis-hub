@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-28, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-29, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b9151483eced28a840501626588f38944d2652d6","author":"Jordan Orange","date":"2026-09-29T09:09:14+01:00","subject":"BC copy: after a restart, re-run a copy the restart cut off"},
   {"sha":"f9ef300f11c376a653d257a1b1c9ee7be60cda04","author":"Jordan Orange","date":"2026-09-28T17:00:27+01:00","subject":"Merge staging into main: straight-in-BC cataloguers, photo copy counts missing files, API Viewer Contact Search + standard API fallback"},
   {"sha":"a20dd0bf4b43ccc54a9d7b0cff221299f3fe66c7","author":"Jordan Orange","date":"2026-09-28T14:46:16+01:00","subject":"BC API Viewer: fall back to BC's standard API (api/v2.0) when a name isn't a web service"},
   {"sha":"2a137320ad58f002763001ab5d4fe91e363bac56","author":"Jordan Orange","date":"2026-09-28T14:38:35+01:00","subject":"BC API Viewer: Contact Search button"},
