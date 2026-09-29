@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"18e1e7368e124c57a41ce285d8332f24466d923e","author":"Jordan Orange","date":"2026-09-29T12:36:46+01:00","subject":"Saleroom Trainer: click a lot in the list to jump to it; the trainer freeze is lifted"},
   {"sha":"d47fc83bf0bc694ddb6fd9f2c5e9383e627a244c","author":"Jordan Orange","date":"2026-09-29T12:21:21+01:00","subject":"Saleroom Trainer Test Mode: run a sale from a BC Lines export (trainer exception #4, for Auto Clerk Scenario 2)"},
   {"sha":"5c3d183dda1d6c176ba999a8bb58c88886383567","author":"Jordan Orange","date":"2026-09-29T11:26:53+01:00","subject":"Image chat: every chat saves itself, private to the person, with a list to reopen or delete"},
   {"sha":"535bf36c46e6bcb896bdd6a49d9f6ed407d90254","author":"Jordan Orange","date":"2026-09-29T11:16:25+01:00","subject":"Photo Prep: Image chat tab — make posters, banners and social posts with Gemini's image model"},
