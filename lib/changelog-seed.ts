@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5c3d183dda1d6c176ba999a8bb58c88886383567","author":"Jordan Orange","date":"2026-09-29T11:26:53+01:00","subject":"Image chat: every chat saves itself, private to the person, with a list to reopen or delete"},
   {"sha":"535bf36c46e6bcb896bdd6a49d9f6ed407d90254","author":"Jordan Orange","date":"2026-09-29T11:16:25+01:00","subject":"Photo Prep: Image chat tab — make posters, banners and social posts with Gemini's image model"},
   {"sha":"b9151483eced28a840501626588f38944d2652d6","author":"Jordan Orange","date":"2026-09-29T09:09:14+01:00","subject":"BC copy: after a restart, re-run a copy the restart cut off"},
   {"sha":"f9ef300f11c376a653d257a1b1c9ee7be60cda04","author":"Jordan Orange","date":"2026-09-28T17:00:27+01:00","subject":"Merge staging into main: straight-in-BC cataloguers, photo copy counts missing files, API Viewer Contact Search + standard API fallback"},

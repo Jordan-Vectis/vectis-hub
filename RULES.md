@@ -240,6 +240,17 @@ bid-undo's handler (after a sale it ate real bids press by press); it now undoes
 Sell/Pass itself — re-opening the lot, touching no bid — while the left-column Undo remains the
 bid-undo, and guided scenarios still see the plain undo they script for. Nothing else is covered.
 
+**Fourth sanctioned exception (Jordan, 2026-09-29, chosen over a trainer-free copy via the conflict
+question):** a third source in the Saleroom Trainer's **Test Mode picker — "From a BC Lines export"**.
+For an Auto Clerk Scenario 2 test the fake Saleroom must run THE SAME lots as the real Vectis
+clerking screen — same lot numbers, same order — and the Hub's own lots can never give that
+(`CatalogueLot` has no lot number and no sale order), while BC's Lines export has both. The picker
+takes the .xlsx, posts it to **`/api/auto-clerk/lines-sheet`** (deliberately OUTSIDE the frozen
+`app/api/trainer` tree; parser `lib/lines-sheet.ts`, proven against F118's real export) and runs the
+lots with the lot NUMBER as the id, so the AHK clerk's lot watch reads the same token on both screens.
+Unnumbered and withdrawn lines are left out and counted on screen. The Vectis Clerk Trainer's picker
+was NOT changed. Nothing else in the trainer is covered.
+
 **If the Auto Clerk needs a replica screen, COPY the trainer file into a new `public/auto-clerk-*.html`
 and change the copy** — exactly how the Scenario 1 rig (`auto-clerk-fake-saleroom.html`) was made from
 the Saleroom replica. A copy may drift from the trainer afterwards; that is accepted, and it is why the
