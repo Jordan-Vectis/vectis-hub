@@ -1377,6 +1377,19 @@ model ScreenRecording {
 // A screenshot from IT Tools → Screenshots (the snipping-tool stand-in): captured
 // or pasted in the browser, cropped and marked up on a canvas, then the PNG goes
 // straight to R2 (presigned PUT) and this row is written once it is confirmed there.
+/// Photo Prep → 💬 Image chat: one saved conversation, PRIVATE to the person who made it.
+/// `turns` is the conversation as JSON; the pictures themselves are in R2 under image-chat/<id>/.
+model ImageChat {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  turns     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
 model ScreenCapture {
   id          String   @id @default(cuid())
   title       String

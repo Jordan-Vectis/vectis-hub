@@ -270,6 +270,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "InvoiceFile", personal: "staff", what: "A file in the invoice store: name, size, type, and who uploaded it." },
       { model: "ScreenRecording", personal: "staff", what: "A recording from IT Tools → Screen Recorder: its title, length, size and who recorded it. The video is in R2 and shows whatever was on that screen, which can include customer or staff details." },
       { model: "ScreenCapture", personal: "staff", what: "A screenshot from IT Tools → Screenshots: its title, size and who took it. The marked-up image is in R2 and, like a recording, shows whatever was on screen." },
+      { model: "ImageChat", personal: "staff", what: "A saved conversation from Photo Prep → Image chat — what the person asked for and the pictures made (the pictures are in R2). Private to the person who made it." },
     ],
   },
   {

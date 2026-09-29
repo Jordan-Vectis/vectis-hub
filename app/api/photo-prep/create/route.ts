@@ -1,22 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
-import { prisma } from "@/lib/prisma"
-import { hasAppAccess } from "@/lib/apps"
+import { randomUUID } from "node:crypto"
 import sharp from "sharp"
+import { prisma } from "@/lib/prisma"
 import { getToolModel } from "@/lib/ai-models"
 import { IMAGE_ENDPOINT, extractImage, extractText } from "@/lib/gemini-image"
+import { uploadBufferToR2, getObjectBuffer } from "@/lib/r2"
+import { photoPrepUser, ownChat, keyPrefix, showTurns, type StoredTurn } from "@/lib/image-chat"
 
 export const maxDuration = 120
 export const runtime = "nodejs"
 
 // POST /api/photo-prep/create — Photo Prep → 💬 Image chat (2026-09-29, Jordan: "a nano banana
 // chat bot where I can ask it to make me posters etc"). One turn per call.
-// FormData: prompt, shape?, current? (the picture being changed), attach* (up to 4 pictures).
-// Returns { image?: <base64>, mimeType?, text? }.
+// FormData: prompt, shape?, chatId? (carry on a saved chat), edit? ("1" = change the chat's latest
+// picture), attach* (up to 4 pictures).
+// Returns { chatId, title, added: ShownTurn[] } — the two turns this call appended.
 //
-// ⚠ STATELESS ON PURPOSE. Each follow-up sends the CURRENT picture back with the new request
-// ("make the title bigger") instead of relying on the interactions API's previous_interaction_id,
-// which has never been tested here. The browser holds the conversation; nothing is stored.
+// ⚠ EVERY CHAT SAVES ITSELF (Jordan: "Can we save chats?"). The row is made on the first turn and
+// each call appends the request and the answer, pictures stored in R2 under image-chat/<id>/.
+// Private to the person — see lib/image-chat.ts.
+//
+// ⚠ STATELESS towards Google. A follow-up sends the chat's latest picture back with the new request
+// ("make the title bigger") rather than relying on the interactions API's previous_interaction_id,
+// which has never been tested here. The picture is read from R2, so the browser never uploads it.
 //
 // ⚠ This is for MARKETING pictures — posters, banners, social posts. It is not for lot photos:
 // the model redraws everything it is given, so a lot photo put through it is no longer evidence of
@@ -40,39 +46,56 @@ const SHAPES: Record<string, string> = {
   story:     "Make it tall, phone-screen shaped (9:16), for a story or reel.",
 }
 
-async function shrink(file: File): Promise<string> {
-  const buf = await sharp(Buffer.from(await file.arrayBuffer())).rotate()
+async function shrink(buf: Buffer): Promise<Buffer> {
+  return sharp(buf).rotate()
     .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
     .png().toBuffer()
-  return buf.toString("base64")
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-
-    const dbUser = await prisma.user.findUnique({
-      where:  { id: session.user.id },
-      select: { role: true, allowedApps: true },
-    })
-    if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "PHOTO_PREP")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    const me = await photoPrepUser()
+    if ("error" in me) return NextResponse.json({ error: me.error }, { status: me.status })
 
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-    const form    = await req.formData()
-    const prompt  = String(form.get("prompt") ?? "").trim()
-    const shape   = String(form.get("shape") ?? "").trim()
-    const current = form.get("current")
-    const attach  = form.getAll("attach").filter((f): f is File => f instanceof File).slice(0, MAX_ATTACH)
+    const form   = await req.formData()
+    const prompt = String(form.get("prompt") ?? "").trim()
+    const shape  = String(form.get("shape") ?? "").trim()
+    const edit   = String(form.get("edit") ?? "") === "1"
+    const chatIn = String(form.get("chatId") ?? "").trim()
+    const files  = form.getAll("attach").filter((f): f is File => f instanceof File).slice(0, MAX_ATTACH)
     if (!prompt) return NextResponse.json({ error: "Say what you'd like made" }, { status: 400 })
 
-    const input: any[] = []
+    // The chat — carried on, or made now so its pictures have somewhere to live.
+    let chat = chatIn ? await ownChat(chatIn, me.id) : null
+    if (chatIn && !chat) return NextResponse.json({ error: "That chat isn't there any more — start a new one." }, { status: 404 })
+    if (!chat) {
+      chat = await prisma.imageChat.create({
+        data: { userId: me.id, title: prompt.replace(/\s+/g, " ").slice(0, 80), turns: [] },
+      })
+    }
+    const turns = (chat.turns as unknown as StoredTurn[]) ?? []
+    const prefix = keyPrefix(chat.id)
+
+    // The picture being changed: the chat's latest one, read back from R2.
+    let lastImageKey: string | null = null
+    for (const t of turns) if (t.who === "ai" && t.image) lastImageKey = t.image
+    const current = edit && lastImageKey ? await getObjectBuffer(lastImageKey) : null
+
+    // Keep what they attached, shrunk, so the saved chat shows it.
+    const attach: { key: string; png: Buffer }[] = []
+    for (const f of files) {
+      const png = await shrink(Buffer.from(await f.arrayBuffer()))
+      const key = `${prefix}${randomUUID()}.png`
+      await uploadBufferToR2(png, key, "image/png")
+      attach.push({ key, png })
+    }
+    const you: StoredTurn = { who: "you", text: prompt, attach: attach.map(a => a.key), at: new Date().toISOString() }
+
     const text = [HOUSE]
-    if (current instanceof File) {
+    if (current) {
       text.push("The FIRST picture below is the current design. Change it exactly as asked and keep everything else about it the same.")
     } else {
       text.push("Create a new picture.")
@@ -80,34 +103,50 @@ export async function POST(req: NextRequest) {
     }
     if (attach.length) text.push(`${attach.length === 1 ? "The attached picture is" : "The attached pictures are"} for you to use in the design as asked (a photo, a logo, or a style to follow).`)
     text.push(`Request: ${prompt}`)
-    input.push({ type: "text", text: text.join("\n\n") })
-    if (current instanceof File) input.push({ type: "image", mime_type: "image/png", data: await shrink(current) })
-    for (const f of attach) input.push({ type: "image", mime_type: "image/png", data: await shrink(f) })
+    const input: any[] = [{ type: "text", text: text.join("\n\n") }]
+    if (current) input.push({ type: "image", mime_type: "image/png", data: (await shrink(current)).toString("base64") })
+    for (const a of attach) input.push({ type: "image", mime_type: "image/png", data: a.png.toString("base64") })
 
-    const model = await getToolModel("photo_prep_create")
-    const res = await fetch(IMAGE_ENDPOINT, {
-      method:  "POST",
-      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-      body:    JSON.stringify({ model, input }),
-      signal:  AbortSignal.timeout(110_000),
+    // Ask. A failure is SAVED as a turn too, so the chat shows what happened.
+    let ai: StoredTurn
+    try {
+      const model = await getToolModel("photo_prep_create")
+      const res = await fetch(IMAGE_ENDPOINT, {
+        method:  "POST",
+        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+        body:    JSON.stringify({ model, input }),
+        signal:  AbortSignal.timeout(110_000),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(json?.error?.message ?? `Image model returned ${res.status}`)
+      const found = extractImage(json)
+      const said  = extractText(json)
+      if (found) {
+        const ext = found.mimeType.includes("jpeg") ? "jpg" : "png"
+        const key = `${prefix}${randomUUID()}.${ext}`
+        await uploadBufferToR2(Buffer.from(found.data, "base64"), key, found.mimeType)
+        ai = { who: "ai", image: key, text: said || undefined, at: new Date().toISOString() }
+      } else if (said) {
+        // Words and no picture is a real answer (a question back, or a refusal) — keep it.
+        ai = { who: "ai", text: said, at: new Date().toISOString() }
+      } else {
+        throw new Error(`The model didn't send a picture back. The reply contained: ${Object.keys(json ?? {}).join(", ") || "nothing"}.`)
+      }
+    } catch (e: any) {
+      const msg = e?.name === "TimeoutError" ? "The image model took too long to answer — try again." : (e?.message ?? "Couldn't make the picture")
+      console.error("photo-prep/create model error:", msg)
+      ai = { who: "ai", error: msg, at: new Date().toISOString() }
+    }
+
+    const added = [you, ai]
+    await prisma.imageChat.update({
+      where:  { id: chat.id },
+      data:   { turns: [...turns, ...added] as any },
+      select: { id: true },
     })
-    const json = await res.json().catch(() => null)
-    if (!res.ok) {
-      const msg = json?.error?.message ?? `Image model returned ${res.status}`
-      return NextResponse.json({ error: msg }, { status: res.status === 429 ? 429 : 502 })
-    }
-
-    const found = extractImage(json)
-    const said  = extractText(json)
-    if (!found) {
-      // Words and no picture is a real answer (a question back, or a refusal) — show it.
-      if (said) return NextResponse.json({ text: said })
-      return NextResponse.json({ error: `The model didn't send a picture back. The reply contained: ${Object.keys(json ?? {}).join(", ") || "nothing"}.` }, { status: 502 })
-    }
-    return NextResponse.json({ image: found.data, mimeType: found.mimeType, text: said || undefined })
+    return NextResponse.json({ chatId: chat.id, title: chat.title, added: showTurns(chat.id, added) })
   } catch (e: any) {
     console.error("photo-prep/create error:", e)
-    const msg = e?.name === "TimeoutError" ? "The image model took too long to answer — try again." : (e?.message ?? "Couldn't make the picture")
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: e?.message ?? "Couldn't make the picture" }, { status: 500 })
   }
 }
