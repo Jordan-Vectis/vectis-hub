@@ -39,7 +39,7 @@ global OCR_DIR := A_Temp "\AutoClerkOCR"
 ; ⚠ Bump on every meaningful change. v1.0 = the build Jordan froze on 2026-08-25 after
 ; live testing ("this version is really good") — archived at public/auto-clerk/v1.0/
 ; and in Downloads\Auto Clerk v1.0\. 2.0 work continues in THIS file.
-global VERSION := "2.1"
+global VERSION := "2.2"
 ; ⚠ Follow mode is reached ONLY through the named launcher scripts (Saleroom Clerk.ahk /
 ; Vectis Clerk.ahk — Jordan, 2026-08-25: separate apps, "save bloating the current one").
 ; They pass "--clerk <side>"; FORCED names the side this instance CLERKS. The main tool's
