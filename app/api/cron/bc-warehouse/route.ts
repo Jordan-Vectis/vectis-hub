@@ -5,6 +5,7 @@ export const maxDuration = 300
 
 // POST /api/cron/bc-warehouse           — the twice-daily incremental catch-up
 // POST /api/cron/bc-warehouse {full:true} — the 5am FULL walk (see below)
+// POST /api/cron/bc-warehouse {resume:true} — after a restart: re-runs a copy the restart cut off
 // Protected by CRON_SECRET. Sequence:
 // receipt-lines (loop) → auction-lines → changelog → totes → totes-active → totes-all → auction-names
 //
@@ -27,18 +28,46 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
   }
 
-  let full = false
+  let full = false, resume = false
   try {
     const body = await req.json()
-    full = body?.full === true
+    full   = body?.full === true
+    resume = body?.resume === true
   } catch { /* no body — incremental */ }
+
+  // ⚠ A row marked "running" that started before THIS process booted cannot still be running —
+  // there is one instance, and a restart kills whatever it was doing. Counting those rows blocked
+  // the catch-up below behind the very run it exists to replace.
+  const bootedAt = new Date(Date.now() - process.uptime() * 1000)
+
+  // ── Catch-up after a restart (2026-09-29) ──────────────────────────────────
+  // server.js asks once, shortly after boot. A deploy that lands during a copy kills it part-way —
+  // the 17:00 copy on 28 Sept died with the 17:00 merge to main, and the tidy-up (always the LAST
+  // step) went 13 hours stale and rang the bell before the 05:00 FULL put it right. Merges to main
+  // routinely land around 17:00, so rather than wait for the next slot: if a copy began in the last
+  // three hours and its tidy-up never finished after it, run it again now. One that began at 5 or 6
+  // in the morning was the FULL, and is re-run as the full. Nothing was cut off → nothing is started.
+  if (resume) {
+    const [lastStart, lastTidy] = await Promise.all([
+      prisma.warehouseSyncLog.findFirst({ where: { source: "receipt_lines" }, orderBy: { startedAt: "desc" }, select: { startedAt: true } }),
+      prisma.warehouseSyncLog.findFirst({ where: { source: "reconcile-deleted", status: "complete" }, orderBy: { completedAt: "desc" }, select: { completedAt: true } }),
+    ])
+    const cutOff = !!lastStart
+      && Date.now() - lastStart.startedAt.getTime() < 3 * 60 * 60 * 1000
+      && lastStart.startedAt < bootedAt
+      && (!lastTidy?.completedAt || lastTidy.completedAt < lastStart.startedAt)
+    if (!cutOff) return NextResponse.json({ ok: false, skipped: "No BC copy was cut off by the restart — nothing to catch up." })
+    const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hour12: false }).format(lastStart.startedAt)) % 24
+    full = hour === 5 || hour === 6
+    console.log(`[cron/bc-warehouse] a ${full ? "FULL" : "incremental"} copy started ${lastStart.startedAt.toISOString()} was cut off by a restart — running it again`)
+  }
 
   // ⚠ One at a time. Nothing used to stop the 12-hourly run starting on top of a manual re-sync,
   // which cannot corrupt anything (every write is an upsert) but doubles the load on BC and on the
   // database for no benefit. A run older than three hours is treated as dead rather than blocking
-  // for ever on a crashed one.
+  // for ever on a crashed one, and so is one from before this process started (see bootedAt).
   const running = await prisma.warehouseSyncLog.findFirst({
-    where:   { status: "running", startedAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } },
+    where:   { status: "running", startedAt: { gte: new Date(Math.max(Date.now() - 3 * 60 * 60 * 1000, bootedAt.getTime())) } },
     orderBy: { startedAt: "desc" },
     select:  { source: true, startedAt: true },
   })

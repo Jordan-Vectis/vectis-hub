@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f9ef300f11c376a653d257a1b1c9ee7be60cda04","author":"Jordan Orange","date":"2026-09-28T17:00:27+01:00","subject":"Merge staging into main: straight-in-BC cataloguers, photo copy counts missing files, API Viewer Contact Search + standard API fallback"},
+  {"sha":"a20dd0bf4b43ccc54a9d7b0cff221299f3fe66c7","author":"Jordan Orange","date":"2026-09-28T14:46:16+01:00","subject":"BC API Viewer: fall back to BC's standard API (api/v2.0) when a name isn't a web service"},
   {"sha":"2a137320ad58f002763001ab5d4fe91e363bac56","author":"Jordan Orange","date":"2026-09-28T14:38:35+01:00","subject":"BC API Viewer: Contact Search button"},
   {"sha":"74a5541cf6603c3c8b2838d9c0333679a3a93c6f","author":"Jordan Orange","date":"2026-09-28T11:09:22+01:00","subject":"Photo copy: count lots whose website photo file is missing, and say so when it finishes"},
   {"sha":"5d06aed070b93414aa3f8643c73f408ae0ab4119","author":"Jordan Orange","date":"2026-09-28T10:42:36+01:00","subject":"Who catalogued this sale: lots catalogued straight in BC show BC's own cataloguer"},
