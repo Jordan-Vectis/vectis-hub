@@ -204,13 +204,23 @@ silently failing. Same root cause: the screen not telling the truth about what i
 - *The failure:* Change Vendor reported "✓ Changed 0 lots" when it had changed nothing, so a real
   problem read as done. If a count is zero, say so plainly and say why.
 
-### 8. ⚠ The SALEROOM TRAINER is FROZEN while the Auto Clerk is being worked on (2026-08-21)
-Jordan: *"we made some great changes for training our staff and the design of the clerking
-screens so I want a rule made first you cannot change anything in here while working on the
-autoclerk."* The trainer (`/tools/saleroom-trainer`) is a finished staff-training tool with
-screens skinned to match the real clerking software; it is **not** Auto Clerk scratch space.
+### 8. The Saleroom Trainer freeze — LIFTED 2026-09-29 (history kept below)
+**Lifted by Jordan on 2026-09-29** ("why are we saying edits are frozen?" — asked, and he chose to
+lift it): the trainer is now the Auto Clerk's Scenario 2 test bench, so trainer edits that serve
+Auto Clerk testing are **allowed without asking each time**. Two things still hold: **the guided
+training scenarios' behaviour is not changed in passing** — a change that touches how a scenario
+plays out is said so plainly first — and the trainer stays skinned to match the real clerking
+software (Jack's work), so no Auto Clerk-only clutter on the clerking screens themselves. The
+reasons the rule existed, and the four exceptions granted under it, are kept below because they
+explain why the trainer looks the way it does.
 
-**Do not edit ANY of these while doing Auto Clerk work — not a line, not a colour, not a comment:**
+*The rule as it stood 2026-08-21 → 2026-09-29:* Jordan: *"we made some great changes for training
+our staff and the design of the clerking screens so I want a rule made first you cannot change
+anything in here while working on the autoclerk."* The trainer (`/tools/saleroom-trainer`) is a
+finished staff-training tool with screens skinned to match the real clerking software; it was
+**not** Auto Clerk scratch space.
+
+**These were the files the rule covered:**
 - `app/(app)/tools/saleroom-trainer/` (layout.tsx, page.tsx)
 - `public/saleroom-trainer.html`, `public/saleroom-trainer-bid.html`, `public/vectis-clerk-trainer.html`
 - `app/api/trainer/**` (qr, sales, sales/lots)

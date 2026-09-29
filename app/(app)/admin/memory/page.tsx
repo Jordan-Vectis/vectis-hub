@@ -964,6 +964,9 @@ V2 - BOTH SCREENS IN STEP (built 2026-08-21, proven in simulation, awaiting Jord
     filename: "saleroom_trainer_frozen.md",
     content: `---
 name: The Saleroom Trainer is FROZEN while the Auto Clerk is being worked on
+
+⚠ LIFTED 2026-09-29: Jordan lifted this freeze (asked the conflict question for click-to-jump in the lot list: "why are we saying edits are frozen?" — chose lift). Trainer edits that serve Auto Clerk testing are now made WITHOUT asking each time. Still: the guided scenarios behaviour is not changed in passing (say so first if a change touches them) and the screens stay skinned to the real software. RULES.md §8 rewritten; the four exceptions below are history that explains the trainer shape.
+
 purpose: Jordan's rule (2026-08-21) - nothing in the trainer may change during Auto Clerk work; copy a trainer screen into auto-clerk-*.html instead. Read before touching any trainer or auto-clerk file.
 metadata:
   type: feedback

@@ -1769,14 +1769,7 @@ function act(a){
         if(S.live) pushState();
         return;
       }
-      S.li++; S.bid=0; S.hi=0; S.log=[]; S.freeLotSold=false;
-      S.lotOutcome=null; S.fairWarned=false; S.lpaddle=null; S.lbdr=''; S.lname='';
-      clearLogs(); setBidSrc(null); setAmt(0);
-      document.getElementById('fH').value = '0';
-      resetOnce(); updateLot(); renderLL();
-      fb('Next lot','info');
-      setG(`Lot ${S.lots[S.li].id} — Est: £${S.lots[S.li].est}. Waiting for bids…`);
-      freeScheduleBid();
+      openLot(S.li + 1, 'Next lot');
     } else if(a === 'fairwarn'){
       addChat('⚠️ Fair Warning — lot about to close!');
       fb('Fair Warning sent','warn');
@@ -2077,10 +2070,37 @@ function setLotImage(el, lot){
   }
 }
 
+/* Open lot i in Free Mode / Test Mode — the reset the Next button does, shared with the
+   lot-list click (2026-09-29, Jordan: "I need to be able to click on a lot in this feed to jump
+   to it"). The lot being left keeps whatever it had in S.sold; its open bids are simply dropped —
+   moving on is never a hammer. */
+function openLot(i, why){
+  S.li = i; S.bid=0; S.hi=0; S.log=[]; S.freeLotSold=false;
+  S.lotOutcome=null; S.fairWarned=false; S.lpaddle=null; S.lbdr=''; S.lname='';
+  clearLogs(); setBidSrc(null); setAmt(0);
+  document.getElementById('fH').value = '0';
+  resetOnce(); updateLot(); renderLL();
+  fb(why,'info');
+  setG(`Lot ${S.lots[S.li].id} — Est: £${S.lots[S.li].est}. Waiting for bids…`);
+  freeScheduleBid();
+}
+
+/* A click on a row in the lot list. Free Mode and Test Mode only — a guided scenario scripts
+   which lot is up, so there the click does nothing. */
+function jumpToLot(id){
+  if(!S || !S.free) return;
+  const src = S.lots || LOTS;
+  const i = src.findIndex(l => String(l.id) === String(id));
+  if(i < 0 || i === S.li) return;
+  openLot(i, `Jumped to lot ${src[i].id}`);
+  if(S.live) pushState();   // the joined phones move to the new lot too
+}
+
 function renderLL(){
   const f=(document.getElementById('findl').value||'').toLowerCase();
   const src=S.lots||LOTS;
   const cur=src[S.li];
+  const jumpable = !!(S && S.free);
   document.getElementById('ll').innerHTML=src
     .filter(l=>!f||String(l.id).includes(f)||l.desc.toLowerCase().includes(f))
     .map(l=>{
@@ -2090,9 +2110,11 @@ function renderLL(){
       const status=hammer!==null
         ? `<span class="ll-status">${buyer}&nbsp;&nbsp;${hammer}.00</span>`
         : '';
-      return `<div class="ll-row${isCur?' cur':''}">
-        <div class="ll-line1"><span class="ll-num">${l.id}</span>${status}</div>
-        <div class="ll-desc">${l.desc}</div>
+      // Descriptions from a Lines export can carry & and < — escaped, or a row breaks the list.
+      const click = jumpable ? ` data-lot="${esc(String(l.id))}" onclick="jumpToLot(this.dataset.lot)" title="Click to jump to lot ${esc(String(l.id))}"` : '';
+      return `<div class="ll-row${isCur?' cur':''}"${click}>
+        <div class="ll-line1"><span class="ll-num">${esc(String(l.id))}</span>${status}</div>
+        <div class="ll-desc">${esc(l.desc)}</div>
       </div><hr class="row-hr">`;
     }).join('');
   setTimeout(()=>{
