@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8e86dee3819f9376f2f8328e038bf134d5b5946c","author":"Jordan Orange","date":"2026-09-30T11:08:02+01:00","subject":"AI descriptions: names keep the cataloguer's capitals everywhere (house rules moved to lib/description-rules.ts)"},
   {"sha":"ab805b4159c1a62f513bd5b0def65ce551dfec10","author":"Jordan Orange","date":"2026-09-30T10:00:37+01:00","subject":"AI descriptions: no exact quantity unless the cataloguer key-pointed it"},
   {"sha":"97daf53af1eebbac2b2e979b4a927bdda7f54dad","author":"Jordan Orange","date":"2026-09-30T10:00:36+01:00","subject":"Cataloguer-mistake flags: a wrong maker/range name is a mistake, not wording (Hornby Dublin for Dublo)"},
   {"sha":"8be64b4e106f8493aa3af7bcb312493ccd1b409a","author":"Jordan Orange","date":"2026-09-29T13:29:01+01:00","subject":"Auto Clerk 2.2: never read a clipped glyph — the grab grows until the glyph is whole; marker-first readings"},
