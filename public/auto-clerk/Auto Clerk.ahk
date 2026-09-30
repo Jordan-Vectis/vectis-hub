@@ -39,7 +39,7 @@ global OCR_DIR := A_Temp "\AutoClerkOCR"
 ; ⚠ Bump on every meaningful change. v1.0 = the build Jordan froze on 2026-08-25 after
 ; live testing ("this version is really good") — archived at public/auto-clerk/v1.0/
 ; and in Downloads\Auto Clerk v1.0\. 2.0 work continues in THIS file.
-global VERSION := "2.0"
+global VERSION := "2.2"
 ; ⚠ Follow mode is reached ONLY through the named launcher scripts (Saleroom Clerk.ahk /
 ; Vectis Clerk.ahk — Jordan, 2026-08-25: separate apps, "save bloating the current one").
 ; They pass "--clerk <side>"; FORCED names the side this instance CLERKS. The main tool's
@@ -181,7 +181,8 @@ OnExit((*) => StopOcr())
 if A_Args.Length >= 1 && A_Args[1] = "--selftest" {
     out := ""
     for s in ["Current Bid: E 1,250", "£640", "Hammer: (f640)", "1.250", "0", "", "E 12,500 Asking", "Bid 45", "Jrrent Bid: EIO", "urrent Bid: £1O", "E I,25O", "OM 15", "ROOM", "£O", "Lot: 508 ROOM Est: ROOM 80-110", "Est: 80-110", "ES", "Est", "Jrrent Bid: EGO", "Jrrent Bid: E 15", "Bid 5", "Bid H 5", "Bid O", "Bid 1,250", "Bid IO", "Bid I,25O", "Bid EGO",
-                "Bid 15.00", "Bid 1,250.00", "Bid 45.00", "15.00", "£1,250.00", "Bid 1.250", "Bid 5.00", "Bid I5.OO"]
+                "Bid 15.00", "Bid 1,250.00", "Bid 45.00", "15.00", "£1,250.00", "Bid 1.250", "Bid 5.00", "Bid I5.OO",
+                "Bid l:E70", "Bid i:E0", "Bid :", "Bid d:E5", "Bid ES", "Bid E30", "Bid l:E1,250", "Bid ÄE10"]
         out .= "[" s "] -> " ParseAmount(s) "`n"
     for a in [10, 15, 45, 50, 60, 110, 220, 550, 1100, 2200, 5500, 5, 7, 0]
         out .= "asking " a " -> bid " BidBeforeAsking(a) "`n"
@@ -1616,6 +1617,9 @@ TestRead() {
         txt := OcrRead(r.x, r.y, r.w, r.h, isFeed ? "lines" : isLabel ? "txt" : "num")
         pic := OCR_DIR "\test-" it.key ".png"
         try FileCopy OCR_DIR "\last.png", pic, 1
+        ; The untouched grab as well (exactly the box that was drawn), for telling a bad read
+        ; from a bad box — the helper saves it as last-raw.png on every read.
+        try FileCopy OCR_DIR "\last-raw.png", OCR_DIR "\test-" it.key "-raw.png", 1
         levels := ""
         if isFeed {
             for line in StrSplit(txt, "`n") {
@@ -2047,9 +2051,18 @@ Short(s, n := 40) {
 ParseAmount(txt) {
     ; Case-SENSITIVE on purpose: with i) the "s" of "Est:" matched S and read as £5.
     ; The token must also end cleanly (not run into letters), so "Est" / "ES" never count.
-    ; "Bid" counts as a marker too — the helper paints that word in front of every number
-    ; box, so "Bid IO" must translate the look-alikes exactly as "£IO" would.
-    if RegExMatch(txt, "(?:[£Ef]|Bid)\s?([0-9OoIl|SBG][0-9OoIl|SBG.,]*)(?![A-Za-z])", &m) {
+    ; ⚠⚠ The MONEY marker (£ / E / f) is tried FIRST, the painted "Bid" word only after it
+    ; (2026-09-29). The box on the real Vectis page took in the tail of the "Current Bid:"
+    ; label, so a read came back "Bid l:E70" — the token straight after "Bid" was "l", a
+    ; look-alike for 1, and the clerk bid £1 on the Saleroom. A £ sign proves where the money
+    ; is; the painted word only says a number box was read, so it is the fallback ("Bid IO"
+    ; must still translate the look-alikes exactly as "£IO" would).
+    if RegExMatch(txt, "[£Ef]\s?([0-9OoIl|SBG][0-9OoIl|SBG.,]*)(?![A-Za-z])", &m) {
+        v := MoneyFromToken(m[1])
+        if v >= 0
+            return v
+    }
+    if RegExMatch(txt, "Bid\s?([0-9OoIl|SBG][0-9OoIl|SBG.,]*)(?![A-Za-z])", &m) {
         v := MoneyFromToken(m[1])
         if v >= 0
             return v

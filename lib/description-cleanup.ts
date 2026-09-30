@@ -31,6 +31,27 @@ export function cleanBearsDescription(input: string): string {
   // 3. "LE 6000" / "LE 1176 of 4000" → "limited edition …" (never the LE shorthand).
   out = out.replace(/\bLE\s+(\d)/g, "limited edition $1")
 
+  // 3b. "artist bear", never "artist designed" (the expert's review of F135, 2026-09-30: all 39
+  //     came from the cataloguers' own key points, copied faithfully). "artist designed teddy
+  //     bear" → "artist teddy bear"; "an artist-designed bear" → "an artist bear". The different
+  //     construction "artist designed by Lynn Bowie" is left alone — that names the designer.
+  out = out.replace(/\b(artist)[- ]designed\b(?!\s+by\b)/gi, "$1")
+  //     "a mohair bear artist designed by Victoria Marsden" → "a mohair artist bear designed by
+  //     Victoria Marsden" — the noun moves behind "artist", the designer credit stays.
+  out = out.replace(/\b(teddy bear|bear|doll|dragon|rabbit|cat|donkey|animal)(s?) artist[- ]designed by\b/gi, "artist $1$2 designed by")
+
+  // 3c. The edition said once. The model writes it in words and then again in a bracket —
+  //     "a limited edition of 3, numbered 3 (limited edition 3/3)" — or stutters "from a limited
+  //     edition, limited edition 01/03". Five lots of F135. The bracket goes only when the words
+  //     are already there just before it, so a lone bracketed edition is never lost.
+  out = out.replace(/\blimited edition,\s*limited edition\b/gi, "limited edition")
+  out = out.replace(/\s*\(limited edition\s+\d[\d,]*\s*(?:\/|of)\s*\d[\d,]*\)/gi, (m: string, offset: number, whole: string) =>
+    /limited edition/i.test(whole.slice(Math.max(0, offset - 160), offset)) ? "" : m)
+
+  // 3d. Never open with "Unbranded" (the expert: "not a nice term"). No maker means the lot
+  //     leads with what it is: "Unbranded, a pair of vintage monkeys" → "A pair of vintage monkeys".
+  out = out.replace(/^Unbranded,\s*(\S)/i, (_m, c: string) => c.toUpperCase())
+
   // 4. Close a stray space inside a Charlie Bears product code: "CB 114790" → "CB114790".
   out = out.replace(/\bCB\s+(\d)/g, "CB$1")
 

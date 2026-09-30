@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
-import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
+import { MEASUREMENT_FLAG_RULE, NAME_FLAG_RULE } from "@/lib/flag-rules"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
 export const maxDuration = 60
@@ -15,7 +15,7 @@ You will be given:
 
 Your job is to check whether any key point contains a hard factual error — for example, a wrong catalogue number, set number, model number, or product name that conflicts with the description or that you are highly confident is incorrect.
 
-IMPORTANT: Use Google Search to verify any catalogue number, set number, model number, or product code before flagging it. Do not rely on memory alone — always search first.
+IMPORTANT: Use Google Search to verify any catalogue number, set number, model number, or product code before flagging it — and any maker, range or product NAME you doubt (search the name as written together with the maker). Do not rely on memory alone — always search first.
 
 Do NOT flag:
 - Style or wording preferences
@@ -25,6 +25,8 @@ Do NOT flag:
 - A set number, catalogue number, or product code simply because it is not in your training data — your knowledge has a cutoff date and products released in 2024 or later may not be known to you. Absence from your training data does NOT mean the product does not exist. Only flag a number if you have strong positive evidence it is wrong (e.g. it belongs to a completely different product, the number format is impossible for that brand, or it clearly contradicts something else in the entry).
 
 ${MEASUREMENT_FLAG_RULE}
+
+${NAME_FLAG_RULE}
 
 If you are HIGHLY confident a key point contains an error (based on positive evidence, not absence of knowledge), respond with exactly:
 FLAG: <which key point looks wrong, what you believe is correct, and why>

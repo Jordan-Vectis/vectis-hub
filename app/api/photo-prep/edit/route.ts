@@ -5,6 +5,7 @@ import { hasAppAccess } from "@/lib/apps"
 import sharp from "sharp"
 import { getToolModel } from "@/lib/ai-models"
 import { buildEditPrompt, GROW } from "@/lib/photo-edit-presets"
+import { IMAGE_ENDPOINT, extractImage, extractText } from "@/lib/gemini-image"
 
 export const maxDuration = 120
 export const runtime = "nodejs"
@@ -21,7 +22,7 @@ export const runtime = "nodejs"
 // it's the /v1beta/interactions endpoint (image in, image out), which the
 // installed @google/generative-ai SDK (0.24.x) doesn't cover. Hence the direct
 // fetch rather than the SDK or lib/ai-provider (which is text-out only).
-const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
+const ENDPOINT = IMAGE_ENDPOINT
 
 // A photo straight off a camera is far bigger than the model needs and makes
 // the request slow and costly. 2048px on the long edge is plenty for a
@@ -91,32 +92,6 @@ function planPadding(
   return { top, bottom, left, right }
 }
 
-// ⚠ Don't hard-code one path to the image. Google's image APIs have returned it
-// as `output_image`, as an `inlineData` content part, and inside an `output`
-// array, and the field names vary (data / bytesBase64Encoded, mime_type /
-// mimeType). Walking the response for the first plausible base64 image is far
-// more robust than guessing which shape today's endpoint uses — and it keeps
-// working when they change it again.
-function extractImage(node: unknown, depth = 0): { data: string; mimeType: string } | null {
-  if (!node || typeof node !== "object" || depth > 6) return null
-
-  if (!Array.isArray(node)) {
-    const o = node as Record<string, any>
-    const data = o.data ?? o.bytesBase64Encoded ?? o.imageBytes ?? o.b64_json
-    const mime = o.mime_type ?? o.mimeType ?? o.media_type
-    // A base64 image is long; a short string here is an id or a label.
-    if (typeof data === "string" && data.length > 512 && (!mime || String(mime).startsWith("image/"))) {
-      return { data, mimeType: mime ? String(mime) : "image/png" }
-    }
-  }
-
-  for (const value of Object.values(node as Record<string, unknown>)) {
-    const hit = extractImage(value, depth + 1)
-    if (hit) return hit
-  }
-  return null
-}
-
 type Pad = { top: number; bottom: number; left: number; right: number }
 
 // ⚠⚠ THE MODEL REDRAWS THE WHOLE PICTURE — it cannot literally "leave the
@@ -146,20 +121,6 @@ async function featherEdges(img: Buffer, w: number, h: number, pad: Pad): Promis
     .composite([{ input: mask, raw: { width: w, height: h, channels: 4 }, blend: "dest-in" }])
     .png()
     .toBuffer()
-}
-
-/** Any text the model sent back instead — usually a refusal worth showing. */
-function extractText(node: unknown, depth = 0): string {
-  if (!node || typeof node !== "object" || depth > 6) return ""
-  if (!Array.isArray(node)) {
-    const o = node as Record<string, any>
-    if (typeof o.text === "string" && o.text.trim()) return o.text.trim()
-  }
-  for (const value of Object.values(node as Record<string, unknown>)) {
-    const hit = extractText(value, depth + 1)
-    if (hit) return hit
-  }
-  return ""
 }
 
 export async function POST(req: NextRequest) {

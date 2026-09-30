@@ -155,6 +155,26 @@ app.prepare().then(async () => {
     }
     scheduleWarehouseSync()
 
+    // ⚠ Catch-up after a restart (2026-09-29). A deploy that lands during a BC copy kills it
+    // part-way, and the next slot can be twelve hours off — the 17:00 copy on 28 Sept died with
+    // the 17:00 merge to main and the Status Centre rang overnight. Two minutes after boot (so Next
+    // is warm and the route is compiled) the route is asked whether a copy was cut off; it decides
+    // from the sync log and runs it again only if one was. A normal boot starts nothing.
+    setTimeout(() => {
+      const secret = process.env.CRON_SECRET
+      if (!secret) return
+      fetch(`http://localhost:${port}/api/cron/bc-warehouse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+        body: JSON.stringify({ resume: true }),
+      })
+        .then(r => r.json())
+        .then(d => console.log(d.started
+          ? `[cron/bc-warehouse] catch-up after restart started${d.full ? ' (FULL)' : ''}`
+          : `[cron/bc-warehouse] catch-up after restart: ${d.skipped ?? d.error ?? 'not needed'}`))
+        .catch(e => console.warn('[cron/bc-warehouse] catch-up after restart could not start:', why(e)))
+    }, 2 * 60 * 1000)
+
     // Full warehouse re-sync — 05:00 UK, an hour after the overnight BC macro finishes.
     //
     // ⚠⚠ WHY THIS EXISTS SEPARATELY FROM THE 12-HOURLY RUN. That one is INCREMENTAL: it only asks

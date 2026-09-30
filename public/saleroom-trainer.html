@@ -539,6 +539,16 @@ body {
 }
 .ts-pick input { flex: 0 0 14vw; }
 .ts-pick select { flex: 1; min-width: 0; }
+/* The Lines-export option: a styled button in place of the browser's file control, which
+   renders black-on-dark here and can't be read. The real <input type="file"> stays hidden. */
+.ts-file {
+  background: #0f1a24; color: #e8eef4; border: 1px solid #5dadec;
+  border-radius: 4px; padding: 0.6vh 1.4vh; font-family: inherit; font-size: 1.6vmin;
+  cursor: pointer; flex-shrink: 0;
+}
+.ts-file:hover { border-color: #8fc9f5; background: #16232f; }
+.ts-fname { font-size: 1.5vmin; color: #cbd5e1; align-self: center; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ts-note { font-size: 1.5vmin; color: #8fa6b8; min-height: 2.2vh; }
 .ts-note.err { color: #f87171; }
 .ts-note.ok  { color: #4ade80; }
@@ -693,6 +703,23 @@ body {
           <select id="tsSale" onchange="onSaleChosen()" onclick="event.stopPropagation()">
             <option value="">Loading sales…</option>
           </select>
+        </span>
+      </span>
+    </label>
+
+    <!-- Sanctioned trainer exception #4 (2026-09-29, RULES.md §8): the lots of a Business Central
+         Lines export, so a two-screen Auto Clerk test runs THE SAME lots, numbers and order as the
+         real Vectis clerking screen. Parsed by /api/auto-clerk/lines-sheet — nothing else here changed. -->
+    <label class="ts-opt" id="tsOptSheet" onclick="pickSource('sheet')">
+      <input type="radio" name="tsSrc" value="sheet">
+      <span style="flex:1;min-width:0">
+        <span class="ts-t">From a BC Lines export</span>
+        <span class="ts-d">The sale's lines as Business Central exports them (the same .xlsx BC Match takes) — runs those lots
+          in lot order, with the lot numbers, descriptions and estimates the real Vectis screen shows.</span>
+        <span class="ts-pick">
+          <button type="button" class="ts-file" onclick="event.preventDefault();event.stopPropagation();pickSource('sheet');document.getElementById('tsSheet').click()">📄 Choose the .xlsx…</button>
+          <span class="ts-fname" id="tsSheetName">No file chosen yet</span>
+          <input type="file" id="tsSheet" accept=".xlsx,.xls,.csv" style="display:none" onchange="onSheetChosen()" onclick="event.stopPropagation()">
         </span>
       </span>
     </label>
@@ -1210,13 +1237,25 @@ function closeSetup(){
 }
 
 function pickSource(which){
-  const demo = which === 'demo';
-  document.getElementById('tsOptDemo').classList.toggle('sel', demo);
-  document.getElementById('tsOptSale').classList.toggle('sel', !demo);
+  // Three sources since 2026-09-29: the built-in lots, a Hub sale, or a BC Lines export.
+  const opts = { demo:'tsOptDemo', sale:'tsOptSale', sheet:'tsOptSheet' };
+  for(const [k, id] of Object.entries(opts)) document.getElementById(id).classList.toggle('sel', k === which);
   const radio = document.querySelector(`input[name="tsSrc"][value="${which}"]`);
   if(radio) radio.checked = true;
-  if(demo) tsNote('');
-  else onSaleChosen();
+  if(which === 'demo') tsNote('');
+  else if(which === 'sale') onSaleChosen();
+  else onSheetChosen();
+}
+
+/* The Lines-export option (trainer exception #4). The file is only READ when Start is
+   pressed — choosing it just shows the name, so a wrong pick costs nothing. */
+function onSheetChosen(){
+  const inp = document.getElementById('tsSheet');
+  const f = inp.files && inp.files[0];
+  document.getElementById('tsSheetName').textContent = f ? f.name : 'No file chosen yet';
+  if(currentSource() !== 'sheet') return;
+  tsNote(f ? `${f.name} — read when you press Start. Read-only, nothing is written anywhere.`
+           : 'Choose the Lines export Business Central saved (.xlsx).');
 }
 
 function currentSource(){
@@ -1279,6 +1318,39 @@ async function startTest(){
     TEST_LOTS = null; TEST_LABEL = '';
     closeSetup();
     beginTest();
+    return;
+  }
+
+  if(currentSource() === 'sheet'){
+    const f = document.getElementById('tsSheet').files[0];
+    if(!f){ tsNote('Choose the Lines export first, or switch to another source.', 'err'); return; }
+    btn.disabled = true;
+    tsNote(`Reading ${f.name}…`);
+    try {
+      const fd = new FormData(); fd.append('file', f);
+      const res  = await fetch('/api/auto-clerk/lines-sheet', { method:'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if(!data.lots || data.lots.length === 0) throw new Error('That sheet has no lots to run.');
+
+      TEST_LOTS  = data.lots;
+      TEST_LABEL = `${data.code || 'Lines export'} — ${f.name}`;
+      closeSetup();
+      beginTest();
+
+      // Say what was left out, in numbers — a sheet with unnumbered or withdrawn lots must
+      // not quietly look complete.
+      const left = [];
+      if(data.total > data.returned) left.push(`only the first ${data.returned} of ${data.total} loaded`);
+      if(data.unnumbered) left.push(`${data.unnumbered} not numbered yet`);
+      if(data.withdrawn)  left.push(`${data.withdrawn} withdrawn`);
+      fb(`Loaded ${data.returned} lot${data.returned === 1 ? '' : 's'} from ${data.code || f.name}` +
+         (left.length ? ` — left out: ${left.join(', ')}` : ''), left.length ? 'warn' : 'good');
+    } catch(e){
+      tsNote(`Could not read that sheet: ${e.message}`, 'err');
+    } finally {
+      btn.disabled = false;
+    }
     return;
   }
 
@@ -1697,14 +1769,7 @@ function act(a){
         if(S.live) pushState();
         return;
       }
-      S.li++; S.bid=0; S.hi=0; S.log=[]; S.freeLotSold=false;
-      S.lotOutcome=null; S.fairWarned=false; S.lpaddle=null; S.lbdr=''; S.lname='';
-      clearLogs(); setBidSrc(null); setAmt(0);
-      document.getElementById('fH').value = '0';
-      resetOnce(); updateLot(); renderLL();
-      fb('Next lot','info');
-      setG(`Lot ${S.lots[S.li].id} — Est: £${S.lots[S.li].est}. Waiting for bids…`);
-      freeScheduleBid();
+      openLot(S.li + 1, 'Next lot');
     } else if(a === 'fairwarn'){
       addChat('⚠️ Fair Warning — lot about to close!');
       fb('Fair Warning sent','warn');
@@ -2005,10 +2070,37 @@ function setLotImage(el, lot){
   }
 }
 
+/* Open lot i in Free Mode / Test Mode — the reset the Next button does, shared with the
+   lot-list click (2026-09-29, Jordan: "I need to be able to click on a lot in this feed to jump
+   to it"). The lot being left keeps whatever it had in S.sold; its open bids are simply dropped —
+   moving on is never a hammer. */
+function openLot(i, why){
+  S.li = i; S.bid=0; S.hi=0; S.log=[]; S.freeLotSold=false;
+  S.lotOutcome=null; S.fairWarned=false; S.lpaddle=null; S.lbdr=''; S.lname='';
+  clearLogs(); setBidSrc(null); setAmt(0);
+  document.getElementById('fH').value = '0';
+  resetOnce(); updateLot(); renderLL();
+  fb(why,'info');
+  setG(`Lot ${S.lots[S.li].id} — Est: £${S.lots[S.li].est}. Waiting for bids…`);
+  freeScheduleBid();
+}
+
+/* A click on a row in the lot list. Free Mode and Test Mode only — a guided scenario scripts
+   which lot is up, so there the click does nothing. */
+function jumpToLot(id){
+  if(!S || !S.free) return;
+  const src = S.lots || LOTS;
+  const i = src.findIndex(l => String(l.id) === String(id));
+  if(i < 0 || i === S.li) return;
+  openLot(i, `Jumped to lot ${src[i].id}`);
+  if(S.live) pushState();   // the joined phones move to the new lot too
+}
+
 function renderLL(){
   const f=(document.getElementById('findl').value||'').toLowerCase();
   const src=S.lots||LOTS;
   const cur=src[S.li];
+  const jumpable = !!(S && S.free);
   document.getElementById('ll').innerHTML=src
     .filter(l=>!f||String(l.id).includes(f)||l.desc.toLowerCase().includes(f))
     .map(l=>{
@@ -2018,9 +2110,11 @@ function renderLL(){
       const status=hammer!==null
         ? `<span class="ll-status">${buyer}&nbsp;&nbsp;${hammer}.00</span>`
         : '';
-      return `<div class="ll-row${isCur?' cur':''}">
-        <div class="ll-line1"><span class="ll-num">${l.id}</span>${status}</div>
-        <div class="ll-desc">${l.desc}</div>
+      // Descriptions from a Lines export can carry & and < — escaped, or a row breaks the list.
+      const click = jumpable ? ` data-lot="${esc(String(l.id))}" onclick="jumpToLot(this.dataset.lot)" title="Click to jump to lot ${esc(String(l.id))}"` : '';
+      return `<div class="ll-row${isCur?' cur':''}"${click}>
+        <div class="ll-line1"><span class="ll-num">${esc(String(l.id))}</span>${status}</div>
+        <div class="ll-desc">${esc(l.desc)}</div>
       </div><hr class="row-hr">`;
     }).join('');
   setTimeout(()=>{

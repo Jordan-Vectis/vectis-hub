@@ -9,6 +9,7 @@ import {
 } from "@/lib/photo-prep"
 import { findBarcode, cardFromBars, rotationFor, cropIsSane, type BarcodeHit } from "@/lib/photo-prep-barcode"
 import AiEditTab from "./ai-edit-tab"
+import ImageChatTab from "./image-chat-tab"
 
 // Photo Prep — auto-crop to the product + brighten, for the photography department.
 //
@@ -47,7 +48,7 @@ export default function PhotoPrepPage() {
   // "prepare" = the local crop/brighten run (nothing leaves this computer).
   // "ai" = the Gemini image editor, which DOES upload the photo it edits.
   // Deliberately separate so the privacy promise on each is unambiguous.
-  const [tab, setTab] = useState<"prepare" | "ai">("prepare")
+  const [tab, setTab] = useState<"prepare" | "ai" | "chat">("prepare")
   const [files, setFiles]       = useState<SourceFile[]>([])
   const [settings, setSettings] = useState<PhotoPrepSettings>(DEFAULT_SETTINGS)
   const [fsa, setFsa]           = useState(false)
@@ -492,13 +493,15 @@ export default function PhotoPrepPage() {
                  : " Your browser can't save straight to a folder, so results come back as a zip — use Chrome or Edge for the folder option."}
             {" "}(The optional &ldquo;fix with AI&rdquo; step sends just those few photos to Google for a crop box.)
           </>
+        ) : tab === "chat" ? (
+          <>Makes posters, banners and social posts with Google&apos;s image model. What you type and attach <span className="font-semibold">is</span> uploaded.</>
         ) : (
           <>Edits a single photo with Google&apos;s image model. These photos <span className="font-semibold">are</span> uploaded.</>
         )}
       </p>
 
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-5">
-        {([["prepare", "🪄 Prepare photos"], ["ai", "🎨 AI edit"]] as const).map(([k, label]) => (
+        {([["prepare", "🪄 Prepare photos"], ["ai", "🎨 AI edit"], ["chat", "💬 Image chat"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`text-sm font-medium px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === k ? "border-[#0078D4] text-[#0078D4]"
@@ -509,6 +512,7 @@ export default function PhotoPrepPage() {
       </div>
 
       {tab === "ai" && <AiEditTab />}
+      {tab === "chat" && <ImageChatTab />}
 
       {tab === "prepare" && (<>
       {error && (

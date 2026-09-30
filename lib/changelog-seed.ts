@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-28, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-09-30, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,18 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8e86dee3819f9376f2f8328e038bf134d5b5946c","author":"Jordan Orange","date":"2026-09-30T11:08:02+01:00","subject":"AI descriptions: names keep the cataloguer's capitals everywhere (house rules moved to lib/description-rules.ts)"},
+  {"sha":"ab805b4159c1a62f513bd5b0def65ce551dfec10","author":"Jordan Orange","date":"2026-09-30T10:00:37+01:00","subject":"AI descriptions: no exact quantity unless the cataloguer key-pointed it"},
+  {"sha":"97daf53af1eebbac2b2e979b4a927bdda7f54dad","author":"Jordan Orange","date":"2026-09-30T10:00:36+01:00","subject":"Cataloguer-mistake flags: a wrong maker/range name is a mistake, not wording (Hornby Dublin for Dublo)"},
+  {"sha":"8be64b4e106f8493aa3af7bcb312493ccd1b409a","author":"Jordan Orange","date":"2026-09-29T13:29:01+01:00","subject":"Auto Clerk 2.2: never read a clipped glyph — the grab grows until the glyph is whole; marker-first readings"},
+  {"sha":"c47a1d597952d9a80297c4d30998392f2943a8ac","author":"Jordan Orange","date":"2026-09-29T13:06:43+01:00","subject":"Auto Clerk 2.1: flatten the bid crop before OCR, £ marker beats the painted word, raw grab saved"},
+  {"sha":"18e1e7368e124c57a41ce285d8332f24466d923e","author":"Jordan Orange","date":"2026-09-29T12:36:46+01:00","subject":"Saleroom Trainer: click a lot in the list to jump to it; the trainer freeze is lifted"},
+  {"sha":"d47fc83bf0bc694ddb6fd9f2c5e9383e627a244c","author":"Jordan Orange","date":"2026-09-29T12:21:21+01:00","subject":"Saleroom Trainer Test Mode: run a sale from a BC Lines export (trainer exception #4, for Auto Clerk Scenario 2)"},
+  {"sha":"5c3d183dda1d6c176ba999a8bb58c88886383567","author":"Jordan Orange","date":"2026-09-29T11:26:53+01:00","subject":"Image chat: every chat saves itself, private to the person, with a list to reopen or delete"},
+  {"sha":"535bf36c46e6bcb896bdd6a49d9f6ed407d90254","author":"Jordan Orange","date":"2026-09-29T11:16:25+01:00","subject":"Photo Prep: Image chat tab — make posters, banners and social posts with Gemini's image model"},
+  {"sha":"b9151483eced28a840501626588f38944d2652d6","author":"Jordan Orange","date":"2026-09-29T09:09:14+01:00","subject":"BC copy: after a restart, re-run a copy the restart cut off"},
+  {"sha":"f9ef300f11c376a653d257a1b1c9ee7be60cda04","author":"Jordan Orange","date":"2026-09-28T17:00:27+01:00","subject":"Merge staging into main: straight-in-BC cataloguers, photo copy counts missing files, API Viewer Contact Search + standard API fallback"},
+  {"sha":"a20dd0bf4b43ccc54a9d7b0cff221299f3fe66c7","author":"Jordan Orange","date":"2026-09-28T14:46:16+01:00","subject":"BC API Viewer: fall back to BC's standard API (api/v2.0) when a name isn't a web service"},
   {"sha":"2a137320ad58f002763001ab5d4fe91e363bac56","author":"Jordan Orange","date":"2026-09-28T14:38:35+01:00","subject":"BC API Viewer: Contact Search button"},
   {"sha":"74a5541cf6603c3c8b2838d9c0333679a3a93c6f","author":"Jordan Orange","date":"2026-09-28T11:09:22+01:00","subject":"Photo copy: count lots whose website photo file is missing, and say so when it finishes"},
   {"sha":"5d06aed070b93414aa3f8643c73f408ae0ab4119","author":"Jordan Orange","date":"2026-09-28T10:42:36+01:00","subject":"Who catalogued this sale: lots catalogued straight in BC show BC's own cataloguer"},

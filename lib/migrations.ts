@@ -2368,6 +2368,18 @@ export const MIGRATIONS = [
   `DO $$ BEGIN
     ALTER TABLE "SitePageVersion" ADD CONSTRAINT "SitePageVersion_slug_fkey" FOREIGN KEY ("slug") REFERENCES "SitePage"("slug") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Photo Prep → Image chat (2026-09-29): saved conversations, private to the person who made
+  // them. Pictures are in R2 under image-chat/<id>/.
+  `CREATE TABLE IF NOT EXISTS "ImageChat" (
+    "id"        TEXT NOT NULL,
+    "userId"    TEXT NOT NULL,
+    "title"     TEXT NOT NULL,
+    "turns"     JSONB NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "ImageChat_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ImageChat_userId_updatedAt_idx" ON "ImageChat"("userId", "updatedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

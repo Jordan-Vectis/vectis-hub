@@ -6,7 +6,8 @@ import { parseModelJson } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
 import { cleanBearsDescription, isBearsPreset, stripToolCallLeak } from "@/lib/description-cleanup"
-import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
+import { MEASUREMENT_FLAG_RULE, NAME_FLAG_RULE } from "@/lib/flag-rules"
+import { DESCRIPTION_RULES } from "@/lib/description-rules"
 import { safetyDetail, blockMeaning } from "@/lib/ai-provider"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
@@ -62,7 +63,10 @@ export async function POST(req: NextRequest) {
     safetySettings: GEMINI_SAFETY_SETTINGS,
     model: modelId,
     // Always include the English-language rule, even when the preset is empty/custom.
-    systemInstruction: [systemInstruction, LANGUAGE_RULE].filter(Boolean).join("\n\n"),
+    // ⚠ The house rules ride on every preset — English only, no counts the cataloguer didn't
+    // give, names keep their capitals (lib/description-rules.ts). A preset is data and cannot
+    // switch them off.
+    systemInstruction: [systemInstruction, LANGUAGE_RULE, DESCRIPTION_RULES].filter(Boolean).join("\n\n"),
     // Google Search grounding lets Gemini look up catalogue numbers and product details
     // in real time. Only enabled when the client requests it — strict presets are unaffected.
     // Note: not all models support grounding; errors surface in the client log.
@@ -149,6 +153,7 @@ ${grounded ? `\nVERIFY NUMBERS: Before finalising, ALWAYS use Google Search to v
 FLAG POSSIBLE MISTAKES: The key points are the cataloguer's record and the description must stay faithful to them — keep their numbers/wording in the description even if you doubt them. BUT if you are HIGHLY confident (ideally confirmed by search) that a catalogue/set/model number or other hard fact in the key points is WRONG, add ONE extra line at the very end in exactly this format:
 FLAG: <which key point looks wrong, what you believe is correct, and why>
 ${MEASUREMENT_FLAG_RULE}
+${NAME_FLAG_RULE}
 CRITICAL RULE FOR FLAGS: NEVER flag a set number, catalogue number, or product code simply because it is not in your training data. Your knowledge has a cutoff date — products released in 2024 or later may not be known to you, and their absence from your training data does NOT mean they do not exist. Only flag a number if you have strong positive evidence it is wrong (e.g. it belongs to a completely different product, the number format is impossible for that brand, or a search result directly contradicts it). If you are not certain, do NOT add a FLAG line.
 
 Key points:
