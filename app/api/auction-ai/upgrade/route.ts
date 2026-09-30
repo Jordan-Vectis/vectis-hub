@@ -5,7 +5,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { cleanBearsDescription, hasToolCallLeak } from "@/lib/description-cleanup"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
-import { QUANTITY_RULE } from "@/lib/quantity-rule"
+import { QUANTITY_RULE, NAME_CASE_RULE } from "@/lib/description-rules"
 
 const MODE_INSTRUCTIONS: Record<string, string> = {
   shorten:          "Shorten the description — remove unnecessary words and padding while keeping all factual detail.",
@@ -61,7 +61,8 @@ Rules:
 - Keep British English spelling throughout.
 - Do not add or change estimate figures.
 - Join lines with \\n, never collapse multi-paragraph or list formatting into a single paragraph.
-- ${QUANTITY_RULE}${kpRule}`
+- ${QUANTITY_RULE}
+- ${NAME_CASE_RULE}${kpRule}`
 
     const genai  = new GoogleGenerativeAI(apiKey)
     const gemini = genai.getGenerativeModel({

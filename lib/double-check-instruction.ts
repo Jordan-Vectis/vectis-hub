@@ -2,7 +2,7 @@
 // Imported by both the API route and the UI so the same text is shown in the interface.
 
 import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
-import { QUANTITY_RULE } from "@/lib/quantity-rule"
+import { QUANTITY_RULE, NAME_CASE_RULE } from "@/lib/description-rules"
 
 export const DOUBLE_CHECK_INSTRUCTION = `You are a quality checker for auction house lot descriptions. You will be given a written description and, where available, one or more photos of the lot.
 
@@ -53,6 +53,8 @@ WHAT NOT TO FLAG:
 - ${MEASUREMENT_FLAG_RULE}
 
 ${QUANTITY_RULE} Your count of the photographs goes ONLY in "quantityFlag" (above) — never into "revised".
+
+${NAME_CASE_RULE}
 
 If issues are found (contradictions, unsupported claims, condition statements, or spelling): produce a corrected version. Make the minimum change necessary. Do NOT rewrite, restructure, or change anything beyond what is flagged.
 

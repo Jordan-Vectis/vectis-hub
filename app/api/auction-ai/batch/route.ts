@@ -7,7 +7,7 @@ import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
 import { cleanBearsDescription, isBearsPreset, stripToolCallLeak } from "@/lib/description-cleanup"
 import { MEASUREMENT_FLAG_RULE, NAME_FLAG_RULE } from "@/lib/flag-rules"
-import { QUANTITY_RULE } from "@/lib/quantity-rule"
+import { DESCRIPTION_RULES } from "@/lib/description-rules"
 import { safetyDetail, blockMeaning } from "@/lib/ai-provider"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 
@@ -63,9 +63,10 @@ export async function POST(req: NextRequest) {
     safetySettings: GEMINI_SAFETY_SETTINGS,
     model: modelId,
     // Always include the English-language rule, even when the preset is empty/custom.
-    // ⚠ Both house rules ride on every preset — English only, and no counts the cataloguer
-    // didn't give (lib/quantity-rule.ts). A preset is data and cannot switch them off.
-    systemInstruction: [systemInstruction, LANGUAGE_RULE, QUANTITY_RULE].filter(Boolean).join("\n\n"),
+    // ⚠ The house rules ride on every preset — English only, no counts the cataloguer didn't
+    // give, names keep their capitals (lib/description-rules.ts). A preset is data and cannot
+    // switch them off.
+    systemInstruction: [systemInstruction, LANGUAGE_RULE, DESCRIPTION_RULES].filter(Boolean).join("\n\n"),
     // Google Search grounding lets Gemini look up catalogue numbers and product details
     // in real time. Only enabled when the client requests it — strict presets are unaffected.
     // Note: not all models support grounding; errors surface in the client log.
