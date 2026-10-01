@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"d2792c4adecd7178be055b22cac1d4bdb7502ac3","author":"Jordan Orange","date":"2026-10-01T16:36:51+01:00","subject":"Claude Memory: the office PC trial on a CPU - plumbing proven, model unusable, fixes made"},
   {"sha":"b993b1624bceff29e43fe695cbc5f46be1d36096","author":"Jordan Orange","date":"2026-10-01T16:35:52+01:00","subject":"Office PC bridge: a ceiling on what the model may write (MAX_OUTPUT_TOKENS, default 1,500)"},
   {"sha":"1147b701d06016ad688374ffb2d81f142c920546","author":"Jordan Orange","date":"2026-10-01T15:35:31+01:00","subject":"Office PC jobs: a newer test run supersedes an older one still waiting"},
   {"sha":"f4dd1de9658e2aaa851347e26fb7c2031cfac7de","author":"Jordan Orange","date":"2026-10-01T15:26:28+01:00","subject":"Office PC bridge: thinking off unless asked for"},

@@ -28,6 +28,9 @@ UNPACKED ITEMS: boxed model railway items (and other boxed items) are photograph
 - Leave "quantityFlag" empty when every stated quantity matches the photos or when there are no photos to count from.
 A quantity flag is not a contradiction and does not need a revised description on its own.
 
+NAMED OBJECTS — look again at each one:
+List every physical object, accessory, part or feature the description NAMES as present or absent (a baton, a microphone, a cap, a hat, a box, a tender, a certificate, a tool, a weapon, an instrument, a particular livery or colour). For each one, look at the photos again specifically for it and say whether the photos show it IS what the description calls it: "sure" when it is clearly that object; "unsure" when it is too small, blurred, partly hidden, or could be something else; "no" when the photos show it is something else, or is not there. In "note", say in a few words what you can actually see. A word that belongs to a known outfit, set or character (a majorette's "baton", a nurse's "watch", a soldier's "rifle") is exactly the kind of claim to look at hardest, because memory of the outfit rather than the photo may have supplied it. Do NOT change the description over an "unsure"; a "no" goes in "contradictions" as well as here. With no photos, return an empty list.
+
 CONDITION STATEMENTS — always remove:
 Condition grades and assessments are set separately by the cataloguer and must NOT appear in the description. Remove any condition statement the AI has added or guessed, including but not limited to:
 - Grades such as "Mint", "Near Mint", "Excellent", "Good Plus", "Good", "Fair", "Poor" used as condition assessments
@@ -61,4 +64,4 @@ If issues are found (contradictions, unsupported claims, condition statements, o
 If the description is fine, set verdict to "ok", leave contradictions and unsupported empty, and set revised to an empty string.
 
 Respond with ONLY valid JSON — no markdown, no code fences:
-{"contradictions":"<description of internal inconsistencies or obvious errors, or empty string>","unsupported":"<comma-separated list of specific unverifiable claims, or empty string>","verdict":"ok or issues","revised":"<corrected description if issues found, otherwise empty string>","quantityFlag":"<a stated quantity the photos do not bear out, or one you could not count with confidence — both figures where you have them — or empty string>"}`
+{"contradictions":"<description of internal inconsistencies or obvious errors, or empty string>","unsupported":"<comma-separated list of specific unverifiable claims, or empty string>","verdict":"ok or issues","revised":"<corrected description if issues found, otherwise empty string>","quantityFlag":"<a stated quantity the photos do not bear out, or one you could not count with confidence — both figures where you have them — or empty string>","objects":[{"object":"<the thing as the description names it>","verdict":"sure | unsure | no","note":"<what the photos actually show, a few words>"}]}`

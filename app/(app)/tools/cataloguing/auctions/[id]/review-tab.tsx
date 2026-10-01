@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { setLotReviewFlag, saveLotDescription, saveAiFlagNote, resolveKeyPointsMistake, clearKeyPointsMistake, applyFlagFixes } from "@/lib/actions/catalogue"
 import { saveAiFlagSnapshot } from "@/lib/actions/saved-ai-flags"
+import { markLotAiCheckSeenAction } from "@/lib/actions/lot-ai-check"
 import LotPhotoViewer from "@/components/lot-photo-viewer"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 // ⚠ The one title rule, shared with the Generate Titles action — never re-derive it here.
@@ -11,6 +12,17 @@ import { titleFromDescription } from "@/lib/lot-title"
 import { hasToolCallLeak, stripToolCallLeak } from "@/lib/description-cleanup"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+// What the AI said it ASSUMED about the lot, and what Double Check saw when it looked again at
+// each object the description names (lib/lot-ai-check.ts). Advisory — a person ticks it.
+type LotAiCheckView = {
+  assumed:   string[]
+  objects:   { object: string; verdict: "sure" | "unsure" | "no"; note: string }[]
+  model:     string | null
+  checkedBy: string | null
+  checkedAt: string | null
+  updatedAt: string
+}
 
 type ReviewLot = {
   id: string
@@ -39,6 +51,15 @@ type ReviewLot = {
   kpFixNote?: string | null
   kpFixedBy?: string | null
   kpFixedAt?: string | null
+  // Optional too — the table may not exist until Run Migrations has been clicked.
+  aiCheck?: LotAiCheckView | null
+}
+
+/** Anything assumed, or any object not "sure", and nobody has ticked it yet. */
+function lotNeedsLook(l: ReviewLot): boolean {
+  const c = l.aiCheck
+  if (!c || c.checkedAt) return false
+  return c.assumed.length > 0 || c.objects.some(o => o.verdict !== "sure")
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -103,6 +124,8 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [search, setSearch]   = useState("")
   const [flaggedOnly, setFlaggedOnly]       = useState(false)
   const [aiFlaggedOnly, setAiFlaggedOnly]   = useState(false)
+  const [needsLookOnly, setNeedsLookOnly]   = useState(false)
+  const [checkingId, setCheckingId]         = useState<string | null>(null)
   const [cataloguer, setCataloguer]   = useState("")
   const [savingFlags, setSavingFlags] = useState(false)
   type IssueFilter = "all" | "attention" | "wording" | "issues" | "good"
@@ -153,6 +176,24 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
 
   const flaggedCount = lots.filter(l => l.reviewFlag).length
   const aiFlagCount  = lots.filter(l => l.aiFlagNote).length
+  const needsLookCount = lots.filter(lotNeedsLook).length
+
+  // A person has read the AI's assumed list and its look-again for this lot.
+  async function markChecked(lot: ReviewLot) {
+    if (checkingId) return
+    setCheckingId(lot.id)
+    try {
+      const res = await markLotAiCheckSeenAction(lot.id)
+      if (res.ok) {
+        const now = new Date().toISOString()
+        setLots(prev => prev.map(l => l.id === lot.id && l.aiCheck ? { ...l, aiCheck: { ...l.aiCheck, checkedAt: now, checkedBy: "you" } } : l))
+      } else {
+        setFixErr({ id: lot.id, msg: res.error ?? "Couldn't mark it as checked" })
+      }
+    } finally {
+      setCheckingId(null)
+    }
+  }
 
   // Freeze this sale's flags into Admin → Saved Flagged Lots before an AI run replaces them.
   async function saveFlagsSnapshot() {
@@ -320,6 +361,7 @@ Read them back any time at Admin → Saved Flagged Lots.`)
     if (l.id === editDescId) return true
     if (flaggedOnly && !l.reviewFlag) return false
     if (aiFlaggedOnly && !l.aiFlagNote) return false
+    if (needsLookOnly && !lotNeedsLook(l)) return false
     if (cataloguer && l.createdByName !== cataloguer) return false
     if (issueFilter === "attention" && !needsAttention(l)) return false
     if (issueFilter === "wording"   && !wordingOnly(l))    return false
@@ -645,6 +687,7 @@ Read them back any time at Admin → Saved Flagged Lots.`)
             )}
             {flaggedCount > 0 && <span className="ml-2 text-red-500 font-semibold">🚩 {flaggedCount} flagged</span>}
             {aiFlagCount > 0 && <span className="ml-2 text-orange-400 font-semibold">⚠️ {aiFlagCount} AI-flagged</span>}
+            {needsLookCount > 0 && <span className="ml-2 text-amber-500 font-semibold">🔍 {needsLookCount} need a look</span>}
           </p>
           <div className="flex items-center gap-2 ml-auto flex-wrap">
             <input
@@ -691,6 +734,17 @@ Read them back any time at Admin → Saved Flagged Lots.`)
               }`}
             >
               ⚠️ AI-flagged only
+            </button>
+            <button
+              onClick={() => setNeedsLookOnly(v => !v)}
+              title="Lots where the AI says a fact came from its own knowledge rather than the photos or key points, or where Double Check looked again at a named object and was not sure it is what the description calls it."
+              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors whitespace-nowrap ${
+                needsLookOnly
+                  ? "bg-amber-500/20 border-amber-500 text-amber-500"
+                  : "bg-white dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+              }`}
+            >
+              🔍 Needs a look{needsLookCount > 0 ? ` (${needsLookCount})` : ""}
             </button>
             {aiFlagCount > 0 && (
               <button
@@ -857,6 +911,64 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                 )}
               </div>
             )}
+
+            {/* What the AI assumed, and what it saw when it looked again (lib/lot-ai-check.ts).
+                The Sindy microphone that became "a silver baton": the model knew the outfit and
+                memory supplied the accessory. Amber until a person has looked; never changes text. */}
+            {lot.aiCheck && (lot.aiCheck.assumed.length > 0 || lot.aiCheck.objects.length > 0) && (() => {
+              const c = lot.aiCheck!
+              const checked = !!c.checkedAt
+              const doubtful = c.objects.filter(o => o.verdict !== "sure")
+              const confirmed = c.objects.filter(o => o.verdict === "sure")
+              const quiet = checked || (c.assumed.length === 0 && doubtful.length === 0)
+              return (
+                <div className={`rounded-xl border px-4 py-3 ${quiet
+                  ? "bg-gray-50 dark:bg-[#1C1C1E] border-gray-200 dark:border-gray-800"
+                  : "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700"}`}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <p className={`text-xs uppercase tracking-wider font-semibold mb-1 ${quiet ? "text-gray-500" : "text-amber-600 dark:text-amber-400"}`}>
+                      🔍 Look again — where the AI's facts came from
+                    </p>
+                    {checked
+                      ? <span className="text-xs text-gray-500">✓ checked{c.checkedBy ? ` by ${c.checkedBy}` : ""}{c.checkedAt ? ` · ${new Date(c.checkedAt).toLocaleString("en-GB", { timeZone: "Europe/London", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</span>
+                      : <button onClick={() => markChecked(lot)} disabled={checkingId === lot.id}
+                          className="px-3 py-1 text-xs font-semibold rounded-lg border border-amber-500 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 disabled:opacity-40">
+                          {checkingId === lot.id ? "Saving…" : "✓ I've checked these"}
+                        </button>}
+                  </div>
+                  {c.assumed.length > 0 && (
+                    <div className="mt-1">
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">The AI says these came from its <strong>own knowledge</strong>, not the photos or key points — check them against the item:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {c.assumed.map((a, i) => (
+                          <span key={i} className={`px-2 py-0.5 rounded-full text-xs border ${quiet ? "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400" : "border-amber-400/60 text-amber-800 dark:text-amber-200 bg-amber-100/60 dark:bg-amber-900/30"}`}>{a}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {doubtful.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Double Check looked again at each object the description names and was <strong>not sure</strong> about:</p>
+                      <ul className="space-y-0.5">
+                        {doubtful.map((o, i) => (
+                          <li key={i} className="text-sm">
+                            <span className={`font-semibold ${o.verdict === "no" ? "text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-300"}`}>
+                              {o.verdict === "no" ? "✗" : "?"} {o.object}
+                            </span>
+                            <span className="text-gray-700 dark:text-gray-300"> — {o.verdict === "no" ? "the photos show otherwise" : "could not confirm"}{o.note ? `: ${o.note}` : ""}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {confirmed.length > 0 && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Confirmed in the photos: {confirmed.map(o => o.object).join(", ")}
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* AI-flagged potential cataloguer mistake */}
             {lot.aiFlagNote && (

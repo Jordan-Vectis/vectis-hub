@@ -720,6 +720,7 @@ model CatalogueLot {
   reviewFlaggedBy String?
   reviewFlaggedAt DateTime?
   aiFlagNote      String?   @db.Text // AI-flagged potential cataloguer mistake from the batch pipeline run
+  aiCheck         CatalogueLotAiCheck? // what the AI assumed + Double Check's look-again (2026-10-01)
   // Review tab — "the KEY POINTS were wrong, not the description". Set when a checker
   // confirms a key-point mismatch is a cataloguer mistake, so the lot stops being counted
   // as needing attention. kpFixNote says which of the two happened (corrected / left as-is).
@@ -3426,4 +3427,22 @@ model LocalAiJob {
 
   @@index([batchId])
   @@index([status, createdAt])
+}
+
+/// What the AI says it ASSUMED about a lot and what Double Check saw when it looked again at
+/// each named object (2026-10-01, the Sindy microphone that became "a silver baton"). One row
+/// per lot, replaced by each run; a person ticks it as checked on the Review tab. Advisory
+/// only — nothing here changes the description. lib/lot-ai-check.ts.
+model CatalogueLotAiCheck {
+  id        String       @id @default(cuid())
+  lotId     String       @unique
+  lot       CatalogueLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  assumed   String[]     @default([])  // claims the model says came from its own knowledge
+  objects   Json?                      // [{ object, verdict: sure|unsure|no, note }] from Double Check
+  model     String?
+  source    String?                    // pipeline | overnight | batch_tab
+  checkedBy String?
+  checkedAt DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 }

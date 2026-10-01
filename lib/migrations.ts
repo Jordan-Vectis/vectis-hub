@@ -2429,6 +2429,25 @@ export const MIGRATIONS = [
   `DO $$ BEGIN
     ALTER TABLE "LocalAiJob" ADD CONSTRAINT "LocalAiJob_workerId_fkey" FOREIGN KEY ("workerId") REFERENCES "LocalAiWorker"("id") ON DELETE SET NULL ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // What the AI assumed about a lot + Double Check's look-again at each named object
+  // (2026-10-01, the Sindy microphone that became "a silver baton"). Advisory; one row per lot.
+  `CREATE TABLE IF NOT EXISTS "CatalogueLotAiCheck" (
+    "id"        TEXT NOT NULL,
+    "lotId"     TEXT NOT NULL,
+    "assumed"   TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "objects"   JSONB,
+    "model"     TEXT,
+    "source"    TEXT,
+    "checkedBy" TEXT,
+    "checkedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "CatalogueLotAiCheck_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "CatalogueLotAiCheck_lotId_key" ON "CatalogueLotAiCheck"("lotId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueLotAiCheck" ADD CONSTRAINT "CatalogueLotAiCheck_lotId_fkey" FOREIGN KEY ("lotId") REFERENCES "CatalogueLot"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

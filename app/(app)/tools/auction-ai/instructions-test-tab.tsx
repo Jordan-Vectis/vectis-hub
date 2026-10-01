@@ -89,6 +89,7 @@ type TestLot = {
   batchFlag?:  string
   batchSkip?:  string
   batchUsage?: Usage
+  batchAssumed?: string[]       // what the model says came from its own knowledge (lib/lot-ai-check.ts)
 
   // Stage 1b — the same Batch call again at Medium photo detail, for the side-by-side
   // comparison. Only filled when "Compare" is ticked; never feeds the later stages.
@@ -115,6 +116,7 @@ type TestLot = {
   dcFlag?:     string
   dcSkip?:     string
   dcUsage?:    Usage
+  dcObjects?:  { object: string; verdict: string; note: string }[]   // its look-again at every named object
 }
 
 // A test run must come back to you. The real pipeline retries forever on purpose
@@ -160,6 +162,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
   const [photoDetail,   setPhotoDetail]   = useState<PhotoDetailChoice>("standard")
   const [photoMaxPx,    setPhotoMaxPx]    = useState("")      // "" = send the originals, as every real run does
   const [compareMedium, setCompareMedium] = useState(false)
+  const [dcUltra,       setDcUltra]       = useState(true)    // Double Check at ULTRA detail for the look-again at small objects
   const [rateOverrides, setRateOverrides] = useState<Record<string, ModelRate>>({})
 
   // The office PC trial (lib/local-ai.ts).
@@ -378,6 +381,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
     const working = lots.map(l => selected.has(l.id)
       ? { ...l, state: "waiting" as StageState, error: undefined, batchDesc: undefined, estimate: undefined, batchFlag: undefined, batchSkip: undefined,
           batchUsage: undefined, batchDescB: undefined, estimateB: undefined, batchFlagB: undefined, batchUsageB: undefined, batchErrorB: undefined, kpUsage: undefined, dcUsage: undefined,
+          batchAssumed: undefined, dcObjects: undefined,
           kpDesc: undefined, kpStatus: undefined, kpMissing: undefined, kpAdded: undefined, kpFlag: undefined, kpSkip: undefined,
           dcDesc: undefined, dcStatus: undefined, contradictions: undefined, unsupported: undefined, dcFlag: undefined, dcSkip: undefined }
       : l)
@@ -436,7 +440,8 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
       }
 
       currentDesc = batch.value.description ?? ""
-      working[idx] = { ...working[idx], batchDesc: currentDesc, estimate: batch.value.estimate ?? "", batchFlag: batch.value.flag || undefined, batchUsage: batch.value.usage }
+      working[idx] = { ...working[idx], batchDesc: currentDesc, estimate: batch.value.estimate ?? "", batchFlag: batch.value.flag || undefined, batchUsage: batch.value.usage,
+        batchAssumed: Array.isArray(batch.value.assumed) ? batch.value.assumed : [] }
       setLots([...working])
       addLog(`  ✓ ${lot.label} — batch OK${batch.value.usage ? ` · ${describeUsage(batch.value.usage)}` : ""}`)
 
@@ -498,7 +503,8 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
             const res = await fetch("/api/auction-ai/double-check", {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ label: lot.label, description: currentDesc, images, model: modelToUse, keyPoints: lot.keyPoints, presetKey: preset,
-                ...(mainDetail !== "standard" ? { photoDetail: mainDetail } : {}) }),
+                // ULTRA for the look-again at small objects (2,240 tokens a photo, this stage only); else the run's detail.
+                ...(dcUltra ? { photoDetail: "ultra" } : mainDetail !== "standard" ? { photoDetail: mainDetail } : {}) }),
             })
             const json = await res.json()
             if (json.error) throw new Error(json.error)
@@ -507,7 +513,10 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
           if (dc.ok) {
             const { verdict, contradictions, unsupported, revised, flag } = dc.value
             if (verdict === "issues" && revised) currentDesc = revised
-            working[idx] = { ...working[idx], dcDesc: currentDesc, dcStatus: verdict === "issues" ? "issues" : "ok", contradictions, unsupported, dcFlag: flag || undefined, dcUsage: dc.value.usage }
+            working[idx] = { ...working[idx], dcDesc: currentDesc, dcStatus: verdict === "issues" ? "issues" : "ok", contradictions, unsupported, dcFlag: flag || undefined, dcUsage: dc.value.usage,
+              dcObjects: Array.isArray(dc.value.objects) ? dc.value.objects : [] }
+            const doubtful = (Array.isArray(dc.value.objects) ? dc.value.objects : []).filter((o: any) => o.verdict !== "sure")
+            if (doubtful.length) addLog(`  🔍 ${lot.label} — looked again, not sure about: ${doubtful.map((o: any) => `${o.object} (${o.verdict})`).join(", ")}`)
             if (flag) addLog(`  ⚑ ${lot.label} — double check flagged: ${flag}`)
           } else {
             working[idx] = { ...working[idx], dcStatus: "error", dcSkip: dc.error }
@@ -622,6 +631,10 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
             <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
               <input type="checkbox" checked={compareMedium} onChange={e => setCompareMedium(e.target.checked)} disabled={running} />
               Compare — run Batch at Standard <em>and</em> Medium, side by side
+            </label>
+            <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 cursor-pointer" title="Double Check looks again at every object the description names and says sure / unsure / no. Ultra detail is 2,240 tokens a photo on that stage only.">
+              <input type="checkbox" checked={dcUltra} onChange={e => setDcUltra(e.target.checked)} disabled={running || !runDc} />
+              🔍 Double Check at <strong>ultra</strong> detail (looks again at every named object)
             </label>
           </div>
           <p className="mt-2 text-[11px] text-gray-600 dark:text-gray-500 max-w-4xl">
@@ -835,6 +848,39 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
                     text={!runDc ? "not run" : l.dcSkip ? `skipped — ${l.dcSkip}` : (l.dcDesc ?? "—")}
                     note={[l.contradictions ? `contradictions: ${l.contradictions}` : "", l.unsupported ? `unsupported: ${l.unsupported}` : "", l.dcUsage ? describeUsage(l.dcUsage) : ""].filter(Boolean).join(" · ")} />
                 </div>
+
+                {/* Where the facts came from, and the look-again (lib/lot-ai-check.ts). The same two
+                    things the Review tab shows on a real lot — here so an instruction change can be
+                    judged by them too. */}
+                {(l.batchAssumed !== undefined || l.dcObjects !== undefined) && (
+                  <div className="rounded border border-amber-400/50 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 space-y-1.5">
+                    <p className="text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 font-semibold">🔍 Look again</p>
+                    {l.batchAssumed !== undefined && (
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        <strong>Assumed</strong> (the model's own knowledge, not the photos or key points):{" "}
+                        {l.batchAssumed.length ? l.batchAssumed.map((a, i) => <span key={i} className="inline-block mr-1 mb-1 px-2 py-0.5 rounded-full border border-amber-400/60 bg-amber-100/60 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">{a}</span>) : <span className="text-gray-500">none declared</span>}
+                      </p>
+                    )}
+                    {l.dcObjects !== undefined && (
+                      <div className="text-xs text-gray-700 dark:text-gray-300">
+                        <strong>Looked again at each named object:</strong>{" "}
+                        {l.dcObjects.length === 0 && <span className="text-gray-500">nothing listed</span>}
+                        {l.dcObjects.length > 0 && (
+                          <ul className="mt-0.5 space-y-0.5">
+                            {l.dcObjects.map((o, i) => (
+                              <li key={i}>
+                                <span className={`font-semibold ${o.verdict === "no" ? "text-red-600 dark:text-red-400" : o.verdict === "unsure" ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-400"}`}>
+                                  {o.verdict === "no" ? "✗" : o.verdict === "unsure" ? "?" : "✓"} {o.object}
+                                </span>
+                                {o.note ? <span> — {o.note}</span> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {final && (
                   <div>

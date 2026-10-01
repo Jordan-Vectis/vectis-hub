@@ -12,6 +12,7 @@ import { parsePhotoDetail, mediaResolutionConfig, parsePhotoMaxPx, shrinkPhoto, 
 // The prompt text lives in lib/batch-prompt.ts (moved 2026-10-01, unchanged) so the office PC
 // trial can hand its model exactly what Gemini gets.
 import { buildBatchSystemInstruction, buildBatchUserPrompt } from "@/lib/batch-prompt"
+import { parseAssumed } from "@/lib/lot-ai-check"
 
 export const maxDuration = 300
 
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
     return { text: response.text(), searchQueries, finishReason: String(finishReason ?? ""), usage: usageFromResponse(response) }
   }
 
-  const results: { lot: string; description: string; estimate: string; status: string; error?: string; flag?: string; usage?: Record<string, unknown>; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
+  const results: { lot: string; description: string; estimate: string; status: string; error?: string; flag?: string; assumed?: string[]; usage?: Record<string, unknown>; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
   const lotEntries = Object.entries(lotMap)
 
   for (let idx = 0; idx < lotEntries.length; idx++) {
@@ -170,12 +171,15 @@ export async function POST(req: NextRequest) {
       const parsedBatch = parseModelJson(rawText)
       if (parsedBatch && typeof parsedBatch.description === "string") rawText = parsedBatch.description.trim()
 
-      // Split description, estimate and any cataloguer-mistake FLAG line — preserve newlines
+      // Split description, estimate, any cataloguer-mistake FLAG line and the ASSUMED line
+      // (what the model says came from its own knowledge — lib/lot-ai-check.ts) — preserve newlines
       const lines = rawText.split("\n")
       const estimateLine = lines.find((l) => l.toLowerCase().startsWith("estimate:")) ?? ""
       const flagLine     = lines.find((l) => l.toLowerCase().startsWith("flag:")) ?? ""
+      const assumedLine  = lines.find((l) => l.toLowerCase().startsWith("assumed:")) ?? ""
+      const assumed      = parseAssumed(assumedLine)
       const rawDescription = lines
-        .filter((l) => !l.toLowerCase().startsWith("estimate:") && !l.toLowerCase().startsWith("flag:"))
+        .filter((l) => { const k = l.toLowerCase(); return !k.startsWith("estimate:") && !k.startsWith("flag:") && !k.startsWith("assumed:") })
         .join("\n").trim()
       // ⚠⚠ THE MODEL SOMETIMES WRITES OUT ITS SEARCH INSTEAD OF RUNNING IT — a bare
       // "tool_code" followed by print(google_search.search(…)). This is not a
@@ -230,6 +234,7 @@ export async function POST(req: NextRequest) {
       } else {
         results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
           ...(flag ? { flag } : {}),
+          assumed,
           usage,
           debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
       }

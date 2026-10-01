@@ -17,6 +17,14 @@ export const LANGUAGE_RULE =
   "be described in British English. Never output any other language. Proper names and catalogue " +
   "numbers printed on the item may be quoted verbatim, but all surrounding description must be English."
 
+// Where each fact came from (2026-10-01). A trio of Sindy dolls: the third held a microphone and
+// the model wrote "a silver baton … (cap absent)" because it had recognised the 1979 Majorette
+// outfit and memory supplied the rest. The description cannot be stopped from knowing things,
+// but it can be made to SAY which statements are knowledge rather than observation — a person
+// then checks exactly those against the item (lib/lot-ai-check.ts, the Review tab).
+export const ASSUMED_RULE =
+  `WHERE EACH FACT CAME FROM: after the estimate line, add ONE final line beginning "ASSUMED:" that lists every statement in your description which came from your own knowledge rather than from the key points or from something clearly visible in the photos — the name, year or maker of an outfit, set, series or variant; a product name you resolved from a number; a part you described as missing or absent; what a small, blurred or partly hidden object is (an accessory, a tool, an instrument, a prop); any date or attribution you inferred. Separate the items with " | ". If everything came from the key points or is plainly visible, write "ASSUMED: none". Be strict and honest here: a person reads this line and checks those points against the item in their hands, and the line itself is never published.`
+
 /**
  * The system instruction: the chosen preset plus the house rules that ride on EVERY preset —
  * English only, no counts the cataloguer didn't give, names keep their capitals
@@ -35,7 +43,7 @@ export function buildBatchUserPrompt(opts: { existingContext: string | null; con
   const { existingContext, contextType, grounded } = opts
   let userPrompt: string
   if (!existingContext) {
-    userPrompt = "Please describe this auction lot."
+    userPrompt = `Please describe this auction lot.\n\n${ASSUMED_RULE}`
   } else if (contextType === "keyPoints") {
     userPrompt = `The following key points were recorded about this lot. ALL of them must appear in your description — do not omit a single one.
 
@@ -58,9 +66,11 @@ CRITICAL RULE FOR FLAGS: NEVER flag a set number, catalogue number, or product c
 Key points:
 ${existingContext}
 
-After the description (and optional FLAG line), include the estimate on its own line exactly as your instructions specify.`
+After the description (and optional FLAG line), include the estimate on its own line exactly as your instructions specify.
+
+${ASSUMED_RULE}`
   } else {
-    userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.\n\nAfter the description, include the estimate on its own line exactly as your instructions specify.`
+    userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.\n\nAfter the description, include the estimate on its own line exactly as your instructions specify.\n\n${ASSUMED_RULE}`
   }
 
   // Reinforce in the user turn too — foreign-language packaging in the photos is a
