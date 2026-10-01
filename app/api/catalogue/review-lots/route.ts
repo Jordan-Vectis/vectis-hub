@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { loadLotAiChecks } from "@/lib/lot-ai-check"
 
 // GET /api/catalogue/review-lots?auctionId=xxx
 // Full lot data for the Review tab — key points, description, estimates,
@@ -41,7 +42,15 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ lots })
+    // What the AI assumed + Double Check's look-again, per lot (lib/lot-ai-check.ts). Empty
+    // until the table exists; never fails the tab.
+    const checks = await loadLotAiChecks(lots.map(l => l.id))
+    const withChecks = lots.map(l => {
+      const c = checks.get(l.id)
+      return { ...l, aiCheck: c ? { assumed: c.assumed, objects: c.objects, model: c.model, checkedBy: c.checkedBy, checkedAt: c.checkedAt, updatedAt: c.updatedAt } : null }
+    })
+
+    return NextResponse.json({ lots: withChecks })
   } catch (e: any) {
     console.error("catalogue/review-lots GET error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

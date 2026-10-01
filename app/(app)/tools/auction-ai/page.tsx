@@ -5,6 +5,7 @@ import * as XLSX from "xlsx"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { KEY_POINTS_INSTRUCTION, KEY_POINTS_INSTRUCTION_RELAXED } from "@/lib/key-points-instruction"
 import { applyAiDescriptionOne, applyAiEstimateOne, saveAiFlagNote } from "@/lib/actions/catalogue"
+import { recordLotAiCheckAction } from "@/lib/actions/lot-ai-check"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
 import BcImportCheckTab from "./bc-import-check-tab"
@@ -4561,6 +4562,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         await saveLot(lot.id, { batchStatus: "ok", description: desc, batchDesc: desc, estimate: result.estimate ?? "",
           ...(applied ? { appliedDesc: desc } : {}) })
         if (result.flag) saveAiFlagNote(lot.id, result.flag).catch(() => {})
+        // What the model says it ASSUMED (its own knowledge, not the key points or photos) — the
+        // Review tab's look-again list. Advisory (lib/lot-ai-check.ts).
+        if (Array.isArray(result.assumed)) recordLotAiCheckAction(lot.id, { assumed: result.assumed, model: result.usage?.model ?? null, source: "pipeline" }).catch(() => {})
         fetch("/api/auction-ai/runs", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code: code.trim().toUpperCase(), preset, lot: lot.label, description: desc, estimate: result.estimate ?? "" }),
@@ -4633,7 +4637,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       }, err => err.startsWith("BLOCKED:") && !/malformed[_ ]function[_ ]call/i.test(err))
 
       if (result) {
-        const { verdict, contradictions, unsupported, revised, flag } = result
+        const { verdict, contradictions, unsupported, revised, flag, objects } = result
+        // Its look-again at every object the description names — for the Review tab. Advisory.
+        if (Array.isArray(objects)) recordLotAiCheckAction(lot.id, { objects, model: result.usage?.model ?? null, source: "pipeline" }).catch(() => {})
         // It tried to rewrite a product code the cataloguer recorded. The route kept the
         // cataloguer's; raise it as a possible cataloguer mistake for a human to settle.
         if (flag) {

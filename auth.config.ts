@@ -18,7 +18,9 @@ export const authConfig: NextAuthConfig = {
       // /login). Only the login page, first-run setup and server-to-server API
       // relays stay reachable while logged out. See RULES.md → "Public site is
       // login-gated".
-      const publicPaths = ["/login", "/setup", "/api/public", "/api/gap-relay"]
+      // /api/local-ai/worker: the office PC's model bridge (lib/local-ai.ts) — it carries its own
+      // bearer token, checked in the route; it has no Hub login. Only the /worker routes are open.
+      const publicPaths = ["/login", "/setup", "/api/public", "/api/gap-relay", "/api/local-ai/worker"]
       if (publicPaths.some((p) => pathname.startsWith(p))) return true
 
       // Facilities → First Aid. Deliberately reachable without logging in so anyone on site

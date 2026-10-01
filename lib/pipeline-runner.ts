@@ -21,6 +21,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { shouldKeepFlag } from "@/lib/measurement-check"
+import { recordLotAiCheck } from "@/lib/lot-ai-check"
 import { logLotFieldChanges } from "@/lib/lot-log"
 import { keepConditionLine } from "@/lib/condition"
 import { HEARTBEAT_STALE_MS } from "@/lib/pipeline-queue"
@@ -800,6 +801,11 @@ async function runStages(
         if (result.flag && shouldKeepFlag(result.flag, lot.keyPoints)) {
           try { await updateLotLogged(lot.id, { aiFlagNote: result.flag }, flagCtx(ctx)) } catch { /* advisory — never fail the run for it */ }
         }
+        // What the model says it ASSUMED — its own knowledge, not the key points or the photos —
+        // for the Review tab's look-again list. Advisory; never fails the run (lib/lot-ai-check.ts).
+        if (Array.isArray(result.assumed)) {
+          await recordLotAiCheck(lot.id, { assumed: result.assumed, model: result.usage?.model ?? null, source: "overnight" })
+        }
         lot.batchStatus = "ok"
         lot.currentDesc = desc
         if (applied) lot.appliedDesc = desc
@@ -922,7 +928,12 @@ async function runStages(
       }, dcOutcome, !!item.fallbackModel)
 
       if (result) {
-        const { verdict, contradictions, unsupported, revised, flag } = result
+        const { verdict, contradictions, unsupported, revised, flag, objects } = result
+        // Its look-again at every object the description names — sure / unsure / no — for the
+        // Review tab. Advisory; never fails the run (lib/lot-ai-check.ts).
+        if (Array.isArray(objects)) {
+          await recordLotAiCheck(lot.id, { objects, model: result.usage?.model ?? null, source: "overnight" })
+        }
         // It tried to rewrite a product code the cataloguer recorded. The route kept the
         // cataloguer's; surface the doubt instead of acting on it.
         if (flag && shouldKeepFlag(flag, lot.keyPoints)) {

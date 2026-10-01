@@ -6,23 +6,15 @@ import { parseModelJson } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
 import { cleanBearsDescription, isBearsPreset, stripToolCallLeak } from "@/lib/description-cleanup"
-import { MEASUREMENT_FLAG_RULE, NAME_FLAG_RULE } from "@/lib/flag-rules"
-import { DESCRIPTION_RULES } from "@/lib/description-rules"
 import { safetyDetail, blockMeaning } from "@/lib/ai-provider"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
+import { parsePhotoDetail, mediaResolutionConfig, parsePhotoMaxPx, shrinkPhoto, usageFromResponse } from "@/lib/ai-photo-options"
+// The prompt text lives in lib/batch-prompt.ts (moved 2026-10-01, unchanged) so the office PC
+// trial can hand its model exactly what Gemini gets.
+import { buildBatchSystemInstruction, buildBatchUserPrompt } from "@/lib/batch-prompt"
+import { parseAssumed } from "@/lib/lot-ai-check"
 
 export const maxDuration = 300
-
-// Vectis catalogues in British English. Model railway and similar lots often have
-// German/French/other foreign-language packaging in the photos (Märklin, Fleischmann,
-// Roco, etc.), and Gemini will otherwise mirror that language in its description.
-// This is appended to every batch generation so output is always English.
-const LANGUAGE_RULE =
-  "IMPORTANT: Write the entire description in British English only, using UK spelling. " +
-  "Ignore the language of any text, packaging, labelling or markings shown in the photos — " +
-  "foreign-language items (e.g. German Märklin/Fleischmann/Roco, French or any other) must still " +
-  "be described in British English. Never output any other language. Proper names and catalogue " +
-  "numbers printed on the item may be quoted verbatim, but all surrounding description must be English."
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -45,6 +37,13 @@ export async function POST(req: NextRequest) {
   }
   const modelId           = await getToolModel("catalogue_batch", formData.get("model") as string | null)
   const grounded          = formData.get("grounded") === "true"
+  // Photo options — both OPTIONAL and absent from every real run (the Auction AI tab, the
+  // overnight runner). Added 2026-10-01 for the Instructions Testing measurement. Gemini 3
+  // charges a FIXED number of tokens per photo set by its detail level (1,120 default · 560
+  // medium · 280 low) whatever the pixel size, so photoDetail is the only thing that moves the
+  // bill; photoMaxPx only shrinks what is carried to Google (bytes and time). See lib/ai-photo-options.ts.
+  const photoDetail       = parsePhotoDetail(formData.get("photoDetail"))
+  const photoMaxPx        = parsePhotoMaxPx(formData.get("photoMaxPx"))
 
   // Each lot is submitted as: lot_{name}_image_{i} files
   // We reconstruct the lots from the file field names
@@ -66,18 +65,21 @@ export async function POST(req: NextRequest) {
     // ⚠ The house rules ride on every preset — English only, no counts the cataloguer didn't
     // give, names keep their capitals (lib/description-rules.ts). A preset is data and cannot
     // switch them off.
-    systemInstruction: [systemInstruction, LANGUAGE_RULE, DESCRIPTION_RULES].filter(Boolean).join("\n\n"),
+    systemInstruction: buildBatchSystemInstruction(systemInstruction),
     // Google Search grounding lets Gemini look up catalogue numbers and product details
     // in real time. Only enabled when the client requests it — strict presets are unaffected.
     // Note: not all models support grounding; errors surface in the client log.
     ...(grounded ? { tools: [{ googleSearch: {} } as any] } : {}),
+    // Only ever present when a detail level was asked for — the SDK is older than the field,
+    // but it passes generationConfig through to the request body untouched.
+    ...(photoDetail ? { generationConfig: mediaResolutionConfig(photoDetail) as any } : {}),
   })
 
   // No retries here — throw immediately so the real Gemini error surfaces in the
   // client log and the client's own backoff loop handles retrying.
   // Rate-limit errors are prefixed with RATE_LIMITED: so the client can apply
   // a longer backoff before retrying.
-  async function generateWithRetry(contents: any[]): Promise<{ text: string; searchQueries: string[]; finishReason: string }> {
+  async function generateWithRetry(contents: any[]): Promise<{ text: string; searchQueries: string[]; finishReason: string; usage: ReturnType<typeof usageFromResponse> }> {
     let result: any
     try {
       result = await model.generateContent(contents)
@@ -114,64 +116,54 @@ export async function POST(req: NextRequest) {
     // Surface whether Google Search grounding actually fired
     const searchQueries: string[] = (candidate?.groundingMetadata as any)?.webSearchQueries ?? []
 
-    return { text: response.text(), searchQueries, finishReason: String(finishReason ?? "") }
+    return { text: response.text(), searchQueries, finishReason: String(finishReason ?? ""), usage: usageFromResponse(response) }
   }
 
-  const results: { lot: string; description: string; estimate: string; status: string; error?: string; flag?: string; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
+  const results: { lot: string; description: string; estimate: string; status: string; error?: string; flag?: string; assumed?: string[]; usage?: Record<string, unknown>; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
   const lotEntries = Object.entries(lotMap)
 
   for (let idx = 0; idx < lotEntries.length; idx++) {
     const [lot, files] = lotEntries[idx]
     try {
+      // Bytes in and bytes sent are counted so the test tab can show what shrinking actually
+      // saves (upload size and time) next to what it doesn't (tokens).
+      let bytesOriginal = 0
+      let bytesSent     = 0
       const imageParts = await Promise.all(
         files.slice(0, 24).map(async (file) => {
-          const buffer = await file.arrayBuffer()
-          const base64 = Buffer.from(buffer).toString("base64")
-          return { inlineData: { data: base64, mimeType: file.type || "image/jpeg" } }
+          const original = Buffer.from(await file.arrayBuffer())
+          bytesOriginal += original.length
+          const mimeIn   = file.type || "image/jpeg"
+          const prepared = photoMaxPx ? await shrinkPhoto(original, mimeIn, photoMaxPx) : { buffer: original, mimeType: mimeIn }
+          bytesSent += prepared.buffer.length
+          return { inlineData: { data: prepared.buffer.toString("base64"), mimeType: prepared.mimeType } }
         })
       )
 
       const existingContext = formData.get(`lot_${lot}_context`) as string | null
       const contextType    = formData.get(`lot_${lot}_contextType`) as string | null  // "keyPoints" | "description"
 
-      let userPrompt: string
-      if (!existingContext) {
-        userPrompt = "Please describe this auction lot."
-      } else if (contextType === "keyPoints") {
-        userPrompt = `The following key points were recorded about this lot. ALL of them must appear in your description — do not omit a single one.
+      // The user turn — key points authoritative, flag rules, the British English reinforcement
+      // (lib/batch-prompt.ts, shared with the office PC trial so both models get the same words).
+      const userPrompt = buildBatchUserPrompt({ existingContext, contextType, grounded })
 
-CRITICAL: Only use the information in the key points and what you can directly observe in the photos. Do NOT add product history, specifications, piece counts, features, or any other details from your training data that are not explicitly stated in the key points. If a detail is not in the key points and cannot be seen in the photos, leave it out entirely.
-
-EXCEPTION: If a key point contains a set or catalogue number (e.g. a LEGO set number like #42110, a Playmobil set number, etc.), you MUST resolve it to its full product name and include both the name and number in the description. This is the only permitted use of training knowledge.
-
-PRESERVE EXACT MEANING — do not soften or paraphrase factual key points. Short condition, completeness or packaging notes (e.g. "Sealed Mint", "Sealed", "Mint", "Boxed", "Unboxed", "Complete", measurements like "55\\"x39\\"") carry a precise meaning and MUST appear with that meaning intact, using the cataloguer's own wording. For example: "Sealed Mint" means factory sealed AND mint condition — do NOT weaken it to "in original boxes" or "remains sealed". If you cannot fit the exact term naturally, state it plainly rather than dropping or rewording it. Losing or softening any such key point is a failure.
-
-KEY POINTS ARE AUTHORITATIVE — the cataloguer had the item in hand. Any CLASS, model type, catalogue number, running number or livery stated in the key points (e.g. "Loadhaul Class 56", "Virgin Trains Class 47") MUST be used EXACTLY as given. NEVER replace it with a different class/number/livery you infer from the photos or recall from training — even if you believe the photo shows something else. If you are highly confident a stated value is wrong, KEEP the cataloguer's value in the description and raise it on the FLAG line below — never silently change it.
-
-Write a single, concise catalogue description that naturally incorporates every key point. Do not list them separately and do not repeat the same information twice — but keep the precise factual wording of condition/completeness/measurement key points exactly as given.
-${grounded ? `\nVERIFY NUMBERS: Before finalising, ALWAYS use Google Search to verify any catalogue number, set number, model number or product code in the key points — do not rely on memory for these. Confirm the number matches the named product.\n` : ""}
-FLAG POSSIBLE MISTAKES: The key points are the cataloguer's record and the description must stay faithful to them — keep their numbers/wording in the description even if you doubt them. BUT if you are HIGHLY confident (ideally confirmed by search) that a catalogue/set/model number or other hard fact in the key points is WRONG, add ONE extra line at the very end in exactly this format:
-FLAG: <which key point looks wrong, what you believe is correct, and why>
-${MEASUREMENT_FLAG_RULE}
-${NAME_FLAG_RULE}
-CRITICAL RULE FOR FLAGS: NEVER flag a set number, catalogue number, or product code simply because it is not in your training data. Your knowledge has a cutoff date — products released in 2024 or later may not be known to you, and their absence from your training data does NOT mean they do not exist. Only flag a number if you have strong positive evidence it is wrong (e.g. it belongs to a completely different product, the number format is impossible for that brand, or a search result directly contradicts it). If you are not certain, do NOT add a FLAG line.
-
-Key points:
-${existingContext}
-
-After the description (and optional FLAG line), include the estimate on its own line exactly as your instructions specify.`
-      } else {
-        userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.\n\nAfter the description, include the estimate on its own line exactly as your instructions specify.`
-      }
-
-      // Reinforce in the user turn too — foreign-language packaging in the photos is a
-      // strong cue and the system instruction alone doesn't always win.
-      userPrompt += "\n\n(Write the description in British English only — ignore any foreign-language text on the item or its packaging.)"
-
-      const { text, searchQueries, finishReason } = await generateWithRetry([
+      const startedAt = Date.now()
+      const { text, searchQueries, finishReason, usage: tokenUsage } = await generateWithRetry([
         ...imageParts,
         { text: userPrompt },
       ])
+      // What this lot really cost, from Google's own count — never an estimate. Travels on
+      // every outcome below so a failed lot still shows what it burned.
+      const usage = {
+        ...tokenUsage,
+        ms:          Date.now() - startedAt,
+        imageCount:  imageParts.length,
+        bytesOriginal,
+        bytesSent,
+        photoDetail: photoDetail ?? "default",
+        photoMaxPx,
+        model:       modelId,
+      }
 
       // Occasionally Gemini returns a JSON object instead of plain text — extract description if so
       // (parseModelJson also repairs the common invalid \' escape). Plain text → null → use as-is.
@@ -179,12 +171,15 @@ After the description (and optional FLAG line), include the estimate on its own 
       const parsedBatch = parseModelJson(rawText)
       if (parsedBatch && typeof parsedBatch.description === "string") rawText = parsedBatch.description.trim()
 
-      // Split description, estimate and any cataloguer-mistake FLAG line — preserve newlines
+      // Split description, estimate, any cataloguer-mistake FLAG line and the ASSUMED line
+      // (what the model says came from its own knowledge — lib/lot-ai-check.ts) — preserve newlines
       const lines = rawText.split("\n")
       const estimateLine = lines.find((l) => l.toLowerCase().startsWith("estimate:")) ?? ""
       const flagLine     = lines.find((l) => l.toLowerCase().startsWith("flag:")) ?? ""
+      const assumedLine  = lines.find((l) => l.toLowerCase().startsWith("assumed:")) ?? ""
+      const assumed      = parseAssumed(assumedLine)
       const rawDescription = lines
-        .filter((l) => !l.toLowerCase().startsWith("estimate:") && !l.toLowerCase().startsWith("flag:"))
+        .filter((l) => { const k = l.toLowerCase(); return !k.startsWith("estimate:") && !k.startsWith("flag:") && !k.startsWith("assumed:") })
         .join("\n").trim()
       // ⚠⚠ THE MODEL SOMETIMES WRITES OUT ITS SEARCH INSTEAD OF RUNNING IT — a bare
       // "tool_code" followed by print(google_search.search(…)). This is not a
@@ -217,6 +212,7 @@ After the description (and optional FLAG line), include the estimate on its own 
           error: `The model wrote out a search instead of a description (leaked tool call)`
                + `${finishReason && finishReason !== "STOP" ? ` (finished: ${finishReason})` : ""}: `
                + `${text.trim().slice(0, 120)}`,
+          usage,
           debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
       } else if (!description.trim()) {
         // ⚠ SAY WHAT DID COME BACK. On F113 this happened to 179 lots and the raw reply was
@@ -233,10 +229,13 @@ After the description (and optional FLAG line), include the estimate on its own 
           : `only this came back${finishReason && finishReason !== "STOP" ? ` (finished: ${finishReason})` : ""}: ${text.trim().slice(0, 120)}`
         results.push({ lot, description: "", estimate: "", status: "FAILED",
           error: `The model returned no description — ${why}`,
+          usage,
           debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
       } else {
         results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
           ...(flag ? { flag } : {}),
+          assumed,
+          usage,
           debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
       }
 

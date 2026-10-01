@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-30, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-01, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,20 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"d2792c4adecd7178be055b22cac1d4bdb7502ac3","author":"Jordan Orange","date":"2026-10-01T16:36:51+01:00","subject":"Claude Memory: the office PC trial on a CPU - plumbing proven, model unusable, fixes made"},
+  {"sha":"b993b1624bceff29e43fe695cbc5f46be1d36096","author":"Jordan Orange","date":"2026-10-01T16:35:52+01:00","subject":"Office PC bridge: a ceiling on what the model may write (MAX_OUTPUT_TOKENS, default 1,500)"},
+  {"sha":"1147b701d06016ad688374ffb2d81f142c920546","author":"Jordan Orange","date":"2026-10-01T15:35:31+01:00","subject":"Office PC jobs: a newer test run supersedes an older one still waiting"},
+  {"sha":"f4dd1de9658e2aaa851347e26fb7c2031cfac7de","author":"Jordan Orange","date":"2026-10-01T15:26:28+01:00","subject":"Office PC bridge: thinking off unless asked for"},
+  {"sha":"1a68918a4568511dd114fd1b8609205e76138cd0","author":"Jordan Orange","date":"2026-10-01T14:51:40+01:00","subject":"Office PC bridge: no five-minute clock on the model call, and photos shrunk by the Hub"},
+  {"sha":"530cf4c653a67837db123d12bb0c1a6a5ca1884c","author":"Jordan Orange","date":"2026-10-01T14:13:37+01:00","subject":"Claude Memory: office PC trial entry - description line"},
+  {"sha":"5d2085949f90b9b95819ca18164bbeec231b375e","author":"Jordan Orange","date":"2026-10-01T14:12:54+01:00","subject":"Claude Memory: the office PC trial - goals, plan and what was built"},
+  {"sha":"de89c89de7f1540f524f8d9528a06eadab2a7c99","author":"Jordan Orange","date":"2026-10-01T12:11:50+01:00","subject":"Office PC model trial: an open model on a machine in the office reads the same lots as Gemini"},
+  {"sha":"c1e1adb3f034b22b64b0ee58c8d5fc995e31b72c","author":"Jordan Orange","date":"2026-10-01T11:05:18+01:00","subject":"Claude Memory: cost was never the problem - record the correction and the open question"},
+  {"sha":"bded409bec30f69633563711c8909573331eabe8","author":"Jordan Orange","date":"2026-10-01T10:44:34+01:00","subject":"Instructions Testing: measure what the photos really cost (detail level, not size)"},
+  {"sha":"d6f405242ef4ca6c558fc8869adad984adc58341","author":"Jordan Orange","date":"2026-10-01T10:27:48+01:00","subject":"Claude Memory: the hammer-price estimator was Claude's idea, not Jordan's — recorded as rejected"},
+  {"sha":"981b42933adcab0650a1b72341f4dc6948bd560a","author":"Jordan Orange","date":"2026-10-01T10:21:05+01:00","subject":"Claude Memory: record the \"our own AI\" research pass (2026-10-01)"},
+  {"sha":"a4bc9ba9dd3ff5216c8ef5d0674c681fbb8a557a","author":"Jordan Orange","date":"2026-09-30T16:58:57+01:00","subject":"Merge staging into main: AI house rules (names as mistakes, no counts unless key-pointed, capitals), Bears clean-up from the F135 review, Auto Clerk 2.2, Saleroom Trainer Lines export + click-to-jump, Image chat saved chats, BC copy catch-up after a restart"},
+  {"sha":"8dc11f9d09ef903bdd14ab8a2539ee83feb3c910","author":"Jordan Orange","date":"2026-09-30T12:08:19+01:00","subject":"Bears clean-up: artist bear not artist designed, edition said once, no Unbranded opening; Dolls & Bears check gains the F135 review rules"},
   {"sha":"8e86dee3819f9376f2f8328e038bf134d5b5946c","author":"Jordan Orange","date":"2026-09-30T11:08:02+01:00","subject":"AI descriptions: names keep the cataloguer's capitals everywhere (house rules moved to lib/description-rules.ts)"},
   {"sha":"ab805b4159c1a62f513bd5b0def65ce551dfec10","author":"Jordan Orange","date":"2026-09-30T10:00:37+01:00","subject":"AI descriptions: no exact quantity unless the cataloguer key-pointed it"},
   {"sha":"97daf53af1eebbac2b2e979b4a927bdda7f54dad","author":"Jordan Orange","date":"2026-09-30T10:00:36+01:00","subject":"Cataloguer-mistake flags: a wrong maker/range name is a mistake, not wording (Hornby Dublin for Dublo)"},
