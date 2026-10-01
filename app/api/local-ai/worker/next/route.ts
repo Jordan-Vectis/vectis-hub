@@ -41,6 +41,24 @@ export async function POST(req: NextRequest) {
       data:  { status: "QUEUED", workerId: null, leasedAt: null, leaseExpiresAt: null },
     })
 
+    // A newer test run by the same person supersedes an older one still waiting. The tab only
+    // ever watches its latest batch, and a slow PC must not spend twenty minutes on lots nobody
+    // is looking at (measured 2026-10-01: two leftovers from a stopped first run sat in front
+    // of the three the tab was showing).
+    const queued = await prisma.localAiJob.findMany({ where: { status: "QUEUED" }, select: { id: true, batchId: true, createdBy: true, createdAt: true } })
+    const newestByUser = new Map<string, { batchId: string; at: number }>()
+    for (const q of queued) {
+      const cur = newestByUser.get(q.createdBy)
+      if (!cur || q.createdAt.getTime() > cur.at) newestByUser.set(q.createdBy, { batchId: q.batchId, at: q.createdAt.getTime() })
+    }
+    const staleIds = queued.filter(q => newestByUser.get(q.createdBy)?.batchId !== q.batchId).map(q => q.id)
+    if (staleIds.length) {
+      await prisma.localAiJob.updateMany({
+        where: { id: { in: staleIds }, status: "QUEUED" },
+        data:  { status: "CANCELLED", finishedAt: now, error: "superseded by a newer test run" },
+      })
+    }
+
     // Claim the oldest queued job atomically: the update only counts if it was still QUEUED.
     let job: Awaited<ReturnType<typeof prisma.localAiJob.findFirst>> = null
     for (let attempt = 0; attempt < 5 && !job; attempt++) {
