@@ -19,7 +19,7 @@ const ENTRIES: Entry[] = [
     filename: "project_own_ai_research.md",
     content: `---
 name: own-ai-research-2026-10-01
-description: "Create our own AI" — the 2026-10-01 research pass. Five routes costed and checked (tune Gemini, fine-tune an open vision model, self-host/rent a GPU, pgvector hammer-price estimator, Vectis assistant). Conclusions - fix quota and cost for free first, build the estimator, staff-only assistant, a £15 GPU trial before any tuning or hardware. The full 21-page PDF sits in Admin → Documents on PRODUCTION. Read before any "own AI", fine-tuning, GPU or estimator conversation
+description: "Create our own AI" — the 2026-10-01 research pass. Five routes costed and checked (tune Gemini, fine-tune an open vision model, self-host/rent a GPU, pgvector hammer-price estimator, Vectis assistant). Conclusions - fix quota and cost for free first, staff-only assistant if wanted, a £15 GPU trial before any tuning or hardware. ⚠ The hammer-price estimator was CLAUDE'S addition and Jordan REJECTED it ("I never asked for that, the cataloguers do estimates themselves") — never re-pitch it. The full 21-page PDF sits in Admin → Documents on PRODUCTION. Read before any "own AI", fine-tuning or GPU conversation
 metadata:
   type: project
 ---
@@ -27,6 +27,8 @@ metadata:
 # "Our own AI" — what was researched and concluded (2026-10-01)
 
 **Why this exists:** Jordan said "we talked before about creating our own AI, I want to explore that again" and NOTHING from that earlier conversation had been saved. This time it is. He wanted all three readings looked at: a model fine-tuned on Vectis data, a self-hosted open-weight model, and a Vectis assistant.
+
+**⚠⚠ Jordan's correction, same day:** the hammer-price estimator (route D below) was never his question — Claude added it as "the obvious sub-project" and then put it first in every recommendation. Jordan: *"Why we even looking at estimate stuff I never asked for that? The cataloguers do estimates themselves AI has just never done them very well."* Route D is RECORDED here only so the PDF's "Do this" verdict is understood as Claude's, not his. Do not suggest building it, and do not widen his three routes again. (The PDF in Documents still carries the original verdict — left as the research record.)
 
 **How it was done (he approved the agents first):** one agent read the Hub's code for what the AI does today; four researched the web (Gemini tuning · open-weight vision models · hosting and hardware · estimator and assistant); four checkers re-opened every price and capability claim; one writer. Ten agents, ~1.5M tokens. **The full write-up is a PDF in Admin → Documents on PRODUCTION, top level: "Our own AI - options for Vectis (1 Oct 2026).pdf"** — 5 pages of comparison plus a 16-page appendix of every figure with its source URL, date and the checker's verdict. Prices are as of 1 Oct 2026.
 
@@ -43,7 +45,7 @@ metadata:
 | A. Tune Gemini | £950–£3,200 per training pass (unconfirmed) | £170 (3.1 Flash-Lite) to £1,130 (3.5 Flash) | Experiment, not a saving |
 | B. Fine-tune an open vision model (Qwen3-VL-8B class, Apache-2.0) | ~£130 of rented H100 (inferred) | as C | Credible, unproven on toy labels |
 | C. Rent a GPU nightly / own a box | nil / £4,400–£19,000 | £140–£165 rented; £215–£560 owned incl. electricity | Break-even now, cheaper after the preview price; only after a trial |
-| D. Hammer-price estimator (pgvector in Neon + gradient boosting) | £2–£50 to embed 1.1m lots | ~£3 | **Do this** — the only route that uses what makes Vectis different |
+| D. Hammer-price estimator (pgvector in Neon + gradient boosting) | £2–£50 to embed 1.1m lots | ~£3 | Claude's addition — REJECTED by Jordan (not asked for; cataloguers do estimates themselves) |
 | E. Assistant | nil | £4–£22 (staff) | Staff-only now; customers are a legal question first |
 
 Key reasons, so nobody re-derives them:
@@ -54,13 +56,13 @@ Key reasons, so nobody re-derives them:
 - **Estimator:** embed every sold description once (OpenAI 3-small / Voyage-4-lite ≈ $2, Gemini Embedding ≈ $18 at 80 tokens a lot), pgvector HNSW on Neon (scale compute up for the hour-long build), show "based on these ten sold lots" as comparables, gradient boosting (department, year, condition words) for a figure and band. Published auction work: data-only models R² 0.74–0.78 vs experts 0.93 on log price → expect most lots within ±30–50%. Split by TIME when back-testing, keep unsold lots in view, never feed the cataloguer's estimate in as a feature.
 - **Assistant:** \`help_assistant\` already has cachePrefix and Claude allowed — add 3–6 typed server-side tools under the user's own permissions and a per-user log; ~880 questions a month ≈ $5 Gemini Flash / $11 Haiku 4.5 / $22 Sonnet 5.5. Customer-facing: Air Canada was held to what its chatbot promised; vendor data needs permission filtering; no investment wording (FCA).
 
-## Suggested order (given to Jordan, not yet decided)
-1. Check the real quota and move the default off the preview model id; look at Tier 2 ($100 paid + 3 days).
-2. Cut tokens: route batch/KP/DC through lib/ai-provider.ts, resize the photos, try Batch mode (50% off, own quota).
-3. Build D (estimator). 4. Add E staff-only on D's vectors. 5. The $20 GPU trial. 6. Only then talk about A, B or hardware.
+## Suggested order (given to Jordan, not yet decided — D removed after his correction)
+1. Check the real quota (AI Studio, project auction-ai — Jordan's console, Claude can't see it) and move the default off the preview model id; look at Tier 2 ($100 paid + 3 days).
+2. Cut tokens: route batch/KP/DC through lib/ai-provider.ts, resize the photos (measure tokens before/after and compare ten lots in Instructions Testing first), try Batch mode (50% off, own quota).
+3. The $20 rented-GPU trial on 50 lots — the cheapest real test of an open model on toy photos. 4. Only then talk about A, B, hardware or the assistant.
 
 ## Decisions only Jordan can make (open)
-Staff-only vs customer assistant · may lot photos leave R2 for Google Cloud (EU) or a rented GPU host (UK at Nebius/Modal) · rent vs a box in the office · which embedding vendor to tie 1.1m vectors to (a retirement forces a re-embed) · estimator vs AI writing the estimate, and whether cataloguers see it before their own · whether to spend on tuning at all once quota and cost are fixed.
+Staff-only vs customer assistant · may lot photos leave R2 for Google Cloud (EU) or a rented GPU host (UK at Nebius/Modal) · rent vs a box in the office · whether to spend on tuning at all once quota and cost are fixed. (The estimator questions are gone with the estimator.)
 
 ## Figures the checkers could NOT confirm
 Per-image training token count on Vertex and so all per-pass training costs · origin of the 4 RPM limit · what happens to a tuned endpoint when its base retires · all per-lot GPU timings and whether a 32 GB card holds a 24-photo prompt · a few vendor list prices (HF Endpoints, Vertex Model Garden hourly, Overclockers/PCSpecialist, Mac Studio UK).

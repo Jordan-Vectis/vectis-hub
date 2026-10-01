@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-09-30, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-01, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"981b42933adcab0650a1b72341f4dc6948bd560a","author":"Jordan Orange","date":"2026-10-01T10:21:05+01:00","subject":"Claude Memory: record the \"our own AI\" research pass (2026-10-01)"},
   {"sha":"a4bc9ba9dd3ff5216c8ef5d0674c681fbb8a557a","author":"Jordan Orange","date":"2026-09-30T16:58:57+01:00","subject":"Merge staging into main: AI house rules (names as mistakes, no counts unless key-pointed, capitals), Bears clean-up from the F135 review, Auto Clerk 2.2, Saleroom Trainer Lines export + click-to-jump, Image chat saved chats, BC copy catch-up after a restart"},
   {"sha":"8dc11f9d09ef903bdd14ab8a2539ee83feb3c910","author":"Jordan Orange","date":"2026-09-30T12:08:19+01:00","subject":"Bears clean-up: artist bear not artist designed, edition said once, no Unbranded opening; Dolls & Bears check gains the F135 review rules"},
   {"sha":"8e86dee3819f9376f2f8328e038bf134d5b5946c","author":"Jordan Orange","date":"2026-09-30T11:08:02+01:00","subject":"AI descriptions: names keep the cataloguer's capitals everywhere (house rules moved to lib/description-rules.ts)"},
