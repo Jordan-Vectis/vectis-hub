@@ -8,6 +8,7 @@ import { getToolModel } from "@/lib/ai-models"
 import { auditCodes } from "@/lib/product-codes"
 import { cleanBearsDescription, isBearsPreset, hasToolCallLeak } from "@/lib/description-cleanup"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
+import { usageFromResponse } from "@/lib/ai-photo-options"
 
 export const maxDuration = 60
 
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
       `Key points (all must appear in the description):\n${keyPoints}\n\n` +
       `Current description:\n${description}`
 
+    const startedAt = Date.now()
     const result   = await ai.generateContent(prompt)
     const response = result.response
 
@@ -143,6 +145,8 @@ export async function POST(req: NextRequest) {
 
     const changed = revised !== description.trim()
     return NextResponse.json({ revised, changed, missing, added, found, flag,
+      // Text only, but reported so the test tab can add up a whole lot's cost (2026-10-01).
+      usage: { ...usageFromResponse(response), ms: Date.now() - startedAt, imageCount: 0, bytesOriginal: 0, bytesSent: 0, photoDetail: "none", photoMaxPx: null },
       debug: { prompt, response: rawResponse } })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"

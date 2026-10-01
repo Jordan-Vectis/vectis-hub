@@ -34,7 +34,8 @@ metadata:
 
 ## Facts about the Hub that shaped the answer (from the code)
 - Gemini via the Gemini Developer API with an API key (\`@google/generative-ai\` 0.24, NOT \`@google/genai\`, NOT Vertex) — every route makes its own \`new GoogleGenerativeAI(process.env.GEMINI_API_KEY)\` (~46 files). Default model everywhere \`gemini-3-flash-preview\`. Claude only through lib/ai-provider.ts on claudeOk slots.
-- Per lot: ~41k input + ~2k output tokens across Batch (~29k, up to 24 photos) → Key Points (~3.5k, text) → Double Check (~9k, up to 6 photos). **The batch route sends the photos at full size** — resizing is an unbuilt saving.
+- Per lot: ~41k input + ~2k output tokens across Batch (~29k, up to 24 photos) → Key Points (~3.5k, text) → Double Check (~9k, up to 6 photos). The batch route sends the photos at full size (every caller — Auction AI tab, Instructions Testing, the overnight runner — posts the R2 original; no sharp anywhere on that path).
+- **⚠⚠ Pixel size does NOT change what Gemini 3 charges for a photo** (ai.google.dev/gemini-api/docs/media-resolution, read 2026-10-01): a FIXED 1,120 tokens per image at the default detail, 560 at medium, 280 at low, 2,240 ultra — set by \`generationConfig.mediaResolution\` ("MEDIA_RESOLUTION_MEDIUM"), which the old \`@google/generative-ai\` SDK passes through untouched. So shrinking photos saves upload bytes and time ONLY; the DETAIL level is the money lever, and lower detail is a quality trade-off on box labels and catalogue numbers that has to be measured. (Gemini 2.5 was per 768px tile, which is where the "resize to save" idea came from — and lib/ai-pricing.ts TOKENS_PER_PHOTO was still 1,032 from that era; now 1,120 for gemini-3 ids.) **Built 2026-10-01 to measure it:** lib/ai-photo-options.ts; the batch and double-check routes take OPTIONAL \`photoDetail\` (high|medium|low) and the batch route an optional \`photoMaxPx\` (sharp shrink) — absent = byte-for-byte today's request, so production runs are unchanged; all three pipeline routes return \`usage\` from Google's own usageMetadata (prompt/image/text/output/thinking tokens, ms, bytes). **Instructions Testing** gained a Photos row (Detail · Shrink · Compare = Batch at Standard AND Medium side by side), a 📐 totals table priced like the run-cost estimate (per lot, per 500-lot sale, the Medium alternative), and a readout line on every stage panel. ⚠ Still PREVIEW ONLY. Not yet measured on real lots — Jordan tests on the sandbox.
 - No embedding / pgvector code exists anywhere; Lens, Website Search and the SearchWord list all match with SQL text (ILIKE) scans.
 - Sold data: ArchiveLot ~956k (no category column; hammer 0 = unsold), BcLotWeb ~220k, WarehouseItem.auctionDate is a STRING.
 
@@ -58,7 +59,7 @@ Key reasons, so nobody re-derives them:
 
 ## Suggested order (given to Jordan, not yet decided — D removed after his correction)
 1. Check the real quota (AI Studio, project auction-ai — Jordan's console, Claude can't see it) and move the default off the preview model id; look at Tier 2 ($100 paid + 3 days).
-2. Cut tokens: route batch/KP/DC through lib/ai-provider.ts, resize the photos (measure tokens before/after and compare ten lots in Instructions Testing first), try Batch mode (50% off, own quota).
+2. Cut tokens: measure Standard vs Medium photo detail on ten real lots in Instructions Testing (Compare tick) — NOT resizing, which cannot change the bill on Gemini 3; then try Batch mode (50% off, own quota); route batch/KP/DC through lib/ai-provider.ts when touched next.
 3. The $20 rented-GPU trial on 50 lots — the cheapest real test of an open model on toy photos. 4. Only then talk about A, B, hardware or the assistant.
 
 ## Decisions only Jordan can make (open)

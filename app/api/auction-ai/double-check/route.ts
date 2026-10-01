@@ -8,6 +8,7 @@ import { getToolModel } from "@/lib/ai-models"
 import { auditCodes } from "@/lib/product-codes"
 import { cleanBearsDescription, isBearsPreset, hasToolCallLeak } from "@/lib/description-cleanup"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
+import { parsePhotoDetail, mediaResolutionConfig, usageFromResponse } from "@/lib/ai-photo-options"
 
 export const maxDuration = 60
 
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
   try {
-    const { label, description, images, model, keyPoints, presetKey } = await req.json() as {
+    const { label, description, images, model, keyPoints, presetKey, photoDetail: photoDetailRaw } = await req.json() as {
       label:       string
       description: string
       images?:     { data: string; mimeType: string }[]
@@ -32,19 +33,28 @@ export async function POST(req: NextRequest) {
       // Which instruction the run is using — only so the Dolls/Bears clean-up can be
       // scoped. The INSTRUCTION TEXT is never posted; this stage has its own system prompt.
       presetKey?:  string
+      // OPTIONAL photo detail level (high | medium | low) — only the Instructions Testing
+      // measurement sends it; absent = exactly today's request. See lib/ai-photo-options.ts.
+      photoDetail?: string
     }
     if (!label || !description) return NextResponse.json({ error: "Missing label or description" }, { status: 400 })
 
+    const photoDetail = parsePhotoDetail(photoDetailRaw)
+    const dcModel     = await getToolModel("catalogue_doublecheck", model)
     const genAI = new GoogleGenerativeAI(apiKey)
     const ai = genAI.getGenerativeModel({
     safetySettings: GEMINI_SAFETY_SETTINGS,
-      model: await getToolModel("catalogue_doublecheck", model),
+      model: dcModel,
       systemInstruction: DOUBLE_CHECK_INSTRUCTION,
+      ...(photoDetail ? { generationConfig: mediaResolutionConfig(photoDetail) as any } : {}),
     })
 
     const imageParts = (images ?? []).map(img => ({
       inlineData: { data: img.data, mimeType: img.mimeType },
     }))
+    // base64 carries 4 characters per 3 bytes — close enough for a "how big was this" readout.
+    const bytesSent = (images ?? []).reduce((n, img) => n + Math.round((img.data?.length ?? 0) * 0.75), 0)
+    const startedAt = Date.now()
 
     // When key points are supplied (pipeline runs Double Check AFTER Key Points),
     // they are cataloguer-verified facts. Tell the model to KEEP them, and to focus
@@ -145,6 +155,7 @@ export async function POST(req: NextRequest) {
     if (revised && hasToolCallLeak(revised)) revised = ""
 
     return NextResponse.json({ verdict, contradictions, unsupported, revised, flag,
+      usage: { ...usageFromResponse(response), ms: Date.now() - startedAt, imageCount: imageParts.length, bytesOriginal: bytesSent, bytesSent, photoDetail: photoDetail ?? "default", photoMaxPx: null, model: dcModel },
       debug: { prompt: textPart.text, response: rawResponse, imageCount: imageParts.length } })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"

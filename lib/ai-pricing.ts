@@ -69,14 +69,16 @@ export const CHARS_PER_TOKEN = 4
 export const tokensOfText = (text: string): number => Math.ceil((text ?? "").length / CHARS_PER_TOKEN)
 
 // Cost of ONE photo, in tokens.
-// Google: an image is cut into 768px-ish tiles at 258 tokens each; a typical
-// 4:3 camera photo works out at 4 tiles. Anthropic: a photo resized to their
-// standard resolution lands around 1,600 tokens.
-export const TOKENS_PER_PHOTO = { gemini: 1032, anthropic: 1600 } as const
+// Gemini 3: a FIXED 1,120 tokens per image at the default detail level, whatever its pixel
+// size (ai.google.dev/gemini-api/docs/media-resolution, read 2026-10-01). Gemini 2.5 and
+// earlier: cut into 768px-ish tiles at 258 tokens each; a typical 4:3 camera photo works out
+// at 4 tiles. Anthropic: a photo resized to their standard resolution lands around 1,600.
+export const TOKENS_PER_PHOTO = { gemini3: 1120, gemini: 1032, anthropic: 1600 } as const
 
 export function tokensOfPhotos(modelId: string, count: number): number {
-  const per = (modelId ?? "").toLowerCase().startsWith("claude-")
-    ? TOKENS_PER_PHOTO.anthropic
+  const id = (modelId ?? "").toLowerCase()
+  const per = id.startsWith("claude-") ? TOKENS_PER_PHOTO.anthropic
+    : id.startsWith("gemini-3")        ? TOKENS_PER_PHOTO.gemini3
     : TOKENS_PER_PHOTO.gemini
   return per * Math.max(0, count)
 }
