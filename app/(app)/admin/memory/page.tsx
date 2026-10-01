@@ -19,16 +19,21 @@ const ENTRIES: Entry[] = [
     filename: "project_own_ai_research.md",
     content: `---
 name: own-ai-research-2026-10-01
-description: "Create our own AI" — the 2026-10-01 research pass. Five routes costed and checked (tune Gemini, fine-tune an open vision model, self-host/rent a GPU, pgvector hammer-price estimator, Vectis assistant). Conclusions - fix quota and cost for free first, staff-only assistant if wanted, a £15 GPU trial before any tuning or hardware. ⚠ The hammer-price estimator was CLAUDE'S addition and Jordan REJECTED it ("I never asked for that, the cataloguers do estimates themselves") — never re-pitch it. The full 21-page PDF sits in Admin → Documents on PRODUCTION. Read before any "own AI", fine-tuning or GPU conversation
+description: "\\"Create our own AI\\" — the 2026-10-01 research pass. Five routes costed and checked (tune Gemini, fine-tune an open vision model, self-host/rent a GPU, pgvector hammer-price estimator, Vectis assistant). ⚠⚠ Two corrections from Jordan the same day - COST WAS NEVER HIS PROBLEM (don't drive cost-saving work unasked), and the hammer-price estimator was CLAUDE'S addition, REJECTED (\\"the cataloguers do estimates themselves\\") — never re-pitch either. The question still open: what would \\"our own AI\\" do better than Gemini today? Nothing gets built until he answers it. The full 21-page PDF sits in Admin → Documents on PRODUCTION. Read before any \\"own AI\\", fine-tuning or GPU conversation"
 metadata:
+  node_type: memory
   type: project
+  originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
+  modified: 2026-10-01T10:05:01.785Z
 ---
 
 # "Our own AI" — what was researched and concluded (2026-10-01)
 
 **Why this exists:** Jordan said "we talked before about creating our own AI, I want to explore that again" and NOTHING from that earlier conversation had been saved. This time it is. He wanted all three readings looked at: a model fine-tuned on Vectis data, a self-hosted open-weight model, and a Vectis assistant.
 
-**⚠⚠ Jordan's correction, same day:** the hammer-price estimator (route D below) was never his question — Claude added it as "the obvious sub-project" and then put it first in every recommendation. Jordan: *"Why we even looking at estimate stuff I never asked for that? The cataloguers do estimates themselves AI has just never done them very well."* Route D is RECORDED here only so the PDF's "Do this" verdict is understood as Claude's, not his. Do not suggest building it, and do not widen his three routes again. (The PDF in Documents still carries the original verdict — left as the research record.)
+**⚠⚠ Jordan's second correction, same day — COST IS NOT A STATED PROBLEM.** After the photo measurement found that thinking tokens dominate the bill, Claude pitched a Thinking selector; Jordan: *"Why are we even looking at this I dont remember ever saying the cost was causing a problem?"* He never did. The research compared routes by cost because that is how routes get compared, and Claude carried that into "what to try first" as if it were his goal. **Do not drive cost-saving work unasked.** The open question, put to him, is what "our own AI" would do better than Gemini does today (house voice/quality · independence from Google · staff answers) — his answer decides what is worth doing next, and nothing from the research is to be built until he gives it. The photo measurement stays (preview-only, nothing changes for real runs); the Thinking selector was NOT built.
+
+**⚠⚠ Jordan's first correction, same day:** the hammer-price estimator (route D below) was never his question — Claude added it as "the obvious sub-project" and then put it first in every recommendation. Jordan: *"Why we even looking at estimate stuff I never asked for that? The cataloguers do estimates themselves AI has just never done them very well."* Route D is RECORDED here only so the PDF's "Do this" verdict is understood as Claude's, not his. Do not suggest building it, and do not widen his three routes again. (The PDF in Documents still carries the original verdict — left as the research record.)
 
 **How it was done (he approved the agents first):** one agent read the Hub's code for what the AI does today; four researched the web (Gemini tuning · open-weight vision models · hosting and hardware · estimator and assistant); four checkers re-opened every price and capability claim; one writer. Ten agents, ~1.5M tokens. **The full write-up is a PDF in Admin → Documents on PRODUCTION, top level: "Our own AI - options for Vectis (1 Oct 2026).pdf"** — 5 pages of comparison plus a 16-page appendix of every figure with its source URL, date and the checker's verdict. Prices are as of 1 Oct 2026.
 
