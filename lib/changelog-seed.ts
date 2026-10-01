@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"530cf4c653a67837db123d12bb0c1a6a5ca1884c","author":"Jordan Orange","date":"2026-10-01T14:13:37+01:00","subject":"Claude Memory: office PC trial entry - description line"},
   {"sha":"5d2085949f90b9b95819ca18164bbeec231b375e","author":"Jordan Orange","date":"2026-10-01T14:12:54+01:00","subject":"Claude Memory: the office PC trial - goals, plan and what was built"},
   {"sha":"de89c89de7f1540f524f8d9528a06eadab2a7c99","author":"Jordan Orange","date":"2026-10-01T12:11:50+01:00","subject":"Office PC model trial: an open model on a machine in the office reads the same lots as Gemini"},
   {"sha":"c1e1adb3f034b22b64b0ee58c8d5fc995e31b72c","author":"Jordan Orange","date":"2026-10-01T11:05:18+01:00","subject":"Claude Memory: cost was never the problem - record the correction and the open question"},

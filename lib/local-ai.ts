@@ -76,6 +76,15 @@ export function parseDescriptionReply(text: string, presetKey: string): { descri
   }
 }
 
+/** The content type a photo key implies — R2 keeps the extension the camera gave it. */
+export function mimeFromKey(key: string): string {
+  const ext = (key.split(".").pop() ?? "").toLowerCase()
+  if (ext === "png")  return "image/png"
+  if (ext === "webp") return "image/webp"
+  if (ext === "gif")  return "image/gif"
+  return "image/jpeg"
+}
+
 /** Plain-English state of the PC for the tab. */
 export function workerPresence(lastSeenAt: Date | null | undefined, now = Date.now()): "online" | "offline" | "never" {
   if (!lastSeenAt) return "never"

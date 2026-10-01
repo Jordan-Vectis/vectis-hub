@@ -20,6 +20,10 @@
 // OPTIONAL:
 //   OLLAMA_URL            where Ollama listens (default http://127.0.0.1:11434)
 //   WORKER_NAME           what the Hub shows (default this PC's name)
+//   PHOTO_MAX_PX          the Hub shrinks each photo to this longest edge before handing it over
+//                         (default 1024). ⚠ An open model reads a 3 MB camera photo at FULL size,
+//                         about 4,000 tokens each, so originals make a 24-photo lot a ~100,000-token
+//                         prompt. 0 = send the originals anyway (a big card, or to measure the gap).
 //   NUM_CTX               context window asked of Ollama (default 32768 — 24 photos need room)
 //   THINK                 "true" or "false" to force a thinking model's mode; unset = model default
 //   IMAGES_PER_MESSAGE    0 = all photos in one message (default); N = split N per message, for a
@@ -27,17 +31,20 @@
 //   --once                do one job (or none) and exit — for checking the set-up
 
 import os from "node:os"
+import http from "node:http"
+import https from "node:https"
 
 const HUB      = (process.env.HUB_URL ?? "").replace(/\/+$/, "")
 const TOKEN    = process.env.LOCAL_AI_TOKEN ?? ""
 const MODEL    = process.env.MODEL ?? ""
 const OLLAMA   = (process.env.OLLAMA_URL ?? "http://127.0.0.1:11434").replace(/\/+$/, "")
 const WORKER   = process.env.WORKER_NAME ?? os.hostname()
+const MAX_PX   = Number(process.env.PHOTO_MAX_PX ?? 1024)
 const NUM_CTX  = Number(process.env.NUM_CTX ?? 32768)
 const THINK    = process.env.THINK
 const PER_MSG  = Number(process.env.IMAGES_PER_MESSAGE ?? 0)
 const ONCE     = process.argv.includes("--once")
-const VERSION  = "1.0 (2026-10-01)"
+const VERSION  = "1.1 (2026-10-01)"
 
 const stamp = () => new Date().toLocaleTimeString("en-GB", { hour12: false })
 const log   = (msg) => console.log(`[${stamp()}] ${msg}`)
@@ -84,16 +91,46 @@ async function checkOllama() {
   }
 }
 
-async function download(url) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`photo download ${res.status}`)
+// Shrunk from the Hub when PHOTO_MAX_PX is set (the Hub does the shrinking, so nothing to
+// install here); the original straight from storage otherwise.
+async function download(img) {
+  const shrunk = MAX_PX > 0 && img.photoPath
+  const res = shrunk
+    ? await fetch(`${HUB}${img.photoPath}&maxPx=${MAX_PX}`, { headers: { authorization: `Bearer ${TOKEN}` } })
+    : await fetch(img.url)
+  if (!res.ok) throw new Error(`photo download ${res.status}${shrunk ? " from the Hub" : ""}`)
   return Buffer.from(await res.arrayBuffer()).toString("base64")
+}
+
+// ⚠ NOT fetch(). Node's fetch gives up after five minutes of silence from the server, and a
+// CPU reading two full-size photos was still silent at five minutes (measured 2026-10-01:
+// "fetch failed" with nothing wrong). A plain HTTP request has no such clock.
+function postJsonNoTimeout(urlString, body) {
+  return new Promise((resolve, reject) => {
+    const url  = new URL(urlString)
+    const lib  = url.protocol === "https:" ? https : http
+    const data = Buffer.from(JSON.stringify(body))
+    const req  = lib.request(url, { method: "POST", headers: { "content-type": "application/json", "content-length": data.length } }, res => {
+      const chunks = []
+      res.on("data", c => chunks.push(c))
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8")
+        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`Ollama ${res.statusCode}: ${text.slice(0, 300)}`))
+        try { resolve(JSON.parse(text)) }
+        catch { reject(new Error(`Ollama answered with something that is not JSON: ${text.slice(0, 200)}`)) }
+      })
+    })
+    req.setTimeout(0)
+    req.on("error", reject)
+    req.write(data)
+    req.end()
+  })
 }
 
 async function describe(job) {
   const images = []
   for (const img of job.images ?? []) {
-    try { images.push(await download(img.url)) }
+    try { images.push(await download(img)) }
     catch (e) { log(`  ⚠ ${job.lotLabel}: skipped a photo (${img.name}): ${e.message}`) }
   }
   if (!images.length) throw new Error("No photos could be downloaded")
@@ -112,10 +149,8 @@ async function describe(job) {
   const body = { model: MODEL, messages, stream: false, options: { num_ctx: NUM_CTX } }
   if (THINK === "true" || THINK === "false") body.think = THINK === "true"
 
-  const t0  = Date.now()
-  const res = await fetch(OLLAMA + "/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 300)}`)
-  const j = await res.json()
+  const t0 = Date.now()
+  const j  = await postJsonNoTimeout(OLLAMA + "/api/chat", body)
   return {
     text:         j?.message?.content ?? "",
     model:        j?.model ?? MODEL,
@@ -128,7 +163,7 @@ async function describe(job) {
 
 async function main() {
   checkConfig()
-  log(`Vectis Hub office PC bridge ${VERSION} · ${WORKER} · ${HUB} · model ${MODEL}`)
+  log(`Vectis Hub office PC bridge ${VERSION} · ${WORKER} · ${HUB} · model ${MODEL} · photos ${MAX_PX > 0 ? `shrunk to ${MAX_PX} px` : "at full size"}`)
   await checkOllama()
 
   let hubFailures = 0

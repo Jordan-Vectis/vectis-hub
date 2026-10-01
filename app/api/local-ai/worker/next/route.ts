@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { workerFromRequest, LOCAL_AI_LEASE_MS } from "@/lib/local-ai"
+import { workerFromRequest, LOCAL_AI_LEASE_MS, mimeFromKey } from "@/lib/local-ai"
 import { getSignedImageUrl } from "@/lib/r2"
 import { needsJpegCopy } from "@/lib/media"
 import { ensureJpegCopy } from "@/lib/media-convert"
@@ -9,19 +9,14 @@ import { ensureJpegCopy } from "@/lib/media-convert"
 // auth.config.ts publicPaths for that reason, and the token is the whole gate.
 //
 // Hands back ONE job at a time with everything the model needs: the frozen system instruction
-// and user prompt, and a signed R2 link per photo (an hour's life; iPhone HEIC and the like get
-// their JPEG copy, as the browser does). The job is leased: if the PC goes quiet the lease
-// expires and the job is offered again.
+// and user prompt, and per photo BOTH a signed R2 link to the original (an hour's life; iPhone
+// HEIC and the like get their JPEG copy, as the browser does) AND a Hub path that serves it
+// SHRUNK (../worker/photo?…&maxPx=N). ⚠ Measured 2026-10-01: an open model reads a 3 MB camera
+// photo at full size — about 4,000 tokens each against Gemini's flat 1,120 — so on anything but
+// a big card the bridge should take the shrunk copy. The job is leased: if the PC goes quiet the
+// lease expires and the job is offered again.
 
 const IDLE_WAIT_MS = 3000
-
-function mimeFromKey(key: string): string {
-  const ext = (key.split(".").pop() ?? "").toLowerCase()
-  if (ext === "png")  return "image/png"
-  if (ext === "webp") return "image/webp"
-  if (ext === "gif")  return "image/gif"
-  return "image/jpeg"
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,14 +55,19 @@ export async function POST(req: NextRequest) {
 
     if (!job) return NextResponse.json({ job: null, waitMs: IDLE_WAIT_MS })
 
-    const images: { url: string; name: string; mimeType: string }[] = []
-    for (const key of job.imageUrls) {
+    const images: { url: string; name: string; mimeType: string; photoPath: string }[] = []
+    for (const [i, key] of job.imageUrls.entries()) {
       try {
         let servedKey = key
         if (needsJpegCopy(key)) {
           try { servedKey = await ensureJpegCopy(key) } catch { /* no copy — send the original and let the model try */ }
         }
-        images.push({ url: await getSignedImageUrl(servedKey, 3600), name: key.split("/").pop() || "photo.jpg", mimeType: mimeFromKey(servedKey) })
+        images.push({
+          url:       await getSignedImageUrl(servedKey, 3600),
+          name:      key.split("/").pop() || "photo.jpg",
+          mimeType:  mimeFromKey(servedKey),
+          photoPath: `/api/local-ai/worker/photo?job=${encodeURIComponent(job.id)}&i=${i}`,
+        })
       } catch (e: any) {
         console.error(`[local-ai] could not sign ${key}:`, e?.message ?? e)
       }
