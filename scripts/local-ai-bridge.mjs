@@ -41,6 +41,10 @@ const OLLAMA   = (process.env.OLLAMA_URL ?? "http://127.0.0.1:11434").replace(/\
 const WORKER   = process.env.WORKER_NAME ?? os.hostname()
 const MAX_PX   = Number(process.env.PHOTO_MAX_PX ?? 1024)
 const NUM_CTX  = Number(process.env.NUM_CTX ?? 32768)
+// ⚠ A ceiling on what the model may write. Measured 2026-10-01 on a CPU: with thinking off the
+// 4B model still ran to 3,000+ tokens on one lot at 1 token a second and never stopped. A
+// description is a few hundred tokens; past this the answer is a runaway, and the lot fails.
+const MAX_OUT  = Number(process.env.MAX_OUTPUT_TOKENS ?? 1500)
 const THINK    = process.env.THINK
 const PER_MSG  = Number(process.env.IMAGES_PER_MESSAGE ?? 0)
 const ONCE     = process.argv.includes("--once")
@@ -146,7 +150,7 @@ async function describe(job) {
     messages.push({ role: "user", content: job.userPrompt, images })
   }
 
-  const body = { model: MODEL, messages, stream: false, options: { num_ctx: NUM_CTX } }
+  const body = { model: MODEL, messages, stream: false, options: { num_ctx: NUM_CTX, num_predict: MAX_OUT } }
   // ⚠ Thinking OFF unless asked for. Measured 2026-10-01: Qwen3-VL "thinks" before it answers,
   // and on a CPU that was 2,249 tokens of private reasoning at 1.6 tokens a second — 23 minutes —
   // before a word of description. A model that cannot think rejects the field; that is retried
