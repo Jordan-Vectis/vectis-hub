@@ -813,6 +813,33 @@ it; any wording relating to condition not from our wizard should never be affect
 
 ---
 
+## 🔍 Where each fact came from, and the look-again (2026-10-01)
+
+A trio of Sindy dolls: the third holds a **microphone**; the AI wrote *"holding a silver baton with
+a loose white feather (cap absent)"*. It had recognised the 1979 Majorette outfit from memory, and
+memory supplied the baton and the missing cap. Jordan: *"we need to come up with like a way of
+scoring the accuracy or having like a confidence rating"*. Two **advisory** checks exist for that —
+**neither ever changes a description**, and a "confidence" is never a percentage the model awards itself:
+
+- **ASSUMED line (Batch).** `ASSUMED_RULE` in `lib/batch-prompt.ts` makes the model end with
+  `ASSUMED: a | b | c` — every statement that came from its own knowledge rather than the key points
+  or something clearly visible. The batch route parses it (`parseAssumed`, `lib/lot-ai-check.ts`)
+  and returns `assumed[]`. ⚠ Keep it a separate line, never tags inside the description text.
+- **Look-again (Double Check).** The "NAMED OBJECTS" section of `lib/double-check-instruction.ts`
+  makes it list every object the description names with `sure | unsure | no` and a note on what the
+  photos show; the route returns `objects[]`. `photoDetail: "ultra"` sets Gemini 3's
+  `MEDIA_RESOLUTION_ULTRA_HIGH` **per photo part** (the only place Google accepts it; 2,240 tokens a
+  photo). Instructions Testing runs Double Check at ultra by default; the real pipeline still runs at
+  the default detail until the sandbox has proved ultra — flip it deliberately, not in passing.
+- **Storage is its own table, `CatalogueLotAiCheck`** (one row per lot; written by the overnight
+  runner and the Auto Pipeline tab via `recordLotAiCheck`, migration-safe, warns once). ⚠ Deliberately
+  NOT columns on `CatalogueLot`: `prisma.update()` reads the whole row back, so a shipped-but-unmigrated
+  column there breaks every lot save between the deploy and Run Migrations.
+- **Review tab:** an amber **🔍 Look again** box per lot (assumed chips; objects not "sure" with ✗/?;
+  confirmed ones in grey), **✓ I've checked these** (a new run clears the tick), the **🔍 Needs a look**
+  filter and header count. Instructions Testing (preview only) shows both and writes nothing.
+- A third option — two independent models disagreeing on an object — was offered and not built.
+
 ## Chat Route (`/api/auction-ai/chat`)
 
 - `maxDuration`: 120 seconds.
