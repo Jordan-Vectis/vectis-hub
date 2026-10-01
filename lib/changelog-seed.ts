@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a4bc9ba9dd3ff5216c8ef5d0674c681fbb8a557a","author":"Jordan Orange","date":"2026-09-30T16:58:57+01:00","subject":"Merge staging into main: AI house rules (names as mistakes, no counts unless key-pointed, capitals), Bears clean-up from the F135 review, Auto Clerk 2.2, Saleroom Trainer Lines export + click-to-jump, Image chat saved chats, BC copy catch-up after a restart"},
+  {"sha":"8dc11f9d09ef903bdd14ab8a2539ee83feb3c910","author":"Jordan Orange","date":"2026-09-30T12:08:19+01:00","subject":"Bears clean-up: artist bear not artist designed, edition said once, no Unbranded opening; Dolls & Bears check gains the F135 review rules"},
   {"sha":"8e86dee3819f9376f2f8328e038bf134d5b5946c","author":"Jordan Orange","date":"2026-09-30T11:08:02+01:00","subject":"AI descriptions: names keep the cataloguer's capitals everywhere (house rules moved to lib/description-rules.ts)"},
   {"sha":"ab805b4159c1a62f513bd5b0def65ce551dfec10","author":"Jordan Orange","date":"2026-09-30T10:00:37+01:00","subject":"AI descriptions: no exact quantity unless the cataloguer key-pointed it"},
   {"sha":"97daf53af1eebbac2b2e979b4a927bdda7f54dad","author":"Jordan Orange","date":"2026-09-30T10:00:36+01:00","subject":"Cataloguer-mistake flags: a wrong maker/range name is a mistake, not wording (Hornby Dublin for Dublo)"},

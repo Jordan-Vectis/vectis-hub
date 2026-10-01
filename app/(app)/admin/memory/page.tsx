@@ -16,6 +16,61 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "project_own_ai_research.md",
+    content: `---
+name: own-ai-research-2026-10-01
+description: "Create our own AI" — the 2026-10-01 research pass. Five routes costed and checked (tune Gemini, fine-tune an open vision model, self-host/rent a GPU, pgvector hammer-price estimator, Vectis assistant). Conclusions - fix quota and cost for free first, build the estimator, staff-only assistant, a £15 GPU trial before any tuning or hardware. The full 21-page PDF sits in Admin → Documents on PRODUCTION. Read before any "own AI", fine-tuning, GPU or estimator conversation
+metadata:
+  type: project
+---
+
+# "Our own AI" — what was researched and concluded (2026-10-01)
+
+**Why this exists:** Jordan said "we talked before about creating our own AI, I want to explore that again" and NOTHING from that earlier conversation had been saved. This time it is. He wanted all three readings looked at: a model fine-tuned on Vectis data, a self-hosted open-weight model, and a Vectis assistant.
+
+**How it was done (he approved the agents first):** one agent read the Hub's code for what the AI does today; four researched the web (Gemini tuning · open-weight vision models · hosting and hardware · estimator and assistant); four checkers re-opened every price and capability claim; one writer. Ten agents, ~1.5M tokens. **The full write-up is a PDF in Admin → Documents on PRODUCTION, top level: "Our own AI - options for Vectis (1 Oct 2026).pdf"** — 5 pages of comparison plus a 16-page appendix of every figure with its source URL, date and the checker's verdict. Prices are as of 1 Oct 2026.
+
+## Facts about the Hub that shaped the answer (from the code)
+- Gemini via the Gemini Developer API with an API key (\`@google/generative-ai\` 0.24, NOT \`@google/genai\`, NOT Vertex) — every route makes its own \`new GoogleGenerativeAI(process.env.GEMINI_API_KEY)\` (~46 files). Default model everywhere \`gemini-3-flash-preview\`. Claude only through lib/ai-provider.ts on claudeOk slots.
+- Per lot: ~41k input + ~2k output tokens across Batch (~29k, up to 24 photos) → Key Points (~3.5k, text) → Double Check (~9k, up to 6 photos). **The batch route sends the photos at full size** — resizing is an unbuilt saving.
+- No embedding / pgvector code exists anywhere; Lens, Website Search and the SearchWord list all match with SQL text (ILIKE) scans.
+- Sold data: ArchiveLot ~956k (no category column; hammer 0 = unsold), BcLotWeb ~220k, WarehouseItem.auctionDate is a STRING.
+
+## The five routes — verdicts
+| Route | One-off | Monthly at 500 lots/night | Verdict |
+|---|---|---|---|
+| Today's Gemini bill | — | ~£250 at the preview price; ~£720 when it ends (Jan 2027) | — |
+| A. Tune Gemini | £950–£3,200 per training pass (unconfirmed) | £170 (3.1 Flash-Lite) to £1,130 (3.5 Flash) | Experiment, not a saving |
+| B. Fine-tune an open vision model (Qwen3-VL-8B class, Apache-2.0) | ~£130 of rented H100 (inferred) | as C | Credible, unproven on toy labels |
+| C. Rent a GPU nightly / own a box | nil / £4,400–£19,000 | £140–£165 rented; £215–£560 owned incl. electricity | Break-even now, cheaper after the preview price; only after a trial |
+| D. Hammer-price estimator (pgvector in Neon + gradient boosting) | £2–£50 to embed 1.1m lots | ~£3 | **Do this** — the only route that uses what makes Vectis different |
+| E. Assistant | nil | £4–£22 (staff) | Staff-only now; customers are a legal question first |
+
+Key reasons, so nobody re-derives them:
+- **Tuning Gemini is Vertex AI only.** The API-key Gemini API has no tuning. It would need a service account, the new SDK, a third provider branch, and 360k photos copied to Google Cloud Storage (tuning runs in us-central1 or europe-west4 only). \`gemini-3-flash-preview\` cannot be tuned; tuned Gemini 3 endpoints bill at 1.5× base; 3.5 Flash is only guaranteed to 2027-05-19 so budget a yearly re-tune. Tuning shortens the instruction, it does not remove it. Anthropic does not offer tuning to ordinary customers; OpenAI's self-serve tuning is closed to new customers (checker-supported as of 1 Oct 2026).
+- **Vertex alone removes the per-minute cap** (2M tokens/min at Tier 1, no RPM cap) without tuning. And \`gemini-3-flash-preview\` is absent from the Gemini API rate-limits page, so **the 4 RPM may be the PREVIEW model's cap, not the project's** (unconfirmed — read the real figure in AI Studio for project auction-ai).
+- **Railway has no GPUs (confirmed).** A GPU, owned or rented, would PULL jobs from the Hub — the office-PC collector pattern — with heartbeat, Stop, catch-up, a Status Centre check. Rented 96 GB RTX PRO 6000 four hours a night: Nebius (UK region) ~$185, RunPod EU ~$216. UK card prices: RTX 5090 £4,400; Scan 3XS 5090 workstation £6,500; RTX PRO 6000 96 GB workstation £19,000. A fine-tuned open model has no per-token serverless home (Together dropped it; Fireworks serves LoRAs at $8/GPU-hour).
+- **No benchmark covers toy-box labels and catalogue numbers.** The "Qwen3-VL-8B beats Gemini 2.5 Flash on OCR" claim could not be reproduced from the paper. A 50-lot trial on a rented card costs under $20 and a day — that is the decision test for B and C.
+- **Estimator:** embed every sold description once (OpenAI 3-small / Voyage-4-lite ≈ $2, Gemini Embedding ≈ $18 at 80 tokens a lot), pgvector HNSW on Neon (scale compute up for the hour-long build), show "based on these ten sold lots" as comparables, gradient boosting (department, year, condition words) for a figure and band. Published auction work: data-only models R² 0.74–0.78 vs experts 0.93 on log price → expect most lots within ±30–50%. Split by TIME when back-testing, keep unsold lots in view, never feed the cataloguer's estimate in as a feature.
+- **Assistant:** \`help_assistant\` already has cachePrefix and Claude allowed — add 3–6 typed server-side tools under the user's own permissions and a per-user log; ~880 questions a month ≈ $5 Gemini Flash / $11 Haiku 4.5 / $22 Sonnet 5.5. Customer-facing: Air Canada was held to what its chatbot promised; vendor data needs permission filtering; no investment wording (FCA).
+
+## Suggested order (given to Jordan, not yet decided)
+1. Check the real quota and move the default off the preview model id; look at Tier 2 ($100 paid + 3 days).
+2. Cut tokens: route batch/KP/DC through lib/ai-provider.ts, resize the photos, try Batch mode (50% off, own quota).
+3. Build D (estimator). 4. Add E staff-only on D's vectors. 5. The $20 GPU trial. 6. Only then talk about A, B or hardware.
+
+## Decisions only Jordan can make (open)
+Staff-only vs customer assistant · may lot photos leave R2 for Google Cloud (EU) or a rented GPU host (UK at Nebius/Modal) · rent vs a box in the office · which embedding vendor to tie 1.1m vectors to (a retirement forces a re-embed) · estimator vs AI writing the estimate, and whether cataloguers see it before their own · whether to spend on tuning at all once quota and cost are fixed.
+
+## Figures the checkers could NOT confirm
+Per-image training token count on Vertex and so all per-pass training costs · origin of the 4 RPM limit · what happens to a tuned endpoint when its base retires · all per-lot GPU timings and whether a 32 GB card holds a 24-photo prompt · a few vendor list prices (HF Endpoints, Vertex Model Garden hourly, Overclockers/PCSpecialist, Mac Studio UK).
+
+## Working notes
+- The Workflow tool's agents only launch through its own \`pipeline()\` / \`parallel()\` — a plain \`Promise.all\` of \`agent()\` calls returned null for every one and the run "completed" with 0/4 areas. Re-ran with pipeline; the cached code-reading result was reused.
+- Admin → Documents on production is the agreed home for research write-ups like this; Chrome's file_upload needs the file inside the working folder (a temporary copy in C:\\Dev apps, deleted afterwards).
+- Related: [[reference_ai_cost]], [[reference_ai_providers]], [[reference_lens]], [[reference_website_search]], [[feedback_ask_before_workflows]].`,
+  },
+  {
     filename: "feedback_design_corrections.md",
     content: `---
 name: design-corrections-look-first
