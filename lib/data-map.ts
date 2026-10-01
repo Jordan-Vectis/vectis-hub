@@ -108,6 +108,8 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "AiPreset", what: "The AI instructions themselves — the one source every run resolves against. Editing an instruction means editing a row here." },
       { model: "AiPresetCategory", what: "How those instructions are grouped and ordered on the Instructions tab." },
       { model: "PipelineRun", what: "One Auto Pipeline run: the sale, the instruction, the model, and which stage it reached." },
+      { model: "LocalAiWorker", personal: "staff", what: "The office PC that runs an open AI model for the comparison trial: its name, who made its token (the token itself is never stored, only a fingerprint), and when it last asked for work." },
+      { model: "LocalAiJob", personal: "staff", what: "One lot sent to the office PC's model for comparison in Instructions Testing: the prompt it was given, which photos, what it wrote back, and who queued it. Preview only — never copied onto the lot." },
       { model: "PipelineLot", what: "One lot's journey through a pipeline run — the generated description, the double-check findings, the key-point fixes, and whether it was applied to the catalogue." },
       { model: "PipelineQueueItem", personal: "staff", what: "A sale queued for the overnight run with its own settings, plus the progress the server-side runner reports back and who queued it." },
       { model: "UpgradeLot", what: "An overnight AI Upgrade's rewrite, held back for the morning review page. Nothing reaches the catalogue until someone accepts it." },

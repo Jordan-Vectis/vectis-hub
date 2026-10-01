@@ -3376,3 +3376,54 @@ model SitePageVersion {
 
   @@index([slug, publishedAt])
 }
+
+/// Office PC model trial (2026-10-01): a machine in the office runs an open-weight model and
+/// PULLS description jobs from the Hub (lib/local-ai.ts). One row per bridge token — the token
+/// itself is never stored, only its SHA-256. Making a new token switches the old row off.
+model LocalAiWorker {
+  id         String       @id @default(cuid())
+  name       String
+  tokenHash  String       @unique
+  createdAt  DateTime     @default(now())
+  createdBy  String
+  lastSeenAt DateTime?
+  lastModel  String?
+  lastInfo   String?
+  disabledAt DateTime?
+  jobs       LocalAiJob[]
+}
+
+/// One lot sent to the office PC's model for comparison. ⚠ PREVIEW ONLY — never written to a
+/// CatalogueLot. The full prompt is frozen on the row so the PC gets exactly what Gemini got.
+model LocalAiJob {
+  id                String         @id @default(cuid())
+  batchId           String
+  status            String         @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELLED
+  createdAt         DateTime       @default(now())
+  createdBy         String
+  auctionCode       String
+  lotId             String
+  lotLabel          String
+  presetKey         String
+  systemInstruction String
+  userPrompt        String
+  imageUrls         String[]       @default([])
+  workerId          String?
+  worker            LocalAiWorker? @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  leasedAt          DateTime?
+  leaseExpiresAt    DateTime?
+  finishedAt        DateTime?
+  model             String?
+  description       String?
+  estimate          String?
+  flag              String?
+  rawResponse       String?
+  error             String?
+  promptTokens      Int?
+  outputTokens      Int?
+  ms                Int?
+  imageCount        Int?
+
+  @@index([batchId])
+  @@index([status, createdAt])
+}

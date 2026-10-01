@@ -47,6 +47,32 @@ type Usage = {
 
 type PhotoDetailChoice = "standard" | "medium" | "low"
 
+// The office PC trial (lib/local-ai.ts): the same lot, the same prompt and photos, written by an
+// open model on a machine in the office. Kept in its OWN map keyed by lot id, not on TestLot —
+// the run loop replaces the lots array wholesale and would wipe anything that arrived meanwhile.
+type LocalResult = {
+  status:       "QUEUED" | "RUNNING" | "DONE" | "FAILED" | "CANCELLED" | string
+  description?: string | null
+  estimate?:    string | null
+  flag?:        string | null
+  error?:       string | null
+  model?:       string | null
+  promptTokens?: number | null
+  outputTokens?: number | null
+  ms?:           number | null
+  imageCount?:   number | null
+}
+
+type LocalStatus = {
+  ready:     boolean
+  reason?:   string
+  hasToken?: boolean
+  presence?: "online" | "offline" | "never"
+  worker?:   { name: string; lastSeenAt: string | null; model: string | null; info: string | null } | null
+  queued?:   number
+  running?:  number
+}
+
 type TestLot = {
   id:          string
   label:       string
@@ -136,6 +162,18 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
   const [compareMedium, setCompareMedium] = useState(false)
   const [rateOverrides, setRateOverrides] = useState<Record<string, ModelRate>>({})
 
+  // The office PC trial (lib/local-ai.ts).
+  const [compareLocal,   setCompareLocal]   = useState(false)
+  const [localStatus,    setLocalStatus]    = useState<LocalStatus | null>(null)
+  const [localBatchId,   setLocalBatchId]   = useState<string | null>(null)
+  const [localResults,   setLocalResults]   = useState<Record<string, LocalResult>>({})
+  const [localSetupOpen, setLocalSetupOpen] = useState(false)
+  const [newToken,       setNewToken]       = useState<string | null>(null)
+  const [tokenBusy,      setTokenBusy]      = useState(false)
+  const [tokenError,     setTokenError]     = useState<string | null>(null)
+  const [origin,         setOrigin]         = useState("")
+  const localSeenRef = useRef<Set<string>>(new Set())   // job ids already logged as finished
+
   const cancelRef = useRef(false)
   const logRef    = useRef<HTMLDivElement>(null)
 
@@ -146,12 +184,87 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
     // The admin's price overrides (Admin → AI Models), so the totals below are priced the
     // same way the run-cost estimate above the real Run buttons is.
     fetch("/api/ai-rates").then(r => r.json()).then(d => { if (d && d.overrides && typeof d.overrides === "object") setRateOverrides(d.overrides) }).catch(() => {})
+    setOrigin(window.location.origin)
   }, [])
 
   function addLog(msg: string) {
     const ts = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     setLog(l => [...l, `[${ts}]  ${msg}`])
     setTimeout(() => logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" }), 50)
+  }
+
+  // Is the office PC there? Asked once on load, then every 10 s while anyone is looking at it.
+  async function refreshLocalStatus() {
+    try {
+      const r = await fetch("/api/local-ai/status")
+      const d = await r.json()
+      setLocalStatus(r.ok ? d : { ready: false, reason: d?.error ?? "could not ask" })
+    } catch (e: any) {
+      setLocalStatus({ ready: false, reason: e?.message ?? "could not ask" })
+    }
+  }
+  useEffect(() => { refreshLocalStatus() }, [])
+  useEffect(() => {
+    if (!compareLocal && !localSetupOpen && !localBatchId) return
+    const t = setInterval(refreshLocalStatus, 10000)
+    return () => clearInterval(t)
+  }, [compareLocal, localSetupOpen, localBatchId])
+
+  // The PC's answers arrive on their own clock. Poll the batch every 4 s until every job has
+  // finished one way or another; log each one once as it lands.
+  useEffect(() => {
+    if (!localBatchId) return
+    let stopped = false
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/local-ai/jobs?batchId=${encodeURIComponent(localBatchId)}`)
+        const d = await r.json()
+        if (!r.ok || !Array.isArray(d.jobs)) return
+        const next: Record<string, LocalResult> = {}
+        let open = 0
+        for (const j of d.jobs) {
+          next[j.lotId] = j
+          if (j.status === "QUEUED" || j.status === "RUNNING") open++
+          else if (!localSeenRef.current.has(j.id)) {
+            localSeenRef.current.add(j.id)
+            if (j.status === "DONE") addLog(`  🖥 ${j.lotLabel} — office PC done${j.model ? ` (${j.model})` : ""} · ${fmtN(j.promptTokens)} in · ${fmtN(j.outputTokens)} out · ${j.ms != null ? `${(j.ms / 1000).toFixed(0)} s` : "?"}`)
+            else if (j.status === "FAILED") addLog(`  🖥 ✗ ${j.lotLabel} — office PC failed: ${j.error ?? "no reason given"}`)
+          }
+        }
+        if (!stopped) setLocalResults(next)
+        if (open === 0 && !stopped) { setLocalBatchId(null); addLog(`🖥 The office PC has finished this batch.`) }
+      } catch { /* a missed poll is nothing — the next one catches up */ }
+    }
+    poll()
+    const t = setInterval(poll, 4000)
+    return () => { stopped = true; clearInterval(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localBatchId])
+
+  async function makeToken() {
+    setTokenBusy(true); setTokenError(null); setNewToken(null)
+    try {
+      const r = await fetch("/api/local-ai/token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Office PC" }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d?.error ?? r.statusText)
+      setNewToken(d.token)
+      refreshLocalStatus()
+    } catch (e: any) {
+      setTokenError(e?.message ?? "Could not make a token")
+    } finally {
+      setTokenBusy(false)
+    }
+  }
+
+  async function stopRun() {
+    cancelRef.current = true
+    if (localBatchId) {
+      try {
+        const r = await fetch("/api/local-ai/jobs/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batchId: localBatchId }) })
+        const d = await r.json()
+        if (r.ok) addLog(`🖥 ${d.cancelled ?? 0} lot${d.cancelled === 1 ? "" : "s"} still queued for the office PC cancelled; one it is already working on will still land.`)
+      } catch { /* the queue just drains instead */ }
+    }
   }
 
   async function handleLoad() {
@@ -239,6 +352,27 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
     addLog(`   Stages: Batch${runKp ? " → Key Points" + (kpRelaxed ? " (relaxed)" : " (strict)") : ""}${runDc ? " → Double Check" : ""}`)
     addLog(`   PREVIEW ONLY — nothing will be written to the catalogue.`)
     addLog(`   Photos: ${compareMedium ? "Standard AND Medium detail, side by side" : `${photoDetail} detail`}${photoMaxPx ? ` · shrunk to ${Number(photoMaxPx).toLocaleString("en-GB")} px before sending` : " · originals sent"}`)
+
+    // The office PC gets the whole batch up front so it works while Gemini does; its answers
+    // land in their own column as they arrive (the polling effect above).
+    setLocalResults({})
+    localSeenRef.current = new Set()
+    setLocalBatchId(null)
+    if (compareLocal) {
+      try {
+        const r = await fetch("/api/local-ai/jobs", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ auctionCode: code.trim().toUpperCase(), presetKey: preset, lots: toRun.map(l => ({ id: l.id, label: l.label, keyPoints: l.keyPoints, imageUrls: l.imageUrls })) }),
+        })
+        const d = await r.json()
+        if (!r.ok) throw new Error(d?.error ?? r.statusText)
+        setLocalBatchId(d.batchId)
+        const offline = localStatus?.presence !== "online"
+        addLog(`🖥 ${d.count} lot${d.count === 1 ? "" : "s"} queued for the office PC${offline ? " — it is not connected right now, so they will wait until it is" : ""}.`)
+      } catch (e: any) {
+        addLog(`🖥 ✗ Could not queue the lots for the office PC: ${e?.message ?? e}. Carrying on with Gemini only.`)
+      }
+    }
 
     // Clear any previous results on the selected lots
     const working = lots.map(l => selected.has(l.id)
@@ -390,6 +524,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
     }
 
     addLog(cancelRef.current ? `⏹ Stopped after ${done} lots.` : `🎉 Test run finished — ${done} lots. Nothing was saved.`)
+    if (compareLocal && !cancelRef.current) addLog(`🖥 The office PC's descriptions appear in their own column as it finishes each lot.`)
     setRunning(false)
   }
 
@@ -494,6 +629,59 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
             Lower detail does cut the bill; the question is whether box labels and catalogue numbers still get read, which is what <strong>Compare</strong> is for.
             Every figure in the results is Google's own count for the call, not an estimate.
           </p>
+
+          {/* ── The office PC: an open model you own, reading the same lots (lib/local-ai.ts) ── */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input type="checkbox" checked={compareLocal} onChange={e => setCompareLocal(e.target.checked)} disabled={running} />
+              🖥 Compare with the <strong>office PC's</strong> model
+            </label>
+            <LocalPill status={localStatus} />
+            <button type="button" onClick={() => setLocalSetupOpen(o => !o)} className="text-xs underline text-gray-600 dark:text-gray-400">
+              {localSetupOpen ? "Hide the set-up" : "Office PC set-up"}
+            </button>
+          </div>
+
+          {localSetupOpen && (
+            <div className="mt-3 rounded border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] p-3 text-xs text-gray-700 dark:text-gray-300 space-y-2.5">
+              <p className="font-medium text-gray-900 dark:text-white">🖥 The office PC — an open model Vectis owns, reading the same lots as Gemini</p>
+              <p>
+                The PC <strong>pulls</strong> work from the Hub with a token, so nothing on the office firewall needs opening. It gets the
+                exact prompt and photos Gemini gets and posts back what its model wrote; the Hub shows the two side by side. Nothing is written to any lot.
+                {localStatus?.worker && (
+                  <> Right now: <strong>{localStatus.worker.name}</strong> is {localStatus.presence === "online" ? "connected" : localStatus.presence === "offline" ? "not connected" : "yet to connect"}
+                  {localStatus.worker.model ? `, model ${localStatus.worker.model}` : ""}{localStatus.worker.lastSeenAt ? `, last seen ${new Date(localStatus.worker.lastSeenAt).toLocaleString("en-GB", { timeZone: "Europe/London" })}` : ""}
+                  {localStatus.queued || localStatus.running ? ` · ${localStatus.queued ?? 0} queued, ${localStatus.running ?? 0} running` : ""}.</>
+                )}
+              </p>
+              <ol className="list-decimal ml-5 space-y-1.5">
+                <li>
+                  On the PC, install <strong>Node</strong> (nodejs.org) and <strong>Ollama</strong> (ollama.com), then pull a vision model in a terminal, for example{" "}
+                  <code className="px-1 rounded bg-gray-100 dark:bg-[#2C2C2E]">ollama pull qwen3-vl:8b</code>. Which model fits depends on the graphics card's memory.
+                </li>
+                <li>
+                  <button type="button" onClick={makeToken} disabled={tokenBusy}
+                    className="px-2.5 py-1 rounded text-xs font-medium bg-[#C8A96E] text-black disabled:opacity-40">
+                    {tokenBusy ? "Making…" : localStatus?.hasToken ? "Make a NEW token (switches the old one off)" : "Make a token"}
+                  </button>
+                  {tokenError && <span className="ml-2 text-red-500">{tokenError}</span>}
+                  {newToken && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <code className="px-2 py-1 rounded bg-gray-100 dark:bg-[#2C2C2E] text-gray-900 dark:text-gray-100 break-all">{newToken}</code>
+                      <button type="button" onClick={() => navigator.clipboard.writeText(newToken)} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700">Copy</button>
+                      <span className="text-amber-600 dark:text-amber-400">Shown once — it is not stored anywhere you can read it back.</span>
+                    </div>
+                  )}
+                </li>
+                <li>
+                  <a href="/api/local-ai/bridge-script" className="underline" download>Download the bridge</a> (one small file), put it in a folder on the PC, and in a terminal in that folder:
+                  <pre className="mt-1 whitespace-pre-wrap rounded bg-gray-100 dark:bg-[#2C2C2E] p-2 text-[11px] text-gray-800 dark:text-gray-200">{`set HUB_URL=${origin || "https://…the Hub address…"}\nset LOCAL_AI_TOKEN=${newToken ?? "…the token…"}\nset MODEL=qwen3-vl:8b\nnode local-ai-bridge.mjs`}</pre>
+                  It says what it is doing lot by lot. Leave it running; Ctrl+C stops it.
+                </li>
+                <li>Back here: tick <strong>Compare with the office PC's model</strong>, pick lots, press Test. The PC's descriptions arrive in their own column as it finishes each one, and the pill above says whether it is connected.</li>
+              </ol>
+            </div>
+          )}
         </div>
         {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
       </div>
@@ -512,7 +700,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
             </div>
             <div className="ml-auto flex items-center gap-2">
               {running
-                ? <button onClick={() => { cancelRef.current = true }} className="px-4 py-1.5 rounded text-sm font-medium bg-red-600 text-white">⏹ Stop</button>
+                ? <button onClick={stopRun} className="px-4 py-1.5 rounded text-sm font-medium bg-red-600 text-white">⏹ Stop</button>
                 : <button onClick={handleRun} disabled={!selCount || !preset}
                     className="px-4 py-1.5 rounded text-sm font-medium bg-[#C8A96E] text-black disabled:opacity-40 disabled:cursor-not-allowed">
                     🧪 Test {selCount || ""} {selCount === 1 ? "lot" : "lots"}
@@ -566,13 +754,17 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
       )}
 
       {/* ── What it cost — totals from the routes' own usage counts ── */}
-      {results.length > 0 && <Totals lots={results} model={model} overrides={rateOverrides} compare={compareMedium} />}
+      {results.length > 0 && <Totals lots={results} model={model} overrides={rateOverrides} compare={compareMedium} local={results.map(l => localResults[l.id]).filter(Boolean)} />}
 
       {/* ── Results ── */}
       {results.map(l => {
         const open  = expanded.has(l.id)
         const final = l.dcDesc || l.kpDesc || l.batchDesc || ""
         const hasB  = l.batchDescB !== undefined || !!l.batchErrorB
+        const local = localResults[l.id]
+        const hasLocal = !!local || (compareLocal && !!localBatchId)
+        const compareCols = 1 + (hasB ? 1 : 0) + (hasLocal ? 1 : 0)
+        const compareMode = compareCols > 1
         return (
           <div key={l.id} className="rounded border border-gray-200 dark:border-gray-800 mb-3">
             <button onClick={() => setExpanded(e => { const n = new Set(e); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n })}
@@ -584,6 +776,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
               {l.batchSkip           && <span className="text-xs text-gray-500">skipped — {l.batchSkip}</span>}
               {l.estimate            && <span className="text-xs text-gray-500">Est. {l.estimate}</span>}
               {l.batchUsage?.promptTokens != null && <span className="text-xs text-gray-500">{fmtN(l.batchUsage.promptTokens)} tokens in{l.batchUsage.ms != null ? ` · ${(l.batchUsage.ms / 1000).toFixed(0)} s` : ""}</span>}
+              {local && <span className={`text-xs ${local.status === "DONE" ? "text-emerald-600 dark:text-emerald-400" : local.status === "FAILED" ? "text-red-500" : "text-gray-500"}`}>🖥 {localStatusWord(local.status)}</span>}
               {l.kpStatus === "fixed"  && <span className="text-xs text-amber-600 dark:text-amber-400">✓ key points inserted</span>}
               {l.kpStatus === "ok"     && <span className="text-xs text-emerald-600 dark:text-emerald-400">✓ key points present</span>}
               {l.dcStatus === "issues" && <span className="text-xs text-amber-600 dark:text-amber-400">⚑ double check rewrote</span>}
@@ -605,20 +798,33 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
                   <Panel title="Currently on the catalogue" tone="plain" text={l.catalogueDesc || "— (nothing yet)"} />
                 </div>
 
-                {hasB && (
-                  // The comparison: the same photos and key points, the same instruction, two
-                  // detail levels. Read these for box labels and catalogue numbers.
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                    <Panel title="⚡ 1. Batch — Standard detail (1,120 tokens a photo)" tone="gold"
+                {compareMode && (
+                  // The comparison: the same photos and key points, the same instruction — two
+                  // detail levels and/or the office PC's model. Read these for box labels and
+                  // catalogue numbers.
+                  <div className={`grid grid-cols-1 gap-3 ${compareCols === 3 ? "xl:grid-cols-3" : "xl:grid-cols-2"}`}>
+                    <Panel title={hasB ? "⚡ 1. Batch — Gemini, Standard detail (1,120 tokens a photo)" : "⚡ 1. Batch — Gemini"} tone="gold"
                       text={l.batchDesc ?? (l.batchSkip ? `skipped — ${l.batchSkip}` : "—")}
                       note={[l.estimate ? `Est. ${l.estimate}` : "", l.batchUsage ? describeUsage(l.batchUsage) : ""].filter(Boolean).join(" · ")} />
-                    <Panel title="⚡ 1b. Batch — Medium detail (560 tokens a photo)" tone="gold"
-                      text={l.batchErrorB ? `failed — ${l.batchErrorB}` : (l.batchDescB || "—")}
-                      note={[l.estimateB ? `Est. ${l.estimateB}` : "", l.batchFlagB ? `flag: ${l.batchFlagB}` : "", l.batchUsageB ? describeUsage(l.batchUsageB) : ""].filter(Boolean).join(" · ")} />
+                    {hasB && (
+                      <Panel title="⚡ 1b. Batch — Gemini, Medium detail (560 tokens a photo)" tone="gold"
+                        text={l.batchErrorB ? `failed — ${l.batchErrorB}` : (l.batchDescB || "—")}
+                        note={[l.estimateB ? `Est. ${l.estimateB}` : "", l.batchFlagB ? `flag: ${l.batchFlagB}` : "", l.batchUsageB ? describeUsage(l.batchUsageB) : ""].filter(Boolean).join(" · ")} />
+                    )}
+                    {hasLocal && (
+                      <Panel title={`🖥 Office PC${local?.model ? ` — ${local.model}` : ""}`} tone="gold"
+                        text={!local ? "waiting to be queued…"
+                          : local.status === "DONE" ? (local.description || "—")
+                          : local.status === "FAILED" ? `failed — ${local.error ?? "no reason given"}`
+                          : local.status === "CANCELLED" ? "cancelled"
+                          : local.status === "RUNNING" ? "the office PC is working on it…"
+                          : "waiting for the office PC…"}
+                        note={local ? [local.estimate ? `Est. ${local.estimate}` : "", local.flag ? `flag: ${local.flag}` : "", describeLocal(local)].filter(Boolean).join(" · ") : undefined} />
+                    )}
                   </div>
                 )}
-                <div className={`grid grid-cols-1 gap-3 ${hasB ? "xl:grid-cols-2" : "xl:grid-cols-3"}`}>
-                  {!hasB && (
+                <div className={`grid grid-cols-1 gap-3 ${compareMode ? "xl:grid-cols-2" : "xl:grid-cols-3"}`}>
+                  {!compareMode && (
                     <Panel title="⚡ 1. Batch" tone="gold" text={l.batchDesc ?? (l.batchSkip ? `skipped — ${l.batchSkip}` : "—")}
                       note={l.batchUsage ? describeUsage(l.batchUsage) : undefined} />
                   )}
@@ -678,6 +884,30 @@ function describeUsage(u: Usage): string {
   return parts.join(" · ")
 }
 
+const localStatusWord = (s: string): string =>
+  s === "DONE" ? "done" : s === "FAILED" ? "failed" : s === "RUNNING" ? "working…" : s === "CANCELLED" ? "cancelled" : "queued"
+
+/** The office PC's own count — Ollama reports tokens in and out and we time the call. */
+function describeLocal(r: LocalResult): string {
+  if (r.status !== "DONE" && r.status !== "FAILED") return ""
+  const parts: string[] = []
+  if (r.imageCount) parts.push(`${r.imageCount} photo${r.imageCount === 1 ? "" : "s"}`)
+  if (r.promptTokens != null || r.outputTokens != null) parts.push(`${fmtN(r.promptTokens)} tokens in · ${fmtN(r.outputTokens)} out`)
+  if (r.ms != null) parts.push(`${(r.ms / 1000).toFixed(0)} s`)
+  return parts.join(" · ")
+}
+
+/** The pill beside the office PC tick: connected / not connected / not set up / database update waiting. */
+function LocalPill({ status }: { status: LocalStatus | null }) {
+  if (!status) return <span className="text-[11px] text-gray-500">checking…</span>
+  if (!status.ready) return <span className="text-[11px] px-2 py-0.5 rounded-full border border-amber-500/50 text-amber-700 dark:text-amber-400">office PC: {status.reason ?? "not available"}</span>
+  if (!status.hasToken) return <span className="text-[11px] px-2 py-0.5 rounded-full border border-gray-400/50 text-gray-600 dark:text-gray-400">office PC: not set up yet</span>
+  if (status.presence === "online") {
+    return <span className="text-[11px] px-2 py-0.5 rounded-full border border-emerald-500/50 text-emerald-700 dark:text-emerald-400">office PC: connected{status.worker?.model ? ` · ${status.worker.model}` : ""}{status.running ? ` · working on ${status.running}` : ""}{status.queued ? ` · ${status.queued} queued` : ""}</span>
+  }
+  return <span className="text-[11px] px-2 py-0.5 rounded-full border border-red-500/50 text-red-600 dark:text-red-400">office PC: not connected{status.worker?.lastSeenAt ? ` · last seen ${new Date(status.worker.lastSeenAt).toLocaleString("en-GB", { timeZone: "Europe/London" })}` : " · never seen"}{status.queued ? ` · ${status.queued} waiting` : ""}</span>
+}
+
 type Sum = { lots: number; photos: number; bytesO: number; bytesS: number; inTok: number; imgTok: number; outTok: number; thought: number; ms: number }
 
 function sumUsage(lots: TestLot[], pick: (l: TestLot) => Usage | undefined): Sum {
@@ -703,12 +933,16 @@ function sumUsage(lots: TestLot[], pick: (l: TestLot) => Usage | undefined): Sum
  * (lib/ai-pricing.ts + the admin's overrides). Google bills thinking tokens as output, so
  * they are priced as output here. An unknown model says "price not set" — never $0.
  */
-function Totals({ lots, model, overrides, compare }: { lots: TestLot[]; model: string; overrides: Record<string, ModelRate>; compare: boolean }) {
+function Totals({ lots, model, overrides, compare, local }: { lots: TestLot[]; model: string; overrides: Record<string, ModelRate>; compare: boolean; local: LocalResult[] }) {
   const batch  = sumUsage(lots, l => l.batchUsage)
   const batchB = sumUsage(lots, l => l.batchUsageB)
   const kp     = sumUsage(lots, l => l.kpUsage)
   const dc     = sumUsage(lots, l => l.dcUsage)
-  if (!batch.lots && !batchB.lots) return null
+  const localDone = local.filter(r => r.status === "DONE")
+  const localSum: Sum = { lots: localDone.length, photos: 0, bytesO: 0, bytesS: 0, inTok: 0, imgTok: 0, outTok: 0, thought: 0, ms: 0 }
+  for (const r of localDone) { localSum.photos += r.imageCount ?? 0; localSum.inTok += r.promptTokens ?? 0; localSum.outTok += r.outputTokens ?? 0; localSum.ms += r.ms ?? 0 }
+  const localModel = localDone.find(r => r.model)?.model ?? null
+  if (!batch.lots && !batchB.lots && !localSum.lots) return null
 
   const rate = rateFor(model, overrides)
   const usd  = (s: Sum): number | null => rate ? (s.inTok / 1e6) * rate.inputPerM + ((s.outTok + s.thought) / 1e6) * rate.outputPerM : null
@@ -771,6 +1005,21 @@ function Totals({ lots, model, overrides, compare }: { lots: TestLot[]; model: s
                 <td className="px-3 py-1.5 text-right">{formatUsd(usd(r.s))}</td>
               </tr>
             ))}
+            {localSum.lots > 0 && (
+              // The office PC's own model: tokens as Ollama counts them (its tokeniser, not
+              // Google's, so not directly comparable), time as measured, no bill to show.
+              <tr>
+                <td className="px-4 py-1.5">🖥 Office PC{localModel ? ` — ${localModel}` : ""}</td>
+                <td className="px-3 py-1.5 text-right">{localSum.lots}</td>
+                <td className="px-3 py-1.5 text-right">{localSum.photos || "—"}</td>
+                <td className="px-3 py-1.5 text-right">—</td>
+                <td className="px-3 py-1.5 text-right">{fmtN(localSum.inTok)}</td>
+                <td className="px-3 py-1.5 text-right">—</td>
+                <td className="px-3 py-1.5 text-right">{fmtN(localSum.outTok)}</td>
+                <td className="px-3 py-1.5 text-right">{(localSum.ms / 1000).toFixed(0)} s</td>
+                <td className="px-3 py-1.5 text-right text-gray-500">no bill</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
