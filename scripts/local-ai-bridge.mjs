@@ -147,10 +147,21 @@ async function describe(job) {
   }
 
   const body = { model: MODEL, messages, stream: false, options: { num_ctx: NUM_CTX } }
-  if (THINK === "true" || THINK === "false") body.think = THINK === "true"
+  // ⚠ Thinking OFF unless asked for. Measured 2026-10-01: Qwen3-VL "thinks" before it answers,
+  // and on a CPU that was 2,249 tokens of private reasoning at 1.6 tokens a second — 23 minutes —
+  // before a word of description. A model that cannot think rejects the field; that is retried
+  // without it below.
+  body.think = THINK === "true"
 
   const t0 = Date.now()
-  const j  = await postJsonNoTimeout(OLLAMA + "/api/chat", body)
+  let j
+  try {
+    j = await postJsonNoTimeout(OLLAMA + "/api/chat", body)
+  } catch (e) {
+    if (!/think/i.test(e.message)) throw e
+    delete body.think
+    j = await postJsonNoTimeout(OLLAMA + "/api/chat", body)
+  }
   return {
     text:         j?.message?.content ?? "",
     model:        j?.model ?? MODEL,
