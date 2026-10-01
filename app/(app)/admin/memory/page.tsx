@@ -24,7 +24,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
-  modified: 2026-10-01T10:05:01.785Z
+  modified: 2026-10-01T13:12:37.454Z
 ---
 
 # "Our own AI" — what was researched and concluded (2026-10-01)
@@ -61,6 +61,19 @@ Key reasons, so nobody re-derives them:
 - **No benchmark covers toy-box labels and catalogue numbers.** The "Qwen3-VL-8B beats Gemini 2.5 Flash on OCR" claim could not be reproduced from the paper. A 50-lot trial on a rented card costs under $20 and a day — that is the decision test for B and C.
 - **Estimator:** embed every sold description once (OpenAI 3-small / Voyage-4-lite ≈ $2, Gemini Embedding ≈ $18 at 80 tokens a lot), pgvector HNSW on Neon (scale compute up for the hour-long build), show "based on these ten sold lots" as comparables, gradient boosting (department, year, condition words) for a figure and band. Published auction work: data-only models R² 0.74–0.78 vs experts 0.93 on log price → expect most lots within ±30–50%. Split by TIME when back-testing, keep unsold lots in view, never feed the cataloguer's estimate in as a feature.
 - **Assistant:** \`help_assistant\` already has cachePrefix and Claude allowed — add 3–6 typed server-side tools under the user's own permissions and a per-user log; ~880 questions a month ≈ $5 Gemini Flash / $11 Haiku 4.5 / $22 Sonnet 5.5. Customer-facing: Air Canada was held to what its chatbot promised; vendor data needs permission filtering; no investment wording (FCA).
+
+## ⚠⚠ Jordan's actual goals (answered 2026-10-01): "better accuracy and not be dependent on other companies"
+That rules OUT tuning Gemini on Vertex (deeper into Google) and the assistant (touches neither goal). What is left is the OPEN-WEIGHT route on hardware Vectis owns. He is getting a NEW PC WITH A DECENT GPU (card not yet known — it decides the model class: 16 GB → 8B vision model; 24 GB → bigger or less compressed; 32 GB → 27–32B class). A "yardstick" (fixed test set + marking) was proposed and he said it "doesn't sound like it would help anything" — dropped; he judges by reading real lots side by side, as he does in Instructions Testing.
+
+**The plan he said "okay lets go" to (2026-10-01):** 1 Hub-side job queue (BUILT) · 2 the bridge the PC runs (BUILT) · 3 when the PC arrives: driver + Ollama + \`ollama pull <model>\` + token + start the bridge (his half-hour, with a step-by-step from Claude) · 4 fifty lots across departments, Compare ticked, read the two columns · 5 if it holds up, fine-tune on the Hub's ~15k lots (rented H100 a few hours ≈ £130, training needs more memory than running) and sit the same lots again · 6 wire it in as a third provider beside Gemini and Claude so any slot can point at the office PC from Admin → AI Models.
+
+**What was built (de89c89d, on staging/sandbox; NEEDS Run Migrations — two new tables):**
+- \`LocalAiWorker\` (one row per bridge token; SHA-256 only; a new token switches the old off) and \`LocalAiJob\` (batchId, lot, the FROZEN systemInstruction + userPrompt, imageUrls, lease, result fields, Ollama's token counts, ms). Prisma migration file + MIGRATIONS array + data map entries.
+- \`lib/batch-prompt.ts\`: the Batch route's prompt text moved out UNCHANGED (\`buildBatchSystemInstruction\`, \`buildBatchUserPrompt\`) so the PC's model gets exactly Gemini's words; the route now calls it.
+- \`lib/local-ai.ts\` (token, lease 15 min, online window 45 s, \`parseDescriptionReply\` = the Batch route's split: Estimate/FLAG lines, leaked tool call, Bears clean-up) and \`/api/local-ai/*\`: token (admin GET/POST), status, jobs (POST queue a batch / GET poll), jobs/cancel, worker/next + worker/result (bearer token; \`/api/local-ai/worker\` is in auth.config publicPaths), bridge-script (admin download of scripts/local-ai-bridge.mjs).
+- \`scripts/local-ai-bridge.mjs\`: Node 18+, polls \`worker/next\`, downloads the signed R2 photos, calls Ollama \`/api/chat\` with the system + user prompt and all images (IMAGES_PER_MESSAGE to split for a model that takes few per turn; THINK to force a thinking mode; --once), posts \`worker/result\`. Env: HUB_URL, LOCAL_AI_TOKEN, MODEL, OLLAMA_URL, WORKER_NAME, NUM_CTX.
+- Instructions Testing: "🖥 Compare with the office PC's model" tick, a connected/not-connected/not-set-up pill (polls /status every 10 s), an Office PC set-up panel (Make a token — shown once; Download the bridge; the four \`set …\` lines with the Hub origin and token filled in), the whole batch queued up front so the PC works while Gemini does, results polled every 4 s into a SEPARATE map keyed by lot id (the run loop replaces the lots array wholesale), an Office PC column in the compare grid, a totals row ("no bill"), Stop also cancels queued jobs.
+- ⚠ NOT yet tried end to end — it needs a PC running Ollama. The worker routes and the bridge are untested against a real Ollama; expect first-run fixes (multi-image support per model, Ollama's \`think\` field).
 
 ## Suggested order (given to Jordan, not yet decided — D removed after his correction)
 1. Check the real quota (AI Studio, project auction-ai — Jordan's console, Claude can't see it) and move the default off the preview model id; look at Tier 2 ($100 paid + 3 days).

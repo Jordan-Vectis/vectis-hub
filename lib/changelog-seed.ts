@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"de89c89de7f1540f524f8d9528a06eadab2a7c99","author":"Jordan Orange","date":"2026-10-01T12:11:50+01:00","subject":"Office PC model trial: an open model on a machine in the office reads the same lots as Gemini"},
   {"sha":"c1e1adb3f034b22b64b0ee58c8d5fc995e31b72c","author":"Jordan Orange","date":"2026-10-01T11:05:18+01:00","subject":"Claude Memory: cost was never the problem - record the correction and the open question"},
   {"sha":"bded409bec30f69633563711c8909573331eabe8","author":"Jordan Orange","date":"2026-10-01T10:44:34+01:00","subject":"Instructions Testing: measure what the photos really cost (detail level, not size)"},
   {"sha":"d6f405242ef4ca6c558fc8869adad984adc58341","author":"Jordan Orange","date":"2026-10-01T10:27:48+01:00","subject":"Claude Memory: the hammer-price estimator was Claude's idea, not Jordan's — recorded as rejected"},
