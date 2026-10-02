@@ -46,7 +46,9 @@ Return STRICT JSON only (no prose, no markdown fences):
   "confident": boolean  // false if the make/model/year is too vague to value
 }
 
-Whole pounds, no currency symbols, realistic figures (a 15-year-old hatchback is hundreds, not hundreds of thousands).`
+Whole pounds, no currency symbols, realistic figures (a 15-year-old hatchback is hundreds, not hundreds of thousands).
+
+The SPEC line matters: where a model has variants worth very different amounts (a Mk4 Supra NA against a Twin Turbo, a diesel against a petrol, a base trim against a performance one, manual against auto, factory options, modifications, mileage, condition), value the EXACT car described there. If no spec is given and the variant would change the figure a lot, value the most common variant and SAY in the summary which you assumed and what detail would change the figure.`
 
 export async function POST(req: NextRequest) {
   try {
@@ -89,6 +91,7 @@ export async function POST(req: NextRequest) {
     const lines = [
       `CAR: ${desc || "(no details)"}`,
       car.reg ? `REGISTRATION: ${car.reg}` : "",
+      car.spec ? `SPEC / EXTRA DETAIL (from the owner — trust it over assumptions): ${car.spec.replace(/\s+/g, " ")}` : "SPEC / EXTRA DETAIL: none given",
       car.mileage != null ? `CURRENT MILEAGE: ${car.mileage.toLocaleString("en-GB")} miles` : "MILEAGE: not recorded",
       car.boughtOn ? `BOUGHT: ${car.boughtOn.toISOString().slice(0, 10)}${car.boughtPrice != null ? ` for £${car.boughtPrice}` : ""}` : "",
       car.soldOn ? `SOLD: ${car.soldOn.toISOString().slice(0, 10)}${car.soldPrice != null ? ` for £${car.soldPrice}` : ""}` : "",

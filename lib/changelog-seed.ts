@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5167c6af228335c90e9e2dcdd6c646fad666a4d7","author":"Jordan Orange","date":"2026-10-02T11:52:55+01:00","subject":"Garage valuer: past year-ends from when the car was new, not just since bought"},
   {"sha":"b3368df8f9b4b81d581aaa75b361be2bdaf5b0a4","author":"Jordan Orange","date":"2026-10-02T11:46:17+01:00","subject":"Garage: what each car is worth over time, plus running costs"},
   {"sha":"f67947ccc61f158f0dae774b96c594cdd608f0e5","author":"Jordan Orange","date":"2026-10-02T11:13:41+01:00","subject":"Claude Memory: stay on his question (2026-10-01/02) + where the own-AI work sits at the end of the day"},
   {"sha":"04b197dc6b2347c75d51b33e58eef686f78e9c99","author":"Jordan Orange","date":"2026-10-02T11:06:33+01:00","subject":"Claude Memory: SEO balance - a word earns the first line only if a collector would type it (autocomplete evidence)"},

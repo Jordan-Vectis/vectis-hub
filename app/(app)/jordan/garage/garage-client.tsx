@@ -26,7 +26,7 @@ type Val = {
 }
 type Car = {
   id: string; nickname: string; reg: string; make: string; model: string; colour: string
-  year: string; fuel: string; notes: string; photoKey: string; mileage: number | null
+  year: string; fuel: string; notes: string; spec: string; photoKey: string; mileage: number | null
   motDue: string | null; taxDue: string | null; serviceDue: string | null; insuranceDue: string | null
   isPast: boolean; boughtOn: string | null; soldOn: string | null
   boughtPrice: number | null; soldPrice: number | null
@@ -117,7 +117,7 @@ export default function GarageClient() {
     <div className="space-y-4 text-sm pb-16">
       {needsMigration && (
         <div className="border border-amber-600 bg-amber-950/30 text-amber-300 rounded-lg px-4 py-2.5 text-xs">
-          The garage tables aren&apos;t in the database yet — press <strong>Run Migrations</strong> on the Admin page, then reload.
+          A database update for the garage is waiting — press <strong>Run Migrations</strong> on the Admin page, then reload.
         </div>
       )}
       {!needsMigration && needsValueMigration && (
@@ -658,6 +658,13 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
           </div>
 
           <label className="block">
+            <span className="block text-[11px] uppercase tracking-wider opacity-50 mb-1">Spec &amp; extras — what the valuer needs to know</span>
+            <textarea value={form.spec} rows={3} onChange={e => set("spec", e.target.value)} className={`${input} resize-y`}
+              placeholder="Variant, engine, gearbox, trim, options, mods, condition — e.g. Twin Turbo, 6-speed manual, Targa, UK car, full history, standard apart from exhaust" />
+            <span className="block text-[11px] opacity-50 mt-1">The valuer reads this. A Mk4 Supra NA and a Turbo are thousands apart — make and model alone can&apos;t tell them apart.</span>
+          </label>
+
+          <label className="block">
             <span className="block text-[11px] uppercase tracking-wider opacity-50 mb-1">Notes</span>
             <textarea value={form.notes} rows={2} onChange={e => set("notes", e.target.value)} className={`${input} resize-y`} />
           </label>
@@ -798,7 +805,7 @@ function History({ car, onChanged, onError }: { car: Car; onChanged: () => void;
 function toForm(c: Car) {
   return {
     nickname: c.nickname, reg: c.reg, make: c.make, model: c.model, colour: c.colour,
-    year: c.year, fuel: c.fuel, notes: c.notes,
+    year: c.year, fuel: c.fuel, notes: c.notes, spec: c.spec ?? "",
     mileage: c.mileage == null ? "" : String(c.mileage),
     motDue: iso(c.motDue), taxDue: iso(c.taxDue), serviceDue: iso(c.serviceDue), insuranceDue: iso(c.insuranceDue),
     boughtOn: iso(c.boughtOn), soldOn: iso(c.soldOn),
