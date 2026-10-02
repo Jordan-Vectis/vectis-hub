@@ -33,7 +33,25 @@ export async function GET() {
       orderBy: [{ isPast: "asc" }, { position: "asc" }, { createdAt: "asc" }],
       include: { records: { orderBy: { date: "desc" } } },
     })
-    return NextResponse.json({ cars })
+    // Valuations are read SEPARATELY: the table arrived later (2026-10-02), and an
+    // include would take the whole garage down until Run Migrations instead of
+    // just the value section.
+    let needsValueMigration = false
+    const byCar = new Map<string, any[]>()
+    try {
+      const vals = await prisma.jordanCarValuation.findMany({ orderBy: { asOf: "asc" } })
+      for (const v of vals) {
+        const list = byCar.get(v.carId) ?? []
+        list.push(v); byCar.set(v.carId, list)
+      }
+    } catch (e: any) {
+      if (!missingTable(e)) throw e
+      needsValueMigration = true
+    }
+    return NextResponse.json({
+      cars: cars.map(c => ({ ...c, valuations: byCar.get(c.id) ?? [] })),
+      needsValueMigration,
+    })
   } catch (e: any) {
     if (missingTable(e)) return NextResponse.json({ cars: [], needsMigration: true })
     console.error("jordan/cars GET:", e)

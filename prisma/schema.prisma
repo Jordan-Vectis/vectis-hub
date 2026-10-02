@@ -2851,7 +2851,8 @@ model JordanCar {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  records JordanCarRecord[]
+  records    JordanCarRecord[]
+  valuations JordanCarValuation[]
 
   @@index([isPast])
 }
@@ -2881,6 +2882,31 @@ model JordanCarRecord {
 
   @@index([carId])
   @@index([date])
+}
+
+/**
+ * What a car was worth on a given date (JORDAN.SYS garage). Whole pounds.
+ * source: "AI" (a dated snapshot from the valuer, kept for ever — the trend IS these),
+ *         "AI_HISTORY" (the valuer's estimate of PAST year-ends, replaced on every re-run),
+ *         "MANUAL" (a real quote — WeBuyAnyCar, a dealer, an advert).
+ */
+model JordanCarValuation {
+  id      String    @id @default(cuid())
+  carId   String
+  car     JordanCar @relation(fields: [carId], references: [id], onDelete: Cascade)
+  asOf    DateTime
+  low     Int?
+  mid     Int
+  high    Int?
+  tradeIn Int?
+  mileage Int?
+  source  String    @default("AI")
+  note    String    @default("") @db.Text
+  model   String    @default("")
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+  @@index([asOf])
 }
 
 // ─── JORDAN.SYS — documents (personal, /jordan) ──────────────────────────────

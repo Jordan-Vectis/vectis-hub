@@ -74,6 +74,25 @@ export const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "JordanCarRecord_carId_idx" ON "JordanCarRecord"("carId")`,
   `CREATE INDEX IF NOT EXISTS "JordanCarRecord_date_idx" ON "JordanCarRecord"("date")`,
+  // JORDAN.SYS garage — what a car was worth on a date (AI snapshots, AI past years, real quotes).
+  `CREATE TABLE IF NOT EXISTS "JordanCarValuation" (
+    "id"        TEXT NOT NULL PRIMARY KEY,
+    "carId"     TEXT NOT NULL,
+    "asOf"      TIMESTAMP(3) NOT NULL,
+    "low"       INTEGER,
+    "mid"       INTEGER NOT NULL,
+    "high"      INTEGER,
+    "tradeIn"   INTEGER,
+    "mileage"   INTEGER,
+    "source"    TEXT NOT NULL DEFAULT 'AI',
+    "note"      TEXT NOT NULL DEFAULT '',
+    "model"     TEXT NOT NULL DEFAULT '',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "JordanCarValuation_carId_fkey" FOREIGN KEY ("carId")
+      REFERENCES "JordanCar"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanCarValuation_carId_idx" ON "JordanCarValuation"("carId")`,
+  `CREATE INDEX IF NOT EXISTS "JordanCarValuation_asOf_idx" ON "JordanCarValuation"("asOf")`,
   // JORDAN.SYS CV workshop (personal, /jordan) — profiles + their applications.
   `CREATE TABLE IF NOT EXISTS "JordanCvProfile" (
     "id"         TEXT NOT NULL PRIMARY KEY,

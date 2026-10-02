@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f67947ccc61f158f0dae774b96c594cdd608f0e5","author":"Jordan Orange","date":"2026-10-02T11:13:41+01:00","subject":"Claude Memory: stay on his question (2026-10-01/02) + where the own-AI work sits at the end of the day"},
   {"sha":"04b197dc6b2347c75d51b33e58eef686f78e9c99","author":"Jordan Orange","date":"2026-10-02T11:06:33+01:00","subject":"Claude Memory: SEO balance - a word earns the first line only if a collector would type it (autocomplete evidence)"},
   {"sha":"45c8bd0002d0e71117d7c76fd7e11cf071876a6f","author":"Jordan Orange","date":"2026-10-02T10:53:03+01:00","subject":"Claude Memory: SEO - the first 83 characters of a description are the lot page's title, meta and URL; what to front-load per department; the provider list"},
   {"sha":"2c7938af6b34e91266dd5c5e1e4aefcecf5e6e04","author":"Jordan Orange","date":"2026-10-02T10:04:34+01:00","subject":"RULES + Claude Memory: the look-again now also lists what the photos show that the description leaves out"},
