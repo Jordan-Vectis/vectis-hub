@@ -16,60 +16,6 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
-    filename: "reference_seo_lot_titles.md",
-    content: `---
-name: seo-lot-titles-first-83-chars
-description: "SEO analysis of lot descriptions (2026-10-02) — on vectis.co.uk the FIRST 83 CHARACTERS (the Hub's title rule) become the page title, meta description, og tags AND the URL slug; the site's own search box is used by MAKER in one word; the per-department order of identifiers worth front-loading; what is not worth it; the 11-point list for the website provider (hammer prices are behind a login so Google indexes no sold price). Read before changing any description instruction's opening or talking SEO"
-metadata:
-  node_type: memory
-  type: reference
-  originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
-  modified: 2026-10-02T10:06:09.376Z
----
-
-# SEO: what a lot description is worth putting first (2026-10-02)
-
-Jordan: *"Can you do an SEO analysis to see whats worth including and whats not"* — asked while tuning the AI description rules. Three sources: the live site measured from this office PC (Railway can't fetch it), a year of Google Analytics read on production Marketing Reports, and a 5-agent research pass (2 researchers, 2 checkers, 1 writer; 11+14 claims supported, 6 corrected, no keyword volumes found anywhere).
-
-## Measured on vectis.co.uk (Joomla, outside provider)
-- **A lot page's \`<title>\`, meta description, og:title/description and URL slug are ALL the lot TITLE = the first 83 characters of the description cut with "…"** ("Vectis Auctions | Kenner and Hasbro, a group of eighteen comprising fifteen Care Bears and three Jem…"). The full description IS server-rendered (indexable) but never appears in the title or snippet. The h1 is the SALE name, not the lot.
-- Only \`{"@type":"WebSite"}\` JSON-LD — no Product/Offer for the lot. **Hammer prices are behind a login** ("Login To See Hammer Prices"), so Google indexes no sold price; autocomplete demand is "corgi 261 value" — the archive can't serve it while gated (a BUSINESS decision, raised first).
-- Faults for the provider: sitemaps capped at 50,000 URLs a year and stop early (2026 ends 20 Mar, 2025 25 Apr, 2024 20 Mar, 2023 25 Jan), no real \`<lastmod>\`; every photo URL carries \`?dummy=<timestamp>\` (uncacheable); meta description = the title; apostrophes double-escaped in \`<title>\`; an invented slug returns 200 with a self-canonical (duplicate URLs); a bad lot id 302s to /error; old URLs 302 not 301; one truncated alt text on every image. robots.txt was reviewed 1 Oct 2026 — someone there is active.
-- Lot URL shape: \`/bidding/<SALE>-<slug>-<siteSaleId>/<lotNo>-<first words>-<siteLotId>\`; the old \`index.php?option=com_bidding&view=commission&layout=details&id=N\` redirects to it.
-
-## Google Analytics, last 365 days (production Marketing Reports)
-- **Site search box = MAKER in one word:** Lego 11,355 · Bachmann 11,206 · Charlie bears 8,486 · meccano 6,658 · Star wars 6,347 · britains 6,272 · lego 6,207 · matchbox 6,171 · star wars 5,736 · Pokemon 5,433 · Steiff 5,384 · corgi 5,354 · Corgi 4,548 · dinky 4,477 (case not folded by GA; a 31.9M blank term = the search page viewed with no term). No model number, year or outfit in the top 15.
-- Sessions 3.49M: Direct 2.20M · Organic Search 783,601 (google/organic 709,734, bing 41,107) · Cross-network 184k · Paid Social 150k · Paid Search 51k. chatgpt.com referrals 115.
-- Top landing pages are the home page (368k), upcoming auctions (115k), valuations (73k); individual lot pages are a long tail — each one's title is its own front door.
-
-## The rule
-Google typically shows ~50–60 title characters (third-party), "Vectis Auctions | " eats 18 → **the first ~40 characters carry maker → catalogue/reference number → model or character name**, then one or two department identifiers. Counts ("a group of eighteen comprising…"), condition prose, "See Photo", "vintage/rare/lovely", the sale name → the body. eBay (80-char rule), LiveAuctioneers (49-char field; "search engines show ~66") and Google's title guidance all say the same. If one short title ever feeds the-saleroom/LiveAuctioneers, design it to **49 characters**.
-
-| Department | First 83 chars | Body | Leave out of the opening |
-|---|---|---|---|
-| Diecast | Corgi Toys / Dinky Toys / Matchbox Lesney · catalogue number · vehicle or tie-in name · colour/issue · "boxed" | scale, year, accessories, full grading, count | count first, "diecast model", maker repeated per item, 1:43 |
-| Model railway | maker · catalogue number as printed (R3073, 32-850A, W2228) · gauge · company/livery · class · name/running number · DCC | era, motor test, set contents, box, grade | measurements, condition words |
-| Dolls | Pedigree/Mattel/Hasbro · Sindy/Barbie · year or decade · outfit/doll name · Ref number | hair, face, body type, missing pieces, grade | "vintage", "rare" |
-| Bears | Steiff/Merrythought · era · model name · size in cm · mohair colour · button/tag | stuffing, eyes, provenance, condition | condition prose |
-| TV & film / figures | Palitoy/Kenner/Dinky · franchise · line (ROTJ, Tri-Logo) · CHARACTER · MOC/carded · card-back + punched · AFA/UKG | sub-grades, bubble/card detail | count first — here "vintage", "AFA", "MOC" ARE searched, keep them |
-| Comics | title · issue/prog number · year · publisher if needed · key note | grade, pages, spine | grading words up front |
-| Vinyl | artist · title · label · catalogue number · country/pressing · format | matrix strings, track lists, sleeve wear | collection counts |
-
-Autocomplete (UK, 2 Oct 2026): catalogue numbers drive diecast/railway ("hornby r2" → r2669…, "corgi toys 2" → 273, 245, 261, 267 batmobile); era drives dolls/bears ("sindy doll 1970s", "steiff bear 1950s"); "corgi 261 mint" / "dinky toys mint boxed" return nothing. The checker's one correction worth knowing: Corgi 267 is the Batmobile, not the DB5 (a source got it wrong).
-
-## ⚠ The balance — Jordan's challenge (2026-10-02)
-*"there needs to be a balance between SEO and not looking silly — is anyone actually searching for those outfits specifically?"* Measured with Google UK autocomplete (suggestqueries, client=firefox, hl=en-GB&gl=gb): "sindy majorette" → 1 doll suggestion (the rest = marching majorettes); "sindy 1979 majorette" → 0; "sindy weekender" → 4; "sindy active" → 10 ("active sindy 1974", "pedigree active sindy doll"); "sindy doll 1970s" → 10 (for sale, worth, outfits); "pedigree sindy" → 10 (lovely lively, ballerina); "corgi 261" → 10 (value, reissue, aston martin db5); "hornby r2669" → 1; "steiff bear 1950s" → 5. **Reading:** dolls are searched by maker + name + ERA + DOLL TYPE/LINE (Active, Ballerina, Lovely Lively, Weekender), not by dress; diecast by catalogue number; bears by era. **Rule: a word earns the first line only if a collector would type it — autocomplete answers that in a minute — and the opening must read like a catalogue line, never a keyword string.** My first Sindy proposal ("Pedigree Sindy 1970s dolls – Majorette, pink floral and checked dress outfits (3)") over-reached; the balanced line is **"Pedigree Sindy 1970s – three dolls in original outfits."** — a doll type only when the cataloguer identified one, an outfit name only when the outfit IS the collectable (a boxed Weekender set). He chose NOT to change any instruction yet ("no just update the document with these findings for now"); the brief in Admin → Documents (production) carries this section.
-
-## Not worth it
-Rewriting historic slugs or image filenames (Google: hardly any effect; ~895k pages of redirects); condition superlatives up front; chasing a Product RICH result with a price for live lots (no auction offer type; estimate isn't a price); special "AI search"/GEO markup (Google says none exists); keyword stuffing; pixel-perfect title measuring.
-
-## Hub side
-Rewrite each department instruction's OPENING rule (maker, number, name, one or two identifiers; count and condition after) — free, immediate. Consider a short-title field (≤49) later. ⚠ The 83-char cut is NOT enforced by the website — live titles of 102 chars with no "…" were measured — so it is a Hub/BC rule; lots catalogued straight in BC may bypass it (unconfirmed).
-
-## Not confirmed
-Any keyword volume (Trends 429); that lots missing from the capped sitemaps are unindexed; that the HOME page carries WebSite JSON-LD with the site name (needed before moving the "Vectis Auctions |" prefix); which fields the-saleroom/LiveAuctioneers/Catawiki search index (bot-walled); whether the GAP contract or vendor terms allow publishing hammer prices.`,
-  },
-  {
     filename: "project_own_ai_research.md",
     content: `---
 name: own-ai-research-2026-10-01
@@ -78,7 +24,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
-  modified: 2026-10-02T09:04:18.529Z
+  modified: 2026-10-02T10:13:22.417Z
 ---
 
 # "Our own AI" — what was researched and concluded (2026-10-01)
@@ -135,6 +81,8 @@ That rules OUT tuning Gemini on Vertex (deeper into Google) and the assistant (t
 2. **Double Check looks again at every named object** — "NAMED OBJECTS" section + \`objects:[{object,verdict:sure|unsure|no,note}]\` in lib/double-check-instruction.ts; the route returns \`objects\`; \`photoDetail:"ultra"\` puts \`mediaResolution:{level:"MEDIA_RESOLUTION_ULTRA_HIGH"}\` on each photo PART (per-part is the only place Google accepts ultra; 2,240 tokens a photo; the old SDK passes part fields through). The real pipeline still runs DC at the default detail; Instructions Testing has "Double Check at ultra detail" ticked by default — flip the pipeline once the sandbox proves it.
 **Storage:** new table \`CatalogueLotAiCheck\` (one row per lot: assumed[], objects JSON, model, source, checkedBy/At; FK cascade; NEEDS Run Migrations) — deliberately NOT columns on CatalogueLot, because \`prisma.update()\` reads the whole row and a shipped-but-unmigrated column would break every lot save between deploy and Run Migrations. lib/lot-ai-check.ts (\`recordLotAiCheck\` migration-safe, warns once; \`loadLotAiChecks\`; \`needsALook\`). Written by the overnight runner and the Auto Pipeline tab (lib/actions/lot-ai-check.ts); NOT by Instructions Testing (preview only). (3) — a second model's opinion for disagreement flags — was offered and not built.
 **Review tab:** amber "🔍 Look again" box per lot (assumed chips; objects not "sure" with ✗/?; confirmed ones in grey), "✓ I've checked these" (checkedBy/At; a new run clears it), "🔍 Needs a look (N)" filter and header count. review-lots route merges \`aiCheck\` per lot. 3rd option (two independent models disagreeing) not built.
+**Where the code sits (end of 2026-10-02):** main = bf837a6c (ASSUMED line + look-again + CatalogueLotAiCheck + the office PC trial + the photo measurement — all on production, Run Migrations waiting there). STAGING is ahead by 478f7621 (ASSUMED must quote the exact phrase; recognised outfits welcome if declared; Double Check's "unmentioned" list) plus RULES/memory commits — Jordan has not asked for that to go to main.
+
 **First run on the Sindy lot (2026-10-02, Jordan's screenshot):** the baton went — but so did "Majorette" and "cap absent": made to declare its knowledge, the model DROPPED it instead, writing a cautious "white feather accessory"; the assumed list came back as categories ("doll sizes", "dress descriptions"); every named object was ✓ because every object it named was really there — the microphone was never named, so never looked at. Ultra detail WAS accepted by Google (1 photo = 2,209 tokens vs 1,089). Fixed the same morning (478f7621, staging): the ASSUMED rule demands the EXACT words from the description and says naming a recognised outfit/set/character is WELCOME (write it and declare it; only naming an unseen accessory is not — "describe what is visible instead"); Double Check gained **"NOT MENTIONED"** → \`unmentioned:[{object,note}]\`, merged into \`objects\` with verdict \`"unmentioned"\` (report only, never added to \`revised\`), shown with a "+" in sky-blue on the Review tab and the test tab. ⚠ Jordan has not yet rerun the lot with these — that's the next check.
 
 ## Suggested order (given to Jordan, not yet decided — D removed after his correction)
@@ -152,6 +100,96 @@ Per-image training token count on Vertex and so all per-pass training costs · o
 - The Workflow tool's agents only launch through its own \`pipeline()\` / \`parallel()\` — a plain \`Promise.all\` of \`agent()\` calls returned null for every one and the run "completed" with 0/4 areas. Re-ran with pipeline; the cached code-reading result was reused.
 - Admin → Documents on production is the agreed home for research write-ups like this; Chrome's file_upload needs the file inside the working folder (a temporary copy in C:\\Dev apps, deleted afterwards).
 - Related: [[reference_ai_cost]], [[reference_ai_providers]], [[reference_lens]], [[reference_website_search]], [[feedback_ask_before_workflows]].`,
+  },
+  {
+    filename: "feedback_stay_on_his_question.md",
+    content: `---
+name: stay-on-his-question
+description: "2026-10-01/02 — Jordan asked about \\"our own AI\\" for ACCURACY and INDEPENDENCE; Claude compared by cost, carried cost into the plan, added an estimator he never asked for, paused a running test to re-ask an answered question, and front-loaded an outfit nobody searches. Don't widen or redirect his question; ask the goal once, early; when he says continue, continue; a word earns the first line only if a collector would type it"
+metadata:
+  node_type: memory
+  type: feedback
+  originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
+  modified: 2026-10-02T10:12:58.137Z
+---
+
+**Don't widen or redirect his question — find out what problem he is solving, once, early, and compare by HIS criteria.**
+
+**Why:** 2026-10-01. Jordan: *"We talked before about creating our own AI, I want to explore that again."* The research pass compared five routes by cost (reasonable for a comparison), but Claude then carried cost into "what to try first", built a photo-cost measurement, and pitched a thinking-token tool. Jordan: *"Why are we even looking at this I dont remember ever saying the cost was causing a problem?"* Earlier the same day Claude had added a hammer-price estimator as "the obvious sub-project" and put it first in every recommendation — *"Why we even looking at estimate stuff I never asked for that? The cataloguers do estimates themselves."* His actual goals, when finally asked: *"better accuracy and not be dependant on other companies."* That answer ruled out most of the research in one line.
+
+**How to apply:** when a request is open ("explore our own AI"), ask what it would do better than today BEFORE comparing routes; keep the comparison on his criteria; never let a side-finding (cost, an idea of Claude's) become the next step without him naming it. If a plan item wasn't in his words, say so and ask.
+
+---
+
+**When he answers, don't re-ask; when he says continue, continue. A running test is never paused for a question.**
+
+**Why:** 2026-10-01 afternoon. Claude stopped the office PC bridge to ask "one more lot or stop?" after Jordan had already said to carry on (*"for god sake I didnt tell you to stop just continue ive been sat here waiting"*); then a "wait for the deploy, then start" loop never fired (its grep matched nothing) and ten minutes passed before anyone noticed (*"do I need to refresh or is it running"*).
+
+**How to apply:** an answered question is not re-asked; a long job that is waiting on something says so in one line and checks its signal actually arrives; if a question genuinely must be asked mid-run, leave the run going.
+
+---
+
+**A word earns the first line only if a collector would type it — SEO must not make a description look silly.**
+
+**Why:** 2026-10-02. Shown an SEO-tuned opening for a Sindy trio that front-loaded the outfits, Jordan: *"there needs to be a balance between SEO and not looking silly like is anyone actually searching for those outfits specifically?"* Google autocomplete measured it: "sindy majorette" → one doll suggestion; "sindy doll 1970s", "sindy active", "pedigree sindy lovely lively" → ten each. Dolls are searched by maker, name, era and doll TYPE, not by dress.
+
+**How to apply:** before promoting any word into a lot's opening, check autocomplete (suggestqueries, en-GB/gb) for whether people type it; keep the opening reading like a catalogue line; per department the strong tokens are the catalogue number (diecast, railway), era + doll type (dolls), era + size (bears), character + card-back (Star Wars). Details in [[seo-lot-titles-first-83-chars]].
+
+Related: [[own-ai-research-2026-10-01]], [[feedback_design_corrections]] (the same shape — look at the reference, don't over-reach).`,
+  },
+  {
+    filename: "reference_seo_lot_titles.md",
+    content: `---
+name: seo-lot-titles-first-83-chars
+description: "SEO analysis of lot descriptions (2026-10-02) — on vectis.co.uk the FIRST 83 CHARACTERS (the Hub's title rule) become the page title, meta description, og tags AND the URL slug; the site's own search box is used by MAKER in one word; the per-department order of identifiers worth front-loading; what is not worth it; the 11-point list for the website provider (hammer prices are behind a login so Google indexes no sold price). Read before changing any description instruction's opening or talking SEO"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
+  modified: 2026-10-02T10:06:09.376Z
+---
+
+# SEO: what a lot description is worth putting first (2026-10-02)
+
+Jordan: *"Can you do an SEO analysis to see whats worth including and whats not"* — asked while tuning the AI description rules. Three sources: the live site measured from this office PC (Railway can't fetch it), a year of Google Analytics read on production Marketing Reports, and a 5-agent research pass (2 researchers, 2 checkers, 1 writer; 11+14 claims supported, 6 corrected, no keyword volumes found anywhere).
+
+## Measured on vectis.co.uk (Joomla, outside provider)
+- **A lot page's \`<title>\`, meta description, og:title/description and URL slug are ALL the lot TITLE = the first 83 characters of the description cut with "…"** ("Vectis Auctions | Kenner and Hasbro, a group of eighteen comprising fifteen Care Bears and three Jem…"). The full description IS server-rendered (indexable) but never appears in the title or snippet. The h1 is the SALE name, not the lot.
+- Only \`{"@type":"WebSite"}\` JSON-LD — no Product/Offer for the lot. **Hammer prices are behind a login** ("Login To See Hammer Prices"), so Google indexes no sold price; autocomplete demand is "corgi 261 value" — the archive can't serve it while gated (a BUSINESS decision, raised first).
+- Faults for the provider: sitemaps capped at 50,000 URLs a year and stop early (2026 ends 20 Mar, 2025 25 Apr, 2024 20 Mar, 2023 25 Jan), no real \`<lastmod>\`; every photo URL carries \`?dummy=<timestamp>\` (uncacheable); meta description = the title; apostrophes double-escaped in \`<title>\`; an invented slug returns 200 with a self-canonical (duplicate URLs); a bad lot id 302s to /error; old URLs 302 not 301; one truncated alt text on every image. robots.txt was reviewed 1 Oct 2026 — someone there is active.
+- Lot URL shape: \`/bidding/<SALE>-<slug>-<siteSaleId>/<lotNo>-<first words>-<siteLotId>\`; the old \`index.php?option=com_bidding&view=commission&layout=details&id=N\` redirects to it.
+
+## Google Analytics, last 365 days (production Marketing Reports)
+- **Site search box = MAKER in one word:** Lego 11,355 · Bachmann 11,206 · Charlie bears 8,486 · meccano 6,658 · Star wars 6,347 · britains 6,272 · lego 6,207 · matchbox 6,171 · star wars 5,736 · Pokemon 5,433 · Steiff 5,384 · corgi 5,354 · Corgi 4,548 · dinky 4,477 (case not folded by GA; a 31.9M blank term = the search page viewed with no term). No model number, year or outfit in the top 15.
+- Sessions 3.49M: Direct 2.20M · Organic Search 783,601 (google/organic 709,734, bing 41,107) · Cross-network 184k · Paid Social 150k · Paid Search 51k. chatgpt.com referrals 115.
+- Top landing pages are the home page (368k), upcoming auctions (115k), valuations (73k); individual lot pages are a long tail — each one's title is its own front door.
+
+## The rule
+Google typically shows ~50–60 title characters (third-party), "Vectis Auctions | " eats 18 → **the first ~40 characters carry maker → catalogue/reference number → model or character name**, then one or two department identifiers. Counts ("a group of eighteen comprising…"), condition prose, "See Photo", "vintage/rare/lovely", the sale name → the body. eBay (80-char rule), LiveAuctioneers (49-char field; "search engines show ~66") and Google's title guidance all say the same. If one short title ever feeds the-saleroom/LiveAuctioneers, design it to **49 characters**.
+
+| Department | First 83 chars | Body | Leave out of the opening |
+|---|---|---|---|
+| Diecast | Corgi Toys / Dinky Toys / Matchbox Lesney · catalogue number · vehicle or tie-in name · colour/issue · "boxed" | scale, year, accessories, full grading, count | count first, "diecast model", maker repeated per item, 1:43 |
+| Model railway | maker · catalogue number as printed (R3073, 32-850A, W2228) · gauge · company/livery · class · name/running number · DCC | era, motor test, set contents, box, grade | measurements, condition words |
+| Dolls | Pedigree/Mattel/Hasbro · Sindy/Barbie · year or decade · outfit/doll name · Ref number | hair, face, body type, missing pieces, grade | "vintage", "rare" |
+| Bears | Steiff/Merrythought · era · model name · size in cm · mohair colour · button/tag | stuffing, eyes, provenance, condition | condition prose |
+| TV & film / figures | Palitoy/Kenner/Dinky · franchise · line (ROTJ, Tri-Logo) · CHARACTER · MOC/carded · card-back + punched · AFA/UKG | sub-grades, bubble/card detail | count first — here "vintage", "AFA", "MOC" ARE searched, keep them |
+| Comics | title · issue/prog number · year · publisher if needed · key note | grade, pages, spine | grading words up front |
+| Vinyl | artist · title · label · catalogue number · country/pressing · format | matrix strings, track lists, sleeve wear | collection counts |
+
+Autocomplete (UK, 2 Oct 2026): catalogue numbers drive diecast/railway ("hornby r2" → r2669…, "corgi toys 2" → 273, 245, 261, 267 batmobile); era drives dolls/bears ("sindy doll 1970s", "steiff bear 1950s"); "corgi 261 mint" / "dinky toys mint boxed" return nothing. The checker's one correction worth knowing: Corgi 267 is the Batmobile, not the DB5 (a source got it wrong).
+
+## ⚠ The balance — Jordan's challenge (2026-10-02)
+*"there needs to be a balance between SEO and not looking silly — is anyone actually searching for those outfits specifically?"* Measured with Google UK autocomplete (suggestqueries, client=firefox, hl=en-GB&gl=gb): "sindy majorette" → 1 doll suggestion (the rest = marching majorettes); "sindy 1979 majorette" → 0; "sindy weekender" → 4; "sindy active" → 10 ("active sindy 1974", "pedigree active sindy doll"); "sindy doll 1970s" → 10 (for sale, worth, outfits); "pedigree sindy" → 10 (lovely lively, ballerina); "corgi 261" → 10 (value, reissue, aston martin db5); "hornby r2669" → 1; "steiff bear 1950s" → 5. **Reading:** dolls are searched by maker + name + ERA + DOLL TYPE/LINE (Active, Ballerina, Lovely Lively, Weekender), not by dress; diecast by catalogue number; bears by era. **Rule: a word earns the first line only if a collector would type it — autocomplete answers that in a minute — and the opening must read like a catalogue line, never a keyword string.** My first Sindy proposal ("Pedigree Sindy 1970s dolls – Majorette, pink floral and checked dress outfits (3)") over-reached; the balanced line is **"Pedigree Sindy 1970s – three dolls in original outfits."** — a doll type only when the cataloguer identified one, an outfit name only when the outfit IS the collectable (a boxed Weekender set). He chose NOT to change any instruction yet ("no just update the document with these findings for now"); the brief in Admin → Documents (production) carries this section.
+
+## Not worth it
+Rewriting historic slugs or image filenames (Google: hardly any effect; ~895k pages of redirects); condition superlatives up front; chasing a Product RICH result with a price for live lots (no auction offer type; estimate isn't a price); special "AI search"/GEO markup (Google says none exists); keyword stuffing; pixel-perfect title measuring.
+
+## Hub side
+Rewrite each department instruction's OPENING rule (maker, number, name, one or two identifiers; count and condition after) — free, immediate. Consider a short-title field (≤49) later. ⚠ The 83-char cut is NOT enforced by the website — live titles of 102 chars with no "…" were measured — so it is a Hub/BC rule; lots catalogued straight in BC may bypass it (unconfirmed).
+
+## Not confirmed
+Any keyword volume (Trends 429); that lots missing from the capped sitemaps are unindexed; that the HOME page carries WebSite JSON-LD with the site name (needed before moving the "Vectis Auctions |" prefix); which fields the-saleroom/LiveAuctioneers/Catawiki search index (bot-walled); whether the GAP contract or vendor terms allow publishing hammer prices.`,
   },
   {
     filename: "feedback_design_corrections.md",
