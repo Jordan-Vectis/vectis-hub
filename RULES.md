@@ -827,7 +827,12 @@ scoring the accuracy or having like a confidence rating"*. Two **advisory** chec
   and returns `assumed[]`. ⚠ Keep it a separate line, never tags inside the description text.
 - **Look-again (Double Check).** The "NAMED OBJECTS" section of `lib/double-check-instruction.ts`
   makes it list every object the description names with `sure | unsure | no` and a note on what the
-  photos show; the route returns `objects[]`. `photoDetail: "ultra"` sets Gemini 3's
+  photos show, and the "NOT MENTIONED" section lists what the photos show that the description
+  leaves out (`unmentioned`, merged into `objects` with that verdict — the microphone was never
+  named, so it was never looked at until this existed). Report only; the route returns `objects[]`.
+  ⚠ The first run showed that making the model declare its knowledge made it DROP the knowledge
+  ("Majorette" vanished with the baton) — the rule now says naming a recognised outfit is welcome,
+  write it AND declare it; only naming an unseen accessory is not. `photoDetail: "ultra"` sets Gemini 3's
   `MEDIA_RESOLUTION_ULTRA_HIGH` **per photo part** (the only place Google accepts it; 2,240 tokens a
   photo). Instructions Testing runs Double Check at ultra by default; the real pipeline still runs at
   the default detail until the sandbox has proved ultra — flip it deliberately, not in passing.

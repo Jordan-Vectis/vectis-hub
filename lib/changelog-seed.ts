@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-01, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-02, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"478f762160459f2247188677147cf32d785e6806","author":"Jordan Orange","date":"2026-10-02T10:03:57+01:00","subject":"Look again: the ASSUMED line quotes exact phrases, and Double Check lists what the photos show that the description leaves out"},
   {"sha":"b90eda11a201d559edaab590bae6567cafd7a606","author":"Jordan Orange","date":"2026-10-01T17:09:28+01:00","subject":"RULES: the ASSUMED line and the Double Check look-again - advisory, their own table, never a self-awarded percentage"},
   {"sha":"bf837a6c6835f5acfaf006440b27f2089802a1c7","author":"Jordan Orange","date":"2026-10-01T17:08:47+01:00","subject":"Merge staging into main: AI accuracy checks (assumed facts + look-again at named objects), photo cost measurement in Instructions Testing, the office PC model trial"},
   {"sha":"a5d8e8631b0bcd82d4d26524035bdcf479b3c633","author":"Jordan Orange","date":"2026-10-01T17:08:24+01:00","subject":"AI accuracy: where each fact came from, and a second look at every named object"},

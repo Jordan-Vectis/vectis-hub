@@ -24,7 +24,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
-  modified: 2026-10-01T16:07:56.853Z
+  modified: 2026-10-02T09:04:18.529Z
 ---
 
 # "Our own AI" — what was researched and concluded (2026-10-01)
@@ -81,7 +81,7 @@ That rules OUT tuning Gemini on Vertex (deeper into Google) and the assistant (t
 2. **Double Check looks again at every named object** — "NAMED OBJECTS" section + \`objects:[{object,verdict:sure|unsure|no,note}]\` in lib/double-check-instruction.ts; the route returns \`objects\`; \`photoDetail:"ultra"\` puts \`mediaResolution:{level:"MEDIA_RESOLUTION_ULTRA_HIGH"}\` on each photo PART (per-part is the only place Google accepts ultra; 2,240 tokens a photo; the old SDK passes part fields through). The real pipeline still runs DC at the default detail; Instructions Testing has "Double Check at ultra detail" ticked by default — flip the pipeline once the sandbox proves it.
 **Storage:** new table \`CatalogueLotAiCheck\` (one row per lot: assumed[], objects JSON, model, source, checkedBy/At; FK cascade; NEEDS Run Migrations) — deliberately NOT columns on CatalogueLot, because \`prisma.update()\` reads the whole row and a shipped-but-unmigrated column would break every lot save between deploy and Run Migrations. lib/lot-ai-check.ts (\`recordLotAiCheck\` migration-safe, warns once; \`loadLotAiChecks\`; \`needsALook\`). Written by the overnight runner and the Auto Pipeline tab (lib/actions/lot-ai-check.ts); NOT by Instructions Testing (preview only). (3) — a second model's opinion for disagreement flags — was offered and not built.
 **Review tab:** amber "🔍 Look again" box per lot (assumed chips; objects not "sure" with ✗/?; confirmed ones in grey), "✓ I've checked these" (checkedBy/At; a new run clears it), "🔍 Needs a look (N)" filter and header count. review-lots route merges \`aiCheck\` per lot. 3rd option (two independent models disagreeing) not built.
-⚠ Not yet run on real lots at the time of writing — the Sindy lot is the test: run it in Instructions Testing and see whether "baton" comes back unsure/no.
+**First run on the Sindy lot (2026-10-02, Jordan's screenshot):** the baton went — but so did "Majorette" and "cap absent": made to declare its knowledge, the model DROPPED it instead, writing a cautious "white feather accessory"; the assumed list came back as categories ("doll sizes", "dress descriptions"); every named object was ✓ because every object it named was really there — the microphone was never named, so never looked at. Ultra detail WAS accepted by Google (1 photo = 2,209 tokens vs 1,089). Fixed the same morning (478f7621, staging): the ASSUMED rule demands the EXACT words from the description and says naming a recognised outfit/set/character is WELCOME (write it and declare it; only naming an unseen accessory is not — "describe what is visible instead"); Double Check gained **"NOT MENTIONED"** → \`unmentioned:[{object,note}]\`, merged into \`objects\` with verdict \`"unmentioned"\` (report only, never added to \`revised\`), shown with a "+" in sky-blue on the Review tab and the test tab. ⚠ Jordan has not yet rerun the lot with these — that's the next check.
 
 ## Suggested order (given to Jordan, not yet decided — D removed after his correction)
 1. Check the real quota (AI Studio, project auction-ai — Jordan's console, Claude can't see it) and move the default off the preview model id; look at Tier 2 ($100 paid + 3 days).
