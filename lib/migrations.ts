@@ -94,6 +94,7 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "JordanCarValuation_carId_idx" ON "JordanCarValuation"("carId")`,
   `CREATE INDEX IF NOT EXISTS "JordanCarValuation_asOf_idx" ON "JordanCarValuation"("asOf")`,
   `ALTER TABLE "JordanCar" ADD COLUMN IF NOT EXISTS "spec" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "JordanCar" ADD COLUMN IF NOT EXISTS "advert" TEXT NOT NULL DEFAULT ''`,
   // JORDAN.SYS CV workshop (personal, /jordan) — profiles + their applications.
   `CREATE TABLE IF NOT EXISTS "JordanCvProfile" (
     "id"         TEXT NOT NULL PRIMARY KEY,

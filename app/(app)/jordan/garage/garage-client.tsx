@@ -26,7 +26,7 @@ type Val = {
 }
 type Car = {
   id: string; nickname: string; reg: string; make: string; model: string; colour: string
-  year: string; fuel: string; notes: string; spec: string; photoKey: string; mileage: number | null
+  year: string; fuel: string; notes: string; spec: string; advert: string; photoKey: string; mileage: number | null
   motDue: string | null; taxDue: string | null; serviceDue: string | null; insuranceDue: string | null
   isPast: boolean; boughtOn: string | null; soldOn: string | null
   boughtPrice: number | null; soldPrice: number | null
@@ -533,6 +533,96 @@ function ValueChart({ points }: { points: Pt[] }) {
   )
 }
 
+// ─── For-sale advert ─────────────────────────────────────────────────────────
+
+const ADVERT_STYLES = [
+  { key: "autotrader",  label: "AutoTrader" },
+  { key: "marketplace", label: "Marketplace" },
+  { key: "short",       label: "Short" },
+] as const
+
+/** The AI drafts a selling advert from the car's own record (spec, mileage, MOT,
+ *  history, latest value). It is saved on the car and editable — anything it
+ *  wasn't told is left in [square brackets], never made up. */
+function AdvertSection({ car, onChanged, onError }: { car: Car; onChanged: () => void; onError: (m: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [style, setStyle] = useState<string>("autotrader")
+  const [text, setText] = useState(car.advert ?? "")
+  const [dirty, setDirty] = useState(false)
+  const [busy, setBusy] = useState<"write" | "save" | null>(null)
+  const [copied, setCopied] = useState(false)
+  const busyRef = useRef(false)
+
+  useEffect(() => { setText(car.advert ?? ""); setDirty(false) }, [car.advert])
+
+  async function write() {
+    if (busyRef.current) return
+    if (dirty && !confirm("Replace the advert you've edited with a fresh draft?")) return
+    busyRef.current = true; setBusy("write")
+    try {
+      const r = await fetch("/api/jordan/cars/advert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carId: car.id, style }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? "The writer didn't answer")
+      setText(j.advert); setDirty(!!j.unsaved); setOpen(true)
+      if (j.unsaved) onError("Written, but not saved — a database update is waiting. Copy it now.")
+      else onChanged()
+    } catch (e: any) { onError(e.message) }
+    finally { busyRef.current = false; setBusy(null) }
+  }
+
+  async function save() {
+    if (busyRef.current) return
+    busyRef.current = true; setBusy("save")
+    try {
+      const r = await fetch("/api/jordan/cars", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: car.id, advert: text }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? "Couldn't save")
+      setDirty(false); onChanged()
+    } catch (e: any) { onError(e.message) }
+    finally { busyRef.current = false; setBusy(null) }
+  }
+
+  async function copy() {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }
+    catch { onError("Couldn't copy — select the text and copy it yourself.") }
+  }
+
+  const placeholders = (text.match(/\[[^\]]+\]/g) ?? []).length
+
+  return (
+    <div className="border-t border-(--j-dim2) pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <button className="text-[11px] uppercase tracking-wider opacity-50 hover:opacity-100" onClick={() => setOpen(o => !o)}>
+          {open ? "▼" : "▶"} For-sale advert{car.advert ? " · saved" : ""}
+        </button>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="flex rounded border border-(--j-dim) overflow-hidden">
+            {ADVERT_STYLES.map(s => (
+              <button key={s.key} onClick={() => setStyle(s.key)}
+                className={`px-2.5 py-1.5 text-[11px] transition-colors ${style === s.key ? "bg-(--j-acc) text-(--j-on-acc)" : "hover:bg-(--j-glow)"}`}>{s.label}</button>
+            ))}
+          </span>
+          <button className={btnGo} onClick={write} disabled={busy !== null}>{busy === "write" ? "WRITING…" : car.advert ? "✍ WRITE IT AGAIN" : "✍ WRITE AN ADVERT"}</button>
+        </span>
+      </div>
+      {open && (
+        text ? (
+          <div className="space-y-2">
+            <textarea value={text} rows={Math.min(24, Math.max(6, text.split("\n").length + 1))} onChange={e => { setText(e.target.value); setDirty(true) }}
+              className={`${input} resize-y leading-relaxed`} />
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <button className={btn} onClick={copy}>{copied ? "✓ COPIED" : "📋 COPY"}</button>
+              <button className={btn} onClick={save} disabled={!dirty || busy !== null}>{busy === "save" ? "SAVING…" : "SAVE EDITS"}</button>
+              {dirty && <span className="text-amber-400">unsaved</span>}
+              {placeholders > 0 && <span className="opacity-60">{placeholders} thing{placeholders === 1 ? "" : "s"} in [brackets] for you to fill in</span>}
+            </div>
+          </div>
+        ) : <p className="text-xs opacity-40">Nothing written yet. Fill in the spec and mileage first — the advert only says what the record says.</p>
+      )}
+    </div>
+  )
+}
+
 // ─── The car card ────────────────────────────────────────────────────────────
 
 function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, valueReady }: {
@@ -677,6 +767,7 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
           </div>
 
           <ValueSection car={car} onChanged={onChanged} onError={onError} ready={valueReady} />
+          <AdvertSection car={car} onChanged={onChanged} onError={onError} />
           <History car={car} onChanged={onChanged} onError={onError} />
         </div>
       )}

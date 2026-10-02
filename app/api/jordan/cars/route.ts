@@ -91,7 +91,7 @@ export async function PUT(req: NextRequest) {
     const put = (k: string, v: any) => { if (v !== undefined) data[k] = v }
     put("nickname", str(b.nickname)); put("make", str(b.make)); put("model", str(b.model))
     put("colour", str(b.colour));     put("year", str(b.year, 8)); put("fuel", str(b.fuel, 40))
-    put("notes", str(b.notes, 4000)); put("spec", str(b.spec, 4000))
+    put("notes", str(b.notes, 4000)); put("spec", str(b.spec, 4000)); put("advert", str(b.advert, 8000))
     if (b.reg !== undefined) data.reg = String(b.reg ?? "").trim().toUpperCase().slice(0, 16)
     put("mileage", int(b.mileage))
     put("motDue", day(b.motDue)); put("taxDue", day(b.taxDue))
