@@ -80,12 +80,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Fill in at least the make and model first — the valuer has nothing to go on." }, { status: 400 })
     }
     const thisYear = new Date().getFullYear()
-    // Past year-ends: from the car's year (or when it was bought, if later), at most ten back.
-    const firstYear = Math.max(
-      parseInt(car.year, 10) || thisYear,
-      car.boughtOn ? car.boughtOn.getFullYear() : 0,
-      thisYear - 10,
-    )
+    // Past year-ends: every year from when the car was NEW (its year) to last year — Jordan
+    // wants the whole life, not just his ownership. No year recorded → the last 15.
+    const firstYear = Math.max(parseInt(car.year, 10) || thisYear - 15, 1950)
     const years: number[] = []
     for (let y = firstYear; y < thisYear; y++) years.push(y)
 
@@ -96,7 +93,7 @@ export async function POST(req: NextRequest) {
       car.boughtOn ? `BOUGHT: ${car.boughtOn.toISOString().slice(0, 10)}${car.boughtPrice != null ? ` for £${car.boughtPrice}` : ""}` : "",
       car.soldOn ? `SOLD: ${car.soldOn.toISOString().slice(0, 10)}${car.soldPrice != null ? ` for £${car.soldPrice}` : ""}` : "",
       `TODAY: ${new Date().toISOString().slice(0, 10)}`,
-      years.length ? `PAST YEAR-ENDS TO ESTIMATE: ${years.join(", ")}` : "PAST YEAR-ENDS TO ESTIMATE: none (return an empty history array)",
+      years.length ? `PAST YEAR-ENDS TO ESTIMATE: ${years.join(", ")} — ${years[0]} is the year the car was new, so that entry is its value at the end of its first year (list price less first-year depreciation); carry the depreciation curve through every year after.` : "PAST YEAR-ENDS TO ESTIMATE: none (return an empty history array)",
     ].filter(Boolean)
 
     let groundedFallback = false
