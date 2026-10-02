@@ -16,6 +16,57 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reference_seo_lot_titles.md",
+    content: `---
+name: seo-lot-titles-first-83-chars
+description: "SEO analysis of lot descriptions (2026-10-02) — on vectis.co.uk the FIRST 83 CHARACTERS (the Hub's title rule) become the page title, meta description, og tags AND the URL slug; the site's own search box is used by MAKER in one word; the per-department order of identifiers worth front-loading; what is not worth it; the 11-point list for the website provider (hammer prices are behind a login so Google indexes no sold price). Read before changing any description instruction's opening or talking SEO"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
+  modified: 2026-10-02T09:52:38.163Z
+---
+
+# SEO: what a lot description is worth putting first (2026-10-02)
+
+Jordan: *"Can you do an SEO analysis to see whats worth including and whats not"* — asked while tuning the AI description rules. Three sources: the live site measured from this office PC (Railway can't fetch it), a year of Google Analytics read on production Marketing Reports, and a 5-agent research pass (2 researchers, 2 checkers, 1 writer; 11+14 claims supported, 6 corrected, no keyword volumes found anywhere).
+
+## Measured on vectis.co.uk (Joomla, outside provider)
+- **A lot page's \`<title>\`, meta description, og:title/description and URL slug are ALL the lot TITLE = the first 83 characters of the description cut with "…"** ("Vectis Auctions | Kenner and Hasbro, a group of eighteen comprising fifteen Care Bears and three Jem…"). The full description IS server-rendered (indexable) but never appears in the title or snippet. The h1 is the SALE name, not the lot.
+- Only \`{"@type":"WebSite"}\` JSON-LD — no Product/Offer for the lot. **Hammer prices are behind a login** ("Login To See Hammer Prices"), so Google indexes no sold price; autocomplete demand is "corgi 261 value" — the archive can't serve it while gated (a BUSINESS decision, raised first).
+- Faults for the provider: sitemaps capped at 50,000 URLs a year and stop early (2026 ends 20 Mar, 2025 25 Apr, 2024 20 Mar, 2023 25 Jan), no real \`<lastmod>\`; every photo URL carries \`?dummy=<timestamp>\` (uncacheable); meta description = the title; apostrophes double-escaped in \`<title>\`; an invented slug returns 200 with a self-canonical (duplicate URLs); a bad lot id 302s to /error; old URLs 302 not 301; one truncated alt text on every image. robots.txt was reviewed 1 Oct 2026 — someone there is active.
+- Lot URL shape: \`/bidding/<SALE>-<slug>-<siteSaleId>/<lotNo>-<first words>-<siteLotId>\`; the old \`index.php?option=com_bidding&view=commission&layout=details&id=N\` redirects to it.
+
+## Google Analytics, last 365 days (production Marketing Reports)
+- **Site search box = MAKER in one word:** Lego 11,355 · Bachmann 11,206 · Charlie bears 8,486 · meccano 6,658 · Star wars 6,347 · britains 6,272 · lego 6,207 · matchbox 6,171 · star wars 5,736 · Pokemon 5,433 · Steiff 5,384 · corgi 5,354 · Corgi 4,548 · dinky 4,477 (case not folded by GA; a 31.9M blank term = the search page viewed with no term). No model number, year or outfit in the top 15.
+- Sessions 3.49M: Direct 2.20M · Organic Search 783,601 (google/organic 709,734, bing 41,107) · Cross-network 184k · Paid Social 150k · Paid Search 51k. chatgpt.com referrals 115.
+- Top landing pages are the home page (368k), upcoming auctions (115k), valuations (73k); individual lot pages are a long tail — each one's title is its own front door.
+
+## The rule
+Google typically shows ~50–60 title characters (third-party), "Vectis Auctions | " eats 18 → **the first ~40 characters carry maker → catalogue/reference number → model or character name**, then one or two department identifiers. Counts ("a group of eighteen comprising…"), condition prose, "See Photo", "vintage/rare/lovely", the sale name → the body. eBay (80-char rule), LiveAuctioneers (49-char field; "search engines show ~66") and Google's title guidance all say the same. If one short title ever feeds the-saleroom/LiveAuctioneers, design it to **49 characters**.
+
+| Department | First 83 chars | Body | Leave out of the opening |
+|---|---|---|---|
+| Diecast | Corgi Toys / Dinky Toys / Matchbox Lesney · catalogue number · vehicle or tie-in name · colour/issue · "boxed" | scale, year, accessories, full grading, count | count first, "diecast model", maker repeated per item, 1:43 |
+| Model railway | maker · catalogue number as printed (R3073, 32-850A, W2228) · gauge · company/livery · class · name/running number · DCC | era, motor test, set contents, box, grade | measurements, condition words |
+| Dolls | Pedigree/Mattel/Hasbro · Sindy/Barbie · year or decade · outfit/doll name · Ref number | hair, face, body type, missing pieces, grade | "vintage", "rare" |
+| Bears | Steiff/Merrythought · era · model name · size in cm · mohair colour · button/tag | stuffing, eyes, provenance, condition | condition prose |
+| TV & film / figures | Palitoy/Kenner/Dinky · franchise · line (ROTJ, Tri-Logo) · CHARACTER · MOC/carded · card-back + punched · AFA/UKG | sub-grades, bubble/card detail | count first — here "vintage", "AFA", "MOC" ARE searched, keep them |
+| Comics | title · issue/prog number · year · publisher if needed · key note | grade, pages, spine | grading words up front |
+| Vinyl | artist · title · label · catalogue number · country/pressing · format | matrix strings, track lists, sleeve wear | collection counts |
+
+Autocomplete (UK, 2 Oct 2026): catalogue numbers drive diecast/railway ("hornby r2" → r2669…, "corgi toys 2" → 273, 245, 261, 267 batmobile); era drives dolls/bears ("sindy doll 1970s", "steiff bear 1950s"); "corgi 261 mint" / "dinky toys mint boxed" return nothing. The checker's one correction worth knowing: Corgi 267 is the Batmobile, not the DB5 (a source got it wrong).
+
+## Not worth it
+Rewriting historic slugs or image filenames (Google: hardly any effect; ~895k pages of redirects); condition superlatives up front; chasing a Product RICH result with a price for live lots (no auction offer type; estimate isn't a price); special "AI search"/GEO markup (Google says none exists); keyword stuffing; pixel-perfect title measuring.
+
+## Hub side
+Rewrite each department instruction's OPENING rule (maker, number, name, one or two identifiers; count and condition after) — free, immediate. Consider a short-title field (≤49) later. ⚠ The 83-char cut is NOT enforced by the website — live titles of 102 chars with no "…" were measured — so it is a Hub/BC rule; lots catalogued straight in BC may bypass it (unconfirmed).
+
+## Not confirmed
+Any keyword volume (Trends 429); that lots missing from the capped sitemaps are unindexed; that the HOME page carries WebSite JSON-LD with the site name (needed before moving the "Vectis Auctions |" prefix); which fields the-saleroom/LiveAuctioneers/Catawiki search index (bot-walled); whether the GAP contract or vendor terms allow publishing hammer prices.`,
+  },
+  {
     filename: "project_own_ai_research.md",
     content: `---
 name: own-ai-research-2026-10-01

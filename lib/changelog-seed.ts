@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2c7938af6b34e91266dd5c5e1e4aefcecf5e6e04","author":"Jordan Orange","date":"2026-10-02T10:04:34+01:00","subject":"RULES + Claude Memory: the look-again now also lists what the photos show that the description leaves out"},
   {"sha":"478f762160459f2247188677147cf32d785e6806","author":"Jordan Orange","date":"2026-10-02T10:03:57+01:00","subject":"Look again: the ASSUMED line quotes exact phrases, and Double Check lists what the photos show that the description leaves out"},
   {"sha":"b90eda11a201d559edaab590bae6567cafd7a606","author":"Jordan Orange","date":"2026-10-01T17:09:28+01:00","subject":"RULES: the ASSUMED line and the Double Check look-again - advisory, their own table, never a self-awarded percentage"},
   {"sha":"bf837a6c6835f5acfaf006440b27f2089802a1c7","author":"Jordan Orange","date":"2026-10-01T17:08:47+01:00","subject":"Merge staging into main: AI accuracy checks (assumed facts + look-again at named objects), photo cost measurement in Instructions Testing, the office PC model trial"},
