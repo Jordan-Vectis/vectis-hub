@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b90eda11a201d559edaab590bae6567cafd7a606","author":"Jordan Orange","date":"2026-10-01T17:09:28+01:00","subject":"RULES: the ASSUMED line and the Double Check look-again - advisory, their own table, never a self-awarded percentage"},
   {"sha":"bf837a6c6835f5acfaf006440b27f2089802a1c7","author":"Jordan Orange","date":"2026-10-01T17:08:47+01:00","subject":"Merge staging into main: AI accuracy checks (assumed facts + look-again at named objects), photo cost measurement in Instructions Testing, the office PC model trial"},
   {"sha":"a5d8e8631b0bcd82d4d26524035bdcf479b3c633","author":"Jordan Orange","date":"2026-10-01T17:08:24+01:00","subject":"AI accuracy: where each fact came from, and a second look at every named object"},
   {"sha":"d2792c4adecd7178be055b22cac1d4bdb7502ac3","author":"Jordan Orange","date":"2026-10-01T16:36:51+01:00","subject":"Claude Memory: the office PC trial on a CPU - plumbing proven, model unusable, fixes made"},

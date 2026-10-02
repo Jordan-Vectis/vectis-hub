@@ -516,7 +516,7 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
             working[idx] = { ...working[idx], dcDesc: currentDesc, dcStatus: verdict === "issues" ? "issues" : "ok", contradictions, unsupported, dcFlag: flag || undefined, dcUsage: dc.value.usage,
               dcObjects: Array.isArray(dc.value.objects) ? dc.value.objects : [] }
             const doubtful = (Array.isArray(dc.value.objects) ? dc.value.objects : []).filter((o: any) => o.verdict !== "sure")
-            if (doubtful.length) addLog(`  🔍 ${lot.label} — looked again, not sure about: ${doubtful.map((o: any) => `${o.object} (${o.verdict})`).join(", ")}`)
+            if (doubtful.length) addLog(`  🔍 ${lot.label} — looked again: ${doubtful.map((o: any) => `${o.object} (${o.verdict === "unmentioned" ? "not in the description" : o.verdict})`).join(", ")}`)
             if (flag) addLog(`  ⚑ ${lot.label} — double check flagged: ${flag}`)
           } else {
             working[idx] = { ...working[idx], dcStatus: "error", dcSkip: dc.error }
@@ -863,15 +863,16 @@ export default function InstructionsTestTab({ model, fallbackModel }: { model: s
                     )}
                     {l.dcObjects !== undefined && (
                       <div className="text-xs text-gray-700 dark:text-gray-300">
-                        <strong>Looked again at each named object:</strong>{" "}
+                        <strong>Looked again at each named object, and at what the photos show that the description leaves out:</strong>{" "}
                         {l.dcObjects.length === 0 && <span className="text-gray-500">nothing listed</span>}
                         {l.dcObjects.length > 0 && (
                           <ul className="mt-0.5 space-y-0.5">
                             {l.dcObjects.map((o, i) => (
                               <li key={i}>
-                                <span className={`font-semibold ${o.verdict === "no" ? "text-red-600 dark:text-red-400" : o.verdict === "unsure" ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-400"}`}>
-                                  {o.verdict === "no" ? "✗" : o.verdict === "unsure" ? "?" : "✓"} {o.object}
+                                <span className={`font-semibold ${o.verdict === "no" ? "text-red-600 dark:text-red-400" : o.verdict === "unsure" ? "text-amber-700 dark:text-amber-300" : o.verdict === "unmentioned" ? "text-sky-700 dark:text-sky-300" : "text-emerald-700 dark:text-emerald-400"}`}>
+                                  {o.verdict === "no" ? "✗" : o.verdict === "unsure" ? "?" : o.verdict === "unmentioned" ? "+" : "✓"} {o.object}
                                 </span>
+                                {o.verdict === "unmentioned" ? <span className="text-gray-500"> (not in the description)</span> : null}
                                 {o.note ? <span> — {o.note}</span> : null}
                               </li>
                             ))}

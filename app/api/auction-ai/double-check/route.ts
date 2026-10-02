@@ -9,7 +9,7 @@ import { auditCodes } from "@/lib/product-codes"
 import { cleanBearsDescription, isBearsPreset, hasToolCallLeak } from "@/lib/description-cleanup"
 import { GEMINI_SAFETY_SETTINGS } from "@/lib/ai-safety"
 import { parsePhotoDetail, mediaResolutionConfig, usageFromResponse } from "@/lib/ai-photo-options"
-import { normaliseObjects, type ObjectCheck } from "@/lib/lot-ai-check"
+import { normaliseObjects, normaliseUnmentioned, type ObjectCheck } from "@/lib/lot-ai-check"
 
 export const maxDuration = 60
 
@@ -102,7 +102,8 @@ export async function POST(req: NextRequest) {
       unsupported    = (parsed.unsupported ?? "").toString().trim()
       revised        = (parsed.revised ?? "").toString().trim()
       quantityFlag   = (parsed.quantityFlag ?? "").toString().trim()
-      objects        = normaliseObjects(parsed.objects)
+      // Named objects checked, then what the photos show that the description leaves out.
+      objects        = [...normaliseObjects(parsed.objects), ...normaliseUnmentioned(parsed.unmentioned)]
       verdict        = contradictions || unsupported ? "issues" : "ok"
     } else {
       // Couldn't parse the JSON (e.g. an invalid \' escape from the model). Salvage the

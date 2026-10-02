@@ -17,7 +17,7 @@ import { hasToolCallLeak, stripToolCallLeak } from "@/lib/description-cleanup"
 // each object the description names (lib/lot-ai-check.ts). Advisory — a person ticks it.
 type LotAiCheckView = {
   assumed:   string[]
-  objects:   { object: string; verdict: "sure" | "unsure" | "no"; note: string }[]
+  objects:   { object: string; verdict: "sure" | "unsure" | "no" | "unmentioned"; note: string }[]
   model:     string | null
   checkedBy: string | null
   checkedAt: string | null
@@ -948,14 +948,14 @@ Read them back any time at Admin → Saved Flagged Lots.`)
                   )}
                   {doubtful.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Double Check looked again at each object the description names and was <strong>not sure</strong> about:</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Double Check looked again at each object the description names, and at what the photos show that it leaves out:</p>
                       <ul className="space-y-0.5">
                         {doubtful.map((o, i) => (
                           <li key={i} className="text-sm">
-                            <span className={`font-semibold ${o.verdict === "no" ? "text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-300"}`}>
-                              {o.verdict === "no" ? "✗" : "?"} {o.object}
+                            <span className={`font-semibold ${o.verdict === "no" ? "text-red-600 dark:text-red-400" : o.verdict === "unmentioned" ? "text-sky-700 dark:text-sky-300" : "text-amber-700 dark:text-amber-300"}`}>
+                              {o.verdict === "no" ? "✗" : o.verdict === "unmentioned" ? "+" : "?"} {o.object}
                             </span>
-                            <span className="text-gray-700 dark:text-gray-300"> — {o.verdict === "no" ? "the photos show otherwise" : "could not confirm"}{o.note ? `: ${o.note}` : ""}</span>
+                            <span className="text-gray-700 dark:text-gray-300"> — {o.verdict === "no" ? "the photos show otherwise" : o.verdict === "unmentioned" ? "in the photos, not in the description" : "could not confirm"}{o.note ? `: ${o.note}` : ""}</span>
                           </li>
                         ))}
                       </ul>

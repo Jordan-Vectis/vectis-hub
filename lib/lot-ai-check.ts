@@ -23,7 +23,10 @@
 
 import { prisma } from "@/lib/prisma"
 
-export type ObjectVerdict = "sure" | "unsure" | "no"
+// sure / unsure / no = the description named it and the photos do / might / don't show it.
+// unmentioned = the photos show it and the description says nothing (2026-10-02: the microphone
+// was never named, so the look-again never looked at it — the reverse question catches that).
+export type ObjectVerdict = "sure" | "unsure" | "no" | "unmentioned"
 export type ObjectCheck   = { object: string; verdict: ObjectVerdict; note: string }
 
 export type LotAiCheck = {
@@ -58,9 +61,26 @@ export function normaliseObjects(v: unknown): ObjectCheck[] {
     const object = String((row as any).object ?? "").trim().slice(0, 200)
     if (!object) continue
     const raw = String((row as any).verdict ?? "").trim().toLowerCase()
-    const verdict: ObjectVerdict = raw === "no" ? "no" : raw === "unsure" || raw === "uncertain" || raw === "maybe" ? "unsure" : "sure"
+    const verdict: ObjectVerdict =
+      raw === "no" ? "no"
+      : raw === "unsure" || raw === "uncertain" || raw === "maybe" ? "unsure"
+      : raw === "unmentioned" || raw === "missing" || raw === "not mentioned" ? "unmentioned"
+      : "sure"
     out.push({ object, verdict, note: String((row as any).note ?? "").trim().slice(0, 300) })
     if (out.length >= 40) break
+  }
+  return out
+}
+
+/** The "unmentioned" list from Double Check — things in the photos the description leaves out. */
+export function normaliseUnmentioned(v: unknown): ObjectCheck[] {
+  if (!Array.isArray(v)) return []
+  const out: ObjectCheck[] = []
+  for (const row of v) {
+    const object = typeof row === "string" ? row.trim().slice(0, 200) : String((row as any)?.object ?? "").trim().slice(0, 200)
+    if (!object) continue
+    out.push({ object, verdict: "unmentioned", note: typeof row === "string" ? "" : String((row as any)?.note ?? "").trim().slice(0, 300) })
+    if (out.length >= 20) break
   }
   return out
 }
