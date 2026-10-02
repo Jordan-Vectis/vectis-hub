@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"45c8bd0002d0e71117d7c76fd7e11cf071876a6f","author":"Jordan Orange","date":"2026-10-02T10:53:03+01:00","subject":"Claude Memory: SEO - the first 83 characters of a description are the lot page's title, meta and URL; what to front-load per department; the provider list"},
   {"sha":"2c7938af6b34e91266dd5c5e1e4aefcecf5e6e04","author":"Jordan Orange","date":"2026-10-02T10:04:34+01:00","subject":"RULES + Claude Memory: the look-again now also lists what the photos show that the description leaves out"},
   {"sha":"478f762160459f2247188677147cf32d785e6806","author":"Jordan Orange","date":"2026-10-02T10:03:57+01:00","subject":"Look again: the ASSUMED line quotes exact phrases, and Double Check lists what the photos show that the description leaves out"},
   {"sha":"b90eda11a201d559edaab590bae6567cafd7a606","author":"Jordan Orange","date":"2026-10-01T17:09:28+01:00","subject":"RULES: the ASSUMED line and the Double Check look-again - advisory, their own table, never a self-awarded percentage"},

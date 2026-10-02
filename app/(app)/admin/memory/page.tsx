@@ -24,7 +24,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: b3beb0b7-c7c7-4fc8-9957-ea18afbbb386
-  modified: 2026-10-02T09:52:38.163Z
+  modified: 2026-10-02T10:06:09.376Z
 ---
 
 # SEO: what a lot description is worth putting first (2026-10-02)
@@ -56,6 +56,9 @@ Google typically shows ~50–60 title characters (third-party), "Vectis Auctions
 | Vinyl | artist · title · label · catalogue number · country/pressing · format | matrix strings, track lists, sleeve wear | collection counts |
 
 Autocomplete (UK, 2 Oct 2026): catalogue numbers drive diecast/railway ("hornby r2" → r2669…, "corgi toys 2" → 273, 245, 261, 267 batmobile); era drives dolls/bears ("sindy doll 1970s", "steiff bear 1950s"); "corgi 261 mint" / "dinky toys mint boxed" return nothing. The checker's one correction worth knowing: Corgi 267 is the Batmobile, not the DB5 (a source got it wrong).
+
+## ⚠ The balance — Jordan's challenge (2026-10-02)
+*"there needs to be a balance between SEO and not looking silly — is anyone actually searching for those outfits specifically?"* Measured with Google UK autocomplete (suggestqueries, client=firefox, hl=en-GB&gl=gb): "sindy majorette" → 1 doll suggestion (the rest = marching majorettes); "sindy 1979 majorette" → 0; "sindy weekender" → 4; "sindy active" → 10 ("active sindy 1974", "pedigree active sindy doll"); "sindy doll 1970s" → 10 (for sale, worth, outfits); "pedigree sindy" → 10 (lovely lively, ballerina); "corgi 261" → 10 (value, reissue, aston martin db5); "hornby r2669" → 1; "steiff bear 1950s" → 5. **Reading:** dolls are searched by maker + name + ERA + DOLL TYPE/LINE (Active, Ballerina, Lovely Lively, Weekender), not by dress; diecast by catalogue number; bears by era. **Rule: a word earns the first line only if a collector would type it — autocomplete answers that in a minute — and the opening must read like a catalogue line, never a keyword string.** My first Sindy proposal ("Pedigree Sindy 1970s dolls – Majorette, pink floral and checked dress outfits (3)") over-reached; the balanced line is **"Pedigree Sindy 1970s – three dolls in original outfits."** — a doll type only when the cataloguer identified one, an outfit name only when the outfit IS the collectable (a boxed Weekender set). He chose NOT to change any instruction yet ("no just update the document with these findings for now"); the brief in Admin → Documents (production) carries this section.
 
 ## Not worth it
 Rewriting historic slugs or image filenames (Google: hardly any effect; ~895k pages of redirects); condition superlatives up front; chasing a Product RICH result with a price for live lots (no auction offer type; estimate isn't a price); special "AI search"/GEO markup (Google says none exists); keyword stuffing; pixel-perfect title measuring.
