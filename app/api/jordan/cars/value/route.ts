@@ -77,14 +77,17 @@ export async function POST(req: NextRequest) {
     }
 
     // ── The AI valuer ──
-    const desc = [car.year, car.make, car.model, car.colour, car.fuel].filter(Boolean).join(" ")
+    const desc = [car.isWatch ? "" : car.year, car.make, car.model, car.isWatch ? car.generation : "", car.colour, car.fuel].filter(Boolean).join(" ")
     if (!car.make && !car.model) {
       return NextResponse.json({ error: "Fill in at least the make and model first — the valuer has nothing to go on." }, { status: 400 })
     }
     const thisYear = new Date().getFullYear()
     // Past year-ends: every year from when the car was NEW (its year) to last year — Jordan
     // wants the whole life, not just his ownership. No year recorded → the last 15.
-    const firstYear = Math.max(parseInt(car.year, 10) || thisYear - 15, 1950)
+    // A watched car is shopped by GENERATION ("Mk4 A80, 1993–2002"): the first 4-digit year in
+    // that text starts the curve, a target year is only a preference within it.
+    const genStart = car.isWatch ? parseInt((car.generation.match(/\b(19|20)\d{2}\b/) ?? [])[0] ?? "", 10) : NaN
+    const firstYear = Math.max((Number.isFinite(genStart) ? genStart : 0) || parseInt(car.year, 10) || thisYear - 15, 1950)
     const years: number[] = []
     for (let y = firstYear; y < thisYear; y++) years.push(y)
 
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
       car.reg ? `REGISTRATION: ${car.reg}` : "",
       car.spec ? `SPEC / EXTRA DETAIL (from the owner — trust it over assumptions): ${car.spec.replace(/\s+/g, " ")}` : "SPEC / EXTRA DETAIL: none given",
       car.isWatch
-        ? "THIS IS A CAR THE OWNER IS CONSIDERING BUYING, NOT ONE THEY OWN — value a typical example of exactly this spec on the UK market today, and the same for each past year-end."
+        ? `THIS IS A CAR THE OWNER IS CONSIDERING BUYING, NOT ONE THEY OWN. ${car.generation ? `GENERATION BEING SHOPPED FOR: ${car.generation}. ` : ""}${car.year ? `TARGET YEAR (a preference within that generation): ${car.year}. ` : "ANY YEAR OF THAT GENERATION — value a typical mid-generation example and say in the summary which years are dearest and cheapest and why. "}Value a typical example of exactly this spec on the UK market today, and the same for each past year-end — the past years are what examples of this generation were SELLING FOR then, not one car depreciating.`
         : "",
       car.mileage != null ? `${car.isWatch ? "TYPICAL MILEAGE TO ASSUME" : "CURRENT MILEAGE"}: ${car.mileage.toLocaleString("en-GB")} miles` : (car.isWatch ? "MILEAGE: assume typical for the age" : "MILEAGE: not recorded"),
       car.boughtOn ? `BOUGHT: ${car.boughtOn.toISOString().slice(0, 10)}${car.boughtPrice != null ? ` for £${car.boughtPrice}` : ""}` : "",

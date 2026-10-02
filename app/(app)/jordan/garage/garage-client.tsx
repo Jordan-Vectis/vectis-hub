@@ -26,7 +26,7 @@ type Val = {
 }
 type Car = {
   id: string; nickname: string; reg: string; make: string; model: string; colour: string
-  year: string; fuel: string; notes: string; spec: string; advert: string; photoKey: string; mileage: number | null
+  year: string; fuel: string; notes: string; spec: string; advert: string; generation: string; photoKey: string; mileage: number | null
   motDue: string | null; taxDue: string | null; serviceDue: string | null; insuranceDue: string | null
   isPast: boolean; isWatch: boolean; boughtOn: string | null; soldOn: string | null
   boughtPrice: number | null; soldPrice: number | null
@@ -730,7 +730,9 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
   }
 
   const title = [car.nickname, car.reg].filter(Boolean).join(" · ") || "Untitled car"
-  const sub   = [car.year, car.make, car.model, car.colour].filter(Boolean).join(" ")
+  const sub   = car.isWatch
+    ? [car.make, car.model, car.generation, car.year && `target ${car.year}`, car.colour].filter(Boolean).join(" · ")
+    : [car.year, car.make, car.model, car.colour].filter(Boolean).join(" ")
   const worth = latestValue(car)
   const trend = valueTrend(car)
 
@@ -780,14 +782,18 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <F label="Nickname" v={form.nickname} on={v => set("nickname", v)} />
-            <F label="Reg"      v={form.reg}      on={v => set("reg", v.toUpperCase())} />
+            {!car.isWatch && <F label="Reg" v={form.reg} on={v => set("reg", v.toUpperCase())} />}
             <F label="Make"     v={form.make}     on={v => set("make", v)} />
             <F label="Model"    v={form.model}    on={v => set("model", v)} />
-            <F label="Colour"   v={form.colour}   on={v => set("colour", v)} />
-            <F label="Year"     v={form.year}     on={v => set("year", v)} />
+            {car.isWatch && <F label="Generation" v={form.generation} on={v => set("generation", v)} placeholder="e.g. Mk4 A80, 1993–2002" />}
+            {car.isWatch
+              ? <F label="Target year (optional)" v={form.year} on={v => set("year", v)} placeholder="any year of the generation" />
+              : <F label="Year" v={form.year} on={v => set("year", v)} />}
+            <F label="Colour"   v={form.colour}   on={v => set("colour", v)} placeholder={car.isWatch ? "preference, if any" : undefined} />
             <F label="Fuel"     v={form.fuel}     on={v => set("fuel", v)} />
-            <F label="Mileage"  v={form.mileage}  on={v => set("mileage", v)} />
+            <F label={car.isWatch ? "Mileage you'd accept" : "Mileage"} v={form.mileage} on={v => set("mileage", v)} placeholder={car.isWatch ? "blank = typical for the age" : undefined} />
           </div>
+          {car.isWatch && <p className="text-[11px] opacity-50 -mt-2">A generation spans years, so put its years in Generation — the chart runs from the first one. A target year is just a preference the valuer prices.</p>}
 
           {!car.isWatch && <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <F label="MOT due"       v={form.motDue}       on={v => set("motDue", v)} type="date" />
@@ -949,7 +955,7 @@ function History({ car, onChanged, onError }: { car: Car; onChanged: () => void;
 function toForm(c: Car) {
   return {
     nickname: c.nickname, reg: c.reg, make: c.make, model: c.model, colour: c.colour,
-    year: c.year, fuel: c.fuel, notes: c.notes, spec: c.spec ?? "",
+    year: c.year, fuel: c.fuel, notes: c.notes, spec: c.spec ?? "", generation: c.generation ?? "",
     mileage: c.mileage == null ? "" : String(c.mileage),
     motDue: iso(c.motDue), taxDue: iso(c.taxDue), serviceDue: iso(c.serviceDue), insuranceDue: iso(c.insuranceDue),
     boughtOn: iso(c.boughtOn), soldOn: iso(c.soldOn),
@@ -958,13 +964,13 @@ function toForm(c: Car) {
   }
 }
 
-function F({ label, v, on, type }: { label: string; v: string; on: (v: string) => void; type?: string }) {
+function F({ label, v, on, type, placeholder }: { label: string; v: string; on: (v: string) => void; type?: string; placeholder?: string }) {
   return (
     <label className="block">
       <span className="block text-[11px] uppercase tracking-wider opacity-50 mb-1">{label}</span>
       {/* ⚠ A bare date input renders with the browser's own dark-on-dark styling —
           colorScheme keeps the picker legible on the black terminal background. */}
-      <input type={type ?? "text"} value={v} onChange={e => on(e.target.value)} className={input}
+      <input type={type ?? "text"} value={v} onChange={e => on(e.target.value)} className={input} placeholder={placeholder}
         style={type === "date" ? { colorScheme: "dark" } : undefined} />
     </label>
   )

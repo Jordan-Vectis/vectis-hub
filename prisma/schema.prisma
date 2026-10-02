@@ -2828,6 +2828,9 @@ model JordanCar {
   // What the VALUER needs to know — variant, engine, gearbox, trim, options, mods, condition.
   // A Mk4 Supra NA and a Turbo are thousands apart; make/model alone can't tell them apart.
   spec     String @default("") @db.Text
+  // For a WATCHED car: the generation being shopped for ("Mk4 A80, 1993–2002"). A generation
+  // spans years, so Year becomes an optional target year there.
+  generation String @default("")
   // The for-sale advert the AI drafted (and Jordan edited) — kept so it isn't rewritten each visit.
   advert   String @default("") @db.Text
 

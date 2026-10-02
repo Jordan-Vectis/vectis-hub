@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
         nickname: str(b.nickname) ?? "", reg: (str(b.reg, 16) ?? "").toUpperCase(),
         make: str(b.make) ?? "", model: str(b.model) ?? "", colour: str(b.colour) ?? "",
         year: str(b.year, 8) ?? "", fuel: str(b.fuel, 40) ?? "", notes: str(b.notes, 4000) ?? "",
+        generation: str(b.generation, 80) ?? "",
         isPast: !!b.isPast, isWatch: !!b.isWatch,
       },
     })
@@ -91,6 +92,7 @@ export async function PUT(req: NextRequest) {
     const put = (k: string, v: any) => { if (v !== undefined) data[k] = v }
     put("nickname", str(b.nickname)); put("make", str(b.make)); put("model", str(b.model))
     put("colour", str(b.colour));     put("year", str(b.year, 8)); put("fuel", str(b.fuel, 40))
+    put("generation", str(b.generation, 80))
     put("notes", str(b.notes, 4000)); put("spec", str(b.spec, 4000)); put("advert", str(b.advert, 8000))
     if (b.reg !== undefined) data.reg = String(b.reg ?? "").trim().toUpperCase().slice(0, 16)
     put("mileage", int(b.mileage))

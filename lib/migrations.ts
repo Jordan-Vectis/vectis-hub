@@ -96,6 +96,7 @@ export const MIGRATIONS = [
   `ALTER TABLE "JordanCar" ADD COLUMN IF NOT EXISTS "spec" TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE "JordanCar" ADD COLUMN IF NOT EXISTS "advert" TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE "JordanCar" ADD COLUMN IF NOT EXISTS "isWatch" BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE "JordanCar" ADD COLUMN IF NOT EXISTS "generation" TEXT NOT NULL DEFAULT ''`,
   // JORDAN.SYS CV workshop (personal, /jordan) — profiles + their applications.
   `CREATE TABLE IF NOT EXISTS "JordanCvProfile" (
     "id"         TEXT NOT NULL PRIMARY KEY,
