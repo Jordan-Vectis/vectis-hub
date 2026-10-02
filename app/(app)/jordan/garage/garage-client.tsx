@@ -28,7 +28,7 @@ type Car = {
   id: string; nickname: string; reg: string; make: string; model: string; colour: string
   year: string; fuel: string; notes: string; spec: string; advert: string; photoKey: string; mileage: number | null
   motDue: string | null; taxDue: string | null; serviceDue: string | null; insuranceDue: string | null
-  isPast: boolean; boughtOn: string | null; soldOn: string | null
+  isPast: boolean; isWatch: boolean; boughtOn: string | null; soldOn: string | null
   boughtPrice: number | null; soldPrice: number | null
   records: Rec[]
   valuations: Val[]
@@ -60,6 +60,19 @@ function dueTone(d: string | null): { colour: string; label: string } {
   return { colour: "var(--j-ok)", label: `in ${n} days` }
 }
 
+const monthYear = (d: string) => new Date(d).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+
+/** How the value has moved since the FIRST real valuation (snapshots and quotes —
+ *  the AI's past-year guesses are left out, they'd make every car look like it
+ *  had fallen). Null until there are two. */
+function valueTrend(car: Car): { diff: number; pct: number; since: string } | null {
+  const real = car.valuations.filter(v => v.source !== "AI_HISTORY")
+  if (real.length < 2) return null
+  const first = real[0], last = real[real.length - 1]
+  if (!first.mid) return null
+  return { diff: last.mid - first.mid, pct: ((last.mid - first.mid) / first.mid) * 100, since: first.asOf }
+}
+
 /** The newest real valuation (an AI snapshot or a typed quote — never a past-year guess). */
 function latestValue(car: Car): Val | null {
   const real = car.valuations.filter(v => v.source !== "AI_HISTORY")
@@ -75,6 +88,7 @@ export default function GarageClient() {
   const [openId, setOpenId]   = useState<string | null>(null)
   const [busy, setBusy]       = useState<string | null>(null)
   const [showPast, setShowPast] = useState(false)
+  const [showWatch, setShowWatch] = useState(true)
 
   const load = useCallback(async (keepOpen?: string) => {
     setLoading(true)
@@ -99,19 +113,24 @@ export default function GarageClient() {
     return j
   }
 
-  async function addCar(isPast: boolean) {
-    const nickname = prompt(isPast ? "What was it? (e.g. the old Focus)" : "What do you call it? (e.g. the Golf)")?.trim()
+  async function addCar(kind: "current" | "past" | "watch") {
+    const nickname = prompt(
+      kind === "past" ? "What was it? (e.g. the old Focus)"
+      : kind === "watch" ? "What are you watching? (e.g. Mk4 Supra Turbo)"
+      : "What do you call it? (e.g. the Golf)")?.trim()
     if (!nickname) return
     setError(null)
     try {
-      const j = await api("/api/jordan/cars", { nickname, isPast })
+      const j = await api("/api/jordan/cars", { nickname, isPast: kind === "past", isWatch: kind === "watch" })
       await load(j.id)
-      if (isPast) setShowPast(true)
+      if (kind === "past") setShowPast(true)
+      if (kind === "watch") setShowWatch(true)
     } catch (e: any) { setError(e.message) }
   }
 
-  const current = cars.filter(c => !c.isPast)
-  const past    = cars.filter(c => c.isPast)
+  const current = cars.filter(c => !c.isPast && !c.isWatch)
+  const past    = cars.filter(c => c.isPast && !c.isWatch)
+  const watch   = cars.filter(c => c.isWatch)
 
   return (
     <div className="space-y-4 text-sm pb-16">
@@ -135,7 +154,7 @@ export default function GarageClient() {
 
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs tracking-widest opacity-60">CURRENT CARS ({current.length})</span>
-        <button className={btn} onClick={() => addCar(false)}>+ ADD A CAR</button>
+        <button className={btn} onClick={() => addCar("current")}>+ ADD A CAR</button>
       </div>
 
       {loading ? <p className="text-xs opacity-60">LOADING…</p> : current.length === 0 ? (
@@ -151,11 +170,27 @@ export default function GarageClient() {
         <button className="text-xs tracking-widest opacity-60 hover:opacity-100" onClick={() => setShowPast(s => !s)}>
           {showPast ? "▼" : "▶"} PAST CARS ({past.length})
         </button>
-        <button className={btn} onClick={() => addCar(true)}>+ ADD A PAST CAR</button>
+        <button className={btn} onClick={() => addCar("past")}>+ ADD A PAST CAR</button>
       </div>
       {showPast && (past.length === 0
         ? <p className="text-xs opacity-50">None yet. A current car can be moved here with &quot;Mark as sold&quot;.</p>
         : past.map(car => (
+            <CarCard key={car.id} car={car} open={openId === car.id} busy={busy} setBusy={setBusy}
+              onToggle={() => setOpenId(openId === car.id ? null : car.id)}
+              onChanged={() => load(car.id)} onError={setError} valueReady={!needsValueMigration} />
+          )))}
+
+      {/* ── Watching — cars being considered, valued the same way, so the market can be
+             followed for months before buying ── */}
+      <div className="flex items-center justify-between gap-3 pt-4">
+        <button className="text-xs tracking-widest opacity-60 hover:opacity-100" onClick={() => setShowWatch(s => !s)}>
+          {showWatch ? "▼" : "▶"} WATCHING ({watch.length})
+        </button>
+        <button className={btn} onClick={() => addCar("watch")}>+ WATCH A CAR</button>
+      </div>
+      {showWatch && (watch.length === 0
+        ? <p className="text-xs opacity-50">A car you&apos;re thinking of buying. Put in the exact spec, value it now and then every month or so — the chart shows whether the market is rising or softening before you spend.</p>
+        : watch.map(car => (
             <CarCard key={car.id} car={car} open={openId === car.id} busy={busy} setBusy={setBusy}
               onToggle={() => setOpenId(openId === car.id ? null : car.id)}
               onChanged={() => load(car.id)} onError={setError} valueReady={!needsValueMigration} />
@@ -246,7 +281,7 @@ function RunningCosts({ car }: { car: Car }) {
 /** One line across every car: what the current ones are worth together, and what
  *  the lot costs a month. Hidden until there is something to say. */
 function FleetStrip({ cars }: { cars: Car[] }) {
-  const current = cars.filter(c => !c.isPast)
+  const current = cars.filter(c => !c.isPast && !c.isWatch)
   const worth = current.map(latestValue).filter((v): v is Val => !!v)
   const costs = current.map(runningCosts).filter((c): c is NonNullable<ReturnType<typeof runningCosts>> => !!c)
   if (!worth.length && !costs.length) return null
@@ -677,6 +712,17 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
     } catch (e: any) { onError(e.message) }
   }
 
+  async function boughtIt() {
+    const when = prompt("Bought on? (YYYY-MM-DD, blank for today)", new Date().toISOString().slice(0, 10))
+    if (when === null) return
+    const paid = prompt("Paid £ (blank to leave it)", "")
+    if (paid === null) return
+    try {
+      await api("/api/jordan/cars", { id: car.id, isWatch: false, boughtOn: when || new Date().toISOString().slice(0, 10), ...(paid.trim() ? { boughtPrice: paid } : {}) }, "PUT")
+      onChanged()
+    } catch (e: any) { onError(e.message) }
+  }
+
   async function removeCar() {
     if (!confirm(`Delete "${car.nickname || car.reg}" and all ${car.records.length} of its records? This also removes its photos.`)) return
     try { await api("/api/jordan/cars", { id: car.id }, "DELETE"); onChanged() }
@@ -686,6 +732,7 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
   const title = [car.nickname, car.reg].filter(Boolean).join(" · ") || "Untitled car"
   const sub   = [car.year, car.make, car.model, car.colour].filter(Boolean).join(" ")
   const worth = latestValue(car)
+  const trend = valueTrend(car)
 
   return (
     <div className={box}>
@@ -698,8 +745,13 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
           <span className="block font-bold">{title}</span>
           {sub && <span className="block text-xs opacity-50">{sub}</span>}
         </span>
-        {!car.isPast && worth && <span className="hidden sm:inline text-[11px] opacity-70">~{gbp(worth.mid)}</span>}
-        {!car.isPast && (
+        {!car.isPast && worth && (
+          <span className="hidden sm:inline text-[11px] opacity-70">
+            ~{gbp(worth.mid)}
+            {trend && <span className="ml-1" style={{ color: trend.diff < 0 ? "#ff5c5c" : "var(--j-ok)" }}>{trend.diff < 0 ? "▼" : "▲"} {Math.abs(trend.pct).toFixed(0)}% since {monthYear(trend.since)}</span>}
+          </span>
+        )}
+        {!car.isPast && !car.isWatch && (
           <span className="hidden sm:flex gap-3 text-[11px]">
             {(["MOT", "Tax", "Service"] as const).map(w => {
               const d = w === "MOT" ? car.motDue : w === "Tax" ? car.taxDue : car.serviceDue
@@ -720,7 +772,8 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
             </button>
             <input ref={photoRef} type="file" accept="image/*" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) void uploadPhoto(f) }} />
-            {!car.isPast && <button className={btn} onClick={markSold}>MARK AS SOLD</button>}
+            {!car.isPast && !car.isWatch && <button className={btn} onClick={markSold}>MARK AS SOLD</button>}
+            {car.isWatch && <button className={btn} onClick={boughtIt}>✓ BOUGHT IT</button>}
             {car.isPast && <button className={btn} onClick={() => api("/api/jordan/cars", { id: car.id, isPast: false }, "PUT").then(onChanged).catch(e => onError(e.message))}>BACK TO CURRENT</button>}
             <button className={`${btn} ml-auto hover:border-red-500 hover:text-red-400`} onClick={removeCar}>DELETE CAR</button>
           </div>
@@ -736,7 +789,7 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
             <F label="Mileage"  v={form.mileage}  on={v => set("mileage", v)} />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {!car.isWatch && <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <F label="MOT due"       v={form.motDue}       on={v => set("motDue", v)} type="date" />
             <F label="Tax due"       v={form.taxDue}       on={v => set("taxDue", v)} type="date" />
             <F label="Service due"   v={form.serviceDue}   on={v => set("serviceDue", v)} type="date" />
@@ -745,7 +798,7 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
             <F label="Bought for £"  v={form.boughtPrice}  on={v => set("boughtPrice", v)} />
             <F label="Sold on"       v={form.soldOn}       on={v => set("soldOn", v)} type="date" />
             <F label="Sold for £"    v={form.soldPrice}    on={v => set("soldPrice", v)} />
-          </div>
+          </div>}
 
           <label className="block">
             <span className="block text-[11px] uppercase tracking-wider opacity-50 mb-1">Spec &amp; extras — what the valuer needs to know</span>
@@ -767,8 +820,8 @@ function CarCard({ car, open, onToggle, onChanged, onError, busy, setBusy, value
           </div>
 
           <ValueSection car={car} onChanged={onChanged} onError={onError} ready={valueReady} />
-          <AdvertSection car={car} onChanged={onChanged} onError={onError} />
-          <History car={car} onChanged={onChanged} onError={onError} />
+          {!car.isWatch && <AdvertSection car={car} onChanged={onChanged} onError={onError} />}
+          {!car.isWatch && <History car={car} onChanged={onChanged} onError={onError} />}
         </div>
       )}
     </div>

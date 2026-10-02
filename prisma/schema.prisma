@@ -2847,6 +2847,10 @@ model JordanCar {
   // Past cars stay in the same table — the history is the point of keeping them,
   // and moving a row between tables when it is sold would orphan its records.
   isPast      Boolean   @default(false)
+  // A car Jordan is CONSIDERING, not one he owns — the same value tracking, so the market
+  // for a Mk4 Supra Turbo can be watched for months before buying. Same table on purpose:
+  // "Bought it" flips the flag and every valuation it gathered comes with it.
+  isWatch     Boolean   @default(false)
   boughtOn    DateTime?
   soldOn      DateTime?
   boughtPrice Int? // whole pounds; nobody needs pence here

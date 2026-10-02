@@ -92,7 +92,10 @@ export async function POST(req: NextRequest) {
       `CAR: ${desc || "(no details)"}`,
       car.reg ? `REGISTRATION: ${car.reg}` : "",
       car.spec ? `SPEC / EXTRA DETAIL (from the owner — trust it over assumptions): ${car.spec.replace(/\s+/g, " ")}` : "SPEC / EXTRA DETAIL: none given",
-      car.mileage != null ? `CURRENT MILEAGE: ${car.mileage.toLocaleString("en-GB")} miles` : "MILEAGE: not recorded",
+      car.isWatch
+        ? "THIS IS A CAR THE OWNER IS CONSIDERING BUYING, NOT ONE THEY OWN — value a typical example of exactly this spec on the UK market today, and the same for each past year-end."
+        : "",
+      car.mileage != null ? `${car.isWatch ? "TYPICAL MILEAGE TO ASSUME" : "CURRENT MILEAGE"}: ${car.mileage.toLocaleString("en-GB")} miles` : (car.isWatch ? "MILEAGE: assume typical for the age" : "MILEAGE: not recorded"),
       car.boughtOn ? `BOUGHT: ${car.boughtOn.toISOString().slice(0, 10)}${car.boughtPrice != null ? ` for £${car.boughtPrice}` : ""}` : "",
       car.soldOn ? `SOLD: ${car.soldOn.toISOString().slice(0, 10)}${car.soldPrice != null ? ` for £${car.soldPrice}` : ""}` : "",
       `TODAY: ${new Date().toISOString().slice(0, 10)}`,

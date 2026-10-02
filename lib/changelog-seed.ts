@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"276b2b3dcfa5a264b070918c1fac82e0bee33f7e","author":"Jordan Orange","date":"2026-10-02T12:34:50+01:00","subject":"Garage: write a for-sale advert from the car's own record"},
   {"sha":"0e4f3854d89e6c67bb4038f4d81d149beed62276","author":"Jordan Orange","date":"2026-10-02T12:29:28+01:00","subject":"Garage: a spec field the valuer reads (variant, engine, trim, mods)"},
   {"sha":"5167c6af228335c90e9e2dcdd6c646fad666a4d7","author":"Jordan Orange","date":"2026-10-02T11:52:55+01:00","subject":"Garage valuer: past year-ends from when the car was new, not just since bought"},
   {"sha":"b3368df8f9b4b81d581aaa75b361be2bdaf5b0a4","author":"Jordan Orange","date":"2026-10-02T11:46:17+01:00","subject":"Garage: what each car is worth over time, plus running costs"},

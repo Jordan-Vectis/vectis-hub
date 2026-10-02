@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         nickname: str(b.nickname) ?? "", reg: (str(b.reg, 16) ?? "").toUpperCase(),
         make: str(b.make) ?? "", model: str(b.model) ?? "", colour: str(b.colour) ?? "",
         year: str(b.year, 8) ?? "", fuel: str(b.fuel, 40) ?? "", notes: str(b.notes, 4000) ?? "",
-        isPast: !!b.isPast,
+        isPast: !!b.isPast, isWatch: !!b.isWatch,
       },
     })
     return NextResponse.json({ id: car.id })
@@ -99,6 +99,7 @@ export async function PUT(req: NextRequest) {
     put("boughtOn", day(b.boughtOn)); put("soldOn", day(b.soldOn))
     put("boughtPrice", int(b.boughtPrice)); put("soldPrice", int(b.soldPrice))
     if (b.isPast !== undefined) data.isPast = !!b.isPast
+    if (b.isWatch !== undefined) data.isWatch = !!b.isWatch
     if (b.position !== undefined) data.position = Number(b.position) || 0
     if (b.photoKey !== undefined) data.photoKey = String(b.photoKey ?? "")
 
