@@ -502,4 +502,17 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     group:              "FACILITIES",
     appKey:             "INDUCTION",
   },
+  {
+    key:                "VANS",
+    href:               "/tools/vans",
+    defaultLabel:       "Vans",
+    defaultDescription: "The collection vans: who has each one out, when MOT, tax and service are due, and everything done to them.",
+    icon:               "🚐",
+    border:             "border-orange-500",
+    iconBg:             "text-orange-400",
+    btnBg:              "bg-orange-600 hover:bg-orange-500",
+    glow:               "hover:shadow-orange-900/40",
+    group:              "FACILITIES",
+    appKey:             "VANS",
+  },
 ]

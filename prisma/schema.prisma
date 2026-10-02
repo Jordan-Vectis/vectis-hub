@@ -2513,6 +2513,80 @@ model SitePlan {
   updatedAt DateTime @updatedAt
 }
 
+// ─── Facilities → Vans ───────────────────────────────────────────────────────
+// The three collection vans: what's due, what's been done, who has it out. Deliberately
+// small (Jordan, 2026-10-02: "not some massive vehicle management system just something
+// basic"). Shaped like the /jordan garage, minus the personal parts, plus a sign-out.
+model Van {
+  id       String @id @default(cuid())
+  name     String
+  reg      String @default("")
+  make     String @default("")
+  model    String @default("")
+  colour   String @default("")
+  year     String @default("")
+  fuel     String @default("")
+  notes    String @default("") @db.Text
+  photoKey String @default("")
+  mileage  Int?   // last known — the highest reading from any record or sign-out
+
+  // ⚠ Nullable on purpose: "no MOT date recorded" and "MOT due today" must never look alike.
+  motDue       DateTime?
+  taxDue       DateTime?
+  serviceDue   DateTime?
+  insuranceDue DateTime?
+
+  active    Boolean  @default(true) // false = retired or sold; history kept
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  records VanRecord[]
+  trips   VanTrip[]
+
+  @@index([active])
+}
+
+model VanRecord {
+  id    String @id @default(cuid())
+  vanId String
+  van   Van    @relation(fields: [vanId], references: [id], onDelete: Cascade)
+
+  kind      String   @default("SERVICE") // MOT | SERVICE | REPAIR | TAX | INSURANCE | OTHER
+  date      DateTime
+  mileage   Int?
+  costPence Int?     // pence, so an invoice adds up exactly
+  garage    String   @default("")
+  result    String   @default("") // MOT: "PASS" | "FAIL" | ""
+  notes     String   @default("") @db.Text
+  fileKeys  String[] @default([]) // R2: the invoice, the certificate
+  createdByName String @default("")
+  createdAt DateTime @default(now())
+
+  @@index([vanId])
+  @@index([date])
+}
+
+/// A sign-out: who took the van, when, and when it came back. inAt NULL = still out.
+model VanTrip {
+  id    String @id @default(cuid())
+  vanId String
+  van   Van    @relation(fields: [vanId], references: [id], onDelete: Cascade)
+
+  driverName String
+  purpose    String    @default("")
+  outAt      DateTime
+  outMileage Int?
+  inAt       DateTime?
+  inMileage  Int?
+  notes      String    @default("") @db.Text
+  createdByName String @default("")
+  createdAt  DateTime  @default(now())
+
+  @@index([vanId, inAt])
+  @@index([outAt])
+}
+
 // ─── Facilities → Induction ──────────────────────────────────────────────────
 // Replaces the Induction PowerPoint. The whole point of moving it here is that it stops
 // going stale, so the slides live in the DB (admin-editable) and the ones that repeat

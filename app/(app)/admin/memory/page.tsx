@@ -1832,6 +1832,26 @@ WARNING: the server action was always correct — it writes only fields that dif
 `,
   },
   {
+    filename: "vans.md",
+    content: `---
+name: Facilities -> Vans (collection vans)
+purpose: The small fleet tool for the three collection vans - who has one out, what is due, the MOT/service history. Read before touching /tools/vans or the Van tables.
+last_updated: 2026-10-02
+---
+
+# Facilities -> Vans (built 2026-10-02)
+
+Jordan: "we have vans we use for collections ... we only use 3 vans so its not some massive vehicle management system just something basic". Placed under Facilities at /tools/vans, app key VANS (tick who sees it in Users & Permissions). Shaped like the private /jordan garage with the personal parts (valuer, advert, watch list) left out and a SIGN-OUT added - his choice.
+
+- Tables Van / VanRecord / VanTrip (NEEDS Run Migrations). Van.active false = retired or sold, history kept. Due dates are nullable on purpose: "not recorded" is its own grey state and must never look like "due today".
+- WHO HAS WHAT strip at the top: one tile per van, IN (green) or OUT with [name] since [time] (amber), and the sign-out / sign-in button right there. A van cannot be signed out twice - the second attempt names who has it. Sign-in refuses a mileage below the mileage out. Any mileage entered (sign-out, sign-in, a record) raises the van's last known mileage if higher, never lowers it.
+- DUE SOON strip lists anything within 60 days. History = MOT / service / repair / tax / insurance with cost in pence, garage, pass/fail, attached invoice or certificate, and who recorded it. Running costs per van: a month and a year from the first record, split by kind.
+- Files upload through POST /api/vans/file to R2 under vans/ and are READ through the login-gated /api/catalogue/photo-proxy - these are shared staff records, so the shared proxy is right here (the /jordan garage uses its own private proxy because that menu is secret).
+- Every route calls requireVans() (lib/vans.ts): the person and their VANS grant are read fresh from the database, and the person's name stamps records and sign-outs.
+- Not built on purpose: bookings ahead of time, fuel logs, a valuer. Add only if asked.
+`,
+  },
+  {
     filename: "first_aid_public.md",
     content: `---
 name: Facilities -> First Aid (a public page, exact match)
@@ -6275,6 +6295,7 @@ type: reference
 - [Departments — sale access](reference_departments.md) — no department = sees everything (deliberate)
 - [Facilities → Site Plan + First Aid](reference_first_aid_public.md) — /first-aid public by EXACT match (the customer photo link /submit/<code> is the only other public page, 2026-09-14); pins as percentages
 - [Facilities → Induction](reference_induction.md) — slides + signed forms on a tablet; signer has no account
+- [Facilities → Vans](vans.md) — the 3 collection vans: WHO HAS WHAT sign-out/in with mileage, due dates, MOT/service history + running costs; app key VANS; files via the shared photo proxy (2026-10-02)
 - [App Access Control](reference_app_access_control.md) — hasAppAccess + per-app layouts, not role lists; "app missing from permissions" = card has no appKey
 - [Data & Compliance page](reference_compliance_page.md) — /admin/compliance, a static data-protection note; keep its lists in step when an integration changes
 - [Data map — every Prisma table](reference_data_map.md) — one plain-English sentence per table on Data & Compliance, with a self-check for undescribed ones. Read before adding a Prisma model
