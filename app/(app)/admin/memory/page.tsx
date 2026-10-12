@@ -1,5 +1,8 @@
 ﻿import { isJordan } from "@/lib/jordan-auth"
+import { redirect } from "next/navigation"
+import { getEffectiveSession } from "@/lib/impersonation"
 import MemoryClient, { type Entry } from "./memory-client"
+import SetupBackups from "./setup-backups"
 
 // ─── Static memory content ────────────────────────────────────────────────────
 // Updated by Claude alongside memory file changes. Last synced: 2026-07-02
@@ -6231,6 +6234,9 @@ Then **delete \`.claude\\.credentials.json\` from the copy and sign in fresh** �
 **Not promised:** the Code tab's sidebar groups and pins live in the desktop app's own profile (\`%APPDATA%\\Claude\`); copying that folder too MAY bring them across (its encrypted parts are tied to the Windows user, so logins won't). The chats themselves come with \`.claude\\projects\` either way.
 
 Do the copy while the old PC still works and open one chat on the new one to check before wiping anything.
+
+**📦 A ready-made zip lives on Admin → Claude Memory → "Setup backups" (added 2026-10-12).** claude-settings-and-memory-2026-10-12.zip, 205 MB: settings.json, history.jsonl, plugins, scheduled-tasks, sessions, the whole projects folder (memory + every chat) and .claude.json — WITHOUT .credentials.json, file-history (edit snapshots, 106 MB) or the caches. Unzip into C:\Users\<you>\ before opening Claude on the new PC. The shelf is R2 prefix claude-memory/ (listed straight from the bucket, no table), route /api/admin/memory-backups, admins only — so it is visible to every admin; never upload a zip holding a login token. Upload is a presigned PUT with a byte count; download is a signed link.
+
 `,
   },
   {
@@ -6337,7 +6343,16 @@ type: reference
 ]
 
 export default async function MemoryPage() {
+  const session = await getEffectiveSession()
+  if (!session || session.user.role !== "ADMIN") redirect("/hub")
   const jordan = await isJordan()
   const visible = ENTRIES.filter((e) => jordan || !JORDAN_ONLY.has(e.filename))
-  return <MemoryClient entries={visible} />
+  return (
+    <>
+      <MemoryClient entries={visible} />
+      <div className="px-8 pb-12 max-w-3xl">
+        <SetupBackups />
+      </div>
+    </>
+  )
 }
