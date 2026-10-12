@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-02, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-12, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"cfff192e626911843c3bfe65ebe41d86806c4833","author":"Jordan Orange","date":"2026-10-12T11:06:05+01:00","subject":"Admin → Claude Memory: a Setup backups shelf for the settings/memory/chats zip"},
   {"sha":"d548d9373684db00d607d205450d02b1b9dd30ec","author":"Jordan Orange","date":"2026-10-02T16:25:44+01:00","subject":"Facilities → Vans: the three collection vans, basic fleet tool"},
   {"sha":"3282d4811f1f55afd83cc66afd0c606fb86af541","author":"Jordan Orange","date":"2026-10-02T13:08:17+01:00","subject":"Garage watch list: shop by generation, not a single year"},
   {"sha":"566fe3bd73bb86be7cd9cd209b9b9358f2f0a8d3","author":"Jordan Orange","date":"2026-10-02T12:47:39+01:00","subject":"Garage: a WATCHING list — value a car you're considering, the same way"},
