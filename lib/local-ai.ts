@@ -63,8 +63,10 @@ export function parseDescriptionReply(text: string, presetKey: string): { descri
   const lines = rawText.split("\n")
   const estimateLine = lines.find(l => l.toLowerCase().startsWith("estimate:")) ?? ""
   const flagLine     = lines.find(l => l.toLowerCase().startsWith("flag:")) ?? ""
+  // The ASSUMED line (what the model says came from its own knowledge) comes out too, as the Batch
+  // route takes it out of Gemini's — the compare column is for the description.
   const rawDescription = lines
-    .filter(l => !l.toLowerCase().startsWith("estimate:") && !l.toLowerCase().startsWith("flag:"))
+    .filter(l => { const k = l.toLowerCase(); return !k.startsWith("estimate:") && !k.startsWith("flag:") && !k.startsWith("assumed:") })
     .join("\n").trim()
   const { text: stripped, leaked } = stripToolCallLeak(rawDescription)
   const description = isBearsPreset(presetKey) ? cleanBearsDescription(stripped) : stripped

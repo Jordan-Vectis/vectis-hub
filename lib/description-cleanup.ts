@@ -125,6 +125,13 @@ export function stripToolCallLeak(input: string): { text: string; leaked: boolea
     })
     .join("\n")
 
+  // ⚠ "leaked" means one of the four strips above REMOVED something — measured here, before the
+  // tidy. It used to be measured after step 5, so a reply with a doubled space or three newlines
+  // in a row was reported as a leaked search although not a character of it was a tool call. The
+  // office PC's model writes "…description\n\nEstimate: …\n\nASSUMED: …"; once the Estimate line is
+  // filtered out three newlines remain, and EVERY lot failed that way on 2026-10-13.
+  const leaked = out !== input
+
   // 5. Tidy what the removals left: stray fences, doubled blanks, trailing space.
   out = out
     .replace(/^\s*```+\s*$/gm, "")
@@ -133,7 +140,7 @@ export function stripToolCallLeak(input: string): { text: string; leaked: boolea
     .replace(/\n{3,}/g, "\n\n")
     .trim()
 
-  return { text: out, leaked: out !== input.trim() }
+  return { text: out, leaked }
 }
 
 /** True when a reply contains leaked tool-call scaffolding. */
