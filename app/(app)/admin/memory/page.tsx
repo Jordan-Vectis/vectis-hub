@@ -6949,14 +6949,13 @@ Core sync rules (full detail on the reference card):
 
 ---
 
-## Recent work (2026-10-13) — ON STAGING ONLY (478388f2 → a4b05d23), not merged
+## Recent work (2026-10-13) — ON PRODUCTION (main = 4f6cfdce, merged 13 Oct; main = staging)
 
 - **IT Tools → 🎨 Craft Apps** — installers for the Craft App Suite (storytold's open-source, clean-room stand-ins for Photoshop, Illustrator, Premiere, Lightroom, Acrobat, After Effects, InDesign, Figma, Word, PowerPoint, Excel, AutoCAD and Pro Tools), the ArtCraft Launcher, and the Vectis build of ArtCraft (sign-in screen removed). Why: *"I don't want it fetching from the github in case it gets taken down"* — the source is cloned and BUILT on my office PC (\`C:\\Dev apps\\artcraft-suite\`) and the Hub keeps the installers in OUR R2 under \`craft-apps/\` with a manifest; nothing links to GitHub. Each app shows its newest version with a badge key (**Built by Vectis** = compiled here, one patch above the official; **Official release** = storytold's MSI kept as a fallback), size, SHA-256 and **All versions**; two **Download all** zips (Vectis builds 412 MB · official releases 736 MB, each with SHA256SUMS.txt + README). Gate = IT Tools (signed in). No table: \`scripts/upload-craft-apps.mjs\`, run from \`vectis-hub\` on the office PC after a rebuild, re-hashes everything, uploads what's missing, rebuilds only a zip whose contents changed, and rewrites the manifest. ⚠ It writes to the LIVE bucket. Details: [[reference_craft_apps]].
 - **On my PC the same day (not Hub code):** the full Rust/Tauri build toolchain (Rust, VS Build Tools, CMake, NASM, LLVM, Perl, .NET + WiX); an offline kit \`ArtCraft Suite Kit\` (launcher + \`mirror\` folder, 1.5 GB) that installs the whole suite on a Windows PC with no internet; the launcher itself modified to read that \`mirror\` folder instead of GitHub. Start Menu: "ArtCraft Suite Kit".
 - **Claude set-up:** plugins connected — Cloudflare, Railway, Neon (Vectis org, project "Vectis CRM"), code-review, frontend-design; GitHub plugin fails to sign in (their side — the \`gh\` CLI already covers it); CLI plugins **i-have-adhd** (always-on) and **ponytail** installed; Claude Code CLI installed with npm. Prisma plugin removed (it managed Prisma's own hosting, not Neon).
 
 ### Needs doing
-- Merge staging → main when I say — the Craft Apps tab is NOT live.
 - After any Craft app rebuild: run the kit script, then \`node scripts/upload-craft-apps.mjs\` from \`vectis-hub\`.
 
 ⚠ **Working-style notes from this session:**
@@ -8265,7 +8264,7 @@ Chrome 155 installed via winget; NVIDIA App installer downloaded to Downloads (n
 - [Data & Compliance page](reference_compliance_page.md) — /admin/compliance, a static data-protection note; keep its lists in step when an integration changes
 - [Data map — every Prisma table](reference_data_map.md) — one plain-English sentence per table on Data & Compliance, with a self-check for undescribed ones. Read before adding a Prisma model
 - [🎥📸 Screen Recorder + Screenshots (IT Tools)](reference_screen_recorder.md) — record/capture into R2; retry never re-uploads; screenshots stream through the Hub; livestream NOT built
-- [🎨 Craft Apps (IT Tools)](reference_craft_apps.md) — Craft App Suite installers served from OUR R2 (craft-apps/ + manifest), never GitHub; built from source on the office PC; upload script; two Download-all zips. STAGING only as of 2026-10-13
+- [🎨 Craft Apps (IT Tools)](reference_craft_apps.md) — Craft App Suite installers served from OUR R2 (craft-apps/ + manifest), never GitHub; built from source on the office PC; upload script; two Download-all zips. On production since 2026-10-13
 - [🏢 BC Database + 🖼 Sales (Databases)](reference_bc_database.md) — the website answers Railway 202+empty, so lots are COLLECTED on an office machine (collect-bc-lots.mjs) and uploaded; BC sales = site 1062–1566. Read before touching
 - [📚 ABC Database / Lot Archive (Databases)](reference_lot_archive.md) — pre-BC lots: sheet STREAMED from R2 + website pull (LotID = site unique_id, photos keyed on it, match by AuctionID+lot). Read before touching old sold prices/photos
 - [💬 Help box (top bar)](reference_help_box.md) — permissions by FILTERING context server-side (allowedHelpContext); getEffectiveSession() not auth(); DESTINATIONS list
@@ -8321,14 +8320,14 @@ Chrome 155 installed via winget; NVIDIA App installer downloaded to Downloads (n
     filename: "reference_craft_apps.md",
     content: `---
 name: craft-apps-it-tools
-description: "IT Tools → Craft Apps (2026-10-13, STAGING only): installers for the Craft App Suite, the ArtCraft Launcher and the Vectis build of ArtCraft, kept in OUR R2 under craft-apps/ with a manifest so nothing depends on GitHub staying up. Built from source on Jordan's office PC; scripts/upload-craft-apps.mjs publishes. Read before touching the tab, the download route, or the upload script"
+description: "IT Tools → Craft Apps (2026-10-13, on production): installers for the Craft App Suite, the ArtCraft Launcher and the Vectis build of ArtCraft, kept in OUR R2 under craft-apps/ with a manifest so nothing depends on GitHub staying up. Built from source on Jordan's office PC; scripts/upload-craft-apps.mjs publishes. Read before touching the tab, the download route, or the upload script"
 metadata:
   node_type: memory
   type: reference
   modified: 2026-10-13T14:00:00.000Z
 ---
 
-# IT Tools → 🎨 Craft Apps (built 2026-10-13, on staging)
+# IT Tools → 🎨 Craft Apps (built 2026-10-13, on production the same day)
 
 Jordan: *"I don't want it fetching from the github in case it gets taken down."* The Craft App Suite is storytold's family of open-source, clean-room stand-ins for the Adobe and Office apps (PhotoCraft, VectorCraft, FilmCraft, LightCraft, PdfCraft, EffectCraft, DesignCraft, FigCraft, WordCraft, DeckCraft, GridCraft, CADCraft, SoundCraft), plus the ArtCraft Launcher and ArtCraft itself. The point of the tab is that staff can install them from the Hub whatever happens to the projects online.
 
