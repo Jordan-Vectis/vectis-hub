@@ -238,6 +238,12 @@ export const DESTINATIONS: Destination[] = [
     what: "A snipping tool that keeps the picture in the Hub: capture a screen, paste one in with Ctrl+V or upload it, crop it, draw arrows, boxes, numbers, ticks and text on it, then save it, copy it into an email, or download it.",
     also: ["snip", "snipping tool", "screen grab", "screenshot", "annotate", "mark up a screenshot", "draw on a screenshot", "highlight a screenshot"],
   },
+  {
+    ask: "Where do I download the free Photoshop or Word alternatives?",
+    name: "IT Tools → Craft Apps", href: "/tools/it-tools?tab=craft-apps",
+    what: "Installers for the Craft App Suite — free, open-source stand-ins for Photoshop, Illustrator, Premiere, Lightroom, Acrobat, After Effects, InDesign, Figma, Word, PowerPoint, Excel, AutoCAD and Pro Tools — plus the ArtCraft Launcher and the Vectis build of ArtCraft. Kept in the Hub's own storage, so they stay available whatever happens to the projects online.",
+    also: ["craft apps", "photocraft", "wordcraft", "gridcraft", "artcraft", "artcraft launcher", "install photoshop alternative", "free office apps", "installer", "msi"],
+  },
   // ── Databases ───────────────────────────────────────────────────────────────
   {
     ask: "Where are the old sale results?",

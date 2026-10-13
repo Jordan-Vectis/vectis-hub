@@ -7,6 +7,7 @@ import ModelPingTester from "@/components/model-ping-tester"
 import BcSourceTab from "./bc-source-tab"
 import RecorderTab from "./recorder-tab"
 import ScreenshotTab from "./screenshot-tab"
+import CraftAppsTab from "./craft-apps-tab"
 
 const FALLBACK_MODEL = "gemini-3-flash-preview"
 
@@ -20,11 +21,11 @@ type Template = {
   sortOrder: number
 }
 
-type Tab = "reply" | "templates" | "bc-source" | "recorder" | "screenshots"
-const TABS: Tab[] = ["reply", "templates", "bc-source", "recorder", "screenshots"]
+type Tab = "reply" | "templates" | "bc-source" | "recorder" | "screenshots" | "craft-apps"
+const TABS: Tab[] = ["reply", "templates", "bc-source", "recorder", "screenshots", "craft-apps"]
 const TAB_LABEL: Record<Tab, string> = {
   reply: "✍️ Draft Reply", templates: "📋 Templates", "bc-source": "🧩 BC Source",
-  recorder: "🎥 Screen Recorder", screenshots: "📸 Screenshots",
+  recorder: "🎥 Screen Recorder", screenshots: "📸 Screenshots", "craft-apps": "🎨 Craft Apps",
 }
 const isTab = (t: string | null): t is Tab => !!t && (TABS as string[]).includes(t)
 
@@ -54,7 +55,7 @@ function ITToolsInner() {
   const [shotsOpened, setShotsOpened] = useState(tab === "screenshots")
   useEffect(() => { if (tab === "screenshots") setShotsOpened(true) }, [tab])
   // Data-bearing tabs get the width (RULES → design rule 1); the prose tabs keep the column.
-  const wide = tab === "bc-source" || tab === "recorder" || tab === "screenshots"
+  const wide = tab === "bc-source" || tab === "recorder" || tab === "screenshots" || tab === "craft-apps"
 
   return (
     <div className={popout ? "p-4" : wide ? "p-8 max-w-[1700px] mx-auto" : "p-8 max-w-5xl mx-auto"}>
@@ -93,6 +94,7 @@ function ITToolsInner() {
       {tab === "reply"     ? <DraftReplyTab /> : null}
       {tab === "templates" ? <TemplatesTab />  : null}
       {tab === "bc-source" ? <BcSourceTab />   : null}
+      {tab === "craft-apps" ? <CraftAppsTab /> : null}
       {recorderOpened && <div hidden={tab !== "recorder"}><RecorderTab popout={popout} active={tab === "recorder"} /></div>}
       {shotsOpened && <div hidden={tab !== "screenshots"}><ScreenshotTab active={tab === "screenshots"} /></div>}
     </div>

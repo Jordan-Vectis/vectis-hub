@@ -1623,3 +1623,36 @@ Migrations**; every write and read is tiered so the page lists sales without pic
   change one, change all three.
 - One export, `GET /api/databases/sales/export`, one row per sale, for the same handover as the
   other two pages.
+
+---
+## 🎨 IT Tools → Craft Apps (2026-10-13)
+
+Jordan: *"I don't want it fetching from the github in case it gets taken down"* — the Craft App Suite
+(storytold's open-source, clean-room stand-ins for Photoshop, Illustrator, Premiere, Lightroom,
+Acrobat, After Effects, InDesign, Figma, Word, PowerPoint, Excel, AutoCAD and Pro Tools), the
+ArtCraft Launcher, and the Vectis build of ArtCraft (sign-in screen removed) must stay installable
+whatever happens to the projects online. So the Hub holds the installers itself and never links to
+GitHub for them.
+
+`app/(app)/tools/it-tools/craft-apps-tab.tsx` + `app/api/it-tools/craft-apps/{route,download/route}.ts`
++ `scripts/upload-craft-apps.mjs`. No table: the list is **`craft-apps/manifest.json` in R2**, written
+by the upload script, and the files are `craft-apps/<app>/<version>/<file>` beside it.
+
+- **Where the installers come from.** The source of every app is cloned and built on Jordan's office
+  PC in `C:\Dev apps\artcraft-suite` (the launcher's `cargo xtask local sync --every-commit` builds the
+  12 launcher-managed apps as `x.y.z-dev.<commit time>`, one patch above the official release). The
+  upload script reads the offline kit's `mirror` folder there, plus FigCraft, the launcher and
+  ArtCraft, hashes everything (SHA-256, shown on the page) and uploads what the bucket doesn't already
+  hold at that size. **Run it from `vectis-hub` on that PC after a rebuild**; the page updates with no
+  code change. `--dry-run` lists without uploading. ⚠ It writes to the LIVE bucket (`.env`).
+- **"Built by Vectis" vs "Official release"** (badge key on the page, design rule 3). A `-dev.` or
+  `-vectis` version is ours; a plain x.y.z is storytold's own MSI, kept as a fallback. Newest x.y.z
+  leads; at the same x.y.z the Vectis build leads. **Download** gives the MSI/EXE; the portable zip
+  sits under **All versions**.
+- **Downloads are signed GETs with `ResponseContentDisposition: attachment`** (the Screen Recorder's
+  reason: `<a download>` is ignored cross-origin). The download route only signs a key the manifest
+  lists — never a prefix match — after checking the key's exact shape.
+- **Gate = IT Tools (`allUsers`)**: signed in is enough, the same as the recorder and screenshots, so
+  the `DESTINATIONS` entry in `lib/help-map.ts` is ungated too. Software only, no personal data
+  (compliance → R2 line updated).
+- A missing manifest (nothing uploaded yet) is an **empty list, not an error**.

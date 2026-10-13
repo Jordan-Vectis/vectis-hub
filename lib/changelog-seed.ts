@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"ae9404d29e671556daf87e96ffd545e3484293b9","author":"Jordan Orange","date":"2026-10-12T15:30:24+01:00","subject":"Claude Memory: shorter MEMORY.md index lines (the index had outgrown what Claude loads at startup)"},
   {"sha":"d104e334c71d3ed53cd1787f5f33ae9be0f00d97","author":"Jordan Orange","date":"2026-10-12T15:22:21+01:00","subject":"Claude Memory: full sync of the shared record with local memory (2026-10-12)"},
   {"sha":"cfff192e626911843c3bfe65ebe41d86806c4833","author":"Jordan Orange","date":"2026-10-12T11:06:05+01:00","subject":"Admin → Claude Memory: a Setup backups shelf for the settings/memory/chats zip"},
   {"sha":"d548d9373684db00d607d205450d02b1b9dd30ec","author":"Jordan Orange","date":"2026-10-02T16:25:44+01:00","subject":"Facilities → Vans: the three collection vans, basic fleet tool"},
