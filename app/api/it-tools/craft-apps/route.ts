@@ -16,7 +16,9 @@ export type CraftApp = {
   id: string; name: string; icon: string; group: string; tagline: string; like: string
   versions: CraftVersion[]
 }
-export type CraftManifest = { generatedAt: string; apps: CraftApp[] }
+// A "Download all" zip: every app's newest installer of one kind (built here / official).
+export type CraftBundle = { id: string; label: string; key: string; fileName: string; sizeBytes: number; sha256: string; fileCount: number }
+export type CraftManifest = { generatedAt: string; apps: CraftApp[]; bundles?: CraftBundle[] }
 
 export async function readManifest(): Promise<CraftManifest> {
   const buf = await getObjectBuffer(MANIFEST_KEY)

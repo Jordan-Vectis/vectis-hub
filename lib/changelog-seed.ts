@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-12, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-13, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"478388f2affa3d766af52514bf0cfc1e80e9e241","author":"Jordan Orange","date":"2026-10-13T11:58:57+01:00","subject":"IT Tools → Craft Apps: installers for the Craft App Suite served from our R2"},
   {"sha":"ae9404d29e671556daf87e96ffd545e3484293b9","author":"Jordan Orange","date":"2026-10-12T15:30:24+01:00","subject":"Claude Memory: shorter MEMORY.md index lines (the index had outgrown what Claude loads at startup)"},
   {"sha":"d104e334c71d3ed53cd1787f5f33ae9be0f00d97","author":"Jordan Orange","date":"2026-10-12T15:22:21+01:00","subject":"Claude Memory: full sync of the shared record with local memory (2026-10-12)"},
   {"sha":"cfff192e626911843c3bfe65ebe41d86806c4833","author":"Jordan Orange","date":"2026-10-12T11:06:05+01:00","subject":"Admin → Claude Memory: a Setup backups shelf for the settings/memory/chats zip"},

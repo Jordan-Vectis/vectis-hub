@@ -18,21 +18,36 @@
 //
 // What it writes to R2 (bucket from .env — ⚠ the LIVE shared bucket):
 //   craft-apps/<app>/<version>/<file>      the installers, content-addressed by name
-//   craft-apps/manifest.json               what the Hub page lists: apps, versions, files, sizes, SHA-256
+//   craft-apps/bundles/<bundle>.zip        "Download all": one zip of every Vectis build, one of every
+//                                          official release (each app's newest installer of that kind,
+//                                          plus SHA256SUMS.txt and a README), stored uncompressed
+//   craft-apps/manifest.json               what the Hub page lists: apps, versions, files, bundles,
+//                                          sizes, SHA-256
 //
-// Safe to run again: a file already in the bucket with the same size is skipped; the manifest is always
-// rewritten from what is on disk, so a rebuilt app shows up after the next run. Every file is hashed
-// here (SHA-256) and the hash is shown on the page so a download can be checked.
+// Safe to run again: a file already in the bucket with the same size is skipped; a bundle is rebuilt
+// and re-uploaded only when the set of installers inside it has changed (its fingerprint is kept in
+// the manifest); the manifest is always rewritten from what is on disk, so a rebuilt app shows up
+// after the next run. Every file is hashed here (SHA-256) and the hash is shown on the page so a
+// download can be checked.
 // Progress is one line per file with its size (design rule 7b); Ctrl+C stops it between files.
 
 import "dotenv/config"
 import { createHash } from "node:crypto"
-import { readFile, readdir, stat } from "node:fs/promises"
+import { createReadStream, createWriteStream } from "node:fs"
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
-import { HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import JSZip from "jszip"
 
 const PREFIX = "craft-apps"
 const MAX_FILE_BYTES = 1_000_000_000
+
+// The two "Download all" zips. Each holds every app's NEWEST installer of that kind.
+const BUNDLES = [
+  { id: "built",    fileName: "craft-apps-vectis-builds.zip",     label: "All Vectis builds",     source: "built" },
+  { id: "official", fileName: "craft-apps-official-releases.zip", label: "All official releases", source: "official" },
+]
 
 // Display metadata the page shows. Order here is the order on the page.
 const APPS = [
@@ -77,11 +92,99 @@ const safeName = (s) => /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(s)
 // sync --every-commit`), or a -vectis tag for the two we package by hand.
 const sourceOf = (version) => /-(dev|vectis)[.-]/.test(version) || /-vectis$/.test(version) ? "built" : "official"
 const contentTypeOf = (name) => name.endsWith(".zip") ? "application/zip" : "application/octet-stream"
+// The installer itself (MSI/EXE), not the portable zip.
+const isInstaller = (name) => /\.(msi|exe)$/i.test(name)
+
+// x.y.z then the pre-release tag; a -dev.<stamp> build is one patch above its official release.
+const parseVersion = (v) => {
+  const [core, pre = ""] = v.split("-", 2)
+  const n = core.split(".").map(x => parseInt(x, 10) || 0)
+  return { n: [n[0] ?? 0, n[1] ?? 0, n[2] ?? 0], pre }
+}
+const compareVersions = (a, b) => {
+  const x = parseVersion(a), y = parseVersion(b)
+  for (let i = 0; i < 3; i++) if (x.n[i] !== y.n[i]) return x.n[i] - y.n[i]
+  return x.pre.localeCompare(y.pre)
+}
 
 async function sha256(file) {
   const hash = createHash("sha256")
-  hash.update(await readFile(file))
+  await new Promise((resolve, reject) => createReadStream(file).on("data", c => hash.update(c)).on("end", resolve).on("error", reject))
   return hash.digest("hex")
+}
+
+/** The manifest the bucket holds now, so unchanged bundles need not be rebuilt. */
+async function previousManifest() {
+  try {
+    const res = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: `${PREFIX}/manifest.json` }))
+    return JSON.parse(Buffer.from(await res.Body.transformToByteArray()).toString("utf8"))
+  } catch { return null }
+}
+
+/** A zip at `zipPath` holding `entries` ([{ name, path }]) uncompressed, plus SHA256SUMS.txt and a README. */
+async function writeBundleZip(zipPath, entries, sums, readme) {
+  const zip = new JSZip()
+  for (const e of entries) zip.file(e.name, createReadStream(e.path), { compression: "STORE" })
+  zip.file("SHA256SUMS.txt", sums)
+  zip.file("README.txt", readme)
+  await new Promise((resolve, reject) => {
+    zip.generateNodeStream({ type: "nodebuffer", streamFiles: true, compression: "STORE" })
+      .pipe(createWriteStream(zipPath))
+      .on("finish", resolve)
+      .on("error", reject)
+  })
+}
+
+/** Build (if changed) and upload the two "Download all" zips; the manifest's `bundles` entries. */
+async function publishBundles(apps, previous) {
+  const out = []
+  const tmp = dryRun ? null : await mkdtemp(path.join(os.tmpdir(), "craft-bundles-"))
+  try {
+    for (const b of BUNDLES) {
+      // Each app's newest version of this kind, and that version's installer.
+      const picks = []
+      for (const app of apps) {
+        const vs = app.versions.filter(v => v.source === b.source).sort((x, y) => compareVersions(y.version, x.version))
+        const file = vs[0]?.files.find(f => isInstaller(f.name))
+        if (file) picks.push({ app, version: vs[0], file })
+      }
+      if (picks.length === 0) continue
+      const fingerprint = createHash("sha256").update(picks.map(p => `${p.file.key}:${p.file.sha256}`).sort().join("\n")).digest("hex")
+      const key = `${PREFIX}/bundles/${b.fileName}`
+      const kept = previous?.bundles?.find(x => x.id === b.id)
+      process.stdout.write(`bundle ${b.fileName}  ${picks.length} installers  `)
+      if (dryRun) {
+        console.log("(dry run)")
+        out.push({ id: b.id, label: b.label, key, fileName: b.fileName, sizeBytes: picks.reduce((n, p) => n + p.file.sizeBytes, 0), sha256: "", fileCount: picks.length, fingerprint })
+        continue
+      }
+      if (kept?.fingerprint === fingerprint && await existsWithSize(key, kept.sizeBytes)) {
+        console.log("unchanged")
+        out.push({ ...kept, label: b.label, key })
+        continue
+      }
+      const zipPath = path.join(tmp, b.fileName)
+      const sums = picks.map(p => `${p.file.sha256}  ${p.file.name}`).join("\n") + "\n"
+      const readme = [
+        `${b.label} — Craft App Suite installers from the Vectis Hub (IT Tools → Craft Apps)`,
+        `Made ${new Date().toISOString()}`, "",
+        "Run each installer; it asks for admin rights and the app appears in the Start Menu.",
+        "Check a file against SHA256SUMS.txt with:  certutil -hashfile <file> SHA256", "",
+        ...picks.map(p => `${p.app.name.padEnd(18)} ${p.version.version.padEnd(32)} ${p.file.name}`),
+      ].join("\r\n") + "\r\n"
+      process.stdout.write("zipping… ")
+      await writeBundleZip(zipPath, picks.map(p => ({ name: p.file.name, path: p.file.path })), sums, readme)
+      const size = (await stat(zipPath)).size
+      const hash = await sha256(zipPath)
+      process.stdout.write(`${fmtSize(size)} uploading… `)
+      await r2.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: createReadStream(zipPath), ContentType: "application/zip", ContentLength: size }))
+      console.log("uploaded")
+      out.push({ id: b.id, label: b.label, key, fileName: b.fileName, sizeBytes: size, sha256: hash, fileCount: picks.length, fingerprint })
+    }
+  } finally {
+    if (tmp) await rm(tmp, { recursive: true, force: true })
+  }
+  return out
 }
 
 /** One version folder → { version, files: [{ name, path }], notes }. */
@@ -182,16 +285,20 @@ async function main() {
           console.log("uploaded")
           uploaded++
         }
-        files.push({ name: f.name, key, sizeBytes: size, sha256: hash })
+        files.push({ name: f.name, key, sizeBytes: size, sha256: hash, path: f.path })
       }
       versions.push({ version: v.version, source: sourceOf(v.version), notes: v.notes, files })
     }
     if (versions.length) manifest.apps.push({ id: app.id, name: app.name, icon: app.icon, group: app.group, tagline: app.tagline, like: app.like, versions })
   }
 
+  manifest.bundles = await publishBundles(manifest.apps, await previousManifest())
+  // The local paths were only for zipping; the manifest the Hub reads must not carry them.
+  for (const app of manifest.apps) for (const v of app.versions) for (const f of v.files) delete f.path
+
   const key = `${PREFIX}/manifest.json`
   if (dryRun) {
-    console.log(`\n(dry run) manifest would list ${manifest.apps.length} apps`)
+    console.log(`\n(dry run) manifest would list ${manifest.apps.length} apps and ${manifest.bundles.length} bundles`)
   } else {
     await r2.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: JSON.stringify(manifest, null, 2), ContentType: "application/json" }))
     console.log(`\nmanifest written: ${key} (${manifest.apps.length} apps)`)

@@ -20,7 +20,8 @@ import { useEffect, useState } from "react"
 type CraftFile = { name: string; key: string; sizeBytes: number; sha256: string }
 type CraftVersion = { version: string; source: "built" | "official"; notes: string; files: CraftFile[] }
 type CraftApp = { id: string; name: string; icon: string; group: string; tagline: string; like: string; versions: CraftVersion[] }
-type Manifest = { generatedAt: string | null; apps: CraftApp[] }
+type Bundle = { id: string; label: string; key: string; fileName: string; sizeBytes: number; sha256: string; fileCount: number }
+type Manifest = { generatedAt: string | null; apps: CraftApp[]; bundles?: Bundle[] }
 
 const GROUP_LABEL: Record<string, string> = { Creative: "Creative", Office: "Office and drafting", Suite: "The suite itself" }
 const GROUP_ORDER = ["Creative", "Office", "Suite"]
@@ -69,7 +70,7 @@ export default function CraftAppsTab() {
       .catch(e => setListError(e?.message ?? "Couldn't load the installer list"))
   }, [])
 
-  async function download(file: CraftFile) {
+  async function download(file: { name: string; key: string }) {
     setActionError(null); setBusyKey(file.key)
     try {
       const r = await fetch(`/api/it-tools/craft-apps/download?key=${encodeURIComponent(file.key)}`)
@@ -106,6 +107,22 @@ export default function CraftAppsTab() {
           <span className="inline-flex items-center gap-1.5"><SourceBadge source="official" /> the project&apos;s own installer, kept as a fallback</span>
           {manifest.generatedAt && <span>List updated {fmtWhen(manifest.generatedAt)}</span>}
         </div>
+        {(manifest.bundles ?? []).length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            {(manifest.bundles ?? []).map(b => (
+              <button
+                key={b.id}
+                onClick={() => download({ name: b.fileName, key: b.key })}
+                disabled={busyKey === b.key}
+                className={`text-sm font-semibold px-4 py-2.5 rounded-lg text-white disabled:opacity-60 ${b.id === "built" ? "bg-emerald-600 hover:bg-emerald-500" : "bg-gray-600 hover:bg-gray-500"}`}
+              >
+                {busyKey === b.key ? "Preparing…" : `⬇ ${b.label}`}
+                <span className="font-normal opacity-80"> · {b.fileCount} installers · {fmtSize(b.sizeBytes)}</span>
+              </button>
+            ))}
+            <span className="text-xs text-gray-500 dark:text-gray-400">One zip each, with a SHA256SUMS.txt and README inside.</span>
+          </div>
+        )}
       </div>
 
       {actionError && <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg p-3">{actionError}</div>}

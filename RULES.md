@@ -1655,4 +1655,11 @@ by the upload script, and the files are `craft-apps/<app>/<version>/<file>` besi
 - **Gate = IT Tools (`allUsers`)**: signed in is enough, the same as the recorder and screenshots, so
   the `DESTINATIONS` entry in `lib/help-map.ts` is ungated too. Software only, no personal data
   (compliance → R2 line updated).
+- **"Download all" = two zips the script builds and uploads** (`craft-apps/bundles/`): every app's
+  NEWEST Vectis build, and every app's newest official release, each with `SHA256SUMS.txt` and a
+  README inside, stored uncompressed (installers don't shrink). A zip is rebuilt only when the set of
+  installers in it changed (fingerprint kept in the manifest's `bundles`), so a re-run after a single
+  rebuilt app re-uploads one ~400–750 MB zip, not both. Jordan (2026-10-13): *"separate download all
+  buttons for both platforms"* — platforms here meaning the two kinds, not Windows/macOS (only
+  Windows x64 is built or kept).
 - A missing manifest (nothing uploaded yet) is an **empty list, not an error**.
