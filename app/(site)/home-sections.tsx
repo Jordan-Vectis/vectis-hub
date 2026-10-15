@@ -81,8 +81,11 @@ export async function HeroSection() {
     const pick = (want: string[]) => rows.find(r => want.some(w => r.slug.includes(w)))
     const sell = pick(["star-wars-auctions", "action-figure"]) ?? rows[0]
     const buy = pick(["vinyl", "music"]) ?? rows.find(r => r !== sell)
+    // The index TILE pictures, not the page banners: the banners are the pale "Collections Wanted"
+    // strips, which came out washed out behind the cards (sandbox, 2026-10-15); the tiles are the
+    // vivid square photos.
     const url = async (r?: { tileKey: string | null; heroKey: string | null; tilePath: string | null; heroPath: string | null }) =>
-      r ? sitePicture(r.heroKey ?? r.tileKey, r.heroPath ?? r.tilePath) : null
+      r ? sitePicture(r.tileKey ?? r.heroKey, r.tilePath ?? r.heroPath) : null
     sidePictures.sell = await url(sell)
     sidePictures.buy = await url(buy)
   } catch { /* no departments collected here yet */ }
