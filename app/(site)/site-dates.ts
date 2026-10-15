@@ -15,11 +15,15 @@ export const ordinal = (n: number) => {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
-/** "Thursday 15 October", with " 09:30" after it when the time is not midnight. */
+// A sale date stored with no time of day sits at midnight UTC (the collectors save the day only),
+// which London reads as 01:00 in summer — so "no time" is judged on the UTC clock, never London's.
+const hasTime = (d: Date) => !(d.getUTCHours() === 0 && d.getUTCMinutes() === 0)
+
+/** "Thursday 15 October", with " 09:30" after it when a time of day is known. */
 export function saleDateLine(d: Date | null): string {
   if (!d) return ""
   const p = parts(d)
-  const time = p.hour === "00" && p.minute === "00" ? "" : ` ${p.hour}:${p.minute}`
+  const time = hasTime(d) ? ` ${p.hour}:${p.minute}` : ""
   return `${p.weekday} ${p.day} ${p.month}${time}`
 }
 
@@ -27,7 +31,7 @@ export function saleDateLine(d: Date | null): string {
 export function saleDateLong(d: Date | null): string {
   if (!d) return ""
   const p = parts(d)
-  const time = p.hour === "00" && p.minute === "00" ? "" : ` ${p.hour}:${p.minute}`
+  const time = hasTime(d) ? ` ${p.hour}:${p.minute}` : ""
   return `${p.weekday} ${ordinal(Number(p.day))} ${p.month} ${p.year}${time}`
 }
 

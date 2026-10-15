@@ -33,9 +33,10 @@ function isLight(hex: string): boolean {
   return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255) >= 0.45
 }
 
-const SIZE = { s: "text-[26px] sm:text-[30px]", m: "text-[30px] sm:text-[38px]", l: "text-[34px] sm:text-[46px]" } as const
-const WIDTH = { narrow: 400, medium: 480, wide: 600 } as const
-const VALIGN = { top: "justify-start pt-10", middle: "justify-center", bottom: "justify-end pb-16" } as const
+const SIZE = { s: "text-[26px] sm:text-[30px]", m: "text-[30px] sm:text-[36px]", l: "text-[34px] sm:text-[44px]" } as const
+const WIDTH = { narrow: 380, medium: 440, wide: 560 } as const
+// The card sits clear of the dots along the bottom edge.
+const VALIGN = { top: "justify-start pt-10", middle: "justify-center", bottom: "justify-end pb-20" } as const
 const ALIGN = { left: "items-start", center: "items-center", right: "items-end" } as const
 const TEXT_ALIGN = { left: "text-left", center: "text-center", right: "text-right" } as const
 const BUTTONS = { left: "justify-start", center: "justify-center", right: "justify-end" } as const
@@ -70,7 +71,7 @@ export default function SlideView({ slide: s, isLoggedIn, eager, preview }: { sl
       )}
       {st.shade > 0 && <div className="absolute inset-0 bg-black" style={{ opacity: st.shade / 100 }} />}
 
-      <div className={`relative h-full flex flex-col px-5 sm:px-10 ${VALIGN[st.valign]}`}>
+      <div className={`relative h-full flex flex-col px-5 sm:px-16 ${VALIGN[st.valign]}`}>
         <div className={`flex flex-col w-full ${ALIGN[st.align]}`}>
           <div
             className={`w-full flex flex-col px-6 py-6 sm:px-9 sm:py-8 ${TEXT_ALIGN[st.align]} ${darkCard ? "bg-[#2e328e]" : "bg-white"}`}
@@ -79,11 +80,11 @@ export default function SlideView({ slide: s, isLoggedIn, eager, preview }: { sl
             {st.showKicker && (
               <p className="vs-kicker mb-3" style={{ color: st.kickerColor }}>{st.kicker}</p>
             )}
-            <h2 className={`font-normal leading-[1.05] mb-3 ${SIZE[st.headlineSize]}`} style={{ color: st.headlineColor }}>
+            <h2 className={`font-medium leading-[1.05] mb-3 ${SIZE[st.headlineSize]}`} style={{ color: st.headlineColor }}>
               {s.title}
             </h2>
             {s.subtitle && (
-              <p className="text-base leading-snug mb-6" style={{ color: st.subtextColor }}>
+              <p className="text-base leading-snug mb-6 uppercase tracking-[0.5px]" style={{ color: st.subtextColor }}>
                 {s.subtitle}
               </p>
             )}

@@ -1,7 +1,8 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { lotPhotoUrl } from "@/lib/photo-url"
-import HomeHero, { type DbSlide } from "./home-hero"
+import HomeHero, { type DbSlide, type SidePictures } from "./home-hero"
+import { sitePicture } from "./departments/data"
 import { getCustomerSession } from "@/lib/customer-auth"
 import { getSignedImageUrl } from "@/lib/r2"
 import { getSiteStats } from "./site-stats"
@@ -52,21 +53,39 @@ export async function HeroSection() {
     // Table may not exist yet in this environment — the featured sales (or the built-in slides) stand in.
   }
 
-  // No slides made yet: the next sales, with their cover pictures, exactly as vectis.co.uk's
-  // banner shows them ("FEATURED · Star Wars Bonanza! · Thursday 15th October 2026 09:30 · VIEW LOTS").
-  if (dbSlides.length === 0) {
-    const upcoming = await listUpcomingSales(5)
-    dbSlides = upcoming.map(s => ({
-      id: `sale-${s.siteId}`,
-      title: s.title,
-      subtitle: saleDateLong(s.saleDate),
-      cta: s.lotCount > 0 ? "View lots" : "Coming soon",
-      ctaHref: `/auctions/results/${s.siteId}`,
-      imageUrl: s.photo,
-      imageFocus: "center",
-      style: parseSlideStyle({ kicker: "Featured" }),
-    }))
-  }
+  // The banner rotates through the next sales with their cover pictures, exactly as vectis.co.uk's
+  // does ("FEATURED · Star Wars Bonanza! · Thursday 15th October 2026 09:30 · VIEW LOTS"); any
+  // slide made in the Banner Manager follows them in the rotation (Jack, 2026-10-15: "usually it's
+  // a moving banner").
+  const upcoming = await listUpcomingSales(12)
+  const featured: DbSlide[] = upcoming.map(s => ({
+    id: `sale-${s.siteId}`,
+    title: s.title,
+    subtitle: saleDateLong(s.saleDate),
+    cta: s.lotCount > 0 ? "View lots" : "Coming soon",
+    ctaHref: `/auctions/results/${s.siteId}`,
+    imageUrl: s.photo,
+    imageFocus: "center",
+    style: parseSlideStyle({ kicker: "Featured" }),
+  }))
+  dbSlides = [...featured, ...dbSlides]
+
+  // The pictures behind the two boxes beside the slider come from the collected department pages
+  // (Star Wars for selling, music for buying, as the real site shows), else the first two
+  // departments with a picture; a department-less environment gets a plain band.
+  const sidePictures: SidePictures = { sell: null, buy: null }
+  try {
+    const rows = await prisma.$queryRaw<{ slug: string; tileKey: string | null; heroKey: string | null; tilePath: string | null; heroPath: string | null }[]>`
+      SELECT "slug", "tileKey", "heroKey", "tilePath", "heroPath" FROM "SiteDepartment"
+      WHERE COALESCE("tileKey", "heroKey", "tilePath", "heroPath") IS NOT NULL ORDER BY "order", "name"`
+    const pick = (want: string[]) => rows.find(r => want.some(w => r.slug.includes(w)))
+    const sell = pick(["star-wars-auctions", "action-figure"]) ?? rows[0]
+    const buy = pick(["vinyl", "music"]) ?? rows.find(r => r !== sell)
+    const url = async (r?: { tileKey: string | null; heroKey: string | null; tilePath: string | null; heroPath: string | null }) =>
+      r ? sitePicture(r.heroKey ?? r.tileKey, r.heroPath ?? r.tilePath) : null
+    sidePictures.sell = await url(sell)
+    sidePictures.buy = await url(buy)
+  } catch { /* no departments collected here yet */ }
 
   const liveAuction = await prisma.liveAuction.findFirst({
     where: { status: { in: ["ACTIVE", "PAUSED"] } },
@@ -90,7 +109,7 @@ export async function HeroSection() {
       }
     : null
 
-  return <HomeHero initialLive={initialLive} dbSlides={dbSlides} isLoggedIn={!!session} />
+  return <HomeHero initialLive={initialLive} dbSlides={dbSlides} sidePictures={sidePictures} isLoggedIn={!!session} />
 }
 
 /** "Vectis the world's leading toy and collectables specialist" — the introduction under the banner. */

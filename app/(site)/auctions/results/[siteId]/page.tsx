@@ -56,6 +56,10 @@ export default async function SaleResultsPage({
     happened ? getResultSummary(sale) : Promise.resolve(null),
   ])
 
+  // A sale can have happened without its hammer prices being in yet (the BC sync and the website
+  // collection run after the day) — then nothing is "unsold", the result is simply to follow.
+  const resultsIn = !happened || (!!summary && summary.sold > 0)
+
   const base = `/auctions/results/${sale.siteId}`
   const pageHref = (p: number) => {
     const sp = new URLSearchParams()
@@ -85,7 +89,9 @@ export default async function SaleResultsPage({
             <p className="text-sm text-[var(--vs-muted)]">
               {sale.code && <span className="mr-4">Sale {sale.code}</span>}
               {happened
-                ? "This auction has ended — the hammer prices are shown against each lot."
+                ? resultsIn
+                  ? "This auction has ended — the hammer prices are shown against each lot."
+                  : "This auction has ended — the results will appear here once they are in."
                 : lots.total > 0
                   ? `${lots.total.toLocaleString("en-GB")} lots. Log in to leave a commission bid or to bid live on the day.`
                   : "The catalogue for this sale is not online yet. Check back soon."}
@@ -106,7 +112,7 @@ export default async function SaleResultsPage({
         </div>
 
         {/* ── The result in numbers — only once the sale has happened ── */}
-        {happened && summary && summary.lots > 0 && (
+        {happened && resultsIn && summary && summary.lots > 0 && (
           <div className="vs-band mt-10 grid grid-cols-3 divide-x divide-[var(--vs-line)] text-center">
             <Figure label="Lots" value={summary.lots.toLocaleString("en-GB")} />
             <Figure label="Sold" value={`${Math.round((summary.sold / summary.lots) * 100)}%`} sub={`${summary.sold.toLocaleString("en-GB")} lots`} />
@@ -139,7 +145,7 @@ export default async function SaleResultsPage({
         ) : (
           <>
             <div className="mt-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
-              {lots.rows.map(lot => <ResultLotCard key={lot.id} lot={lot} saleHref={base} happened={happened} />)}
+              {lots.rows.map(lot => <ResultLotCard key={lot.id} lot={lot} saleHref={base} happened={happened} resultsIn={resultsIn} />)}
             </div>
 
             {lots.pages > 1 && (
@@ -174,7 +180,7 @@ function Figure({ label, value, sub }: { label: string; value: string; sub?: str
 // The picture and the description open the lot's page (the zoom viewer lives there, not on the
 // grid). The button is its own link, beside them rather than inside them — a link inside a link
 // is not allowed, and the two clicks would fight.
-function ResultLotCard({ lot, saleHref, happened }: { lot: ResultLot; saleHref: string; happened: boolean }) {
+function ResultLotCard({ lot, saleHref, happened, resultsIn }: { lot: ResultLot; saleHref: string; happened: boolean; resultsIn: boolean }) {
   const estimate = estimateText(lot.estimateLow, lot.estimateHigh)
   const href = `${saleHref}/lot/${encodeURIComponent(lot.id)}`
   return (
@@ -198,7 +204,7 @@ function ResultLotCard({ lot, saleHref, happened }: { lot: ResultLot; saleHref: 
           {happened ? (
             lot.hammer != null
               ? <p><span className="vs-price-label">Hammer price: </span><span className="vs-price">£{gbp(lot.hammer)}</span></p>
-              : <p className="vs-price-label">Unsold</p>
+              : <p className="vs-price-label">{resultsIn ? "Unsold" : "Result to follow"}</p>
           ) : (
             <Link href="/portal/login" className="vs-btn vs-btn-sm">Login to bid</Link>
           )}

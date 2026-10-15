@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import ZoomPhoto from "@/components/zoom-photo"
-import { getResultSale, getResultLot, saleHasHappened, type LotNeighbour, type ResultSale } from "../../../data"
+import { getResultSale, getResultLot, getResultSummary, saleHasHappened, type LotNeighbour, type ResultSale } from "../../../data"
 import { dateShort, saleDateLong } from "../../../../../site-dates"
 
 // One lot of a sale on the test website — the page a lot card opens. Laid out as vectis.co.uk
@@ -64,6 +64,10 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
   // Before the day there is no result — the estimate stands, and the lot is not "unsold".
   const happened = saleHasHappened(sale)
   const sold = happened && lot.hammer != null
+  // A sale can have happened without its hammer prices being in yet — then an unsold-looking lot
+  // is simply waiting for its result, and must not be called unsold.
+  const summary = happened && !sold ? await getResultSummary(sale).catch(() => null) : null
+  const resultsIn = sold || (!!summary && summary.sold > 0)
   const saleDate = sale.saleDate ? saleDateLong(sale.saleDate) : null
 
   return (
@@ -190,11 +194,17 @@ export default async function ResultLotPage({ params }: { params: Promise<{ site
                       <p className="text-[36px] leading-none font-semibold text-[var(--vs-navy)] mt-1">£{gbp(lot.hammer!)}</p>
                       <p className="text-sm text-[var(--vs-muted)] mt-2">Sold{saleDate ? ` on ${saleDate}` : ""}. Excludes buyer&apos;s premium.</p>
                     </>
-                  ) : (
+                  ) : resultsIn ? (
                     <>
                       <p className="vs-price-label">Result</p>
                       <p className="text-[28px] leading-none font-semibold text-[var(--vs-muted)] mt-1">Unsold</p>
                       <p className="text-sm text-[var(--vs-muted)] mt-2">This lot did not sell on the day.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="vs-price-label">Result</p>
+                      <p className="text-[28px] leading-none font-semibold text-[var(--vs-muted)] mt-1">To follow</p>
+                      <p className="text-sm text-[var(--vs-muted)] mt-2">The hammer prices for this sale are not in yet.</p>
                     </>
                   )
                 ) : (

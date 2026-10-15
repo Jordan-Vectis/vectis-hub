@@ -347,11 +347,17 @@
 .vectis-site .vs-drawer-sub a:hover { color: var(--vs-navy); }
 
 /* ── The hero ───────────────────────────────────────────────────────────────────────────────── */
+/* The slider is 460px on phones, 600px from lg (vectis.co.uk's own heights); the dots run along its
+   bottom edge — solid navy, the current one a navy ring with a white centre. */
 .vectis-site .vs-hero { position: relative; height: 460px; }
-@media (min-width: 768px) { .vectis-site .vs-hero { height: 520px; } }
-.vectis-site .vs-hero-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--vs-navy); opacity: 0.35; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15); transition: opacity 0.15s, transform 0.15s; }
-.vectis-site .vs-hero-dot[aria-current="true"] { opacity: 1; transform: scale(1.15); }
-.vectis-site .vs-hero-dot:hover { opacity: 0.8; }
+@media (min-width: 1024px) { .vectis-site .vs-hero { height: 600px; } }
+.vectis-site .vs-hero-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--vs-navy); border: 4px solid var(--vs-navy); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6); transition: background-color 0.15s; }
+.vectis-site .vs-hero-dot[aria-current="true"] { background: #fff; }
+.vectis-site .vs-hero-dot:hover { background: #fff; }
+/* The two picture boxes beside the slider: a photo with a white card inset on it. */
+.vectis-site .vs-hero-box { position: relative; display: block; overflow: hidden; background: var(--vs-bg); min-height: 240px; }
+.vectis-site .vs-hero-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.vectis-site .vs-hero-box-card { position: relative; z-index: 1; background: #fff; margin: 56px 44px 56px 28px; padding: 28px 32px; max-width: 360px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); }
 
 /* ── The footer ─────────────────────────────────────────────────────────────────────────────── */
 .vectis-site .vs-footer { background: var(--vs-footer); color: #000; font-size: 16px; }

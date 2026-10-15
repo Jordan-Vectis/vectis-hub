@@ -520,9 +520,10 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
 
 const INPUT = "w-full border border-gray-200 rounded px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-[#32348A] placeholder:text-gray-300 bg-white"
 
-// The site's hero is 520px tall on a wide screen; the preview renders it at 1400×520 and scales
-// that down to the panel's width, so the words, sizes and gaps are the site's own.
-const PREVIEW_W = 1400, PREVIEW_H = 520
+// The site's slider is 600px tall on a wide screen (2026-10-15, vectis.co.uk's height) and about
+// 1,130px wide beside the two picture boxes; the preview renders it at that size and scales it
+// down to the panel's width, so the words, sizes and gaps are the site's own.
+const PREVIEW_W = 1130, PREVIEW_H = 600
 function ScaledPreview({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const [k, setK] = useState(0.5)
