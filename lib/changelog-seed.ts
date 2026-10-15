@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2878e5c0af270205a6682fc12f2c323b13f3dbd5","author":"Jack Collings","date":"2026-10-15T09:53:12+01:00","subject":"Test website: the banner's side boxes use the vivid department tile pictures, not the pale banners"},
   {"sha":"e8a3b88b6173c38dc12ef165ede3830b22e26cb8","author":"Jack Collings","date":"2026-10-15T09:47:00+01:00","subject":"Test website: the banner rotates the upcoming sales, with the two picture boxes beside it"},
   {"sha":"872fad2f60e1f0fdaf9814b1ed0a5fb9d70128ac","author":"Jack Collings","date":"2026-10-15T09:27:43+01:00","subject":"Test website: restyled to match vectis.co.uk, with working upcoming sales and search"},
   {"sha":"fa3013abc09da8504ddb44e53cd3ca91d7d45278","author":"Jordan Orange","date":"2026-10-13T16:59:02+01:00","subject":"Memory: the 13 Oct merge to main in the opening message (Craft Apps is on production)"},
