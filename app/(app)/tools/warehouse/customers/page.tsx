@@ -1,274 +1,315 @@
-"use client"
+import Link from "next/link"
+import { redirect } from "next/navigation"
+import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@/app/generated/prisma/client"
+import { getGoodsInUser } from "@/lib/goods-in/access"
+import { normaliseCode } from "@/lib/goods-in/model"
+import { box, btn, btnGo, mono, th, td, ukDate, PageHeader, Empty, NotReady, ErrorBox, isMissingTable } from "../_components/ui"
+import CustomerSearchBox from "./new/search-box"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+// Goods In → Customers. One search over the CRM's customer database (the same fields the counter's
+// customer picker searches: name, postcode, email, phone, vendor number) run on the server, 50 to a
+// page. With nothing searched it lists the customers who have booked goods in, most recent first.
+// A scanned vendor-number card goes straight to that customer. Nothing here touches Business Central.
 
-export default function CustomersPage() {
-  const router = useRouter()
-  const [customers, setCustomers] = useState<any[]>([])
-  const [search, setSearch] = useState("")
-  const [selected, setSelected] = useState<any>(null)
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ salutation: "", name: "", email: "", phone: "", addressLine1: "", addressLine2: "", postcode: "", notes: "" })
-  const [editForm, setEditForm] = useState<any>(null)
-  const [receipts, setReceipts] = useState<any[]>([])
-  const [auctions, setAuctions] = useState<any[]>([])
-  const [selectedAuctionId, setSelectedAuctionId] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState("")
+export const dynamic = "force-dynamic"
 
-  async function load(q = "") {
-    const res = await fetch(`/api/warehouse/customers?search=${encodeURIComponent(q)}`)
-    setCustomers(await res.json())
+const PAGE_SIZE = 50
+const BASE = "/tools/warehouse/customers"
+
+type Row = {
+  id: string
+  salutation: string | null
+  name: string
+  vendorNo: string | null
+  town: string | null
+  postcode: string | null
+  email: string | null
+  mobile: string | null
+  phone: string | null
+  receipts: number
+  lastBooked: Date | null
+}
+
+/** A scanned or typed receipt / tote / pallet number — we say whose it is rather than "no customer found". */
+type CodeHit = { what: "receipt" | "tote" | "pallet"; code: string; receiptId: string; customerId: string; customer: string }
+
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? ""
+const plural = (n: number, word: string) => `${n.toLocaleString("en-GB")} ${word}${n === 1 ? "" : "s"}`
+const fullName = (r: { salutation: string | null; name: string }) => [r.salutation, r.name].filter(Boolean).join(" ")
+const looksLikeCode = (code: string) => /^[A-Z]{1,3}\d{3,}$/.test(code)
+
+/** The same fields searchCustomers looks through, with a little more forgiveness for how people type. */
+function searchWhere(s: string): Prisma.ContactWhereInput {
+  const like = { contains: s, mode: "insensitive" as const }
+  const code = normaliseCode(s)
+  const digits = s.replace(/\D/g, "")
+  const words = s.split(/\s+/).filter(Boolean)
+  const or: Prisma.ContactWhereInput[] = [
+    { name: like }, { email: like }, { postcode: like }, { addressLine1: like }, { phone: like },
+    { id: { equals: s, mode: "insensitive" } },
+  ]
+  // "Smith John" or "J Smith" still finds John Smith.
+  if (words.length > 1) or.push({ AND: words.map(w => ({ name: { contains: w, mode: "insensitive" as const } })) })
+  // A postcode typed without its space (TS176JJ) still finds TS17 6JJ.
+  if (!/\s/.test(s) && /^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/i.test(s)) or.push({ postcode: { contains: `${s.slice(0, -3)} ${s.slice(-3)}`, mode: "insensitive" } })
+  // A phone number typed without its spaces.
+  if (digits.length >= 5) or.push({ phone: { contains: digits } })
+  const goodsIn: Prisma.GoodsInCustomerWhereInput[] = [{ vendorNo: { equals: code, mode: "insensitive" } }, { mobile: like }]
+  if (code.length >= 3) goodsIn.push({ vendorNo: { contains: code, mode: "insensitive" } })
+  if (digits.length >= 5) goodsIn.push({ mobile: { contains: digits } })
+  or.push({ goodsInCustomer: { is: { OR: goodsIn } } })
+  return { OR: or }
+}
+
+const CONTACT_INCLUDE = { goodsInCustomer: true, _count: { select: { goodsInReceipts: true } } } as const
+type ContactWithGoodsIn = Prisma.ContactGetPayload<{ include: typeof CONTACT_INCLUDE }>
+
+const toRow = (c: ContactWithGoodsIn, lastBooked: Date | null, receipts?: number): Row => ({
+  id: c.id, salutation: c.salutation, name: c.name, vendorNo: c.goodsInCustomer?.vendorNo ?? null,
+  town: c.goodsInCustomer?.town ?? null, postcode: c.postcode, email: c.email, mobile: c.goodsInCustomer?.mobile ?? null, phone: c.phone,
+  receipts: receipts ?? c._count.goodsInReceipts, lastBooked,
+})
+
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams
+  const q = one(sp.q).trim().slice(0, 100)
+  const page = Math.max(1, Math.floor(Number(one(sp.page))) || 1)
+  const skip = (page - 1) * PAGE_SIZE
+
+  const me = await getGoodsInUser()
+  if (!me) {
+    return <div className="p-4 sm:p-6 lg:p-8"><ErrorBox>Your account doesn&apos;t have Warehouse access. Ask a manager to add it.</ErrorBox></div>
   }
 
-  useEffect(() => { load() }, [])
+  const searching = q.length >= 2
+  let rows: Row[] = []
+  let total = 0
+  let hit: CodeHit | null = null
+  let goTo: string | null = null
+  let missing = false
+  let failed: string | null = null
 
-  async function selectCustomer(c: any) {
-    setSelected(c)
-    setEditForm({ salutation: c.salutation || "", name: c.name, email: c.email || "", phone: c.phone || "", addressLine1: c.addressLine1 || "", addressLine2: c.addressLine2 || "", postcode: c.postcode || "", notes: c.notes || "" })
-    setSelectedAuctionId("")
-    const [receiptsRes, auctionsRes] = await Promise.all([
-      fetch(`/api/warehouse/receipts?customer_id=${c.id}`),
-      fetch(`/api/warehouse/customers/${c.id}/auctions`),
-    ])
-    setReceipts(await receiptsRes.json())
-    setAuctions(await auctionsRes.json())
-  }
-
-  async function doCreate() {
-    if (!form.name.trim()) { setMsg("Name required"); return }
-    setLoading(true)
-    try {
-      const res = await fetch("/api/warehouse/customers", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
-      })
-      if (res.ok) {
-        setShowCreate(false)
-        setForm({ salutation: "", name: "", email: "", phone: "", addressLine1: "", addressLine2: "", postcode: "", notes: "" })
-        setMsg("")
-        load()
-      } else { setMsg("Error creating customer") }
-    } finally { setLoading(false) }
-  }
-
-  async function doSave() {
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/warehouse/customers/${selected.id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editForm),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setSelected(data)
-        setMsg("Saved")
-        setTimeout(() => setMsg(""), 2000)
-        load(search)
+  try {
+    if (searching) {
+      const code = normaliseCode(q)
+      if (looksLikeCode(code)) {
+        const [vendor, receipt, container] = await Promise.all([
+          prisma.goodsInCustomer.findUnique({ where: { vendorNo: code }, select: { contactId: true } }),
+          prisma.goodsInReceipt.findUnique({ where: { id: code }, select: { id: true, contactId: true, contact: { select: { name: true } } } }),
+          prisma.goodsInContainer.findUnique({ where: { id: code }, select: { id: true, kind: true, receiptId: true, receipt: { select: { contactId: true, contact: { select: { name: true } } } } } }),
+        ])
+        // A scanned vendor-number card: straight to that customer.
+        if (vendor) goTo = `${BASE}/${encodeURIComponent(vendor.contactId)}`
+        else if (receipt) hit = { what: "receipt", code: receipt.id, receiptId: receipt.id, customerId: receipt.contactId, customer: receipt.contact.name }
+        else if (container) hit = { what: container.kind === "pallet" ? "pallet" : "tote", code: container.id, receiptId: container.receiptId, customerId: container.receipt.contactId, customer: container.receipt.contact.name }
       }
-    } finally { setLoading(false) }
+      if (!goTo) {
+        const where = searchWhere(q)
+        const [contacts, count] = await Promise.all([
+          prisma.contact.findMany({ where, include: CONTACT_INCLUDE, orderBy: [{ name: "asc" }, { id: "asc" }], skip, take: PAGE_SIZE }),
+          prisma.contact.count({ where }),
+        ])
+        total = count
+        const ids = contacts.map(c => c.id)
+        const last = ids.length
+          ? await prisma.goodsInReceipt.groupBy({ by: ["contactId"], where: { contactId: { in: ids } }, _max: { createdAt: true } })
+          : []
+        const lastOf = new Map(last.map(l => [l.contactId, l._max.createdAt ?? null]))
+        rows = contacts.map(c => toRow(c, lastOf.get(c.id) ?? null))
+      }
+    } else {
+      // Nothing searched: the customers who have booked goods in, the most recently booked first.
+      const [groups, count] = await Promise.all([
+        prisma.goodsInReceipt.groupBy({
+          by: ["contactId"],
+          _max: { createdAt: true },
+          _count: { _all: true },
+          orderBy: { _max: { createdAt: "desc" } },
+          skip,
+          take: PAGE_SIZE,
+        }),
+        prisma.contact.count({ where: { goodsInReceipts: { some: {} } } }),
+      ])
+      total = count
+      const contacts = groups.length
+        ? await prisma.contact.findMany({ where: { id: { in: groups.map(g => g.contactId) } }, include: CONTACT_INCLUDE })
+        : []
+      const byId = new Map(contacts.map(c => [c.id, c]))
+      rows = groups.flatMap(g => {
+        const c = byId.get(g.contactId)
+        return c ? [toRow(c, g._max.createdAt ?? null, g._count._all)] : []
+      })
+    }
+  } catch (e) {
+    if (isMissingTable(e)) missing = true
+    else {
+      console.error("goods-in customers list:", e)
+      failed = "The customer list couldn't be loaded just now. Try again in a moment — if it keeps happening, tell Jack."
+    }
   }
 
-  function openDoc(url: string) {
-    window.open(url, "_blank")
-  }
+  // redirect() works by throwing, so it must sit outside the try/catch above.
+  if (goTo) redirect(goTo)
 
-  const fmtDate = (d: string | null) => d
-    ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-    : ""
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const from = total === 0 ? 0 : skip + 1
+  const to = Math.min(total, skip + rows.length)
+  const pageHref = (p: number) => {
+    const u = new URLSearchParams()
+    if (q) u.set("q", q)
+    if (p > 1) u.set("page", String(p))
+    const s = u.toString()
+    return s ? `${BASE}?${s}` : BASE
+  }
 
   return (
-    <div className="p-6 space-y-4" style={{ fontFamily: "Arial, sans-serif" }}>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customers</h1>
-        <button className="wh-btn-primary" onClick={() => setShowCreate(true)}>+ New Customer</button>
-      </div>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5">
+      <PageHeader
+        title="Customers"
+        intro="Find a customer to see their receipts, which of their totes and pallets are in the warehouse, and the lots made from them."
+        actions={<Link href={`${BASE}/new`} className={btnGo}>+ New customer</Link>}
+      />
 
-      {msg && <p className="text-sm text-green-600">{msg}</p>}
+      {/* A GET search: Enter (or a barcode scanner's Enter) searches; the address bar keeps it. */}
+      <CustomerSearchBox q={q} action={BASE} />
 
-      <div className="flex gap-2">
-        <input className="wh-input flex-1" placeholder="Search name, phone, email, postcode, address…" value={search}
-          onChange={e => setSearch(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") load(search) }} />
-        <button className="wh-btn-primary" onClick={() => load(search)}>Search</button>
-        <button className="wh-btn-secondary" onClick={() => { setSearch(""); load("") }}>Clear</button>
-      </div>
+      {missing && <NotReady />}
+      {failed && <ErrorBox>{failed}</ErrorBox>}
 
-      {showCreate && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.4)" }}>
-          <div className="wh-card w-full max-w-md space-y-4">
-            <h2 className="font-semibold text-lg">New Customer</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="wh-label">Salutation</label>
-                <select className="wh-input" value={form.salutation} onChange={e => setForm({...form, salutation: e.target.value})}>
-                  <option value="">—</option>
-                  <option>Mr</option><option>Mrs</option><option>Ms</option><option>Miss</option><option>Dr</option><option>Prof</option>
-                </select>
-              </div>
-              <div><label className="wh-label">Name *</label><input className="wh-input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
-              <div><label className="wh-label">Phone</label><input className="wh-input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
-              <div><label className="wh-label">Email</label><input className="wh-input" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-              <div className="col-span-2"><label className="wh-label">Address Line 1</label><input className="wh-input" value={form.addressLine1} onChange={e => setForm({...form, addressLine1: e.target.value})} /></div>
-              <div className="col-span-2"><label className="wh-label">Address Line 2</label><input className="wh-input" value={form.addressLine2} onChange={e => setForm({...form, addressLine2: e.target.value})} /></div>
-              <div><label className="wh-label">Postcode</label><input className="wh-input" value={form.postcode} onChange={e => setForm({...form, postcode: e.target.value})} /></div>
-              <div className="col-span-2"><label className="wh-label">Notes</label><textarea className="wh-input" rows={2} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
+      {!missing && !failed && (
+        <>
+          {q && !searching && (
+            <p className="text-sm text-amber-700 dark:text-amber-300">Type at least two letters or numbers to search. Showing recent customers instead.</p>
+          )}
+
+          {hit && (
+            <div className="rounded-lg border border-indigo-300 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-100 px-4 py-3 text-sm flex flex-wrap items-center gap-x-4 gap-y-2">
+              <span>
+                <span className={`${mono} font-semibold`}>{hit.code}</span> is {hit.what === "receipt" ? "a receipt" : `a ${hit.what} on receipt `}
+                {hit.what !== "receipt" && <span className={mono}>{hit.receiptId}</span>} for <b>{hit.customer}</b>.
+              </span>
+              <span className="flex flex-wrap gap-2">
+                <Link href={`${BASE}/${encodeURIComponent(hit.customerId)}`} className={btn}>Open {hit.customer}</Link>
+                <Link href={`/tools/warehouse/receipts/${encodeURIComponent(hit.receiptId)}`} className={btn}>Open receipt {hit.receiptId}</Link>
+              </span>
             </div>
-            <div className="flex gap-2">
-              <button className="wh-btn-secondary flex-1" onClick={() => setShowCreate(false)}>Cancel</button>
-              <button className="wh-btn-primary flex-1" onClick={doCreate} disabled={loading}>Create</button>
+          )}
+
+          {searching ? (
+            // A scanned receipt or tote number is answered by the banner above, not "no customer matches".
+            !(hit && total === 0) && (
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                {total === 0 ? <>No customer matches &ldquo;{q}&rdquo;</> : <>{plural(total, "customer")} {total === 1 ? "matches" : "match"} &ldquo;{q}&rdquo;</>}
+              </h2>
+            )
+          ) : (
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Recently booked in</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
+                Only customers who have booked goods in are listed here. The full customer database is the CRM&apos;s{" "}
+                <Link href="/contacts" className="text-indigo-700 dark:text-indigo-300 underline">Contacts</Link> — the search above looks through all of it.
+              </p>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      <div className="flex gap-4">
-        <div className="wh-card p-0 overflow-hidden flex-1">
-          <table className="w-full">
-            <thead><tr>
-              <th className="wh-table-header">ID</th>
-              <th className="wh-table-header">Name</th>
-              <th className="wh-table-header">Phone</th>
-              <th className="wh-table-header">Email</th>
-              <th className="wh-table-header">Postcode</th>
-              <th className="wh-table-header">Address</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {customers.map(c => (
-                <tr key={c.id} onClick={() => selectCustomer(c)}
-                  className="cursor-pointer hover:bg-gray-50"
-                  style={selected?.id === c.id ? { background: "#eff6ff" } : {}}>
-                  <td className="wh-table-cell font-mono text-xs">{c.id}</td>
-                  <td className="wh-table-cell font-medium">{c.name}</td>
-                  <td className="wh-table-cell text-gray-500">{c.phone}</td>
-                  <td className="wh-table-cell text-gray-500">{c.email}</td>
-                  <td className="wh-table-cell text-gray-500">{c.postcode}</td>
-                  <td className="wh-table-cell text-gray-500">{c.addressLine1}</td>
-                </tr>
-              ))}
-              {customers.length === 0 && (
-                <tr><td colSpan={6} className="wh-table-cell text-center text-gray-400 py-8">No customers found</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {selected && editForm && (
-          <div style={{ width: "22rem" }} className="space-y-4 flex-shrink-0">
-            {/* Details */}
-            <div className="wh-card space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-gray-900 dark:text-white">{selected.name}</p>
-                <span className="wh-badge wh-badge-blue font-mono">{selected.id}</span>
-              </div>
-              <div className="space-y-2">
-                <div><label className="wh-label">Salutation</label>
-                  <select className="wh-input" value={editForm.salutation} onChange={e => setEditForm({...editForm, salutation: e.target.value})}>
-                    <option value="">—</option>
-                    <option>Mr</option><option>Mrs</option><option>Ms</option><option>Miss</option><option>Dr</option><option>Prof</option>
-                  </select>
-                </div>
-                <div><label className="wh-label">Name</label><input className="wh-input" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
-                <div><label className="wh-label">Phone</label><input className="wh-input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} /></div>
-                <div><label className="wh-label">Email</label><input className="wh-input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} /></div>
-                <div><label className="wh-label">Address Line 1</label><input className="wh-input" value={editForm.addressLine1} onChange={e => setEditForm({...editForm, addressLine1: e.target.value})} /></div>
-                <div><label className="wh-label">Address Line 2</label><input className="wh-input" value={editForm.addressLine2} onChange={e => setEditForm({...editForm, addressLine2: e.target.value})} /></div>
-                <div><label className="wh-label">Postcode</label><input className="wh-input" value={editForm.postcode} onChange={e => setEditForm({...editForm, postcode: e.target.value})} /></div>
-                <div><label className="wh-label">Notes</label><textarea className="wh-input" rows={2} value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} /></div>
-              </div>
-              <button className="wh-btn-primary w-full justify-center" onClick={doSave} disabled={loading}>Save Changes</button>
-            </div>
-
-            {/* Receipts */}
-            {receipts.length > 0 && (
-              <div className="wh-card p-0 overflow-hidden">
-                <p className="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-50 dark:bg-[#141416]">Receipts ({receipts.length})</p>
-                <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
-                  {receipts.map((r: any) => (
-                    <div key={r.id} className="px-4 py-2 flex items-center justify-between">
-                      <span className="font-mono text-sm">{r.id}</span>
-                      <div className="flex items-center gap-2">
-                        <span className={`wh-badge ${r.status === "open" ? "wh-badge-green" : "wh-badge-gray"}`}>{r.status}</span>
-                        <button className="wh-btn-secondary wh-btn-sm" onClick={() => router.push(`/tools/warehouse/receipts?id=${r.id}`)}>View</button>
+          {rows.length === 0 ? (
+            total > 0 ? (
+              <Empty>There&apos;s nothing on page {page}. <Link href={pageHref(1)} className="underline text-indigo-700 dark:text-indigo-300">Back to the first page</Link>.</Empty>
+            ) : searching ? (
+              !hit && (
+                <Empty>
+                  <p>Check the spelling, try their postcode or vendor number — or add them as a new customer.</p>
+                  <Link href={`${BASE}/new`} className={`${btnGo} mt-4`}>+ New customer</Link>
+                </Empty>
+              )
+            ) : (
+              <Empty>Nobody has been booked in yet. Search above to find a customer in the CRM, or add a new one.</Empty>
+            )
+          ) : (
+            <>
+              {/* Phones: cards. */}
+              <ul className="sm:hidden space-y-2">
+                {rows.map(r => (
+                  <li key={r.id} className={box}>
+                    <Link href={`${BASE}/${encodeURIComponent(r.id)}`} className="block px-4 py-3 min-h-14 active:bg-gray-50 dark:active:bg-gray-800 rounded-xl">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-semibold text-gray-900 dark:text-white min-w-0 break-words">{fullName(r)}</span>
+                        {r.vendorNo && <span className={`${mono} text-xs text-indigo-700 dark:text-indigo-300 shrink-0`}>{r.vendorNo}</span>}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Documents */}
-            <div className="wh-card space-y-3">
-              <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">📄 Documents</p>
-
-              {/* Receipt documents — one per receipt */}
-              {receipts.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Receipts</p>
-                  <div className="space-y-1">
-                    {receipts.map((r: any) => (
-                      <div key={r.id} className="flex items-center justify-between py-1 px-2 rounded bg-gray-50 dark:bg-[#141416]">
-                        <span className="font-mono text-xs text-gray-600">{r.id}</span>
-                        <button
-                          className="wh-btn-secondary wh-btn-sm"
-                          onClick={() => openDoc(`/api/warehouse/documents/receipt?receiptId=${r.id}`)}
-                        >
-                          Print Receipt
-                        </button>
+                      {(r.town || r.postcode) && <div className="text-sm text-gray-600 dark:text-gray-300">{[r.town, r.postcode].filter(Boolean).join(", ")}</div>}
+                      {(r.email || r.mobile || r.phone) && <div className="text-sm text-gray-500 dark:text-gray-400 break-all">{[r.email, r.mobile ?? r.phone].filter(Boolean).join(" · ")}</div>}
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {plural(r.receipts, "receipt")}{r.lastBooked ? ` · last booked ${ukDate(r.lastBooked)}` : ""}
                       </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Tablets and desktops: a full-width table. */}
+              <div className={`${box} hidden sm:block overflow-x-auto`}>
+                <table className="w-full">
+                  <thead className="border-b border-gray-200 dark:border-gray-800">
+                    <tr>
+                      <th className={th}>Name</th>
+                      <th className={th}>Vendor no.</th>
+                      <th className={th}>Town / postcode</th>
+                      <th className={th}>Email / mobile</th>
+                      <th className={th}>Receipts</th>
+                      <th className={th}>Last booked</th>
+                      <th className={th}><span className="sr-only">Book in</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {rows.map(r => (
+                      <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                        <td className={td}>
+                          <Link href={`${BASE}/${encodeURIComponent(r.id)}`} className="inline-flex items-center min-h-11 font-semibold text-indigo-700 dark:text-indigo-300 hover:underline">
+                            {fullName(r)}
+                          </Link>
+                        </td>
+                        <td className={`${td} ${mono} whitespace-nowrap`}>{r.vendorNo ?? <span className="text-gray-500 dark:text-gray-400">—</span>}</td>
+                        <td className={td}>
+                          {r.town || r.postcode ? (
+                            <>
+                              {r.town && <div>{r.town}</div>}
+                              {r.postcode && <div className="whitespace-nowrap text-gray-600 dark:text-gray-300">{r.postcode}</div>}
+                            </>
+                          ) : <span className="text-gray-500 dark:text-gray-400">—</span>}
+                        </td>
+                        <td className={`${td} max-w-xs`}>
+                          {r.email && <div className="break-all">{r.email}</div>}
+                          {(r.mobile ?? r.phone) && <div className="whitespace-nowrap text-gray-600 dark:text-gray-300">{r.mobile ?? r.phone}</div>}
+                          {!r.email && !r.mobile && !r.phone && <span className="text-gray-500 dark:text-gray-400">—</span>}
+                        </td>
+                        <td className={`${td} ${mono}`}>{r.receipts.toLocaleString("en-GB")}</td>
+                        <td className={`${td} whitespace-nowrap`}>{r.lastBooked ? ukDate(r.lastBooked) : <span className="text-gray-500 dark:text-gray-400">Never</span>}</td>
+                        <td className={`${td} text-right`}>
+                          <Link href={`/tools/warehouse/check-in?customer=${encodeURIComponent(r.id)}`} className={`${btn} whitespace-nowrap`}>Book in</Link>
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-              )}
+                  </tbody>
+                </table>
+              </div>
 
-              {/* Auction documents */}
-              {auctions.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Auction Documents</p>
-                  <div className="mb-2">
-                    <select
-                      className="wh-input text-sm"
-                      value={selectedAuctionId}
-                      onChange={e => setSelectedAuctionId(e.target.value)}
-                    >
-                      <option value="">Select auction…</option>
-                      {auctions.map((a: any) => (
-                        <option key={a.id} value={a.id}>
-                          {a.code} — {a.name}{a.auctionDate ? ` (${fmtDate(a.auctionDate)})` : ""}
-                        </option>
-                      ))}
-                    </select>
+              <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {from.toLocaleString("en-GB")}–{to.toLocaleString("en-GB")} of {plural(total, "customer")}
+                  {pages > 1 ? ` · page ${page} of ${pages}` : ""}
+                </p>
+                {pages > 1 && (
+                  <div className="flex gap-2">
+                    {page > 1 ? <Link href={pageHref(page - 1)} className={btn}>← Previous</Link> : <span className={`${btn} opacity-40 pointer-events-none`} aria-disabled="true">← Previous</span>}
+                    {page < pages ? <Link href={pageHref(page + 1)} className={btn}>Next →</Link> : <span className={`${btn} opacity-40 pointer-events-none`} aria-disabled="true">Next →</span>}
                   </div>
-                  {selectedAuctionId && (
-                    <div className="grid grid-cols-1 gap-1">
-                      <button
-                        className="wh-btn-secondary text-sm justify-start"
-                        onClick={() => openDoc(`/api/warehouse/documents/pre-sale?customerId=${selected.id}&auctionId=${selectedAuctionId}`)}
-                      >
-                        📋 Pre-Sale Advice
-                      </button>
-                      <button
-                        className="wh-btn-secondary text-sm justify-start"
-                        onClick={() => openDoc(`/api/warehouse/documents/post-sale?customerId=${selected.id}&auctionId=${selectedAuctionId}`)}
-                      >
-                        📋 Post-Sale Advice
-                      </button>
-                      <button
-                        className="wh-btn-secondary text-sm justify-start"
-                        onClick={() => openDoc(`/api/warehouse/documents/vendor-statement?customerId=${selected.id}&auctionId=${selectedAuctionId}`)}
-                      >
-                        💰 Vendor Statement
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {receipts.length === 0 && auctions.length === 0 && (
-                <p className="text-xs text-gray-400 text-center py-2">No receipts or auction history yet</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+                )}
+              </nav>
+            </>
+          )}
+        </>
+      )}
     </div>
   )
 }

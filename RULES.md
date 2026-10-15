@@ -1663,3 +1663,93 @@ by the upload script, and the files are `craft-apps/<app>/<version>/<file>` besi
   buttons for both platforms"* — platforms here meaning the two kinds, not Windows/macOS (only
   Windows x64 is built or kept).
 - A missing manifest (nothing uploaded yet) is an **empty list, not an error**.
+
+---
+## 📦 Goods In — the Hub's own check-in (2026-10-15)
+
+Jack rebuilt the Warehouse section (`/tools/warehouse`, app key `WAREHOUSE`, tiers warehouse < manager
+< admin) as **Goods In**, replacing the abandoned April prototype. The Hub card is now called "Goods
+In" (key, href and app key unchanged). The flow, in the words staff see:
+
+1. Find the customer in the customer database (the CRM `Contact`), or add them at the counter.
+2. **Book in** their goods onto a **receipt** (R010244).
+3. Group the goods **by category, not item**, into **totes** (T027657) and **pallets** (P…) —
+   "5x boxes of comics" is one tote.
+4. Print and/or email the receipt, and print a barcode label (100 × 50 mm) for every tote and pallet.
+5. Put the totes away at a **storage** location; later move them to a **bench** to be catalogued.
+6. Cataloguers make lots from a tote in the Add Lot wizard exactly as now — each lot keeps the tote,
+   receipt and vendor number, so its barcode still ties back to the receipt.
+7. Move each finished lot to a **shelf** until it sells.
+
+Every write is a server action in `lib/actions/goods-in.ts` returning `{ ok, error }`; the shared words
+and shapes are in `lib/goods-in/model.ts`; who may do what is `lib/goods-in/access.ts` (read fresh from
+the database, judged on the effective session). Managers void receipts and edit locations; only a
+Warehouse admin sets the number series.
+
+- ⚠⚠ **Goods In never touches Business Central** (Jack: *"don't do anything with BC"*). No BC API call,
+  no BC sync table written, and End of Day, Tote Check, Locking Check, BC Match, Change Vendor,
+  `lib/bc.ts` and `lib/tote-check.ts` are unchanged. What that means, and it is **not solved**:
+  - A lot made from a Goods In tote shows **"Tote not in the BC data"** on Tote Check and **"Tote not
+    found in BC"** on Locking Check, because BC has never heard of the tote.
+  - End of Day flags its receipt **"Receipt doesn't exist in BC"** — the lot stays on the sheet, but
+    the overnight import fails on it. So **a lot from a Goods In tote cannot get into BC** today.
+  - ⚠ **A decision for Jack and Jordan before real stock is booked in this way.** Don't quieten those
+    flags by teaching the checks about Goods In without that decision — they are telling the truth.
+- **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken
+  with a single `UPDATE … RETURNING` inside the booking transaction, so two clerks booking in at once
+  can never be handed the same number (the prototype's read-the-highest-and-add-one could). A number
+  that already exists in Goods In is skipped, never reused. The series **carry on from BC's** — an
+  admin sets the next receipt, tote and pallet number in Goods In → Settings on the day BC stops, and
+  until a series is set, booking in refuses with a plain message rather than guessing.
+  - ⚠ **The vendor series is deliberately optional.** BC still hands out C-numbers for website
+    sign-ups, so the Hub carrying the C-series on could give two customers the same number. With no
+    vendor series set, a customer without a vendor number simply gets a receipt without one. Don't
+    make it compulsory without asking.
+- ⚠⚠ **A customer's bank details are never stored or shown.** The bank form on the printed receipt
+  is blank by design and the customer fills it in by hand — nothing in the Hub is locked down enough
+  to hold them. Don't add fields for them.
+- **Emailing a receipt** goes from the receipts mailbox (`RECEIPTS_MAILBOX`, default
+  admin@vectis.co.uk) through Microsoft Graph, signed in **delegated with `Mail.Send.Shared`** — the IT
+  mailbox's pattern, no tenant-wide permission. ⚠ It waits on **IT's consent** (the permission and
+  the redirect URI on the app registration); until then the screens say so plainly, and a receipt can
+  still be printed, or downloaded and emailed by hand. A copy is kept in the mailbox's Sent Items.
+  Microsoft 365 is listed as a processor on Data & Compliance and the DPIA for this.
+- **New tables only**: `GoodsInCustomer`, `GoodsInReceipt`, `GoodsInContainer`, `GoodsInLocation`,
+  `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth` (**NEEDS Run Migrations**). ⚠ **Nothing was
+  added to `Contact`, `CatalogueLot` or `User`** — a shipped-but-unmigrated column there breaks every
+  contact or lot save, or login, between the deploy and Run Migrations. Keep it that way. Until the
+  tables exist every Goods In screen says it isn't set up yet rather than crashing.
+  - A Goods In customer **is** a CRM contact; `GoodsInCustomer` holds only the Goods In half (vendor
+    number, mobile, town, county, country, VAT number and terms), one row per contact.
+  - A receipt **copies** the customer's details when it is booked (`GoodsInReceipt.customer`), so a
+    reprint next year says what it said on the day. Editing the customer changes future receipts only.
+- **A lot's shelf is its latest `GoodsInMovement` with that `lotId`** — never a column on the lot. A
+  tote's current location is kept on `GoodsInContainer` as well, so lists don't have to work it out;
+  a move writes both in one transaction.
+- **The Add Lot wizard and Lotting Up fall back to Goods In ONLY after BC's copy finds nothing**
+  (`/api/warehouse/vendor-lookup` and `/api/warehouse/tote-search`). Every tote and receipt BC knows —
+  a shell tote and one with no vendor included — answers byte-for-byte as before; Goods In is asked
+  only when BC has **no row at all** for the number, and answers in the same shape with
+  `source: "goods-in"`. ⚠ `catalogued` is always null there (the wizard words a true value as BC's
+  tick on a re-used tote, which a Goods In tote never is), totes on a **voided** receipt are not
+  offered, and a missing table simply means nothing from Goods In.
+  - ⚠ The wizard still says "BC" in places ("Type the BC tote number…", "Typed by hand, not taken from
+    BC"), and a Goods In receipt with no vendor number cannot fill the wizard's required Vendor box —
+    the cataloguer types it. Wording on those screens is a cataloguing change, not a Goods In one.
+    For such a tote the wizard now shows the customer and receipt in its banner, fills the receipt,
+    and says "Booked in through Goods In with no vendor number … type it in".
+- **Switching the vendor series off**: an admin can press "Stop giving vendor numbers" on the vendor
+  card in Goods In → Settings (`clearCounter("vendor")`, which refuses every other series).
+- **Voiding and un-voiding a receipt both need a manager.** `updateReceipt` reads the current status
+  and changes it in one step, so two people changing it at once can't both win; a void reason is
+  added to the notes on the server (`appendNote`), never overwriting them.
+- **A half-finished check-in is kept** in that browser tab's `sessionStorage` (customer id and name,
+  rows, terms and ticks only, every access in try/catch) and offered back only to the same user. It is
+  cleared on Book in. Never put anything more personal in it.
+- Check in opens with a customer already chosen from `/tools/warehouse/check-in?customer=<contact id>`
+  (the Customers list and customer page use it).
+- Registered in `lib/help-map.ts` (Book in · Receipt list · Scan to move · Benches · Code lookup ·
+  Locations & labels · Number series & email · Movement record). ⚠ Those names and their keywords avoid everyday words
+  ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that
+  matches a tool the asker can't open, and a cataloguer asking "where do I find…" must never be told
+  Goods In isn't part of their Hub.

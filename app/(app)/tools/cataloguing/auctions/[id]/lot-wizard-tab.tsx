@@ -1065,7 +1065,7 @@ export default function LotWizardTab({
     setToteInfo(item)
     setToteInfoFor(item.toteNo)
     setToteContents(item.contents ?? null)
-    setToteMeta({ catalogued: item.catalogued ?? null, syncedAt: item.syncedAt ?? null, source: "tote" })
+    setToteMeta({ catalogued: item.catalogued ?? null, syncedAt: item.syncedAt ?? null, source: item.source === "goods-in" ? "goods-in" : "tote" })
     setToteResults([])
     setToteOpen(false)
     setToteIgnored(false)
@@ -1116,6 +1116,25 @@ export default function LotWizardTab({
       if (params.tote && data.source === "tote-shell") {
         setToteMeta({ catalogued: null, syncedAt: null, source: "tote-shell", knownTote: true })
         setToteInfoFor(params.tote)
+        return
+      }
+      // A tote booked in through the Hub's own Goods In whose receipt carries no vendor number —
+      // most of them, because Goods In's vendor series is deliberately optional. The receipt and
+      // customer name are still known, so they are shown and the receipt filled in; Vendor is left
+      // for the cataloguer (it is still required — whether it should be for these totes is Jack
+      // and Jordan's call, not changed here).
+      if (params.tote && data.source === "goods-in" && !data.vendorNo) {
+        setToteChoices(null)
+        setVendorHint(data.vendorName ?? null)
+        setToteInfo({ vendorNo: "", vendorName: data.vendorName ?? "", receiptNo: data.receiptNo ?? "", location: data.location ?? "" })
+        setToteInfoFor(params.tote)
+        setToteMeta({ catalogued: null, syncedAt: null, source: "goods-in" })
+        if (!params.hintOnly && data.receiptNo && !receiptTyped) setReceipt(data.receiptNo)
+        return
+      }
+      // The same for a Goods In receipt typed with no tote: name the customer, fill nothing.
+      if (params.receipt && data.source === "goods-in" && !data.vendorNo) {
+        setVendorHint(data.vendorName ?? null)
         return
       }
       if (data.vendorNo) {
@@ -2089,20 +2108,30 @@ export default function LotWizardTab({
                   A mistyped but VALID tote number (P005023 for P005022) resolves perfectly and
                   fills in a different consignment's customer; nothing else on this screen can
                   catch that. */}
-              {toteInfo && toteInfo.vendorNo && (() => {
+              {toteInfo && (toteInfo.vendorNo || toteMeta?.source === "goods-in") && (() => {
                 // ⚠ Sync age no longer colours anything. Amber has to be explainable in a
                 // sentence next to it, and the sentence it had has gone.
                 const flagged = !!toteMeta?.catalogued || toteMeta?.source === "item"
+                const goodsIn = toteMeta?.source === "goods-in"
                 return (
                   <div className={`mt-2 rounded-lg border px-3 py-2.5 ${flagged
                     ? "border-amber-500/60 bg-amber-500/10"
                     : "border-[#2AB4A6]/50 bg-[#2AB4A6]/10"}`}>
                     <p className={`font-semibold leading-tight ${tablet ? "text-lg" : "text-base"} ${flagged ? "text-amber-700 dark:text-amber-300" : "text-[#178F84] dark:text-[#2AB4A6]"}`}>
-                      {toteInfo.vendorName || "No customer name in BC"}
+                      {toteInfo.vendorName || (goodsIn ? "No customer name" : "No customer name in BC")}
                     </p>
                     <p className={`font-mono text-gray-700 dark:text-gray-300 mt-0.5 ${tablet ? "text-sm" : "text-xs"}`}>
-                      {toteInfo.vendorNo}{toteInfo.receiptNo ? ` · ${toteInfo.receiptNo}` : ""}
+                      {[toteInfo.vendorNo, toteInfo.receiptNo].filter(Boolean).join(" · ")}
                     </p>
+                    {/* A Goods In tote: booked in on the Hub, not in BC. Most Goods In receipts
+                        carry no vendor number, and Vendor Number below is still required. */}
+                    {goodsIn && (
+                      <p className="text-xs text-gray-700 dark:text-gray-300 mt-1.5">
+                        Booked in through Goods In{toteInfo.vendorNo
+                          ? "."
+                          : " with no vendor number, so Vendor Number below can't be filled in from the tote — type it in."}
+                      </p>
+                    )}
                     {toteMeta?.catalogued && (
                       <p className="text-xs text-amber-700 dark:text-amber-300 mt-1.5">
                         ⚠ BC has already ticked this tote catalogued. If it has been emptied and re-used, this is the

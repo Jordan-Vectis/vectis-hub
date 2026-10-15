@@ -170,6 +170,13 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "WarehouseContainer", what: "A box or tote of goods on a receipt, with its description and category." },
       { model: "WarehouseLocation", what: "The shelf and location codes goods can be put in." },
       { model: "WarehouseMovement", personal: "staff", what: "Every move of a container to a location, with who moved it and when." },
+      { model: "GoodsInCustomer", personal: "customer", what: "The Goods In half of a customer record: their vendor number, mobile, town, county, country, VAT number and the commission and fees their receipts carry." },
+      { model: "GoodsInReceipt", personal: "customer", what: "A Goods In receipt — what a customer handed in and on what terms — with a copy of their name, address and contact details as they were on the day, who booked it in, and when it was printed or emailed." },
+      { model: "GoodsInContainer", personal: "staff", what: "A tote or pallet on a Goods In receipt: its category and description, where it is now, and who booked it in." },
+      { model: "GoodsInLocation", what: "The places Goods In can put things — storage locations, cataloguing benches and shelves." },
+      { model: "GoodsInMovement", personal: "staff", what: "Every move of a tote, pallet or single lot to a location, with who moved it and when." },
+      { model: "GoodsInCounter", what: "The next receipt, tote, pallet and vendor number Goods In will hand out, and who last set it." },
+      { model: "GoodsInMailAuth", personal: "staff", what: "The sign-in that lets Goods In email receipts from the Vectis mailbox: the mailbox, the access tokens and who connected it." },
     ],
   },
   {

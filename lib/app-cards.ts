@@ -194,8 +194,8 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   {
     key:                "WAREHOUSE",
     href:               "/tools/warehouse",
-    defaultLabel:       "Warehouse",
-    defaultDescription: "Track containers, totes and warehouse locations.",
+    defaultLabel:       "Goods In",
+    defaultDescription: "Book customers' goods in, print and email receipts and tote labels, and track every tote from storage to bench to shelf.",
     icon:               "🏭",
     border:             "border-cyan-500",
     iconBg:             "text-cyan-400",

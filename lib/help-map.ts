@@ -174,6 +174,74 @@ export const DESTINATIONS: Destination[] = [
     also: ["social media", "marketing content", "newsletter"],
   },
 
+  // ── Goods In ────────────────────────────────────────────────────────────────
+  // The Hub's own check-in (2026-10-15). Gated on WAREHOUSE, the same as its Hub card. Within it,
+  // some things are for managers or admins only; the help box can only gate on the app, so each
+  // `what` line says who can change what, and the pages themselves refuse the rest.
+  // ⚠⚠ No bare everyday words in these names or `also` lists — "find", "move", "receipts",
+  // "bench", "settings", "tote", "vendor numbers". `blockedDestination()` refuses any question that
+  // matches a tool the asker cannot open better than anything they can, and a name part counts the
+  // moment it appears as a word: "Goods In → Find" would have told a cataloguer asking "where do I
+  // find the photos?" that Goods In isn't part of their Hub. Every phrase here is one only someone
+  // asking about Goods In would type. Lotting Up talks about "a bench of items", BC Warehouse
+  // answers "tote" and "where is a lot", and Packing (open to everyone) owns "labels" and parcels —
+  // don't steal those.
+  {
+    ask: "How do I book a customer's goods in?",
+    name: "Goods In → Book in", href: "/tools/warehouse/check-in", app: "WAREHOUSE",
+    what: "Book a customer's goods in at the counter: find the customer in the customer database (or add them), put their goods on a new receipt as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote — then print or email the receipt and print a barcode label for every tote and pallet.",
+    also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "customer bringing in"],
+  },
+  {
+    ask: "How do I reprint or email a receipt?",
+    name: "Goods In → Receipt list", href: "/tools/warehouse/receipts", app: "WAREHOUSE",
+    what: "Every Goods In receipt, newest first. Open one to reprint it, email it to the customer, print its tote and pallet labels again, or add another tote or pallet to it. Only a manager can void one.",
+    also: ["reprint a receipt", "reprint the receipt", "print a receipt", "email a receipt", "email the receipt", "send the receipt", "lost their receipt", "reprint tote labels", "void a receipt", "add a tote to a receipt"],
+  },
+  {
+    ask: "How do I move a tote to a new location?",
+    name: "Goods In → Scan to move", href: "/tools/warehouse/move", app: "WAREHOUSE",
+    what: "Scan a tote, pallet or lot barcode, then the label of the location it is going to, and the move is recorded with your name and the time. Moving a tote to a bench marks it as being catalogued; a finished lot is moved onto its shelf the same way.",
+    also: ["put away", "putting away", "move a tote", "move a pallet", "move a lot to a shelf", "put a lot on a shelf", "shelve a lot", "take a tote to a bench", "scan a location"],
+  },
+  {
+    name: "Goods In → Benches", href: "/tools/warehouse/bench", app: "WAREHOUSE",
+    what: "What is at each cataloguing bench right now — the totes and pallets waiting to be made into lots, and whose they are.",
+    also: ["at the benches", "on the benches", "waiting to be catalogued", "totes waiting", "bench list"],
+  },
+  // ⚠ Code lookup carries BC Warehouse's own four words ("tote", "location", "where is a lot",
+  // "find an item") and Admin Centre's "look up a receipt" ON PURPOSE, so it scores the same as
+  // them on those. A tie never blocks (blockedDestination needs strictly more), so a Goods In clerk
+  // asking "where is tote T030001?" isn't refused with "BC Warehouse isn't part of your Hub", and a
+  // BC Warehouse or Admin Centre user asking the same isn't refused with Goods In. Someone with
+  // neither is still refused naming BC Warehouse / Admin Centre (they come first), as before. Its
+  // name avoids "find", "look", "receipt" and "tote" as words, any one of which would tip a tie.
+  {
+    ask: "How do I find where a tote is?",
+    name: "Goods In → Code lookup", href: "/tools/warehouse/find", app: "WAREHOUSE",
+    what: "Scan or type any Goods In code — a tote, pallet, lot barcode, receipt, location or vendor number — to see what it is, whose it is and where it is now, with every move it has made. For a tote it lists the lots made from it and the shelf each one is on.",
+    also: ["tote", "location", "where is a lot", "find an item", "look up a receipt", "goods in tote", "goods in pallet", "goods in receipt", "goods in lot", "lots made from a tote", "lots from this tote", "scan any code"],
+  },
+  {
+    name: "Goods In → Locations & labels", href: "/tools/warehouse/locations", app: "WAREHOUSE",
+    what: "Every storage location, cataloguing bench and shelf Goods In can put things in, how many totes are at each, and barcode labels to print for them. Managers add locations, or load the warehouse's own location list in one go.",
+    also: ["location labels", "location label", "add a location", "new location", "shelf labels", "bench labels"],
+  },
+  {
+    name: "Goods In → Number series & email", href: "/tools/warehouse/settings", app: "WAREHOUSE",
+    what: "Where the receipt, tote, pallet and (optional) vendor number series carry on from, and the connection to the mailbox receipts are emailed from. Only a Warehouse admin can change them.",
+    also: ["number series", "starting number", "next receipt number", "receipt numbering", "tote numbering", "vendor numbering", "connect the mailbox", "email setup", "receipt emails"],
+  },
+  // ⚠ Named "Movement record", not "History" / "Movement history": BC Warehouse has a Location
+  // History tab, and a BC Warehouse user asking for a tote's "movement history" must not be refused
+  // with Goods In. The keywords all say "goods in" for the same reason; the `what` line is what lets
+  // the answer point a Goods In user here for "who moved tote T030001?".
+  {
+    name: "Goods In → Movement record", href: "/tools/warehouse/history", app: "WAREHOUSE",
+    what: "Every move of a Goods In tote, pallet or lot — from where to where, who moved it and when — filterable by item, location and day. The page is called History in the Goods In menu.",
+    also: ["goods in history", "goods in moves", "goods in movements", "goods in movement history", "moved in goods in"],
+  },
+
   // ── Reports & people ────────────────────────────────────────────────────────
   {
     ask: "How many lots have we done?",

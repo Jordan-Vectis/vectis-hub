@@ -138,6 +138,8 @@ model Contact {
   receipts        WarehouseReceipt[] @relation("ContactReceipts")
   submissions     Submission[]       @relation("ContactSubmissions")
   customerAccount CustomerAccount?
+  goodsInCustomer GoodsInCustomer?
+  goodsInReceipts GoodsInReceipt[]
 }
 
 model CustomerAccount {
@@ -1114,6 +1116,144 @@ model WarehouseMovement {
   notes        String?
   movedByName  String?
   movedAt      DateTime           @default(now())
+}
+
+// ─── Goods In (2026-10-15) ──────────────────────────────────────────────────────────────────
+// The Hub's own check-in: a customer brings goods in, they are booked onto a RECEIPT, grouped by
+// category into TOTES and PALLETS, stored at locations, taken to a bench, catalogued into lots,
+// and each lot shelved until sold. Entirely the Hub's own records — nothing here is read from or
+// written to Business Central (Jack, 2026-10-15: "don't include BC at all"). New tables only, so
+// nothing existing changes shape before Run Migrations has been pressed.
+
+/// The Goods In half of a customer: their vendor number and the terms their receipts carry. One
+/// row per Contact (the CRM's customer record stays the one customer database).
+model GoodsInCustomer {
+  contactId       String   @id
+  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  vendorNo        String?  @unique
+  mobile          String?
+  town            String?
+  county          String?
+  country         String?
+  vatRegNo        String?
+  commission      Float?
+  lottingFee      Float?
+  photographyFee  Float?
+  unsoldFee       Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+/// A receipt: the record of what a customer handed in, on which day, on what terms. The id IS
+/// the receipt number (R010244). The customer's details are copied in at booking, so a receipt
+/// reprinted next year still says what it said on the day.
+model GoodsInReceipt {
+  id              String    @id
+  contactId       String
+  contact         Contact   @relation(fields: [contactId], references: [id])
+  vendorNo        String?
+  customer        Json?
+  commission      Float?
+  lottingFee      Float?
+  photographyFee  Float?
+  unsoldFee       Float?
+  reservePercent  Int?
+  ownerConfirmed  Boolean?
+  agentConfirmed  Boolean?
+  notes           String?
+  status          String?
+  createdById     String?
+  createdByName   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  printedAt       DateTime?
+  emailedAt       DateTime?
+  emailedTo       String?
+
+  containers GoodsInContainer[]
+
+  @@index([contactId])
+  @@index([createdAt])
+}
+
+/// A tote or a pallet on a receipt — goods grouped by CATEGORY, not item. The id IS the tote or
+/// pallet number (T027657). Where it is now is kept here as well as in the movement history, so
+/// lists don't have to work it out.
+model GoodsInContainer {
+  id             String         @id
+  receiptId      String
+  receipt        GoodsInReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  kind           String
+  category       String?
+  description    String?
+  status         String?
+  locationCode   String?
+  locationKind   String?
+  movedAt        DateTime?
+  labelPrintedAt DateTime?
+  createdByName  String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  movements GoodsInMovement[]
+
+  @@index([receiptId])
+  @@index([locationCode])
+  @@index([status])
+}
+
+/// A place goods can be: a storage location, a cataloguing bench, a shelf for finished lots.
+model GoodsInLocation {
+  code      String   @id
+  name      String?
+  kind      String?
+  active    Boolean?
+  createdAt DateTime @default(now())
+}
+
+/// Every move — of a tote/pallet, or of a single lot — to a location, with who and when. A lot's
+/// shelf is its latest move here (nothing is added to CatalogueLot).
+model GoodsInMovement {
+  id            String            @id @default(cuid())
+  containerId   String?
+  container     GoodsInContainer? @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  lotId         String?
+  barcode       String?
+  locationCode  String
+  fromCode      String?
+  note          String?
+  movedById     String?
+  movedByName   String?
+  movedAt       DateTime          @default(now())
+
+  @@index([containerId, movedAt])
+  @@index([lotId, movedAt])
+  @@index([barcode])
+  @@index([locationCode])
+}
+
+/// The next number for receipts, totes, pallets and vendors. Taken one at a time with a single
+/// UPDATE … RETURNING, so two clerks booking in at once can never get the same number. An admin
+/// sets where each series starts (carrying on from BC's last number on the day BC stops).
+model GoodsInCounter {
+  key       String   @id
+  prefix    String
+  next      Int
+  width     Int
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+/// The connection to the mailbox receipts are emailed from (delegated Microsoft Graph sign-in with
+/// Mail.Send.Shared, the same pattern as the IT mailbox — no tenant-wide consent). One row.
+model GoodsInMailAuth {
+  id           String   @id
+  mailbox      String?
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  connectedBy  String?
+  updatedAt    DateTime @updatedAt
 }
 
 model Parcel {

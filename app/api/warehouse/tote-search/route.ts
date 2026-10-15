@@ -2,9 +2,69 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { searchReceiptTotes } from "@/lib/receipt-totes"
+import { normaliseCode, type CustomerSnapshot } from "@/lib/goods-in/model"
+
+// ── Goods In fallback (2026-10-15) ───────────────────────────────────────────────────────────
+// Totes and pallets booked in through the Hub's own Goods In (/tools/warehouse) are not in our copy
+// of BC — Goods In never touches Business Central — so the wizard's tote box and Lotting Up found
+// nothing for them. When, and ONLY when, both BC searches below come back empty, Goods In is
+// searched the same way (from the start of the number, then anywhere) and answers in the same row
+// shape as a BC row, plus `source: "goods-in"`. Any search BC answers is returned exactly as before.
+// ⚠ `catalogued` is null (the wizard words a true value as BC's tick and "the previous customer",
+// false for a Goods In tote); `syncedAt` is null (nothing was synced). Totes on a VOIDED receipt
+// are left out. Migration-safe: before Run Migrations the tables don't exist, and any failure here
+// means "Goods In has nothing" — the reply is then the same empty list it always was.
+async function searchGoodsIn(q: string) {
+  const code = normaliseCode(q)
+  if (!code) return []
+  // A receipt with no status counts as live; Prisma's `not` alone would drop NULLs as well as voids.
+  const live = { receipt: { is: { OR: [{ status: null }, { status: { not: "void" } }] } } }
+  const select = {
+    id: true, category: true, description: true, locationCode: true,
+    receipt: {
+      select: {
+        id: true, vendorNo: true, customer: true,
+        contact: { select: { name: true, goodsInCustomer: { select: { vendorNo: true } } } },
+      },
+    },
+  } as const
+  try {
+    let rows = await prisma.goodsInContainer.findMany({
+      where: { id: { startsWith: code }, ...live }, select, orderBy: { id: "asc" }, take: 20,
+    })
+    if (rows.length === 0) {
+      rows = await prisma.goodsInContainer.findMany({
+        where: { id: { contains: code }, ...live }, select, orderBy: { id: "asc" }, take: 20,
+      })
+    }
+    const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null)
+    return rows.map(c => {
+      const snap = c.receipt.customer && typeof c.receipt.customer === "object"
+        ? (c.receipt.customer as Partial<CustomerSnapshot>)
+        : null
+      const contents = [c.category, c.description].map(s => (s ?? "").trim()).filter(Boolean).join(" – ")
+      return {
+        toteNo:     c.id,
+        // The receipt's own copy first (what was printed on it), then the customer's current
+        // vendor number for a receipt booked before they were given one.
+        vendorNo:   text(c.receipt.vendorNo) ?? text(snap?.vendorNo) ?? text(c.receipt.contact.goodsInCustomer?.vendorNo),
+        vendorName: text(snap?.name) ?? text(c.receipt.contact.name),
+        receiptNo:  c.receipt.id,
+        location:   c.locationCode ?? null,
+        contents:   contents || null,
+        catalogued: null,
+        syncedAt:   null,
+        source:     "goods-in" as const,
+      }
+    })
+  } catch {
+    return []   // tables not migrated yet, or unreadable — Goods In simply has nothing to add
+  }
+}
 
 // GET /api/warehouse/tote-search?q=T025
-// Searches WarehouseTote (BC-synced) by toteNo — used by the lot wizard tote field.
+// Searches WarehouseTote (BC-synced) by toteNo — used by the lot wizard tote field and Lotting Up.
+// Goods In is searched last, only when BC's copy has nothing (see searchGoodsIn above).
 //
 // ⚠ PREFIX FIRST, "anywhere" only as a fallback (2026-09-08). Tote numbers are typed by hand, one
 // character at a time, so an unanchored `contains` answers a half-typed "P0050" with every tote
@@ -78,6 +138,12 @@ export async function GET(req: NextRequest) {
 
     if (totes.length === 0) {
       totes = await find({ toteNo: { contains: q, mode: "insensitive" } })
+    }
+
+    // BC's copy has nothing for this — try Goods In (see the top). Never mixed into a BC answer.
+    if (totes.length === 0) {
+      const goodsIn = await searchGoodsIn(q)
+      if (goodsIn.length > 0) return NextResponse.json(goodsIn)
     }
 
     return NextResponse.json(totes)
