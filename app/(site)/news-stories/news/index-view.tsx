@@ -4,15 +4,26 @@ import { Prisma } from "@/app/generated/prisma/client"
 import { articlePicture, StoryCard, PageLink, type Article } from "./shared"
 
 // The News & Stories listing on the test website, read from Databases → News (every article on vectis.co.uk,
-// collected on an office machine). Its own design, not the live site's: a header with search and
-// a category pick, the featured stories, then every story newest first, 24 a page.
-
+// collected on an office machine), laid out as the live site lays it out (2026-10-14): the title and a
+// line under it, a search box with a category pick and GO, the featured stories as three cards, then
+// every story newest first, 24 a page.
 
 const PAGE = 24
 // One copy, used by the built-in /news-stories/news page and by the page editor's "News & Stories"
 // live block (2026-09-24). Moved here unchanged from page.tsx.
 
 export type NewsParams = { search?: string; category?: string; page?: string }
+
+/** The page numbers to offer: the first, the last, and two either side of the current one; null = a gap. */
+function pageNumbers(current: number, pages: number): (number | null)[] {
+  const keep = Array.from({ length: pages }, (_, i) => i + 1).filter(p => Math.abs(p - current) <= 2 || p === 1 || p === pages)
+  const out: (number | null)[] = []
+  keep.forEach((p, i) => {
+    if (i > 0 && p - keep[i - 1] > 1) out.push(null)
+    out.push(p)
+  })
+  return out
+}
 
 export default async function NewsIndex({ sp, kicker = "From the saleroom", title = "News & Stories", intro = "Sold prices, stories and news from the world's leading toy and collectables auction house." }: { sp: NewsParams; kicker?: string; title?: string; intro?: string }) {
   const { search, category, page } = sp
@@ -46,6 +57,8 @@ export default async function NewsIndex({ sp, kicker = "From the saleroom", titl
     unavailable = String((e as { message?: string })?.message ?? "")
   }
   const pages = Math.max(1, Math.ceil(total / PAGE))
+  // A ?page= past the last one (an old link, a typo): there are stories, just none this far along.
+  const pastEnd = rows.length === 0 && total > 0
 
   const pageHref = (p: number) => {
     const sp = new URLSearchParams()
@@ -56,81 +69,96 @@ export default async function NewsIndex({ sp, kicker = "From the saleroom", titl
     return s ? `/news-stories/news?${s}` : "/news-stories/news"
   }
 
-  return (
-    <div>
-      {/* ── Page header ── */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-          {kicker && <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">{kicker}</p>}
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-black text-[#32348A] uppercase tracking-tight">{title}</h1>
-              {intro && <p className="text-gray-500 text-sm mt-1">{intro}</p>}
-            </div>
-            <form method="GET" action="/news-stories/news" className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center border border-gray-300 bg-white overflow-hidden">
-                <span className="px-3 text-gray-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                  </svg>
-                </span>
-                <input name="search" defaultValue={q} placeholder="Search the news…" className="py-2 pr-3 text-sm focus:outline-none w-52" />
-              </div>
-              <select name="category" defaultValue={cat} className="border border-gray-300 px-3 py-2 text-sm focus:outline-none" aria-label="Category">
-                <option value="">All categories</option>
-                {cats.map(c => <option key={c.category} value={c.category}>{c.category}</option>)}
-              </select>
-              <button type="submit" className="bg-[#32348A] text-white text-xs font-bold uppercase tracking-widest px-5 py-2.5 hover:bg-[#28296e] transition-colors">GO</button>
-              {filtering && <Link href="/news-stories/news" className="text-xs text-gray-400 hover:text-[#32348A] underline">Clear</Link>}
-            </form>
-          </div>
-        </div>
-      </div>
+  const listHeading = cat ? cat : q ? `Stories matching “${q}”` : "Latest stories"
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-12">
+  return (
+    <div className="vs-page bg-white">
+      <div className="vs-container">
+        {/* ── The page header: back link, centred title, a line under it ── */}
+        <p className="mb-6"><Link href="/" className="vs-link vs-link-back vs-link-sm">Back to home</Link></p>
+        <header className="text-center max-w-[760px] mx-auto">
+          {kicker && <p className="vs-kicker mb-2">{kicker}</p>}
+          <h1 className="vs-h1 mb-3">{title}</h1>
+          {intro && <p className="vs-lead text-[var(--vs-muted)]">{intro}</p>}
+        </header>
+
+        {/* ── Search, category, GO — a GET form, so a search is a link that can be shared ── */}
+        <form method="GET" action="/news-stories/news" role="search" className="mt-8 max-w-[760px] mx-auto flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 min-w-0">
+            <label htmlFor="news-search" className="sr-only">Search the news</label>
+            <input id="news-search" type="search" name="search" defaultValue={q} placeholder="Search the news" className="vs-input" />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1 min-w-0 sm:w-56">
+              <label htmlFor="news-category" className="sr-only">Category</label>
+              <select id="news-category" name="category" defaultValue={cat} className="vs-select">
+                <option value="">All categories</option>
+                {cats.map(c => <option key={c.category} value={c.category}>{c.category} ({c.n})</option>)}
+              </select>
+            </div>
+            {/* 42px tall to sit level with the vs-input / vs-select beside it. */}
+            <button type="submit" className="vs-btn h-[42px]">Go</button>
+          </div>
+        </form>
+        {filtering && (
+          <p className="text-center mt-4">
+            <Link href="/news-stories/news" className="vs-link vs-link-sm vs-link-plain">Clear the search</Link>
+          </p>
+        )}
+
         {unavailable ? (
           <div className="text-center py-20">
-            <p className="text-gray-400 text-lg">The news isn&apos;t available here yet.</p>
-            <p className="text-gray-300 text-xs mt-2">{unavailable}</p>
+            <p className="vs-lead text-[var(--vs-muted)]">The news isn&apos;t available here yet.</p>
+            {/* The site sits behind the Hub login, so the reason is for the staff member looking at it. */}
+            <p className="text-xs text-[var(--vs-muted)] mt-2">{unavailable}</p>
           </div>
         ) : (
           <>
+            {/* ── Featured stories — only on the first, unfiltered page, as on vectis.co.uk ── */}
             {featured.length > 0 && (
-              <section>
-                <div className="mb-5">
-                  <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">Don&apos;t miss</p>
-                  <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">Featured stories</h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <section className="mt-12 lg:mt-16" aria-labelledby="news-featured">
+                <h2 id="news-featured" className="vs-h2 text-center mb-8">Featured stories</h2>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {featured.map(a => <StoryCard key={a.id} a={a} big />)}
                 </div>
               </section>
             )}
 
-            <section>
-              <div className="flex flex-wrap items-end justify-between gap-2 mb-5">
-                <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">
-                  {cat ? cat : q ? `Stories matching “${q}”` : "Latest stories"}
-                </h2>
-                <p className="text-xs text-gray-400">{total.toLocaleString("en-GB")} {total === 1 ? "story" : "stories"} · page {currentPage} of {pages}</p>
+            {/* ── Every story, newest first ── */}
+            <section className="mt-12 lg:mt-16" aria-labelledby="news-list">
+              <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 mb-8">
+                <h2 id="news-list" className="vs-h2 vs-h2-light">{listHeading}</h2>
+                <p className="text-sm text-[var(--vs-muted)]">
+                  {total.toLocaleString("en-GB")} {total === 1 ? "story" : "stories"}{pages > 1 && ` · page ${Math.min(currentPage, pages)} of ${pages}`}
+                </p>
               </div>
               {rows.length === 0 ? (
                 <div className="text-center py-16">
-                  <p className="text-gray-400 text-lg">{filtering ? "No stories match." : "No stories yet."}</p>
+                  {pastEnd ? (
+                    <>
+                      <p className="vs-lead text-[var(--vs-muted)]">There is no page {currentPage} — the stories end at page {pages}.</p>
+                      <p className="mt-4"><Link href={pageHref(pages)} className="vs-link vs-link-sm">Go to the last page</Link></p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="vs-lead text-[var(--vs-muted)]">{filtering ? "No stories match." : "No stories yet."}</p>
+                      {filtering && <p className="mt-4"><Link href="/news-stories/news" className="vs-link vs-link-sm">See every story</Link></p>}
+                    </>
+                  )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {rows.map(a => <StoryCard key={a.id} a={a} />)}
                 </div>
               )}
-              {pages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-10 flex-wrap">
-                  {currentPage > 1 && <PageLink href={pageHref(currentPage - 1)} label="← Prev" />}
-                  {Array.from({ length: pages }, (_, i) => i + 1)
-                    .filter(p => Math.abs(p - currentPage) <= 2 || p === 1 || p === pages)
-                    .map(p => <PageLink key={p} href={pageHref(p)} label={String(p)} active={p === currentPage} />)}
-                  {currentPage < pages && <PageLink href={pageHref(currentPage + 1)} label="Next →" />}
-                </div>
+              {pages > 1 && !pastEnd && (
+                <nav className="vs-pages mt-12" aria-label="Pages of stories">
+                  {currentPage > 1 && <PageLink href={pageHref(currentPage - 1)} label="Previous" />}
+                  {pageNumbers(currentPage, pages).map((p, i) => p === null
+                    ? <span key={`gap-${i}`} className="px-1 text-[var(--vs-muted)]" aria-hidden="true">…</span>
+                    : <PageLink key={p} href={pageHref(p)} label={String(p)} active={p === currentPage} />)}
+                  {currentPage < pages && <PageLink href={pageHref(currentPage + 1)} label="Next" />}
+                </nav>
               )}
             </section>
           </>

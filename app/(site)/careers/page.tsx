@@ -1,4 +1,11 @@
+import Link from "next/link"
 import { PageBlocks, pageMetadata, publishedPage } from "../page-editor/render"
+
+// Careers on the test website, laid out as vectis.co.uk's: the title with its short navy rule, the
+// introduction, the quote centred, "Current Vacancies" centred, then a card per job with an Apply
+// button. The words here are the same ones the page editor's seed (page-editor/seeds.ts) carries
+// for this page — change them in both places or in neither. The live page opens with a banner
+// picture; the test site holds none, so it starts at the title.
 
 export async function generateMetadata() {
   return pageMetadata("careers", {
@@ -125,136 +132,100 @@ const jobs = [
   },
 ]
 
+/** A small capital sub-heading inside a job card ("KEY RESPONSIBILITIES") with its list under it. */
+function JobList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <h4 className="vs-caps text-[var(--vs-navy)] mb-2">{title}</h4>
+      <ul className="list-disc pl-5 space-y-1.5">
+        {items.map(item => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
+  )
+}
+
 export default async function CareersPage() {
   // The page editor's published version (Website → Pages) when there is one; the built-in design otherwise.
   const page = await publishedPage("careers")
   if (page) return <PageBlocks data={page.data} />
   return (
-    <div className="bg-white">
+    <div className="vs-page">
+      <div className="vs-container">
+        <p className="mb-6"><Link href="/" className="vs-link vs-link-back vs-link-sm">Back to home</Link></p>
+        <p className="vs-kicker mb-2">Join the Team</p>
+        <h1 className="vs-h2 vs-rule">Careers at Vectis</h1>
 
-      {/* Hero */}
-      <div className="bg-[#1e1f5e] text-white py-16 px-6">
-        <div className="max-w-4xl mx-auto">
-          <p className="text-[#DB0606] text-xs font-black uppercase tracking-widest mb-3">Join the Team</p>
-          <h1 className="text-4xl font-black mb-4">Careers at Vectis</h1>
-          <p className="text-white/70 text-lg max-w-2xl">
-            Vectis is the largest toy and collectables auction house in the world, processing over 50,000 lots annually
-            across more than 90 auctions per year. Our employees are our greatest asset.
-          </p>
-        </div>
-      </div>
+        <div className="max-w-[960px]">
+          {/* Intro */}
+          <div className="vs-prose mt-8">
+            <p className="vs-lead">
+              Vectis is the largest toy and collectables auction house in the world, processing over 50,000 lots annually
+              across more than 90 auctions per year. Our employees are our greatest asset.
+            </p>
+            <p>
+              We are committed to creating a positive and inclusive work environment where everyone can thrive and grow.
+              If you share our passion for toys and collectables and want to be part of a world-class specialist auction house,
+              we&apos;d love to hear from you.
+            </p>
+          </div>
 
-      {/* Intro */}
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <blockquote className="border-l-4 border-[#DB0606] pl-6 mb-10">
-          <p className="text-xl text-gray-700 italic font-medium leading-relaxed">
-            &ldquo;Find a job you enjoy doing, and you will never have to work a day in your life.&rdquo;
-          </p>
-          <footer className="text-gray-500 text-sm mt-2">— Mark Twain</footer>
-        </blockquote>
-        <p className="text-gray-600 leading-relaxed">
-          We are committed to creating a positive and inclusive work environment where everyone can thrive and grow.
-          If you share our passion for toys and collectables and want to be part of a world-class specialist auction house,
-          we&apos;d love to hear from you.
-        </p>
-      </div>
+          <blockquote className="my-12 mx-auto max-w-[720px] text-center">
+            <p className="vs-h3 italic">
+              &ldquo;Find a job you enjoy doing, and you will never have to work a day in your life.&rdquo;
+            </p>
+            <footer className="vs-caps vs-muted mt-4">— Mark Twain</footer>
+          </blockquote>
 
-      {/* Jobs */}
-      <div className="max-w-4xl mx-auto px-6 pb-16 space-y-8">
-        <h2 className="text-2xl font-black text-gray-900">Current Vacancies</h2>
+          {/* Jobs */}
+          <h2 className="vs-h2 text-center mb-8">Current Vacancies</h2>
 
-        {jobs.map((job, i) => (
-          <div key={i} className="border border-gray-200 overflow-hidden">
-            {/* Job header */}
-            <div className="bg-gray-50 border-b border-gray-200 px-6 py-5 flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-black text-[#1e1f5e]">{job.title}</h3>
-                <div className="flex flex-wrap gap-3 mt-2">
-                  <span className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-2.5 py-1">{job.type}</span>
-                  {job.hours && <span className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-2.5 py-1">{job.hours}</span>}
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-[#1e1f5e] font-black text-base">{job.salary}</p>
-              </div>
-            </div>
-
-            {/* Job body */}
-            <div className="px-6 py-6 grid sm:grid-cols-2 gap-6">
-              <div>
-                <p className="text-gray-600 text-sm leading-relaxed mb-5">{job.description}</p>
-                <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Key Responsibilities</h4>
-                <ul className="space-y-1.5">
-                  {job.responsibilities.map((r, j) => (
-                    <li key={j} className="flex items-start gap-2 text-sm text-gray-600">
-                      <span className="text-[#DB0606] mt-0.5 shrink-0">•</span>
-                      {r}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="space-y-5">
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Essential Requirements</h4>
-                  <ul className="space-y-1.5">
-                    {job.essential.map((r, j) => (
-                      <li key={j} className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="text-green-600 mt-0.5 shrink-0">✓</span>
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                {job.desirable.length > 0 && (
+          <div className="space-y-6">
+            {jobs.map(job => (
+              <article key={job.title} className="vs-card-flat">
+                {/* Job header */}
+                <header className="vs-band border-b border-[var(--vs-line)] px-5 sm:px-6 py-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
                   <div>
-                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Desirable</h4>
-                    <ul className="space-y-1.5">
-                      {job.desirable.map((r, j) => (
-                        <li key={j} className="flex items-start gap-2 text-sm text-gray-500">
-                          <span className="text-blue-400 mt-0.5 shrink-0">+</span>
-                          {r}
-                        </li>
-                      ))}
-                    </ul>
+                    <h3 className="vs-h4 text-[22px]">{job.title}</h3>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <span className="vs-caps text-[12px] bg-white border border-[var(--vs-line)] px-2.5 py-1">{job.type}</span>
+                      {job.hours && <span className="vs-caps text-[12px] bg-white border border-[var(--vs-line)] px-2.5 py-1">{job.hours}</span>}
+                    </div>
                   </div>
-                )}
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Benefits</h4>
-                  <ul className="space-y-1">
-                    {job.benefits.map((b, j) => (
-                      <li key={j} className="text-sm text-gray-600">{b}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
+                  <p className="vs-price">{job.salary}</p>
+                </header>
 
-            {/* Apply CTA */}
-            <div className="border-t border-gray-100 px-6 py-4 bg-gray-50">
-              <a
-                href="mailto:admin@vectis.co.uk?subject=Job Application"
-                className="inline-block bg-[#1e1f5e] hover:bg-[#28296e] text-white text-xs font-black uppercase tracking-widest px-6 py-2.5 transition-colors"
-              >
-                Apply for This Role
-              </a>
-              <span className="text-xs text-gray-400 ml-4">Send your CV to admin@vectis.co.uk</span>
+                {/* Job body */}
+                <div className="px-5 sm:px-6 py-6 grid gap-8 md:grid-cols-2">
+                  <div>
+                    <p className="mb-5">{job.description}</p>
+                    <JobList title="Key Responsibilities" items={job.responsibilities} />
+                  </div>
+                  <div className="space-y-6">
+                    <JobList title="Essential Requirements" items={job.essential} />
+                    {job.desirable.length > 0 && <JobList title="Desirable" items={job.desirable} />}
+                    <JobList title="Benefits" items={job.benefits} />
+                  </div>
+                </div>
+
+                {/* Apply */}
+                <footer className="border-t border-[var(--vs-line)] px-5 sm:px-6 py-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+                  {/* The subject names the job, as the page editor's Job block does, so the office knows which one it is. */}
+                  <a href={`mailto:admin@vectis.co.uk?subject=${encodeURIComponent(`Job Application — ${job.title}`)}`} className="vs-btn">Apply</a>
+                  <span className="text-sm vs-muted">Send your CV to admin@vectis.co.uk</span>
+                </footer>
+              </article>
+            ))}
+
+            {/* Contact */}
+            <div className="vs-band p-6 sm:p-8">
+              <h3 className="vs-h4 mb-2">Don&apos;t see the right role?</h3>
+              <p className="mb-5 max-w-[640px]">
+                We&apos;re always interested in hearing from talented people who share our passion. Send a speculative
+                application and we&apos;ll keep your details on file.
+              </p>
+              <a href="mailto:admin@vectis.co.uk?subject=Speculative Application" className="vs-btn vs-btn-outline">Get in Touch</a>
             </div>
           </div>
-        ))}
-
-        {/* Contact */}
-        <div className="bg-gray-50 border border-gray-200 p-8">
-          <h3 className="text-lg font-black text-gray-900 mb-2">Don&apos;t see the right role?</h3>
-          <p className="text-gray-600 text-sm mb-4">
-            We&apos;re always interested in hearing from talented people who share our passion. Send a speculative
-            application and we&apos;ll keep your details on file.
-          </p>
-          <a
-            href="mailto:admin@vectis.co.uk?subject=Speculative Application"
-            className="inline-block border border-[#1e1f5e] text-[#1e1f5e] hover:bg-[#1e1f5e] hover:text-white text-xs font-black uppercase tracking-widest px-6 py-2.5 transition-colors"
-          >
-            Get in Touch
-          </a>
         </div>
       </div>
     </div>

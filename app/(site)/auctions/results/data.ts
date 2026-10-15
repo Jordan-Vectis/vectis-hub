@@ -298,3 +298,61 @@ export async function getResultLot(sale: ResultSale, id: string): Promise<Result
     return null
   }
 }
+
+// ── Upcoming sales ──────────────────────────────────────────────────────────────────────────────
+// The website's own sale list (ArchiveSale) carries the sales still to come as well — the office
+// collector reads every sale page the site has, dated or not — so the test site's "upcoming" is
+// the same list vectis.co.uk shows, with the lots BC has catalogued for them. A sale is upcoming
+// from its day (it is still running on the day itself) until the day after.
+
+const UPCOMING = Prisma.sql`(s."saleDate" IS NOT NULL AND s."saleDate" >= now() - interval '1 day' AND NOT s."finished")`
+
+/** True once the sale is in the past — the day AFTER its date; an undated sale once the website says it has finished. */
+export function saleHasHappened(s: { saleDate: Date | null; finished: boolean }): boolean {
+  if (s.saleDate) return s.saleDate.getTime() < Date.now() - 24 * 60 * 60 * 1000
+  return s.finished
+}
+
+/** The sales still to come, soonest first. Empty (never a throw) when the table isn't there. */
+export async function listUpcomingSales(limit = 12): Promise<ResultSale[]> {
+  const n = Math.max(1, Math.min(60, limit))
+  const run = (cols: Prisma.Sql) => prisma.$queryRaw<SaleRow[]>`SELECT ${cols} FROM "ArchiveSale" s WHERE ${UPCOMING} ORDER BY s."saleDate" ASC, s."siteId" ASC LIMIT ${n}`
+  try {
+    let rows: SaleRow[]
+    try { rows = await run(COLS_FULL) }
+    catch (e) { if (!missingColumns(e)) throw e; rows = await run(COLS_BASIC) }
+    return withPhoto(rows)
+  } catch {
+    return []
+  }
+}
+
+/** Every dated sale still to come, for the calendar sidebar — a day links to that sale. */
+export async function upcomingCalendarEntries(): Promise<{ date: string; href: string }[]> {
+  try {
+    const rows = await prisma.$queryRaw<{ siteId: number; saleDate: Date }[]>`SELECT s."siteId", s."saleDate" FROM "ArchiveSale" s WHERE ${UPCOMING} ORDER BY s."saleDate" ASC`
+    return rows.map(r => ({ date: r.saleDate.toISOString(), href: `/auctions/results/${r.siteId}` }))
+  } catch {
+    return []
+  }
+}
+
+/** The newest results — the first few of the View Results list. Empty (never a throw) when unavailable. */
+export async function listRecentResults(limit = 4): Promise<ResultSale[]> {
+  try {
+    const r = await listResultSales({ page: 1 })
+    return r.rows.slice(0, Math.max(1, Math.min(SALES_PAGE, limit)))
+  } catch {
+    return []
+  }
+}
+
+/** The years the archive covers (newest first), for the year strip on View Results. */
+export async function resultYears(): Promise<number[]> {
+  try {
+    const rows = await prisma.$queryRaw<{ y: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM (s."saleDate" AT TIME ZONE 'Europe/London'))::int AS y FROM "ArchiveSale" s WHERE s."saleDate" IS NOT NULL AND ${HAPPENED} ORDER BY y DESC`
+    return rows.map(r => Number(r.y)).filter(y => Number.isFinite(y))
+  } catch {
+    return []
+  }
+}

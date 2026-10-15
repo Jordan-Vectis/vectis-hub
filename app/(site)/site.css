@@ -1,85 +1,369 @@
-/* The test website is light, but it renders inside the Hub's root layout, whose <html> carries
-   class="dark" by default — and globals.css paints every form control dark for the dark theme
-   ("Dark-mode default for form controls": an UNLAYERED rule, so it beats Tailwind's layered classes
-   such as bg-transparent / text-gray-800 on the site's own inputs). That is why the search boxes
-   came out black on a white page (Jordan, 2026-09-23: "the formatting on the search bars is messed
-   up"). These rules, scoped to the site's wrapper and unlayered too but more specific, paint them
-   back. Site-only: nothing in the Hub carries the vectis-site class. */
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   The test website's look — matched to vectis.co.uk (2026-10-14).
+
+   Everything here is scoped to .vectis-site (the site layout's wrapper, the page editor's PageRoot,
+   /site-block and the Banner Manager preview carry the class) so nothing leaks into the Hub, and
+   the Hub's globals.css is never touched for the site. Measured from the live site: Barlow,
+   #2e328e navy, #ff0300 red for dates and "catalogue now live", #f102f2 magenta for the banner
+   button, body text #212529 at 16px/500, square corners everywhere, buttons in 14px uppercase with
+   1px letter-spacing that invert on hover.
+
+   The .vs-* classes are the shared vocabulary every site page uses — add to them here rather than
+   repeating hexes in pages, so the whole site changes together.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 
 .vectis-site {
+  --vs-navy: #2e328e;
+  --vs-navy-dark: #22256f;
+  --vs-red: #ff0300;
+  --vs-magenta: #f102f2;
+  --vs-magenta-dark: #cf00d0;
+  --vs-orange: #c27608;
+  --vs-ink: #212529;
+  --vs-muted: #6c757d;
+  --vs-bg: #f6f4f4;
+  --vs-footer: #f9f9fc;
+  --vs-line: #e6e6e6;
+  --vs-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+
+  font-family: var(--font-barlow), Barlow, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--vs-ink);
   color-scheme: light;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ── Form controls ──────────────────────────────────────────────────────────────────────────────
+   The site renders inside the Hub's root layout, whose <html> carries class="dark" by default, and
+   globals.css paints every form control dark for that with an UNLAYERED rule that beats Tailwind's
+   classes. These rules (scoped, unlayered, more specific) paint them back. Never fix this in
+   globals.css. */
 .vectis-site :is(
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
   textarea,
   select
 ) {
   background-color: #ffffff;
-  color: #1f2937; /* gray-800 */
+  color: var(--vs-ink);
+  border-radius: 0;
 }
+.vectis-site :is(input, textarea, select)::placeholder { color: #9ca3af; }
+.vectis-site :is(input, textarea, select):disabled { background-color: #f9fafb; color: #6b7280; }
 
-.vectis-site :is(input, textarea, select)::placeholder {
-  color: #9ca3af; /* gray-400 */
+/* The site's own field look: a 40px box with a hairline border that turns navy on focus. */
+.vectis-site .vs-input,
+.vectis-site .vs-select,
+.vectis-site .vs-textarea {
+  width: 100%;
+  border: 1px solid var(--vs-line);
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vs-ink);
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
 }
+.vectis-site .vs-input, .vectis-site .vs-select { height: 42px; }
+.vectis-site .vs-textarea { padding: 10px 14px; min-height: 120px; }
+.vectis-site :is(.vs-input, .vs-select, .vs-textarea):focus { border-color: var(--vs-navy); box-shadow: 0 0 0 1px var(--vs-navy); }
+.vectis-site .vs-select {
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 20 20' fill='%232e328e'><path d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.vectis-site .vs-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #000;
+  margin-bottom: 6px;
+}
+.vectis-site .vs-check { accent-color: var(--vs-navy); width: 16px; height: 16px; }
 
-.vectis-site :is(input, textarea, select):disabled {
-  background-color: #f9fafb; /* gray-50 */
-  color: #6b7280;            /* gray-500 */
-}
+/* ── Everything below sits in Tailwind's `components` layer, so a Tailwind utility on the same element
+   (text-lg, mb-2, !text-white…) still wins over a .vs-* rule — Tailwind's utilities layer comes after it.
+   Only the form-control repaint above stays unlayered, because it must beat the Hub's unlayered dark rule. */
+@layer components {
+/* Keyboard users get a visible ring; the mouse gets none. */
+.vectis-site :is(a, button, summary, [tabindex]):focus-visible { outline: 2px solid var(--vs-navy); outline-offset: 2px; }
 
-/* News & Stories article bodies arrive from the site as HTML — readable defaults for that text. */
-.vectis-site .news-body { font-size: 1rem; line-height: 1.75; color: #1f2937; }
-.vectis-site .news-body p { margin: 0 0 1em; }
-.vectis-site .news-body h2, .vectis-site .news-body h3, .vectis-site .news-body h4 {
-  color: #32348A; font-weight: 900; line-height: 1.2; margin: 1.4em 0 0.5em;
+/* ── Layout ─────────────────────────────────────────────────────────────────────────────────── */
+.vectis-site .vs-container { width: 100%; max-width: 1320px; margin: 0 auto; padding: 0 20px; }
+@media (min-width: 640px) { .vectis-site .vs-container { padding: 0 32px; } }
+.vectis-site .vs-container-wide { width: 100%; max-width: 1600px; margin: 0 auto; padding: 0 20px; }
+@media (min-width: 640px) { .vectis-site .vs-container-wide { padding: 0 32px; } }
+.vectis-site .vs-section { padding: 48px 0; }
+@media (min-width: 1024px) { .vectis-site .vs-section { padding: 64px 0; } }
+.vectis-site .vs-page { padding: 32px 0 72px; }
+
+/* ── Type ───────────────────────────────────────────────────────────────────────────────────── */
+.vectis-site :is(h1, h2, h3, h4) { color: #000; font-weight: 400; line-height: 1.1; }
+.vectis-site .vs-h1 { font-size: clamp(32px, 4.2vw, 48px); font-weight: 400; line-height: 1.05; color: #000; }
+.vectis-site .vs-h2 { font-size: clamp(28px, 3.2vw, 36px); font-weight: 600; line-height: 1.15; color: #000; }
+.vectis-site .vs-h2-light { font-weight: 400; }
+.vectis-site .vs-h3 { font-size: 24px; font-weight: 400; line-height: 1.2; color: #000; }
+.vectis-site .vs-h4 { font-size: 20px; font-weight: 500; line-height: 1.25; color: #000; }
+/* The short navy rule under an inner page's title (How to Bid, FAQ…). */
+.vectis-site .vs-rule::after { content: ""; display: block; width: 30px; height: 3px; background: var(--vs-navy); margin-top: 14px; }
+.vectis-site .vs-rule-center::after { margin-left: auto; margin-right: auto; }
+.vectis-site .vs-kicker { color: var(--vs-red); font-size: 14px; font-weight: 500; letter-spacing: 1.4px; text-transform: uppercase; }
+.vectis-site .vs-kicker-navy { color: var(--vs-navy); }
+.vectis-site .vs-kicker-orange { color: var(--vs-orange); }
+.vectis-site .vs-caps { text-transform: uppercase; letter-spacing: 1px; font-size: 14px; font-weight: 500; }
+.vectis-site .vs-muted { color: var(--vs-muted); }
+.vectis-site .vs-lead { font-size: 18px; line-height: 1.5; }
+
+/* ── Buttons and links ──────────────────────────────────────────────────────────────────────── */
+.vectis-site .vs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--vs-navy);
+  color: #fff;
+  border: 1px solid var(--vs-navy);
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  line-height: 1.4;
+  padding: 9px 20px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
 }
-.vectis-site .news-body h2 { font-size: 1.5rem; }
-.vectis-site .news-body h3 { font-size: 1.25rem; }
-.vectis-site .news-body h4 { font-size: 1.1rem; }
-.vectis-site .news-body img { max-width: 100%; height: auto; margin: 1em 0; }
-.vectis-site .news-body a { color: #32348A; text-decoration: underline; }
-.vectis-site .news-body ul { margin: 0 0 1em 1.5em; list-style: disc; }
-.vectis-site .news-body ol { margin: 0 0 1em 1.5em; list-style: decimal; }
-.vectis-site .news-body strong, .vectis-site .news-body b { font-weight: 700; }
-.vectis-site .news-body iframe, .vectis-site .news-body video { max-width: 100%; }
-.vectis-site .news-body table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
-.vectis-site .news-body td, .vectis-site .news-body th { border: 1px solid #e5e7eb; padding: 0.4em 0.6em; }
-.vectis-site .news-body blockquote { border-left: 4px solid #DB0606; padding-left: 1em; color: #4b5563; margin: 1em 0; }
-.vectis-site .news-body h1 { color: #32348A; font-weight: 900; font-size: 1.75rem; line-height: 1.15; margin: 0 0 0.75em; }
-.vectis-site .news-body em { font-style: italic; }
+.vectis-site .vs-btn:hover { background: #fff; color: var(--vs-navy); }
+.vectis-site .vs-btn-outline { background: #fff; color: var(--vs-navy); }
+.vectis-site .vs-btn-outline:hover { background: var(--vs-navy); color: #fff; }
+.vectis-site .vs-btn-magenta { background: var(--vs-magenta); border-color: var(--vs-magenta); color: #fff; }
+.vectis-site .vs-btn-magenta:hover { background: var(--vs-magenta-dark); border-color: var(--vs-magenta-dark); color: #fff; }
+.vectis-site .vs-btn-red { background: var(--vs-red); border-color: var(--vs-red); color: #fff; }
+.vectis-site .vs-btn-red:hover { background: #d90200; border-color: #d90200; color: #fff; }
+.vectis-site .vs-btn-white { background: #fff; border-color: #fff; color: var(--vs-navy); }
+.vectis-site .vs-btn-white:hover { background: var(--vs-navy); border-color: #fff; color: #fff; }
+.vectis-site .vs-btn-lg { font-size: 16px; padding: 11px 36px; }
+.vectis-site .vs-btn-sm { font-size: 12px; padding: 6px 14px; }
+.vectis-site .vs-btn-block { display: flex; width: 100%; }
+.vectis-site .vs-btn:disabled, .vectis-site .vs-btn[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+
+/* "SEE FULL CALENDAR ›" — navy, uppercase, a thin chevron. .vs-link-back puts the chevron first. */
+.vectis-site .vs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vs-navy);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-decoration: none;
+  line-height: 1.3;
+}
+.vectis-site .vs-link::after,
+.vectis-site .vs-link-back::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  transform: rotate(45deg);
+  flex: none;
+}
+.vectis-site .vs-link-back::before { transform: rotate(-135deg); }
+.vectis-site .vs-link-back::after { display: none; }
+.vectis-site .vs-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.vectis-site .vs-link-sm { font-size: 13px; }
+.vectis-site .vs-link-plain::after { display: none; }
+.vectis-site .vs-text-link { color: var(--vs-navy); text-decoration: underline; text-underline-offset: 2px; }
+.vectis-site .vs-text-link:hover { color: var(--vs-navy-dark); }
+
+/* ── Surfaces ───────────────────────────────────────────────────────────────────────────────── */
+.vectis-site .vs-card { background: #fff; border: 1px solid rgba(0, 0, 0, 0.1); box-shadow: var(--vs-shadow); }
+.vectis-site .vs-card-flat { background: #fff; border: 1px solid var(--vs-line); }
+.vectis-site .vs-band { background: var(--vs-bg); }
+.vectis-site .vs-badge {
+  display: inline-block;
+  background: var(--vs-navy);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 4px 20px;
+  line-height: 1.4;
+}
+.vectis-site .vs-badge-red { background: var(--vs-red); }
+
+/* A department tile: the picture, a dark fade from the bottom, the name and EXPLORE › in white. */
+.vectis-site .vs-tile { position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden; background: #d9d9d9; color: #fff; }
+.vectis-site .vs-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
+.vectis-site .vs-tile:hover img { transform: scale(1.04); }
+.vectis-site .vs-tile::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0.72) 100%); }
+.vectis-site .vs-tile-label { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vectis-site .vs-tile-name { font-size: 20px; font-weight: 500; line-height: 1.2; }
+.vectis-site .vs-tile-cta { font-size: 12px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.vectis-site .vs-tile-cta::after { content: ""; width: 6px; height: 6px; border-right: 2px solid currentColor; border-top: 2px solid currentColor; transform: rotate(45deg); }
+
+/* The date box at the right of a calendar row: month, big day, weekday. */
+.vectis-site .vs-date-box { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-width: 120px; padding: 16px 12px; border-left: 1px solid var(--vs-line); }
+.vectis-site .vs-date-box .vs-date-month { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #000; }
+.vectis-site .vs-date-box .vs-date-day { font-size: 52px; font-weight: 400; line-height: 1; color: var(--vs-navy); margin: 6px 0; }
+.vectis-site .vs-date-box .vs-date-weekday { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #000; }
+
+/* Tabs — "Upcoming | View Results" — and the year strip under them. */
+.vectis-site .vs-tabs { display: flex; justify-content: center; gap: 28px; border-bottom: 1px solid var(--vs-line); }
+.vectis-site .vs-tab { padding: 10px 2px 12px; font-size: 16px; font-weight: 500; color: var(--vs-muted); border-bottom: 3px solid transparent; margin-bottom: -1px; text-decoration: none; }
+.vectis-site .vs-tab:hover { color: var(--vs-navy); }
+.vectis-site .vs-tab[aria-current="page"] { color: var(--vs-navy); border-bottom-color: var(--vs-navy); }
+.vectis-site .vs-years { display: flex; gap: 22px; overflow-x: auto; padding: 14px 0; scrollbar-width: none; }
+.vectis-site .vs-years::-webkit-scrollbar { display: none; }
+.vectis-site .vs-year { font-size: 14px; font-weight: 500; color: var(--vs-navy); text-decoration: none; padding-bottom: 4px; border-bottom: 2px solid transparent; white-space: nowrap; }
+.vectis-site .vs-year[aria-current="true"] { border-bottom-color: var(--vs-navy); }
+
+/* Pagination. */
+.vectis-site .vs-pages { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+.vectis-site .vs-page-link { min-width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; font-size: 14px; font-weight: 500; color: var(--vs-navy); background: #fff; border: 1px solid var(--vs-line); text-decoration: none; }
+.vectis-site .vs-page-link:hover { border-color: var(--vs-navy); }
+.vectis-site .vs-page-link[aria-current="page"] { background: var(--vs-navy); border-color: var(--vs-navy); color: #fff; }
+
+/* A horizontal, snap-scrolling row (the upcoming auctions carousel) with its scrollbar hidden. */
+.vectis-site .vs-scroll-x { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.vectis-site .vs-scroll-x::-webkit-scrollbar { display: none; }
+.vectis-site .vs-scroll-x > * { scroll-snap-align: start; flex: none; }
+.vectis-site .vs-arrow { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--vs-navy); background: #fff; border: 1px solid var(--vs-line); cursor: pointer; }
+.vectis-site .vs-arrow:hover { background: var(--vs-navy); color: #fff; border-color: var(--vs-navy); }
+.vectis-site .vs-arrow:disabled { opacity: 0.35; cursor: default; background: #fff; color: var(--vs-navy); border-color: var(--vs-line); }
+
+/* The lot result / sold price line on cards. */
+.vectis-site .vs-price { font-size: 16px; font-weight: 700; color: #000; }
+.vectis-site .vs-price-label { font-size: 13px; color: var(--vs-muted); }
+
+/* ── Running copy (static pages, the collected HTML of articles and department pages, the editor's
+      text blocks). One set of rules; the HTML classes are aliases of it. ─────────────────────── */
+.vectis-site :is(.vs-prose, .news-body) { font-size: 16px; line-height: 1.6; color: var(--vs-ink); font-weight: 500; }
+.vectis-site :is(.vs-prose, .news-body) p { margin: 0 0 1em; }
+.vectis-site :is(.vs-prose, .news-body) :is(h1, h2, h3, h4) { color: #000; font-weight: 500; line-height: 1.2; margin: 1.5em 0 0.5em; }
+.vectis-site :is(.vs-prose, .news-body) h1 { font-size: 32px; font-weight: 400; margin-top: 0; }
+.vectis-site :is(.vs-prose, .news-body) h2 { font-size: 26px; }
+.vectis-site :is(.vs-prose, .news-body) h3 { font-size: 20px; }
+.vectis-site :is(.vs-prose, .news-body) h4 { font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.vectis-site :is(.vs-prose, .news-body) > :first-child { margin-top: 0; }
+.vectis-site :is(.vs-prose, .news-body) img { max-width: 100%; height: auto; margin: 1em 0; }
+.vectis-site :is(.vs-prose, .news-body) a { color: var(--vs-navy); text-decoration: underline; text-underline-offset: 2px; }
+.vectis-site :is(.vs-prose, .news-body) ul { margin: 0 0 1em 1.4em; list-style: disc; }
+.vectis-site :is(.vs-prose, .news-body) ol { margin: 0 0 1em 1.4em; list-style: decimal; }
+.vectis-site :is(.vs-prose, .news-body) li { margin: 0.25em 0; }
+.vectis-site :is(.vs-prose, .news-body) :is(strong, b) { font-weight: 700; }
+.vectis-site :is(.vs-prose, .news-body) :is(em, i) { font-style: italic; }
+.vectis-site :is(.vs-prose, .news-body) :is(iframe, video) { max-width: 100%; }
+.vectis-site :is(.vs-prose, .news-body) table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
+.vectis-site :is(.vs-prose, .news-body) :is(td, th) { border: 1px solid var(--vs-line); padding: 0.45em 0.7em; text-align: left; }
+.vectis-site :is(.vs-prose, .news-body) th { font-weight: 700; background: var(--vs-bg); }
+.vectis-site :is(.vs-prose, .news-body) blockquote { border-left: 3px solid var(--vs-navy); padding-left: 1em; color: var(--vs-muted); margin: 1em 0; }
+.vectis-site :is(.vs-prose, .news-body) hr { border: 0; height: 1px; background: var(--vs-line); margin: 1.5em 0; }
+
 /* A department page's side box: the video sits 16:9 across the box, the prices-achieved picture full width. */
 .vectis-site .dept-side iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; margin: 0 0 1em; }
 .vectis-site .dept-side img { display: block; width: 100%; height: auto; margin: 1em 0 0; }
-.vectis-site .dept-side h3 { color: #ffffff; font-weight: 900; font-size: 1.25rem; margin: 0 0 0.5em; }
+.vectis-site .dept-side h3 { color: #ffffff; font-weight: 500; font-size: 22px; margin: 0 0 0.5em; }
 .vectis-site .dept-side p, .vectis-site .dept-side div { color: #e5e7eb; }
 .vectis-site .dept-side a { color: #ffffff; font-weight: 700; text-decoration: underline; }
 
-/* The page editor's Text, Fold-out and HTML blocks (Website → Pages). Colours come from the
-   --pe-* variables a Section or Box sets (page-editor/look.ts), so the same text reads on light and
-   dark backgrounds. Puck wraps rich text in its own .rich-text div. */
-.vectis-site .pe-text { line-height: 1.7; }
+/* The page editor's Text, Fold-out and HTML blocks (Website → Pages). Colours come from the --pe-*
+   variables a Section or Box sets (page-editor/look.ts), so the same text reads on light and dark
+   backgrounds. Puck wraps rich text in its own .rich-text div. */
+.vectis-site .pe-text { line-height: 1.6; }
 .vectis-site .pe-text p { margin: 0 0 0.9em; }
 .vectis-site .pe-text .rich-text > :last-child, .vectis-site .pe-text > :last-child { margin-bottom: 0; }
 .vectis-site .pe-text h1, .vectis-site .pe-text h2, .vectis-site .pe-text h3, .vectis-site .pe-text h4 {
-  color: var(--pe-heading, #32348A); font-weight: 900; line-height: 1.2; margin: 1.2em 0 0.45em;
+  color: var(--pe-heading, #000); font-weight: 500; line-height: 1.2; margin: 1.2em 0 0.45em;
 }
-.vectis-site .pe-text h1 { font-size: 1.75rem; }
-.vectis-site .pe-text h2 { font-size: 1.45rem; }
-.vectis-site .pe-text h3 { font-size: 1.15rem; }
-.vectis-site .pe-text h4 { font-size: 1.02rem; }
-.vectis-site .pe-text a { color: var(--pe-link, #32348A); text-decoration: underline; text-underline-offset: 2px; }
+.vectis-site .pe-text h1 { font-size: 32px; font-weight: 400; }
+.vectis-site .pe-text h2 { font-size: 26px; }
+.vectis-site .pe-text h3 { font-size: 20px; }
+.vectis-site .pe-text h4 { font-size: 16px; font-weight: 700; }
+.vectis-site .pe-text a { color: var(--pe-link, #2e328e); text-decoration: underline; text-underline-offset: 2px; }
 .vectis-site .pe-text ul { list-style: disc; margin: 0 0 1em 1.4em; }
 .vectis-site .pe-text ol { list-style: decimal; margin: 0 0 1em 1.4em; }
 .vectis-site .pe-text li { margin: 0.2em 0; }
 .vectis-site .pe-text li > p { margin: 0; }
 .vectis-site .pe-text strong, .vectis-site .pe-text b { font-weight: 700; }
 .vectis-site .pe-text em, .vectis-site .pe-text i { font-style: italic; }
-.vectis-site .pe-text blockquote { border-left: 4px solid var(--pe-kicker, #DB0606); padding-left: 1em; margin: 1em 0; }
-.vectis-site .pe-text hr { border: 0; height: 1px; background: var(--pe-line, #e5e7eb); margin: 1.5em 0; }
+.vectis-site .pe-text blockquote { border-left: 3px solid var(--pe-kicker, #2e328e); padding-left: 1em; margin: 1em 0; }
+.vectis-site .pe-text hr { border: 0; height: 1px; background: var(--pe-line, #e6e6e6); margin: 1.5em 0; }
 .vectis-site .pe-text code { font-family: ui-monospace, monospace; background: rgba(0, 0, 0, 0.05); padding: 0 0.25em; }
 .vectis-site .pe-text img { max-width: 100%; height: auto; }
 .vectis-site .pe-text table { border-collapse: collapse; margin: 1em 0; }
-.vectis-site .pe-text td, .vectis-site .pe-text th { border: 1px solid var(--pe-line, #e5e7eb); padding: 0.4em 0.6em; }
-/* The fold-outs' own arrow replaces the browser's marker. */
+.vectis-site .pe-text td, .vectis-site .pe-text th { border: 1px solid var(--pe-line, #e6e6e6); padding: 0.4em 0.6em; }
+
+/* Fold-outs draw their own arrow in place of the browser's marker. */
 .vectis-site summary::-webkit-details-marker { display: none; }
+.vectis-site summary { list-style: none; }
+
+/* ── The header ─────────────────────────────────────────────────────────────────────────────── */
+.vectis-site .vs-header { background: #fff; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); }
+.vectis-site .vs-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px 14px;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #000;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.vectis-site .vs-nav-link:hover { color: var(--vs-navy); }
+.vectis-site .vs-nav-panel { background: #fff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); border: 1px solid var(--vs-line); }
+.vectis-site .vs-nav-panel a { display: block; padding: 7px 18px; font-size: 14px; font-weight: 400; color: #000; text-decoration: none; }
+.vectis-site .vs-nav-panel a:hover { color: var(--vs-navy); background: var(--vs-bg); }
+.vectis-site .vs-search { display: flex; align-items: stretch; height: 40px; border: 1px solid var(--vs-line); background: #fff; }
+.vectis-site .vs-search:focus-within { outline: 1px solid var(--vs-navy); }
+.vectis-site .vs-search input { flex: 1; min-width: 0; border: 0; padding: 0 10px; font-size: 14px; letter-spacing: 1px; color: var(--vs-navy); background: #fff; outline: none; }
+.vectis-site .vs-search input::placeholder { color: var(--vs-navy); text-transform: uppercase; letter-spacing: 1px; }
+.vectis-site .vs-search select { border: 0; border-left: 1px solid var(--vs-line); padding: 0 26px 0 12px; font-size: 14px; font-weight: 500; color: var(--vs-navy); background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 20 20' fill='%232e328e'><path d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'/></svg>") no-repeat right 8px center; appearance: none; outline: none; cursor: pointer; }
+.vectis-site .vs-search button { border: 0; border-left: 1px solid var(--vs-line); background: #fff; color: var(--vs-navy); font-size: 14px; font-weight: 500; letter-spacing: 1px; padding: 0 14px; cursor: pointer; }
+.vectis-site .vs-search button:hover { background: var(--vs-navy); color: #fff; }
+
+/* The mobile menu panel slides in from the right; the page behind it is dimmed. */
+.vectis-site .vs-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 88vw); background: #fff; z-index: 70; overflow-y: auto; transform: translateX(100%); transition: transform 0.25s ease; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15); }
+.vectis-site .vs-drawer[data-open="true"] { transform: translateX(0); }
+.vectis-site .vs-drawer-dim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 60; }
+.vectis-site .vs-drawer-link { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 12px 0; font-size: 18px; font-weight: 600; text-transform: uppercase; color: var(--vs-navy); text-decoration: none; background: none; border: 0; text-align: left; font-family: inherit; cursor: pointer; }
+.vectis-site .vs-drawer-sub a { display: block; padding: 8px 0 8px 14px; font-size: 15px; color: var(--vs-ink); text-decoration: none; }
+.vectis-site .vs-drawer-sub a:hover { color: var(--vs-navy); }
+
+/* ── The hero ───────────────────────────────────────────────────────────────────────────────── */
+.vectis-site .vs-hero { position: relative; height: 460px; }
+@media (min-width: 768px) { .vectis-site .vs-hero { height: 520px; } }
+.vectis-site .vs-hero-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--vs-navy); opacity: 0.35; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15); transition: opacity 0.15s, transform 0.15s; }
+.vectis-site .vs-hero-dot[aria-current="true"] { opacity: 1; transform: scale(1.15); }
+.vectis-site .vs-hero-dot:hover { opacity: 0.8; }
+
+/* ── The footer ─────────────────────────────────────────────────────────────────────────────── */
+.vectis-site .vs-footer { background: var(--vs-footer); color: #000; font-size: 16px; }
+.vectis-site .vs-footer a { color: var(--vs-navy); text-decoration: none; }
+.vectis-site .vs-footer a:hover { text-decoration: underline; }
+.vectis-site .vs-footer .vs-footer-menu a { color: #000; line-height: 2; }
+.vectis-site .vs-footer-social a { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; color: var(--vs-navy); }
+.vectis-site .vs-footer-social a:hover { color: var(--vs-navy-dark); }
+.vectis-site .vs-footer-copy { color: rgba(0, 0, 0, 0.5); font-size: 13px; font-weight: 400; text-align: center; }
+
+/* ── Motion ─────────────────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .vectis-site * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+}

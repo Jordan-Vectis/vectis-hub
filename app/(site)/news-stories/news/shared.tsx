@@ -1,7 +1,7 @@
 import Link from "next/link"
-import { format } from "date-fns"
 import { getSignedImageUrl } from "@/lib/r2"
 import { htmlToText } from "@/lib/html-text"
+import { dateShort } from "../../site-dates"
 
 // Shared by the News & Stories list and article pages on the test website. (A page file may only
 // export its page, so the helpers and the story card live here.)
@@ -39,7 +39,8 @@ export function teaser(a: { introText: string | null; fullText: string | null; t
   return (space > 60 ? cut.slice(0, space) : cut) + "…"
 }
 
-export const gbDate = (d: Date | null) => (d ? format(d, "d MMMM yyyy") : "")
+/** "15 October 2026" — in Europe/London, like every other date on the site (the server runs in UTC). */
+export const gbDate = (d: Date | null) => dateShort(d)
 
 // The site's HTML as served, made safe enough for the test site: scripts, styles and inline event
 // handlers out; pictures and links that still point at the site's own root made absolute so they
@@ -55,43 +56,40 @@ export function cleanHtml(html: string): string {
     .replace(/<a href="(https?:\/\/[^"]+)">/gi, `<a href="$1" target="_blank" rel="noreferrer">`)
 }
 
+/**
+ * A story as vectis.co.uk's news cards show it: the picture 16:9 with a NEWS / FEATURED label in
+ * its top-right corner, the date in red, the title, a line or two of the story, READ MORE. `big`
+ * is the featured row's card — the same card with more room for the title. The picture, title and
+ * READ MORE each open the story (one card can't be one link: links don't nest); the picture is
+ * kept out of the tab order so a keyboard reaches each story once, by its title.
+ */
 export function StoryCard({ a, big }: { a: Article & { photo: string | null }; big?: boolean }) {
   const href = `/news-stories/news/${encodeURIComponent(a.alias)}`
+  const line = teaser(a)
   return (
-    <Link href={href} className="group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col">
-      <div className={`relative bg-gray-100 overflow-hidden ${big ? "aspect-[16/10]" : "aspect-[16/9]"}`}>
-        {a.photo ? (
-          <img src={a.photo} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-        ) : (
-          <div className="absolute inset-0 bg-[#32348A]/5 flex items-center justify-center">
-            <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-        )}
-        {a.featured && <span className="absolute top-2 left-2 bg-[#DB0606] text-white text-[10px] font-black uppercase tracking-widest px-2 py-0.5">Featured</span>}
+    <article className="vs-card flex flex-col h-full">
+      <Link href={href} className="relative block bg-[var(--vs-bg)] aspect-[16/9] overflow-hidden" tabIndex={-1} aria-hidden="true">
+        {a.photo
+          ? <img src={a.photo} alt="" loading="lazy" className="w-full h-full object-cover" />
+          : <span className="w-full h-full flex items-center justify-center"><img src="/vectis-logo.svg" alt="" loading="lazy" width={120} height={48} className="opacity-30" /></span>}
+        <span className="vs-badge absolute top-0 right-0">{a.featured ? "Featured" : "News"}</span>
+      </Link>
+      <div className={`flex flex-col flex-1 ${big ? "p-6 sm:p-7" : "p-5 sm:p-6"}`}>
+        {a.publishedAt && <p className="vs-kicker mb-2">{gbDate(a.publishedAt)}</p>}
+        <h3 className={`vs-h4 mb-3 ${big ? "line-clamp-3" : "line-clamp-2"}`}>
+          <Link href={href} className="hover:underline">{a.title}</Link>
+        </h3>
+        {line && <p className="text-sm text-[var(--vs-muted)] line-clamp-3 mb-5">{line}</p>}
+        <Link href={href} className="vs-link vs-link-sm mt-auto self-start" aria-label={`Read more: ${a.title}`}>Read more</Link>
       </div>
-      <div className="p-4 flex flex-col flex-1">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#2AB4A6] truncate">{a.category ?? "News"}</span>
-          {a.publishedAt && <span className="text-[11px] text-gray-400 uppercase tracking-wide shrink-0">{gbDate(a.publishedAt)}</span>}
-        </div>
-        <h3 className={`font-black text-[#32348A] leading-snug group-hover:underline mb-2 ${big ? "text-xl line-clamp-3" : "text-base line-clamp-2"}`}>{a.title}</h3>
-        <p className="text-sm text-gray-600 leading-snug line-clamp-3 mb-4">{teaser(a)}</p>
-        <span className="mt-auto text-xs font-black uppercase tracking-widest text-[#32348A]">Read story <span aria-hidden="true">→</span></span>
-      </div>
-    </Link>
+    </article>
   )
 }
 
+/** One page number in a `vs-pages` strip; the current page carries aria-current. */
 export function PageLink({ href, label, active }: { href: string; label: string; active?: boolean }) {
   return (
-    <Link
-      href={href}
-      className={`min-w-[2.5rem] text-center px-3 py-2 text-sm font-semibold border transition-colors ${
-        active ? "bg-[#32348A] text-white border-[#32348A]" : "bg-white text-[#32348A] border-gray-300 hover:border-[#32348A]"
-      }`}
-    >
+    <Link href={href} className="vs-page-link" aria-current={active ? "page" : undefined}>
       {label}
     </Link>
   )

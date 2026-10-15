@@ -6,10 +6,11 @@ import { getDepartment, sitePicture, withDeptPictures } from "../data"
 import { DeptHighlights, DeptPastAuctions, NewsList } from "../sections"
 import { PageBlocks, pageMetadata, publishedPage } from "../../page-editor/render"
 
-// One department on the test website, from the page collected from vectis.co.uk: the banner, the
-// "sell with us" copy, the hand-picked highlighted lots, plus — from our own databases — the
-// department's latest news (by its news category, else its keywords) and its past auctions (the
-// sales the site's page listed, plus any whose title matches the keywords). Its own design.
+// One department on the test website, from the page collected from vectis.co.uk and laid out as
+// the site lays it out (2026-10-14): the banner picture with the title over it, the copy beside the
+// navy "sell your collection" box, then — from our own databases — the hand-picked highlighted
+// lots, the department's latest news (by its news category, else its keywords) and its past
+// auctions (the sales the site's page listed, plus any whose title matches the keywords).
 //
 // Built in the page editor (Website → Pages → Departments) once published there; until then the
 // built-in design below. The lots, news and past auctions are ../sections.tsx — the editor's live
@@ -32,6 +33,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   })
 }
 
+const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase()
+
 export default async function DepartmentPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const d = await getDepartment(slug)
@@ -47,62 +50,69 @@ export default async function DepartmentPage({ params }: { params: Promise<{ slu
   const side = d.sideHtml
     ? cleanHtml(await withDeptPictures(d.sideHtml, d)).replace(/href="(?:https:\/\/www\.vectis\.co\.uk)?\/valuations[^"]*"(?: target="_blank" rel="noreferrer")?/gi, 'href="/sell-with-us"')
     : ""
-  const copyHasHeading = /<h1\b/i.test(copy)
   const title = d.pageTitle ?? d.name
 
+  // One h1 a page: the banner carries the title, so the copy's own <h1> is shown as an h2 — or
+  // dropped when it only repeats the banner (the site's pages often head the copy with the name again).
+  const copyH1 = copy.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)
+  const copyHeading = (copyH1 ? htmlToText(copyH1[1]) : d.heading ?? "").trim()
+  const repeatsTitle = !copyHeading || norm(copyHeading) === norm(title)
+  const body = copyH1
+    ? copy.replace(copyH1[0], () => (repeatsTitle ? "" : copyH1[0].replace(/<(\/?)h1\b/gi, "<$1h2")))
+    : copy
+
   return (
-    <div className="bg-gray-50 min-h-screen">
-      {/* ── Banner ── */}
-      <div className="relative bg-[#32348A] overflow-hidden" style={{ height: "300px" }}>
-        {hero ? (
-          <img src={hero} alt="" className="absolute inset-0 w-full h-full object-cover opacity-60" />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[#32348A] to-[#4446a8]" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
-        <div className="relative h-full w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 flex flex-col justify-end pb-8">
-          <div className="flex items-center gap-2 text-xs text-gray-300 mb-3">
-            <Link href="/departments" className="hover:text-white transition-colors uppercase tracking-wider font-semibold">Departments</Link>
-            <span>/</span>
-            <span className="text-white uppercase tracking-wider font-semibold">{d.name}</span>
+    <div className="bg-white">
+      {/* ── Banner: the collected hero picture under a dark fade, the title in white; a navy band without one ── */}
+      <div className="relative bg-[var(--vs-navy)] overflow-hidden flex items-end min-h-[220px] sm:min-h-[260px]">
+        {hero && <img src={hero} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-black/10" aria-hidden="true" />
+        <div className="vs-container relative pt-16 pb-8">
+          <p className="vs-kicker mb-2">Collections wanted</p>
+          <h1 className="vs-h1 !text-white">{title}</h1>
+        </div>
+      </div>
+
+      <div className="vs-container pt-6 pb-12 lg:pb-16">
+        {/* py-3 -my-3 on the text links: a 44px touch target (the iPads) without moving the text. */}
+        <Link href="/departments" className="vs-link vs-link-back vs-link-sm py-3 -my-3">Back to departments</Link>
+
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12 items-start">
+          {/* ── The copy, as the site has it (its bold and italic runs, lists, pictures) ── */}
+          <div className="lg:col-span-2 min-w-0">
+            {!copyH1 && !repeatsTitle && <h2 className="vs-h3 mb-4">{copyHeading}</h2>}
+            {body
+              ? <div className="vs-prose" dangerouslySetInnerHTML={{ __html: body }} />
+              : <p className="vs-muted">No text is held for this department yet.</p>}
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-white">{title}</h1>
+
+          {/* ── The navy side box: the site's own "Sell your collection" column (video, GET STARTED, the
+                prices-achieved picture), or ours when none was collected ── */}
+          <aside className="bg-[var(--vs-navy)] text-white p-6 sm:p-8 min-w-0">
+            {side ? (
+              <div className="dept-side" dangerouslySetInnerHTML={{ __html: side }} />
+            ) : (
+              <>
+                <h2 className="vs-h3 !text-white mb-3">Sell your collection with us</h2>
+                <p className="text-white/85 mb-5">
+                  From a single piece to a room of thousands, our Collections Team will guide you through the
+                  process — a free valuation, no lotting fees, and worldwide marketing at no extra cost.
+                </p>
+                <Link href="/sell-with-us" className="vs-link !text-white py-3 -my-3">Get started</Link>
+                <p className="mt-6 pt-5 border-t border-white/20 text-sm text-white/85">
+                  Or talk to us on <a href="tel:+441642750616" className="text-white underline underline-offset-2">(+44) 01642 750 616</a>
+                  <br />
+                  <a href="mailto:collections@vectis.co.uk" className="text-white underline underline-offset-2">collections@vectis.co.uk</a>
+                </p>
+                <p className="mt-3"><Link href="/contact" className="vs-link vs-link-sm !text-white py-3 -my-3">Contact us</Link></p>
+              </>
+            )}
+          </aside>
         </div>
       </div>
 
-      <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* ── The copy, as the site has it (its own heading, bold and italic runs, lists, pictures) ── */}
-        <div className="lg:col-span-8 bg-white border border-gray-200 p-6 sm:p-8 xl:p-10">
-          {!copyHasHeading && d.heading && <h1 className="text-3xl font-black text-[#32348A] leading-tight mb-4">{d.heading}</h1>}
-          {copy
-            ? <div className="news-body" dangerouslySetInnerHTML={{ __html: copy }} />
-            : <p className="text-gray-400">No text is held for this department yet.</p>}
-        </div>
-
-        {/* ── The "Sell your collection" side box + latest news ── */}
-        <div className="lg:col-span-4 flex flex-col gap-5">
-          {side ? (
-            <div className="dept-side bg-[#32348A] text-white p-6" dangerouslySetInnerHTML={{ __html: side }} />
-          ) : (
-            <div className="bg-[#32348A] text-white p-6">
-              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#2AB4A6] mb-1">Selling</p>
-              <h3 className="text-2xl font-black mb-2">Sell your collection with us</h3>
-              <p className="text-sm text-gray-200 leading-relaxed mb-5">Looking to sell? From a single piece to a room of thousands, our Collections Team will guide you through the process — a free valuation, no lotting fees, and worldwide marketing at no extra cost.</p>
-              <div className="flex flex-wrap items-center gap-3">
-                <Link href="/sell-with-us" className="inline-flex items-center gap-2 bg-white text-[#32348A] text-xs font-black uppercase tracking-widest px-5 py-3 hover:bg-[#2AB4A6] hover:text-white transition-colors">Get started <span aria-hidden="true">→</span></Link>
-                <span className="text-xs text-gray-300">or call <a href="tel:+441642750616" className="text-white font-semibold hover:underline">01642 750 616</a></span>
-              </div>
-            </div>
-          )}
-
-          <NewsList department={slug} heading="Latest news" count={3} layout="list" />
-        </div>
-      </div>
-
-      {/* ── Highlighted lots ── */}
       <DeptHighlights slug={slug} />
-
-      {/* ── Past auctions ── */}
+      <NewsList department={slug} heading="Latest news" count={3} layout="cards" />
       <DeptPastAuctions slug={slug} />
     </div>
   )

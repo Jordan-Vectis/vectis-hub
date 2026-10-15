@@ -4,9 +4,14 @@
 // colours etc"). parseSlideStyle() is the ONE reader: it fills every default and refuses anything
 // that is not a colour, one of the choices, or a number in range, so a slide always renders and
 // never with a value the site doesn't understand.
+//
+// 2026-10-14: the slide is drawn as vectis.co.uk draws its banner — the picture full-bleed with a
+// white caption card over it (small line, headline, a line of text, a magenta button). The colours
+// here are the card's words; the card itself turns navy when the headline colour is light, so a
+// slide saved with white words before this change still reads (hero-slide-view.tsx).
 
 export type SlideStyle = {
-  /** The small line above the headline ("VECTIS AUCTIONS · EST. 1988"). */
+  /** The small line above the headline ("FEATURED"). */
   kicker: string
   showKicker: boolean
   kickerColor: string
@@ -22,23 +27,23 @@ export type SlideStyle = {
   align: "left" | "center" | "right"
   valign: "top" | "middle" | "bottom"
   textWidth: "narrow" | "medium" | "wide"
-  /** 0–100: how much the picture is darkened behind the words on this slide (0 = the picture as it is). */
+  /** 0–100: how much the picture is darkened behind the card on this slide (0 = the picture as it is). */
   shade: number
   /** How long the slide stays before the next one, in seconds. */
   seconds: number
 }
 
-// The site's look before the editor existed — a slide with no saved style renders exactly as it did.
+// The site's look when a slide has no saved style: vectis.co.uk's own caption card.
 export const DEFAULT_STYLE: SlideStyle = {
-  kicker: "Vectis Auctions · Est. 1988",
+  kicker: "Featured",
   showKicker: true,
-  kickerColor: "#db0606",
-  headlineColor: "#ffffff",
+  kickerColor: "#c27608",
+  headlineColor: "#000000",
   headlineSize: "m",
-  subtextColor: "#d1d5db",
-  buttonBg: "#db0606",
+  subtextColor: "#000000",
+  buttonBg: "#f102f2",
   buttonText: "#ffffff",
-  showRegister: true,
+  showRegister: false,
   second: null,
   align: "left",
   valign: "middle",
@@ -49,14 +54,14 @@ export const DEFAULT_STYLE: SlideStyle = {
 
 // The swatches the editor offers first; any other colour can be typed or picked.
 export const BRAND_COLOURS: { hex: string; name: string }[] = [
-  { hex: "#ffffff", name: "White" },
-  { hex: "#d1d5db", name: "Light grey" },
-  { hex: "#6b7280", name: "Grey" },
   { hex: "#000000", name: "Black" },
-  { hex: "#32348a", name: "Vectis blue" },
-  { hex: "#12134a", name: "Dark blue" },
-  { hex: "#db0606", name: "Vectis red" },
-  { hex: "#2ab4a6", name: "Teal" },
+  { hex: "#212529", name: "Ink" },
+  { hex: "#6c757d", name: "Grey" },
+  { hex: "#ffffff", name: "White" },
+  { hex: "#2e328e", name: "Vectis navy" },
+  { hex: "#ff0300", name: "Vectis red" },
+  { hex: "#f102f2", name: "Magenta" },
+  { hex: "#c27608", name: "Orange" },
   { hex: "#f5c518", name: "Gold" },
 ]
 

@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"fa3013abc09da8504ddb44e53cd3ca91d7d45278","author":"Jordan Orange","date":"2026-10-13T16:59:02+01:00","subject":"Memory: the 13 Oct merge to main in the opening message (Craft Apps is on production)"},
   {"sha":"4f6cfdce7d1a1ace1673c799e6893ab7b4dd7650","author":"Jordan Orange","date":"2026-10-13T14:56:49+01:00","subject":"Memory: 2026-10-13 in the opening message (Craft Apps tab, the rule on complete instructions) + reference_craft_apps entry"},
   {"sha":"d2e086a209b9d3f9ea18884985c165ed0d845eb1","author":"Jordan Orange","date":"2026-10-13T12:57:03+01:00","subject":"Office PC trial: a reply with blank lines is not a leaked search"},
   {"sha":"a4b05d231affa9143ab1800f542ac550ba52a3ba","author":"Jordan Orange","date":"2026-10-13T12:19:28+01:00","subject":"Craft Apps: \"Download all\" buttons for the Vectis builds and the official releases"},

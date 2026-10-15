@@ -1,31 +1,28 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { io, Socket } from "socket.io-client"
 import SlideView, { type SlideData } from "./hero-slide-view"
 import { DEFAULT_STYLE } from "./hero-style"
 
-// The slides shown until the Banner Manager holds at least one; they have no picture and the default look.
+// The home page banner, laid out as vectis.co.uk's (2026-10-14): the slides on the left with
+// their caption cards and a row of dots bottom-right; a white "Sell with us / Buy with us" panel
+// on the right. When a Hub sale is live the panel gives way to the live lot and its bids.
+
+// The slides shown until the Banner Manager holds one and no sale is coming up; no picture, the default look.
 const DEFAULT_SLIDES: SlideData[] = [
   {
-    title: "World's No.1 Diecast Specialist",
-    subtitle: "Tens of thousands of lots sold every year to collectors worldwide. Join our next auction.",
-    cta: "VIEW UPCOMING AUCTIONS",
+    title: "The world's leading toy and collectables auction house",
+    subtitle: "Over 70,000 lots a year — Star Wars to Barbie, trains to military figures, Matchbox to vinyl.",
+    cta: "View auctions",
     ctaHref: "/auctions",
   },
   {
-    title: "Sell Your Collection",
-    subtitle: "Free valuations from our specialist team. No fees, no fuss — just the best price for your collection.",
-    cta: "GET A FREE VALUATION",
-    ctaHref: "/submit",
-  },
-  {
-    title: "Bid Live & Online",
-    subtitle: "Register once and bid in real-time from anywhere in the world across 100+ auctions a year.",
-    cta: "REGISTER TO BID",
-    ctaHref: "/portal/register",
+    title: "Sell your collection with us",
+    subtitle: "Free valuations from our specialist team. One commission, no hidden fees, worldwide buyers.",
+    cta: "Get started",
+    ctaHref: "/sell-with-us",
   },
 ]
 
@@ -60,7 +57,7 @@ interface AuctionState {
   lots: LiveLot[]
 }
 
-/** A slide from the Banner Manager, with its picture already signed by the page and its look already parsed. */
+/** A slide from the Banner Manager (or a featured sale), with its picture already signed by the page and its look already parsed. */
 export type DbSlide = SlideData & { id: string }
 
 interface Props {
@@ -81,7 +78,7 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
   const [slide, setSlide] = useState(0)
   const [live, setLive] = useState(initialLive)
   const [auctionState, setAuctionState] = useState<AuctionState | null>(null)
-  const socketRef  = useRef<Socket | null>(null)  // kept for cleanup
+  const socketRef = useRef<Socket | null>(null)  // kept for cleanup
 
   const isLive = !!live && ["ACTIVE", "PAUSED"].includes(live.status)
 
@@ -129,120 +126,105 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
     : null
 
   return (
-    <div className="relative overflow-hidden" style={{ height: "520px" }}>
-      {/* ── Hero slides (shrinks left when live) ── */}
-      <div
-        className="absolute top-0 left-0 h-full transition-all duration-700 ease-in-out"
-        style={{ width: isLive ? "58%" : "100%" }}
-      >
-        {/* One rendering of a slide (hero-slide-view.tsx) — the Banner Manager's preview uses the same one. */}
-        {SLIDES.map((s, i) => (
-          <div
-            key={i}
-            className={`absolute inset-0 transition-opacity duration-1000 ${i === slide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-          >
-            <SlideView slide={s} isLoggedIn={isLoggedIn} eager={i === 0} />
-          </div>
-        ))}
+    <section className="bg-[var(--vs-bg)]">
+      <div className={`grid grid-cols-1 ${isLive ? "lg:grid-cols-[1fr_420px]" : "lg:grid-cols-[1fr_340px]"}`}>
+        {/* ── The slides ── */}
+        <div className="vs-hero overflow-hidden">
+          {/* One rendering of a slide (hero-slide-view.tsx) — the Banner Manager's preview uses the same one. */}
+          {SLIDES.map((s, i) => (
+            <div
+              key={i}
+              className={`absolute inset-0 transition-opacity duration-700 ${i === slide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+              aria-hidden={i !== slide}
+            >
+              <SlideView slide={s} isLoggedIn={isLoggedIn} eager={i === 0} />
+            </div>
+          ))}
 
-        {/* Slide dots — one per slide, none at all for a single slide (a lone red dash under the
-            buttons read as a stray mark). Each dot sits in a finger-sized button. */}
-        {!isLive && SLIDES.length > 1 && (
-          <div className="absolute bottom-3 left-9 flex">
-            {SLIDES.map((s, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setSlide(i)}
-                aria-label={`Slide ${i + 1}: ${s.title}`}
-                aria-current={i === slide}
-                className="p-3 group"
-              >
-                <span className={`block h-2.5 w-2.5 rounded-full transition-colors ${i === slide ? "bg-[#DB0606]" : "bg-white/40 group-hover:bg-white/80"}`} />
-              </button>
-            ))}
-          </div>
-        )}
+          {/* Slide dots, bottom right as on vectis.co.uk — one per slide, none for a single slide. Each sits in a finger-sized button. */}
+          {!isLive && SLIDES.length > 1 && (
+            <div className="absolute bottom-3 right-4 flex" role="tablist" aria-label="Banner slides">
+              {SLIDES.map((s, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  role="tab"
+                  onClick={() => setSlide(i)}
+                  aria-label={`Slide ${i + 1}: ${s.title}`}
+                  aria-selected={i === slide}
+                  className="p-2 group"
+                >
+                  <span className="vs-hero-dot block" aria-current={i === slide ? "true" : undefined} />
+                </button>
+              ))}
+            </div>
+          )}
 
-        {/* Live indicator overlay on hero */}
-        {isLive && (
-          <div className="absolute top-6 left-6 flex items-center gap-2 bg-red-600 text-white text-xs font-black uppercase tracking-widest px-3 py-1.5">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            AUCTION IN PROGRESS
-          </div>
-        )}
-      </div>
+          {/* Live indicator overlay on hero */}
+          {isLive && (
+            <div className="absolute top-5 left-5 flex items-center gap-2 bg-[var(--vs-red)] text-white vs-caps px-3 py-1.5">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              Auction in progress
+            </div>
+          )}
+        </div>
 
-      {/* ── Live auction panel (slides in from right) ── */}
-      <div
-        className="absolute top-0 right-0 h-full bg-[#12134a] transition-all duration-700 ease-in-out overflow-hidden"
-        style={{ width: isLive ? "42%" : "0%" }}
-      >
-        {isLive && live && currentLot && (
-          <div className="h-full flex flex-col">
-            {/* Header */}
-            <div className="bg-red-600 px-5 py-3 flex items-center justify-between shrink-0">
+        {/* ── Right-hand panel: Sell with us / Buy with us — or the live sale when one is running ── */}
+        {isLive && live && currentLot ? (
+          <aside className="bg-[var(--vs-navy)] text-white flex flex-col lg:h-[520px]" aria-label="Live auction">
+            <div className="bg-[var(--vs-red)] px-5 py-3 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
-                <span className="text-white text-xs font-black uppercase tracking-widest">LIVE AUCTION</span>
+                <span className="vs-caps">Live auction</span>
               </div>
-              <Link
-                href={`/auctions/${live.auctionCode}/live`}
-                className="text-white text-[10px] font-bold uppercase tracking-wider hover:underline"
-              >
-                ENTER BIDDING ROOM →
+              <Link href={`/auctions/${live.auctionCode}/live`} className="vs-caps text-xs hover:underline">
+                Enter bidding room ›
               </Link>
             </div>
-
-            {/* Lot image */}
-            <div className="relative flex-1 bg-black min-h-0">
+            <div className="relative flex-1 bg-black min-h-[220px]">
               {lotImg ? (
-                <Image src={lotImg} alt={currentLot.title} fill className="object-contain p-4" unoptimized />
+                <img src={lotImg} alt={currentLot.title} className="absolute inset-0 w-full h-full object-contain p-4" />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700">
-                  <svg className="w-20 h-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-white/30">
+                  <img src="/vectis-logo.svg" alt="" width={140} height={56} className="opacity-40" />
                 </div>
               )}
             </div>
-
-            {/* Lot info */}
-            <div className="shrink-0 px-5 py-4 bg-[#12134a] border-t border-white/10">
-              <p className="text-[#2AB4A6] text-[10px] font-black uppercase tracking-widest mb-1">
-                LOT {currentLot.barcode || "—"}
-              </p>
-              <p className="text-white font-bold text-sm leading-snug line-clamp-2 mb-3">
-                {currentLot.title}
-              </p>
+            <div className="shrink-0 px-5 py-4 border-t border-white/10">
+              <p className="vs-caps text-white/70 text-xs mb-1">Lot {currentLot.barcode || "—"}</p>
+              <p className="font-medium text-base leading-snug line-clamp-2 mb-3">{currentLot.title}</p>
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-black/40 px-3 py-2">
-                  <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-0.5">Current Bid</p>
-                  <p className="text-white font-black text-lg">
-                    {currentBid ? `£${currentBid.toLocaleString("en-GB")}` : "—"}
-                  </p>
+                <div className="bg-black/30 px-3 py-2">
+                  <p className="text-white/60 text-xs uppercase tracking-wider mb-0.5">Current bid</p>
+                  <p className="font-semibold text-lg">{currentBid ? `£${currentBid.toLocaleString("en-GB")}` : "—"}</p>
                 </div>
-                <div className="bg-[#2AB4A6]/20 px-3 py-2 border border-[#2AB4A6]/40">
-                  <p className="text-[#2AB4A6] text-[9px] uppercase tracking-widest mb-0.5">Asking</p>
-                  <p className="text-[#2AB4A6] font-black text-lg">
-                    {askingBid ? `£${askingBid.toLocaleString("en-GB")}` : (
-                      currentLot.estimateLow
-                        ? `£${currentLot.estimateLow.toLocaleString("en-GB")}`
-                        : "TBC"
-                    )}
+                <div className="bg-white/10 px-3 py-2 border border-white/30">
+                  <p className="text-white/60 text-xs uppercase tracking-wider mb-0.5">Asking</p>
+                  <p className="font-semibold text-lg">
+                    {askingBid ? `£${askingBid.toLocaleString("en-GB")}` : currentLot.estimateLow ? `£${currentLot.estimateLow.toLocaleString("en-GB")}` : "TBC"}
                   </p>
                 </div>
               </div>
-              <Link
-                href={`/auctions/${live.auctionCode}/live`}
-                className="block w-full text-center bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest py-3 transition-colors"
-              >
-                BID LIVE NOW →
-              </Link>
+              <Link href={`/auctions/${live.auctionCode}/live`} className="vs-btn vs-btn-red vs-btn-block">Bid live now</Link>
             </div>
-          </div>
+          </aside>
+        ) : (
+          <aside className="bg-white lg:h-[520px] flex flex-col justify-center px-8 py-8 lg:px-9 border-t lg:border-t-0 lg:border-l border-[var(--vs-line)]">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-8 lg:gap-10">
+              <div>
+                <h3 className="vs-h3 mb-3">Sell with us</h3>
+                <p className="text-sm leading-relaxed mb-4">We buy or auction your collection here at Vectis Auctions, the world&apos;s largest collectable toy specialist.</p>
+                <Link href="/sell-with-us" className="vs-link">Get started</Link>
+              </div>
+              <div className="lg:pt-10 lg:border-t border-[var(--vs-line)]">
+                <h3 className="vs-h3 mb-3">Buy with us</h3>
+                <p className="text-sm leading-relaxed mb-4">Vectis holds more collectable toy auctions than any other auction house.</p>
+                <Link href="/how-to-bid" className="vs-link">Find out more</Link>
+              </div>
+            </div>
+          </aside>
         )}
       </div>
-    </div>
+    </section>
   )
 }

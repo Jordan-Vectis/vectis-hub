@@ -1,16 +1,31 @@
+import Link from "next/link"
+import { redirect } from "next/navigation"
 import { getCustomerSession } from "@/lib/customer-auth"
 import { prisma } from "@/lib/prisma"
-import { format } from "date-fns"
-import { redirect } from "next/navigation"
+import { dateShort } from "../../site-dates"
 
-export const metadata = { title: "My Sales — Vectis" }
+// The site layout's title template adds " | Vectis Auctions" itself.
+export const metadata = { title: "My sales" }
 
-const STATUS_LABELS: Record<string, { label: string; colour: string }> = {
-  open:      { label: "Open",      colour: "bg-blue-100 text-blue-700" },
-  sold:      { label: "Sold",      colour: "bg-green-100 text-green-700" },
-  complete:  { label: "Complete",  colour: "bg-gray-100 text-gray-600" },
-  cancelled: { label: "Cancelled", colour: "bg-red-100 text-red-700" },
+type ChipTone = "navy" | "red" | "grey"
+
+// A receipt's state as a chip: "open" is still being worked (red, like an active bid), "sold"
+// navy, and the finished states a grey outline — the same three chips the bids page uses.
+const STATUS: Record<string, { label: string; tone: ChipTone }> = {
+  open:      { label: "Open",      tone: "red" },
+  sold:      { label: "Sold",      tone: "navy" },
+  complete:  { label: "Complete",  tone: "grey" },
+  cancelled: { label: "Cancelled", tone: "grey" },
 }
+
+function Chip({ tone, children }: { tone: ChipTone; children: React.ReactNode }) {
+  if (tone === "grey") {
+    return <span className="inline-block vs-caps !text-xs px-3 py-1 border border-[var(--vs-line)] bg-white text-[var(--vs-muted)] whitespace-nowrap">{children}</span>
+  }
+  return <span className={`vs-badge !text-xs !px-3 !py-1 whitespace-nowrap${tone === "red" ? " vs-badge-red" : ""}`}>{children}</span>
+}
+
+const gbp = (n: number) => `£${n.toLocaleString("en-GB")}`
 
 export default async function MySalesPage() {
   const session = await getCustomerSession()
@@ -49,137 +64,146 @@ export default async function MySalesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">My Sales</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        Items you have consigned with us for auction.
-      </p>
+      <h1 className="vs-h2 vs-rule mb-3">My sales</h1>
+      <p className="text-[var(--vs-muted)] mb-8">The items you have consigned with us for auction, receipt by receipt.</p>
 
       {receipts.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center shadow-sm">
-          <p className="text-gray-500 font-medium">No consignment records found.</p>
-          <p className="text-sm text-gray-400 mt-2">
-            If you have recently sent items to us, they may not yet be linked to your account. Please contact us.
+        <div className="vs-card-flat p-8 sm:p-10 text-center">
+          <p className="vs-h4 mb-2">No consignments on your account yet</p>
+          <p className="text-[var(--vs-muted)] max-w-md mx-auto mb-6">
+            If you have recently sent items to us they may not be linked to your account yet — please{" "}
+            <Link href="/contact" className="vs-text-link">contact us</Link>.
           </p>
+          <Link href="/sell-with-us" className="vs-btn vs-btn-outline">Sell with us</Link>
         </div>
       ) : (
         <div className="space-y-6">
           {receipts.map(receipt => {
-            const status = STATUS_LABELS[receipt.status] ?? { label: receipt.status, colour: "bg-gray-100 text-gray-600" }
+            const status = STATUS[receipt.status] ?? { label: receipt.status, tone: "grey" as const }
             const lots = lotsByReceipt[receipt.id] ?? []
+            const titleId = `receipt-${receipt.id}`
 
             return (
-              <div key={receipt.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                {/* Receipt header */}
-                <div className="bg-gray-50 border-b border-gray-200 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Receipt</p>
-                    <p className="font-mono font-semibold text-gray-900 text-sm">{receipt.id}</p>
+              <section key={receipt.id} aria-labelledby={titleId} className="vs-card-flat">
+                {/* Receipt header: the number, its state, and the figures. */}
+                <div className="vs-band border-b border-[var(--vs-line)] px-5 sm:px-6 py-4 flex flex-wrap items-start gap-x-8 gap-y-3">
+                  <div className="min-w-0 mr-auto">
+                    <p className="vs-price-label">Receipt</p>
+                    <h2 id={titleId} className="vs-h4 flex flex-wrap items-center gap-3">
+                      {receipt.id}
+                      <Chip tone={status.tone}>{status.label}</Chip>
+                    </h2>
                   </div>
-                  <div className="text-right">
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${status.colour}`}>
-                      {status.label}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Received</p>
-                    <p className="text-sm font-medium text-gray-700">
-                      {format(new Date(receipt.createdAt), "d MMM yyyy")}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Commission</p>
-                    <p className="text-sm font-medium text-gray-700">{receipt.commissionRate}%</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Items</p>
-                    <p className="text-sm font-medium text-gray-700">{receipt.containers.length}</p>
-                  </div>
+                  <dl className="flex flex-wrap gap-x-8 gap-y-2">
+                    <div>
+                      <dt className="vs-price-label">Received</dt>
+                      <dd className="text-sm font-medium">{dateShort(receipt.createdAt)}</dd>
+                    </div>
+                    <div>
+                      <dt className="vs-price-label">Commission</dt>
+                      <dd className="text-sm font-medium">{receipt.commissionRate}%</dd>
+                    </div>
+                    <div>
+                      <dt className="vs-price-label">Items</dt>
+                      <dd className="text-sm font-medium">{receipt.containers.length}</dd>
+                    </div>
+                  </dl>
                 </div>
 
-                {/* Containers */}
+                {/* What came in. */}
                 {receipt.containers.length > 0 && (
-                  <div className="px-6 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Items received</p>
-                    <div className="space-y-2">
-                      {receipt.containers.map(container => {
-                        const lastLocation = container.movements[0]?.locationCode ?? null
-                        return (
-                          <div key={container.id} className="flex items-center justify-between text-sm py-2 border-b border-gray-50 last:border-0">
-                            <div>
-                              <span className="font-medium text-gray-800">{container.description}</span>
-                              {container.category && (
-                                <span className="text-gray-400 ml-2 text-xs">{container.category}</span>
-                              )}
-                            </div>
-                            <div className="text-right text-xs text-gray-400">
-                              <span className="uppercase text-gray-500">{container.type}</span>
-                              {lastLocation && (
-                                <span className="ml-2 text-[#2AB4A6]">@ {lastLocation}</span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
+                  <div className="px-5 sm:px-6 py-5">
+                    <h3 className="vs-caps text-[var(--vs-muted)] mb-2">Items received</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left">
+                            <th scope="col" className="vs-price-label font-medium py-2 pr-4">Item</th>
+                            <th scope="col" className="vs-price-label font-medium py-2 pr-4">Type</th>
+                            <th scope="col" className="vs-price-label font-medium py-2 text-right">Location</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {receipt.containers.map(container => {
+                            const lastLocation = container.movements[0]?.locationCode ?? null
+                            return (
+                              <tr key={container.id} className="border-t border-[var(--vs-line)]">
+                                <td className="py-2.5 pr-4">
+                                  <span className="font-medium">{container.description}</span>
+                                  {container.category && <span className="text-[var(--vs-muted)] ml-2">{container.category}</span>}
+                                </td>
+                                <td className="py-2.5 pr-4 whitespace-nowrap text-[var(--vs-muted)] uppercase">{container.type}</td>
+                                <td className="py-2.5 whitespace-nowrap text-right text-[var(--vs-muted)]">{lastLocation ?? "—"}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
 
-                {/* Auction lots */}
+                {/* The lots made from it. A lot links to its page only once the sale is published. */}
                 {lots.length > 0 && (
-                  <div className="px-6 pb-5 border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">In auction</p>
-                    <div className="space-y-2">
-                      {lots.map(lot => {
-                        const sold = lot.status === "SOLD"
-                        return (
-                          <div key={lot.id} className="flex items-center justify-between text-sm py-2 border-b border-gray-50 last:border-0">
-                            <div className="flex items-center gap-3">
-                              <span className="font-mono text-xs text-[#2AB4A6] font-bold">Lot {lot.barcode ?? lot.receiptUniqueId ?? lot.id.slice(-6)}</span>
-                              <span className="text-gray-800 font-medium truncate max-w-xs">{lot.title}</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-right shrink-0">
-                              <div>
-                                <p className="text-xs text-gray-400">Auction</p>
-                                <p className="font-medium text-gray-700 text-xs">{lot.auction.name}</p>
-                                {lot.auction.auctionDate && (
-                                  <p className="text-xs text-gray-400">
-                                    {format(new Date(lot.auction.auctionDate), "d MMM yyyy")}
-                                  </p>
-                                )}
-                              </div>
-                              <div>
-                                {sold && lot.hammerPrice ? (
-                                  <div>
-                                    <p className="text-xs text-gray-400">Sold for</p>
-                                    <p className="font-bold text-green-700">
-                                      £{lot.hammerPrice.toLocaleString("en-GB")}
-                                    </p>
-                                  </div>
-                                ) : lot.estimateLow ? (
-                                  <div>
-                                    <p className="text-xs text-gray-400">Estimate</p>
-                                    <p className="font-medium text-gray-700">
-                                      £{lot.estimateLow.toLocaleString("en-GB")}
-                                      {lot.estimateHigh ? `–£${lot.estimateHigh.toLocaleString("en-GB")}` : "+"}
-                                    </p>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
+                  <div className="px-5 sm:px-6 py-5 border-t border-[var(--vs-line)]">
+                    <h3 className="vs-caps text-[var(--vs-muted)] mb-2">In auction</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[560px] text-sm">
+                        <thead>
+                          <tr className="text-left">
+                            <th scope="col" className="vs-price-label font-medium py-2 pr-4">Lot</th>
+                            <th scope="col" className="vs-price-label font-medium py-2 pr-4">Auction</th>
+                            <th scope="col" className="vs-price-label font-medium py-2 text-right">Result</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lots.map(lot => {
+                            const sold = lot.status === "SOLD"
+                            const lotNo = lot.barcode ?? lot.receiptUniqueId ?? lot.id.slice(-6)
+                            const href = lot.auction.published ? `/auctions/${lot.auction.code}/lot/${lot.id}` : null
+                            return (
+                              <tr key={lot.id} className="border-t border-[var(--vs-line)] align-top">
+                                <td className="py-2.5 pr-4">
+                                  <p className="vs-caps text-[var(--vs-navy)]">Lot {lotNo}</p>
+                                  {href
+                                    ? <Link href={href} className="font-medium hover:underline line-clamp-2">{lot.title}</Link>
+                                    : <p className="font-medium line-clamp-2">{lot.title}</p>}
+                                </td>
+                                <td className="py-2.5 pr-4">
+                                  <p className="font-medium">{lot.auction.name}</p>
+                                  {lot.auction.auctionDate && <p className="text-[var(--vs-muted)]">{dateShort(lot.auction.auctionDate)}</p>}
+                                </td>
+                                <td className="py-2.5 text-right whitespace-nowrap">
+                                  {sold && lot.hammerPrice ? (
+                                    <>
+                                      <p className="vs-price-label">Sold for</p>
+                                      <p className="vs-price">{gbp(lot.hammerPrice)}</p>
+                                    </>
+                                  ) : lot.estimateLow ? (
+                                    <>
+                                      <p className="vs-price-label">Estimate</p>
+                                      <p className="font-medium">{gbp(lot.estimateLow)}{lot.estimateHigh ? ` – ${gbp(lot.estimateHigh)}` : "+"}</p>
+                                    </>
+                                  ) : (
+                                    <p className="text-[var(--vs-muted)]">—</p>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
 
                 {receipt.notes && (
-                  <div className="px-6 pb-4 border-t border-gray-100 pt-3">
-                    <p className="text-xs text-gray-400 mb-1">Notes</p>
-                    <p className="text-sm text-gray-600">{receipt.notes}</p>
+                  <div className="px-5 sm:px-6 py-4 border-t border-[var(--vs-line)]">
+                    <p className="vs-price-label">Notes</p>
+                    <p className="text-sm">{receipt.notes}</p>
                   </div>
                 )}
-              </div>
+              </section>
             )
           })}
         </div>

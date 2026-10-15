@@ -2,6 +2,7 @@ import { getDepartment } from "../departments/data"
 import { SITE } from "../news-stories/news/shared"
 import { WHY_VECTIS } from "../home-sections"
 import { BUILT_IN_PAGES, deptSlugOf } from "./pages"
+import { BRAND } from "./look"
 import { block, esc, htmlToBlocks, pageData, para, type PageData } from "./seed-tools"
 
 // Every built-in page of the test website expressed as the page editor's blocks — what the editor
@@ -11,41 +12,33 @@ import { block, esc, htmlToBlocks, pageData, para, type PageData } from "./seed-
 // site keeps the built-in design until the page is published from the editor.
 //
 // Keep these in step with the built-in pages' words when those change.
+//
+// Colours are the site's own palette (BRAND in look.ts) or left blank: blank means the words take
+// the colour of whatever they sit on (look.ts TONE_VARS), so a heading in a navy box reads white
+// without anyone choosing it, and the seeds follow site.css if the palette ever moves again.
 
 const INCREMENTS = "Value | Increment\n£5 - £50 | £5\n£50 - £200 | £10\n£200 - £700 | £20\n£700 - £1,000 | £50\n£1,000 - £3,000 | £100\n£3,000 - £7,000 | £200\n£7,000 - £10,000 | £500\n£10,000+ | £1000"
 
+// The home page as vectis.co.uk lays it out (2026-10-14) — every section a live block, so the
+// seed is the built-in page exactly. WHY_VECTIS is still exported for anyone who adds the old
+// "Why choose Vectis?" cards back.
+void WHY_VECTIS
 function home(): PageData {
   return pageData("Home", [
     block("LiveHero"),
+    block("LiveIntro"),
     block("LiveUpcoming"),
-    block("LiveStats"),
-    block("Section", {
-      background: "#ffffff", width: "standard", paddingY: "large",
-      content: [
-        block("Heading", { kicker: "The Vectis Difference", text: "Why Choose Vectis?", level: "h2", size: "l", align: "center", uppercase: true }),
-        block("Cards", { columns: "3", style: "plain", align: "center", caps: true, items: WHY_VECTIS.map(w => ({ icon: w.iconName, emoji: "", kicker: "", title: w.title, text: w.desc, link: "", linkLabel: "" })) }),
-      ],
-    }),
-    block("Section", {
-      background: "#32348a", width: "standard", paddingY: "xl",
-      content: [
-        block("Heading", { kicker: "Free Valuation", text: "Ready to Sell Your Collection?", level: "h2", size: "xl", align: "center", uppercase: true }),
-        block("Text", { text: para("Our specialists will assess your items for free and guide you through the entire process — from valuation to payment."), align: "center", width: "reading", colour: "#d1d5db" }),
-        block("Buttons", { align: "center", size: "l", buttons: [
-          { label: "Get a free valuation", link: "/sell-with-us", style: "red", newTab: false },
-          { label: "Register to bid", link: "/portal/register", style: "outlineLight", newTab: false },
-        ] }),
-      ],
-    }),
-    block("LiveSpecialisms"),
+    block("LiveSellAtAuction"),
+    block("LiveRecentResults"),
+    block("LiveLatestNews"),
   ], {
-    seoTitle: "Vectis Auctions — World's No.1 Diecast Specialist",
-    seoDescription: "Vectis Auctions is the world's leading specialist auction house for diecast, tinplate and collectable toys. Browse upcoming auctions, bid live, or sell your collection.",
+    seoTitle: "Vectis Auctions | The UK's Largest Toy & Collectables Auctioneer",
+    seoDescription: "Vectis is the world's leading specialist toy and collectables auction house. Browse upcoming auctions, view results, bid live or sell your collection.",
   })
 }
 
 function howToBid(): PageData {
-  const h = (text: string) => block("Heading", { text, level: "h2", size: "xs", uppercase: true, colour: "#111827" })
+  const h = (text: string) => block("Heading", { text, level: "h2", size: "xs", uppercase: true })
   const t = (html: string) => block("Text", { text: html, size: "s" })
   return pageData("How to Bid", [
     block("Section", {
@@ -112,7 +105,7 @@ const anchorOf = (s: string) => s.toLowerCase().replace(/&/g, "and").replace(/[^
 
 function faq(): PageData {
   return pageData("FAQ", [
-    block("PageHeader", { kicker: "Help Centre", heading: "Frequently Asked Questions", intro: "Everything you need to know about bidding, buying, selling and shipping at Vectis Auctions.", background: "#1e1f5e", width: "text" }),
+    block("PageHeader", { kicker: "Help Centre", heading: "Frequently Asked Questions", intro: "Everything you need to know about bidding, buying, selling and shipping at Vectis Auctions.", background: BRAND.navy, width: "text" }),
     block("Section", {
       width: "text", paddingY: "large",
       content: [
@@ -120,15 +113,15 @@ function faq(): PageData {
         ...FAQ.map(s => block("Box", {
           background: "", border: "none", padding: "none", anchor: anchorOf(s.heading),
           content: [
-            block("Heading", { text: s.heading, level: "h2", size: "xs", uppercase: true, colour: "#db0606" }),
+            block("Heading", { text: s.heading, level: "h2", size: "xs", uppercase: true }),
             block("Accordion", { style: "lines", openFirst: false, items: s.faqs.map(([q, a]) => ({ title: q, body: para(a) })) }),
           ],
         })),
         block("Box", {
-          background: "#f9fafb", border: "light", padding: "large",
+          background: BRAND.band, border: "light", padding: "large",
           content: [
-            block("Heading", { text: "Still have a question?", level: "h3", size: "s", align: "center", colour: "#111827" }),
-            block("Text", { text: para("Our team is available Monday – Friday, 9:00 am – 5:00 pm."), align: "center", size: "s", colour: "#6b7280" }),
+            block("Heading", { text: "Still have a question?", level: "h3", size: "s", align: "center" }),
+            block("Text", { text: para("Our team is available Monday – Friday, 9:00 am – 5:00 pm."), align: "center", size: "s", colour: BRAND.muted }),
             block("Buttons", { align: "center", size: "s", buttons: [
               { label: "+44 (0)1642 750 616", link: "tel:+441642750616", style: "link", newTab: false },
               { label: "admin@vectis.co.uk", link: "mailto:admin@vectis.co.uk", style: "link", newTab: false },
@@ -148,7 +141,8 @@ const MAILBOXES: [string, string, string][] = [
 ]
 
 function contact(): PageData {
-  const label = (text: string, colour = "#111827") => block("Heading", { text, level: "h2", size: "xs", uppercase: true, colour })
+  // A small uppercase label; on the navy box it reads white by itself (TONE_VARS).
+  const label = (text: string) => block("Heading", { text, level: "h2", size: "xs", uppercase: true })
   return pageData("Contact Us", [
     block("Section", {
       width: "wide", paddingY: "medium",
@@ -164,13 +158,13 @@ function contact(): PageData {
           ],
           col2: [
             block("Box", {
-              background: "#32348a", border: "none", padding: "large",
+              background: BRAND.navy, border: "none", padding: "large",
               content: [
-                label("Telephone", "#2ab4a6"),
+                label("Telephone"),
                 block("Text", { size: "l", text: `<p><a href="tel:+441642750616"><strong>+44 (0)1642 750616</strong></a></p>` }),
-                label("Office hours", "#2ab4a6"),
+                label("Office hours"),
                 block("Text", { size: "s", text: "<p>Monday to Friday, 9:00am – 5:00pm (UK time).<br>Closed at weekends.</p>" }),
-                label("Address", "#2ab4a6"),
+                label("Address"),
                 block("Text", { size: "s", text: "<p>Vectis Auctions Ltd<br>Fleck Way<br>Teesside Industrial Estate<br>Thornaby<br>TS17 9JZ<br>United Kingdom</p>" }),
               ],
             }),
@@ -210,19 +204,19 @@ const JOBS = [
 
 function careers(): PageData {
   return pageData("Careers", [
-    block("PageHeader", { kicker: "Join the Team", heading: "Careers at Vectis", intro: "Vectis is the largest toy and collectables auction house in the world, processing over 50,000 lots annually across more than 90 auctions per year. Our employees are our greatest asset.", background: "#1e1f5e", width: "text" }),
+    block("PageHeader", { kicker: "Join the Team", heading: "Careers at Vectis", intro: "Vectis is the largest toy and collectables auction house in the world, processing over 50,000 lots annually across more than 90 auctions per year. Our employees are our greatest asset.", background: BRAND.navy, width: "text" }),
     block("Section", {
       width: "text", paddingY: "large",
       content: [
         block("Quote", { text: "Find a job you enjoy doing, and you will never have to work a day in your life.", by: "Mark Twain" }),
-        block("Text", { text: para("We are committed to creating a positive and inclusive work environment where everyone can thrive and grow. If you share our passion for toys and collectables and want to be part of a world-class specialist auction house, we'd love to hear from you."), colour: "#4b5563" }),
-        block("Heading", { text: "Current Vacancies", level: "h2", size: "m", colour: "#111827" }),
+        block("Text", { text: para("We are committed to creating a positive and inclusive work environment where everyone can thrive and grow. If you share our passion for toys and collectables and want to be part of a world-class specialist auction house, we'd love to hear from you.") }),
+        block("Heading", { text: "Current Vacancies", level: "h2", size: "m" }),
         ...JOBS.map(j => block("Job", { ...j, responsibilities: j.responsibilities.join("\n"), essential: j.essential.join("\n"), desirable: j.desirable.join("\n"), benefits: j.benefits.join("\n"), applyEmail: "admin@vectis.co.uk" })),
         block("Box", {
-          background: "#f9fafb", border: "light", padding: "large",
+          background: BRAND.band, border: "light", padding: "large",
           content: [
-            block("Heading", { text: "Don't see the right role?", level: "h3", size: "s", colour: "#111827" }),
-            block("Text", { size: "s", colour: "#4b5563", text: para("We're always interested in hearing from talented people who share our passion. Send a speculative application and we'll keep your details on file.") }),
+            block("Heading", { text: "Don't see the right role?", level: "h3", size: "s" }),
+            block("Text", { size: "s", text: para("We're always interested in hearing from talented people who share our passion. Send a speculative application and we'll keep your details on file.") }),
             block("Buttons", { size: "s", buttons: [{ label: "Get in Touch", link: "mailto:admin@vectis.co.uk?subject=Speculative Application", style: "outline", newTab: false }] }),
           ],
         }),
@@ -236,11 +230,11 @@ const clause = (n: number, title: string, text: string) => `<h3>${n}. ${esc(titl
 function terms(): PageData {
   const part = (anchor: string, heading: string, html: BlockDataList) => block("Box", {
     background: "", border: "none", padding: "none", anchor,
-    content: [block("Heading", { text: heading, level: "h2", size: "s", colour: "#111827" }), block("Divider", { style: "line" }), ...html],
+    content: [block("Heading", { text: heading, level: "h2", size: "s" }), block("Divider", { style: "line" }), ...html],
   })
-  const text = (html: string) => block("Text", { text: html, size: "s", colour: "#4b5563" })
+  const text = (html: string) => block("Text", { text: html, size: "s" })
   return pageData("Terms & Conditions", [
-    block("PageHeader", { kicker: "Legal", heading: "Terms & Conditions", intro: "Vectis Auctions Limited — Conditions of Business for Buyers and Sellers", background: "#1e1f5e", width: "text" }),
+    block("PageHeader", { kicker: "Legal", heading: "Terms & Conditions", intro: "Vectis Auctions Limited — Conditions of Business for Buyers and Sellers", background: BRAND.navy, width: "text" }),
     block("Section", {
       width: "text", paddingY: "large",
       content: [
@@ -285,8 +279,8 @@ function terms(): PageData {
           ),
         ]),
         block("Box", {
-          background: "#f9fafb", border: "light", padding: "medium",
-          content: [block("Text", { size: "s", colour: "#6b7280", text: `<p><strong>Vectis Auctions Limited</strong></p><p>Registered in England &amp; Wales. Head office: Thornaby, Stockton-on-Tees, United Kingdom.</p><p>These terms and conditions are subject to change. For the most up-to-date version please contact us at <a href="mailto:admin@vectis.co.uk">admin@vectis.co.uk</a>.</p>` })],
+          background: BRAND.band, border: "light", padding: "medium",
+          content: [block("Text", { size: "s", colour: BRAND.muted, text: `<p><strong>Vectis Auctions Limited</strong></p><p>Registered in England &amp; Wales. Head office: Thornaby, Stockton-on-Tees, United Kingdom.</p><p>These terms and conditions are subject to change. For the most up-to-date version please contact us at <a href="mailto:admin@vectis.co.uk">admin@vectis.co.uk</a>.</p>` })],
         }),
       ],
     }),
@@ -312,11 +306,11 @@ async function department(slug: string): Promise<PageData | null> {
   const hasHeading = copy.some(b => b.type === "Heading")
   return pageData(d.name, [
     block("PageHeader", {
-      heading: d.pageTitle ?? d.name, picture: hero, darken: 55, height: "medium", width: "wide", background: "#32348a",
+      heading: d.pageTitle ?? d.name, picture: hero, darken: 55, height: "medium", width: "wide", background: BRAND.navy,
       crumbs: [{ label: "Departments", link: "/departments" }, { label: d.name, link: "" }],
     }),
     block("Section", {
-      background: "#f9fafb", width: "wide", paddingY: "medium",
+      background: BRAND.band, width: "wide", paddingY: "medium",
       content: [
         block("Columns", {
           layout: "2-1", gap: "large", valign: "top",
@@ -329,7 +323,7 @@ async function department(slug: string): Promise<PageData | null> {
           })],
           col2: [
             block("Box", {
-              background: "#32348a", border: "none", padding: "medium",
+              background: BRAND.navy, border: "none", padding: "medium",
               content: side.length ? side : [
                 block("Heading", { kicker: "Selling", text: "Sell your collection with us", level: "h3", size: "m" }),
                 block("Text", { size: "s", text: para("Looking to sell? From a single piece to a room of thousands, our Collections Team will guide you through the process — a free valuation, no lotting fees, and worldwide marketing at no extra cost.") }),
@@ -369,7 +363,7 @@ export async function seedFor(slug: string, title?: string): Promise<PageData> {
   }
   const name = title || BUILT_IN_PAGES.find(p => p.slug === slug)?.label || "New page"
   return pageData(name, [
-    block("PageHeader", { heading: name, background: "#1e1f5e", width: "standard" }),
+    block("PageHeader", { heading: name, background: BRAND.navy, width: "standard" }),
     block("Section", { width: "standard", paddingY: "large", content: [block("Text", { text: para("Start writing here — or drag blocks in from the left.") })] }),
   ])
 }

@@ -1,9 +1,9 @@
-"use client"
+// The FAQ page's built-in design, laid out as vectis.co.uk's: the title with its short navy rule,
+// a section per topic, and each question as a <details> fold-out — the browser opens and closes
+// them and turns the chevron on its own open state, so no script is needed and the page reads
+// whole before any JavaScript arrives. The page itself (./page.tsx) shows the page editor's
+// published version instead when there is one.
 
-// The FAQ page's built-in design (the fold-outs open and close in the browser). The page itself
-// (./page.tsx) shows the page editor's published version instead when there is one.
-
-import { useState } from "react"
 import Link from "next/link"
 
 const sections = [
@@ -124,86 +124,62 @@ const sections = [
   },
 ]
 
+// The in-page anchors ("#bidding", "#post-&-packing") are spelt exactly as they always were, so a
+// link made to one of them still lands.
+const anchor = (heading: string) => heading.toLowerCase().replace(/ /g, "-")
+
 function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false)
   return (
-    <div className="border-b border-gray-100 last:border-0">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between text-left py-4 px-0 gap-4 group"
-      >
-        <span className="text-gray-800 font-semibold text-sm group-hover:text-[#1e1f5e] transition-colors">
-          {q}
-        </span>
-        <svg
-          className={`w-5 h-5 text-gray-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    <details className="group border-b border-[var(--vs-line)]">
+      <summary className="flex items-center justify-between gap-4 py-4 cursor-pointer text-[18px] font-medium leading-snug text-[var(--vs-navy)] hover:text-[var(--vs-navy-dark)]">
+        <span>{q}</span>
+        <svg className="w-5 h-5 shrink-0 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
-      </button>
-      {open && (
-        <div className="pb-5 pr-8">
-          <p className="text-gray-600 text-sm leading-relaxed">{a}</p>
-        </div>
-      )}
-    </div>
+      </summary>
+      <p className="pb-5 pr-9 max-w-[760px] leading-relaxed">{a}</p>
+    </details>
   )
 }
 
 export default function FaqBuiltIn() {
   return (
-    <div className="bg-white">
+    <div className="vs-page">
+      <div className="vs-container">
+        <p className="mb-6"><Link href="/" className="vs-link vs-link-back vs-link-sm">Back to home</Link></p>
+        <h1 className="vs-h2 vs-rule">Frequently Asked Questions</h1>
 
-      {/* Hero */}
-      <div className="bg-[#1e1f5e] text-white py-16 px-6">
-        <div className="max-w-4xl mx-auto">
-          <p className="text-[#DB0606] text-xs font-black uppercase tracking-widest mb-3">Help Centre</p>
-          <h1 className="text-4xl font-black mb-4">Frequently Asked Questions</h1>
-          <p className="text-white/70 text-lg max-w-2xl">
+        <div className="max-w-[900px]">
+          <p className="vs-lead mt-8">
             Everything you need to know about bidding, buying, selling and shipping at Vectis Auctions.
           </p>
-        </div>
-      </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-14">
+          {/* Jump to a topic — the same anchors the sections carry. */}
+          <nav aria-label="FAQ topics" className="flex flex-wrap gap-x-6 gap-y-1 mt-5">
+            {sections.map(s => (
+              <a key={s.heading} href={`#${anchor(s.heading)}`} className="vs-link vs-link-sm min-h-[44px]">{s.heading}</a>
+            ))}
+          </nav>
 
-        {/* Quick links */}
-        <div className="flex flex-wrap gap-2 mb-12">
-          {sections.map(s => (
-            <a
-              key={s.heading}
-              href={`#${s.heading.toLowerCase().replace(/ /g, "-")}`}
-              className="text-xs font-bold uppercase tracking-widest border border-[#1e1f5e] text-[#1e1f5e] hover:bg-[#1e1f5e] hover:text-white px-4 py-2 transition-colors"
-            >
-              {s.heading}
-            </a>
-          ))}
-        </div>
-
-        <div className="space-y-12">
-          {sections.map(section => (
-            <section key={section.heading} id={section.heading.toLowerCase().replace(/ /g, "-")}>
-              <h2 className="text-xs font-black uppercase tracking-widest text-[#DB0606] mb-4 pb-2 border-b border-gray-200">
-                {section.heading}
-              </h2>
-              <div>
-                {section.faqs.map((faq, i) => (
-                  <FaqItem key={i} q={faq.q} a={faq.a} />
+          <div className="mt-10 space-y-12">
+            {sections.map(section => (
+              <section key={section.heading} id={anchor(section.heading)} className="scroll-mt-24">
+                <h2 className="vs-h3 pb-3 border-b border-[var(--vs-navy)]">{section.heading}</h2>
+                {section.faqs.map(faq => (
+                  <FaqItem key={faq.q} q={faq.q} a={faq.a} />
                 ))}
-              </div>
-            </section>
-          ))}
-        </div>
+              </section>
+            ))}
+          </div>
 
-        {/* Still need help */}
-        <div className="mt-16 bg-gray-50 border border-gray-200 p-8 text-center">
-          <h3 className="text-lg font-black text-gray-900 mb-2">Still have a question?</h3>
-          <p className="text-gray-500 text-sm mb-6">Our team is available Monday – Friday, 9:00 am – 5:00 pm.</p>
-          <div className="flex items-center justify-center gap-4 flex-wrap text-sm">
-            <a href="tel:+441642750616" className="text-[#1e1f5e] font-bold hover:underline">+44 (0)1642 750 616</a>
-            <span className="text-gray-300">|</span>
-            <a href="mailto:admin@vectis.co.uk" className="text-[#1e1f5e] font-bold hover:underline">admin@vectis.co.uk</a>
+          {/* Still need help */}
+          <div className="vs-band mt-16 p-8 text-center">
+            <h2 className="vs-h4 mb-2">Still have a question?</h2>
+            <p className="vs-muted mb-5">Our team is available Monday – Friday, 9:00 am – 5:00 pm.</p>
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2">
+              <a href="tel:+441642750616" className="vs-text-link">+44 (0)1642 750 616</a>
+              <a href="mailto:admin@vectis.co.uk" className="vs-text-link">admin@vectis.co.uk</a>
+            </div>
           </div>
         </div>
       </div>

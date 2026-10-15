@@ -5,12 +5,15 @@ import { DEFAULT_STYLE, type SlideStyle } from "./hero-style"
 // ONE rendering of a hero slide, used by the site's hero (home-hero.tsx) and by the Banner
 // Manager's preview — so what the editor shows is exactly what the site will show. No hooks, no
 // state: everything comes from the slide. `preview` swaps the links for plain spans.
+//
+// The look is vectis.co.uk's banner (2026-10-14): the picture fills the frame and a caption CARD
+// sits over it — a small line ("FEATURED"), the headline, a line of text, and a magenta button.
 export type SlideData = {
   title: string
   subtitle: string
   cta: string
   ctaHref: string
-  /** The picture's address (signed by the page), or null for the blue gradient. */
+  /** The picture's address (signed by the page), or null for the navy backdrop. */
   imageUrl?: string | null
   /** Which part of the picture stays when it is cropped to the frame: top / center / bottom. */
   imageFocus?: string | null
@@ -21,10 +24,20 @@ export type SlideData = {
 // bottom — the focus says which part stays (2026-09-24).
 export const focusPosition = (f?: string | null) => (f === "top" ? "center top" : f === "bottom" ? "center bottom" : "center center")
 
-const SIZE = { s: "text-3xl sm:text-4xl", m: "text-4xl sm:text-5xl", l: "text-5xl sm:text-6xl" } as const
-const WIDTH = { narrow: 512, medium: 672, wide: 896 } as const
-const VALIGN = { top: "justify-start pt-14", middle: "justify-center", bottom: "justify-end pb-16" } as const
-const ALIGN = { left: "items-start text-left mr-auto", center: "items-center text-center mx-auto", right: "items-end text-right ml-auto" } as const
+/** Relative luminance (sRGB, the WCAG way) — a headline colour under ~0.45 is dark enough for a white card. */
+function isLight(hex: string): boolean {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return false
+  const n = parseInt(m[1], 16)
+  const lin = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4) }
+  return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255) >= 0.45
+}
+
+const SIZE = { s: "text-[26px] sm:text-[30px]", m: "text-[30px] sm:text-[38px]", l: "text-[34px] sm:text-[46px]" } as const
+const WIDTH = { narrow: 400, medium: 480, wide: 600 } as const
+const VALIGN = { top: "justify-start pt-10", middle: "justify-center", bottom: "justify-end pb-16" } as const
+const ALIGN = { left: "items-start", center: "items-center", right: "items-end" } as const
+const TEXT_ALIGN = { left: "text-left", center: "text-center", right: "text-right" } as const
 const BUTTONS = { left: "justify-start", center: "justify-center", right: "justify-end" } as const
 
 function Btn({ href, preview, className, style, children }: { href: string; preview?: boolean; className: string; style?: CSSProperties; children: ReactNode }) {
@@ -35,52 +48,60 @@ function Btn({ href, preview, className, style, children }: { href: string; prev
 
 export default function SlideView({ slide: s, isLoggedIn, eager, preview }: { slide: SlideData; isLoggedIn: boolean; eager?: boolean; preview?: boolean }) {
   const st = s.style ?? DEFAULT_STYLE
+  // A slide saved before 2026-10-14 may carry white words (they sat straight on the picture then);
+  // on a white card they would vanish, so the card goes navy for light words and white for dark.
+  const darkCard = isLight(st.headlineColor)
   return (
     <>
-      {/* Background — the picture as it is, or the blue gradient when there is none. Nothing is laid
+      {/* Background — the picture as it is, or a navy backdrop when there is none. Nothing is laid
           over the picture unless this slide's own shade says so (Jordan: "remove the filter completely"). */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b3a] via-[#32348A] to-[#32348A]" />
+      <div className="absolute inset-0 bg-[#2e328e]" />
       {s.imageUrl ? (
         <img
           src={s.imageUrl}
-          alt={s.title}
+          alt=""
           className="absolute inset-0 w-full h-full object-cover"
           style={{ objectPosition: focusPosition(s.imageFocus) }}
           loading={eager ? "eager" : "lazy"}
+          fetchPriority={eager ? "high" : undefined}
         />
       ) : (
-        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "36px 36px" }} />
       )}
       {st.shade > 0 && <div className="absolute inset-0 bg-black" style={{ opacity: st.shade / 100 }} />}
 
-      <div className={`relative h-full flex flex-col px-12 ${VALIGN[st.valign]}`}>
-        <div className={`flex flex-col w-full ${ALIGN[st.align]}`} style={{ maxWidth: WIDTH[st.textWidth] }}>
-          {st.showKicker && (
-            <div className="flex items-center gap-2 mb-6">
-              <div className="h-px w-8" style={{ background: st.kickerColor }} />
-              <p className="text-[10px] font-black tracking-[0.35em] uppercase" style={{ color: st.kickerColor }}>{st.kicker}</p>
+      <div className={`relative h-full flex flex-col px-5 sm:px-10 ${VALIGN[st.valign]}`}>
+        <div className={`flex flex-col w-full ${ALIGN[st.align]}`}>
+          <div
+            className={`w-full flex flex-col px-6 py-6 sm:px-9 sm:py-8 ${TEXT_ALIGN[st.align]} ${darkCard ? "bg-[#2e328e]" : "bg-white"}`}
+            style={{ maxWidth: WIDTH[st.textWidth], boxShadow: "0 10px 30px rgba(0,0,0,0.18)" }}
+          >
+            {st.showKicker && (
+              <p className="vs-kicker mb-3" style={{ color: st.kickerColor }}>{st.kicker}</p>
+            )}
+            <h2 className={`font-normal leading-[1.05] mb-3 ${SIZE[st.headlineSize]}`} style={{ color: st.headlineColor }}>
+              {s.title}
+            </h2>
+            {s.subtitle && (
+              <p className="text-base leading-snug mb-6" style={{ color: st.subtextColor }}>
+                {s.subtitle}
+              </p>
+            )}
+            <div className={`flex flex-wrap gap-3 ${BUTTONS[st.align]}`}>
+              <Btn href={s.ctaHref} preview={preview} className="vs-btn vs-btn-lg" style={{ background: st.buttonBg, borderColor: st.buttonBg, color: st.buttonText }}>
+                {s.cta}
+              </Btn>
+              {st.second && (
+                <Btn href={st.second.href} preview={preview} className={`vs-btn vs-btn-lg ${darkCard ? "vs-btn-white" : "vs-btn-outline"}`}>
+                  {st.second.label}
+                </Btn>
+              )}
+              {st.showRegister && !isLoggedIn && (
+                <Btn href="/portal/register" preview={preview} className={`vs-btn vs-btn-lg ${darkCard ? "vs-btn-white" : "vs-btn-outline"}`}>
+                  Register free
+                </Btn>
+              )}
             </div>
-          )}
-          <h1 className={`font-black leading-none mb-5 uppercase tracking-tight ${SIZE[st.headlineSize]}`} style={{ color: st.headlineColor }}>
-            {s.title}
-          </h1>
-          <p className="text-sm mb-8 leading-relaxed max-w-lg" style={{ color: st.subtextColor }}>
-            {s.subtitle}
-          </p>
-          <div className={`flex flex-wrap gap-3 ${BUTTONS[st.align]}`}>
-            <Btn href={s.ctaHref} preview={preview} className="text-xs font-black uppercase tracking-widest px-7 py-3.5 hover:opacity-90 transition-opacity" style={{ background: st.buttonBg, color: st.buttonText }}>
-              {s.cta}
-            </Btn>
-            {st.second && (
-              <Btn href={st.second.href} preview={preview} className="border-2 text-xs font-black uppercase tracking-widest px-7 py-3.5 hover:opacity-80 transition-opacity" style={{ borderColor: st.headlineColor, color: st.headlineColor }}>
-                {st.second.label}
-              </Btn>
-            )}
-            {st.showRegister && !isLoggedIn && (
-              <Btn href="/portal/register" preview={preview} className="border-2 border-white/30 hover:border-white text-white text-xs font-black uppercase tracking-widest px-7 py-3.5 transition-colors">
-                REGISTER FREE
-              </Btn>
-            )}
           </div>
         </div>
       </div>

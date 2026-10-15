@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { io as ioClient } from "socket.io-client"
-import Image from "next/image"
 import Link from "next/link"
 import { lotPhotoUrl } from "@/lib/photo-url"
-import { format } from "date-fns"
+import { saleDateLong } from "../site-dates"
+
+// The takeover at the top of the Auction Calendar while a Hub sale is running: the lot under the
+// hammer large on the left with a caption card, and on the right the live panel — the way into
+// the bidding room, the lot, the current and asking bids, fair warning — on navy, like the home
+// page's live panel. The figures arrive over the same socket the bidding room uses.
 
 interface LotInfo {
   id: string
@@ -56,7 +60,7 @@ interface Props {
 
 function fmt(n: number | null | undefined) {
   if (!n && n !== 0) return "—"
-  return `£${n.toLocaleString()}`
+  return `£${n.toLocaleString("en-GB")}`
 }
 
 export default function LiveAuctionBanner({
@@ -90,179 +94,108 @@ export default function LiveAuctionBanner({
   const lastBid = lot?.bids?.[lot.bids.length - 1]
   const lastBidderName = lastBid?.bidderName ?? (lastBid ? lastBid.type : null)
 
-  return (
-    <div className="bg-white border-b border-gray-200">
+  const estLow = lot?.estimateLow ?? fallbackLot?.estimateLow ?? null
+  const estHigh = lot?.estimateHigh ?? fallbackLot?.estimateHigh ?? null
+  const dateLine = auctionDate ? saleDateLong(new Date(auctionDate)) : ""
+  const liveHref = `/auctions/${auctionCode}/live`
+  const lotsHref = `/auctions/${auctionCode}`
 
-      {/* ── Announcement bar ── */}
-      <div className="bg-[#555] text-white text-center text-xs py-2 px-4 font-medium">
-        {connected
-          ? `🔴 Live Auction in progress — ${lotsSold} of ${totalLots} lots sold · ${state?.onlineCount ?? 0} watching`
-          : "Connecting to live auction…"}
+  return (
+    <section className="bg-[var(--vs-navy)] text-white" aria-label="Live auction in progress">
+      {/* The red strip says what is happening, in numbers. */}
+      <div className="bg-[var(--vs-red)] px-4 py-2 text-center">
+        <p className="vs-caps text-xs inline-flex items-center gap-2" role="status">
+          <span className={`w-2 h-2 rounded-full bg-white shrink-0 ${connected ? "animate-pulse" : "opacity-50"}`} aria-hidden="true" />
+          {connected
+            ? `Live auction in progress · ${lotsSold} of ${totalLots} lots sold · ${state?.onlineCount ?? 0} watching`
+            : "Connecting to the live auction…"}
+        </p>
       </div>
 
-      {/* ── Main split layout ── */}
-      <div className="flex" style={{ minHeight: "560px" }}>
-
-        {/* LEFT — big lot image with overlay */}
-        <div className="relative flex-1 bg-[#32348A] overflow-hidden">
-          {displayImg ? (
-            <Image
-              src={displayImg}
-              alt={lot?.title ?? auctionName}
-              fill
-              className="object-cover"
-              priority
-             
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-[#32348A] to-[#4446a8]" />
-          )}
-
-          {/* Fair warning overlay */}
-          {fairWarning && (
-            <div className="absolute inset-0 bg-amber-500/20 animate-pulse z-10 pointer-events-none" />
-          )}
-
-          {/* Bottom-left info card */}
-          <div className="absolute bottom-10 left-8 z-20 bg-white p-5 max-w-xs shadow-xl">
-            <p className="text-[#c8923a] text-xs font-bold tracking-widest uppercase mb-2">FEATURED</p>
-            <h2 className="text-[#32348A] font-black text-2xl leading-tight mb-1">{auctionName}</h2>
-            {auctionDate && (
-              <p className="text-gray-600 text-sm mb-4">
-                {format(new Date(auctionDate), "EEEE do MMMM yyyy")}
-              </p>
-            )}
-            <Link
-              href={`/auctions/${auctionCode}`}
-              className="block w-full bg-[#32348A] hover:bg-[#28296e] text-white text-xs font-bold tracking-widest text-center py-3 px-6 uppercase transition-colors"
-            >
-              VIEW LOTS
-            </Link>
+      <div className="grid lg:grid-cols-[1fr_400px]">
+        {/* ── The lot under the hammer, large; the caption card sits over it, or under it on a phone ── */}
+        <div className="relative flex flex-col">
+          <div className="relative flex-1 bg-black aspect-[4/3] sm:aspect-auto sm:min-h-[420px] lg:min-h-[560px]">
+            {displayImg
+              ? <img src={displayImg} alt={lot?.title ?? auctionName} className="absolute inset-0 w-full h-full object-contain" />
+              : <div className="absolute inset-0 flex items-center justify-center"><img src="/vectis-logo.svg" alt="" width={160} height={64} className="opacity-30" /></div>}
+            {fairWarning && <div className="absolute inset-0 bg-[var(--vs-red)] opacity-25 animate-pulse pointer-events-none" aria-hidden="true" />}
           </div>
 
-          {/* Dot pagination */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
-            {Array.from({ length: Math.min(totalLots, 20) }).map((_, i) => (
-              <div
-                key={i}
-                className={`rounded-full transition-all ${
-                  i === (auction?.currentLotIndex ?? 0) % 20
-                    ? "w-3 h-3 bg-white"
-                    : "w-2 h-2 bg-white/40"
-                }`}
-              />
-            ))}
+          <div className="vs-card text-[var(--vs-ink)] p-5 m-4 sm:m-0 sm:absolute sm:left-8 sm:bottom-8 sm:w-80">
+            <p className="vs-kicker mb-2">Live now</p>
+            <h2 className="vs-h4 mb-1">{auctionName}</h2>
+            {dateLine && <p className="text-sm text-[var(--vs-muted)] mb-4">{dateLine}</p>}
+            <Link href={lotsHref} className="vs-btn vs-btn-block">View lots</Link>
           </div>
         </div>
 
-        {/* RIGHT — live panel */}
-        <div className="w-[420px] shrink-0 flex flex-col border-l border-gray-200 bg-white">
-
-          {/* Header */}
-          <div className="px-5 pt-5 pb-3 border-b border-gray-100">
-            <p className="text-[#2AB4A6] text-xs font-bold tracking-widest uppercase mb-0.5">LIVE AUCTION</p>
-            <h3 className="text-[#32348A] font-black text-xl leading-tight">{auctionName}</h3>
-            {auctionDate && (
-              <p className="text-gray-500 text-sm mt-0.5">
-                {format(new Date(auctionDate), "d MMMM yyyy")} | {format(new Date(auctionDate), "HH:mm")}
-              </p>
-            )}
+        {/* ── The live panel ── */}
+        <div className="flex flex-col gap-4 p-5 sm:p-6 border-t lg:border-t-0 lg:border-l border-white/15">
+          <div>
+            <p className="vs-caps text-xs text-white/70 mb-1">Live auction</p>
+            <h3 className="vs-h3 !text-white">{auctionName}</h3>
+            {dateLine && <p className="text-sm text-white/80 mt-1">{dateLine}</p>}
           </div>
 
-          {/* Video / stream area */}
-          <div className="relative bg-black mx-5 mt-4 rounded overflow-hidden" style={{ aspectRatio: "16/9" }}>
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-              {displayImg ? (
-                <Image src={displayImg} alt="" fill className="object-cover opacity-60" />
-              ) : null}
-              <div className="relative z-10 text-center">
-                <div className="w-14 h-14 rounded-full bg-white/20 border-2 border-white flex items-center justify-center mx-auto mb-2 cursor-pointer hover:bg-white/30 transition-colors">
-                  <svg className="w-6 h-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                </div>
-                <p className="text-white/70 text-xs">Live stream</p>
-              </div>
-            </div>
-            {/* LIVE badge */}
-            <div className="absolute top-2 right-2 z-20 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded tracking-widest">
-              LIVE
-            </div>
-          </div>
+          {/* The stream plays in the bidding room; this opens it. */}
+          <Link href={liveHref} className="relative block aspect-video bg-black overflow-hidden group" aria-label="Enter the bidding room">
+            {displayImg && <img src={displayImg} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:opacity-65 transition-opacity" />}
+            <span className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+              <span className="w-14 h-14 rounded-full border-2 border-white bg-white/15 group-hover:bg-white/30 transition-colors flex items-center justify-center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              </span>
+              <span className="vs-caps text-xs">Enter the bidding room</span>
+            </span>
+            <span className="vs-badge vs-badge-red absolute top-2 right-2 text-xs !px-3">Live</span>
+          </Link>
 
-          {/* Current lot info */}
-          <div className="mx-5 mt-3 flex gap-3 pb-3 border-b border-gray-100">
-            {/* Lot thumbnail */}
+          {/* The lot */}
+          <div className="flex gap-3 pb-4 border-b border-white/15">
             {displayImg && (
-              <div className="relative w-16 h-16 shrink-0 border border-gray-200 overflow-hidden rounded">
-                <Image src={displayImg} alt="" fill className="object-cover" />
+              <div className="w-16 h-16 shrink-0 bg-white overflow-hidden">
+                <img src={displayImg} alt="" className="w-full h-full object-contain" />
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-[#32348A] text-xs font-black tracking-widest uppercase">
-                LOT {lot?.barcode ?? fallbackLot?.barcode ?? "—"}
-              </p>
-              <p className="text-gray-700 text-sm font-medium leading-snug line-clamp-2">
-                {lot?.title ?? fallbackLot?.title ?? "Loading…"}
-              </p>
-              {(lot?.estimateLow || fallbackLot?.estimateLow) && (
-                <p className="text-gray-500 text-xs mt-0.5">
-                  Estimate: <strong className="text-gray-700">
-                    {fmt(lot?.estimateLow ?? fallbackLot?.estimateLow)} – {fmt(lot?.estimateHigh ?? fallbackLot?.estimateHigh)}
-                  </strong>
+              <p className="vs-caps text-xs text-white/70">Lot {lot?.barcode ?? fallbackLot?.barcode ?? "—"}</p>
+              <p className="font-medium leading-snug line-clamp-2">{lot?.title ?? fallbackLot?.title ?? "Loading…"}</p>
+              {(estLow || estHigh) && (
+                <p className="text-sm text-white/70 mt-0.5">
+                  Estimate: <span className="text-white">{fmt(estLow)} – {fmt(estHigh)}</span>
                 </p>
               )}
             </div>
           </div>
 
-          {/* Bid status */}
-          <div className="mx-5 mt-3 space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 font-medium">Current Bid:</span>
-              <div className="flex items-center gap-3">
-                <span className="text-gray-500 text-xs">{lastBidderName ?? "—"}</span>
-                <span className={`font-black text-lg transition-colors ${bidFlash ? "text-green-600" : "text-[#32348A]"}`}>
-                  {fmt(lot?.currentBid ?? 0)}
-                </span>
-              </div>
+          {/* The bidding — the current-bid box inverts for a moment as each new bid lands. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`px-3 py-2 transition-colors ${bidFlash ? "bg-white text-[var(--vs-navy)]" : "bg-black/30"}`}>
+              <p className={`text-xs uppercase tracking-wider mb-0.5 ${bidFlash ? "opacity-70" : "text-white/60"}`}>Current bid</p>
+              <p className="font-semibold text-lg leading-tight">{lot?.currentBid ? fmt(lot.currentBid) : "—"}</p>
+              {lastBidderName && <p className="text-xs opacity-70 truncate">{lastBidderName}</p>}
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 font-medium">Asking Bid:</span>
-              <span className="font-semibold text-gray-800">{fmt(lot?.askingBid)}</span>
+            <div className="px-3 py-2 bg-white/10 border border-white/30">
+              <p className="text-xs uppercase tracking-wider text-white/60 mb-0.5">Asking</p>
+              <p className="font-semibold text-lg leading-tight">{fmt(lot?.askingBid)}</p>
             </div>
-            {fairWarning && (
-              <div className="bg-amber-50 border border-amber-300 text-amber-700 text-xs font-bold text-center py-2 rounded tracking-wider animate-pulse">
-                ⚠️ FAIR WARNING
-              </div>
-            )}
           </div>
-
-          {/* Action buttons */}
-          <div className="mx-5 mt-4 mb-5 flex flex-col gap-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Link
-                href="/portal/register"
-                className="border-2 border-[#32348A] text-[#32348A] hover:bg-[#32348A] hover:text-white text-xs font-black text-center py-3 tracking-widest uppercase transition-colors"
-              >
-                BID LIVE
-              </Link>
-              <Link
-                href={`/auctions/${auctionCode}`}
-                className="bg-[#32348A] hover:bg-[#28296e] text-white text-xs font-black text-center py-3 tracking-widest uppercase transition-colors"
-              >
-                VIEW LOTS
-              </Link>
+          {fairWarning && (
+            <div className="text-center" role="status">
+              <span className="vs-badge vs-badge-red animate-pulse">Fair warning</span>
             </div>
-            <Link
-              href="/portal/register"
-              className="border border-gray-300 text-[#32348A] hover:bg-gray-50 text-xs font-bold text-center py-3 tracking-widest uppercase transition-colors"
-            >
-              APPROVED TO BID LIVE
-            </Link>
-          </div>
+          )}
 
+          {/* Where to go */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 mt-auto">
+            <Link href={liveHref} className="vs-btn vs-btn-red">Bid live now</Link>
+            <Link href={lotsHref} className="vs-btn vs-btn-white">View lots</Link>
+          </div>
+          <p className="text-sm text-white/80">
+            Not registered yet? <Link href="/portal/register" className="underline underline-offset-2 hover:text-white">Create an account</Link> to bid live.
+          </p>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

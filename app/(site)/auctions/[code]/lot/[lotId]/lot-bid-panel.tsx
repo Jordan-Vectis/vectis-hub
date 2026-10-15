@@ -118,18 +118,13 @@ export default function LotBidPanel({
   // Live auction — redirect to live room instead
   if (isLive) {
     return (
-      <div className="bg-red-50 border border-red-300 p-4 mb-6">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-          <p className="text-sm font-black text-red-700 uppercase tracking-widest">Auction Live Now</p>
-        </div>
-        <p className="text-xs text-red-600 mb-3">This auction is currently running live. Join to bid in real time.</p>
-        <a
-          href={`/auctions/${auctionCode}/live`}
-          className="inline-block bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 transition-colors"
-        >
-          Join Live Auction
-        </a>
+      <div className="vs-card-flat p-5">
+        <p className="vs-kicker mb-2 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[var(--vs-red)] animate-pulse shrink-0" aria-hidden="true" />
+          Auction live now
+        </p>
+        <p className="text-sm text-[var(--vs-muted)] mb-4">This auction is currently running live. Join to bid in real time.</p>
+        <a href={`/auctions/${auctionCode}/live`} className="vs-btn vs-btn-red">Join live auction</a>
       </div>
     )
   }
@@ -138,51 +133,48 @@ export default function LotBidPanel({
 
   return (
     <>
-      <div className="border border-[#32348A]/20 bg-white p-5 mb-6">
-        <h3 className="text-xs font-black uppercase tracking-widest text-[#32348A] mb-4">
-          {existingMaxBid ? "Update Your Commission Bid" : "Place a Commission Bid"}
+      <div className="vs-card-flat p-5">
+        <h3 className="vs-h4 mb-4">
+          {existingMaxBid ? "Update your commission bid" : "Place a commission bid"}
         </h3>
 
         {/* Existing bid reminder */}
         {existingMaxBid && (
-          <p className="text-sm text-gray-600 mb-4">
-            Your Maximum Bid:{" "}
-            <span className="font-black text-[#32348A]">
-              £{existingMaxBid.toLocaleString("en-GB")}
-            </span>
+          <p className="text-sm text-[var(--vs-muted)] mb-4">
+            Your maximum bid: <span className="vs-price">£{existingMaxBid.toLocaleString("en-GB")}</span>
           </p>
         )}
 
         {/* Bid stepper */}
         <div className="mb-4">
-          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
-            Maximum Bid
-          </label>
+          <label htmlFor="max-bid" className="vs-label">Maximum bid</label>
 
           <div className={`flex items-stretch border transition-colors ${
             belowMin || invalidIncrement
-              ? "border-red-400 focus-within:border-red-500"
-              : "border-gray-300 focus-within:border-[#32348A]"
+              ? "border-[var(--vs-red)]"
+              : "border-[var(--vs-line)] focus-within:border-[var(--vs-navy)]"
           }`}>
             {/* Decrement */}
             <button
               type="button"
               onClick={stepDown}
               disabled={bidAmount <= minBid}
-              className="px-4 py-3 text-lg font-black text-gray-500 hover:text-[#32348A] hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed border-r border-gray-300 transition-colors select-none"
+              aria-label="Lower the bid by one increment"
+              className="w-12 min-h-[48px] text-xl text-[var(--vs-navy)] hover:bg-[var(--vs-bg)] disabled:opacity-30 disabled:cursor-not-allowed border-r border-[var(--vs-line)] transition-colors select-none"
             >
               −
             </button>
 
             {/* Amount display / manual input */}
-            <div className="flex-1 flex items-center justify-center gap-1 px-4 py-3">
-              <span className="text-gray-400 font-bold text-lg">£</span>
+            <div className="flex-1 flex items-center justify-center gap-1 px-3 py-2">
+              <span className="text-[var(--vs-muted)] text-lg">£</span>
               <input
+                id="max-bid"
                 type="number"
                 min={minBid}
                 value={bidAmount}
                 onChange={e => handleManualInput(e.target.value)}
-                className="w-28 text-center text-2xl font-black text-[#32348A] focus:outline-none bg-transparent"
+                className="w-28 min-w-0 text-center text-2xl font-semibold text-[var(--vs-navy)] !border-0 focus:outline-none bg-transparent"
               />
             </div>
 
@@ -190,44 +182,37 @@ export default function LotBidPanel({
             <button
               type="button"
               onClick={stepUp}
-              className="px-4 py-3 text-lg font-black text-gray-500 hover:text-[#32348A] hover:bg-gray-50 border-l border-gray-300 transition-colors select-none"
+              aria-label="Raise the bid by one increment"
+              className="w-12 min-h-[48px] text-xl text-[var(--vs-navy)] hover:bg-[var(--vs-bg)] border-l border-[var(--vs-line)] transition-colors select-none"
             >
               +
             </button>
           </div>
 
-          <div className="flex items-center justify-between mt-1.5">
-            <p className="text-[10px] text-gray-400">
-              Min. bid: <span className="font-bold text-gray-600">£{minBid.toLocaleString("en-GB")}</span>
-            </p>
-            <p className="text-[10px] text-gray-400">
-              Increment: <span className="font-bold text-gray-600">£{currentIncrement}</span>
-            </p>
+          <div className="flex items-center justify-between mt-2 text-xs text-[var(--vs-muted)]">
+            <p>Minimum bid: <span className="text-[var(--vs-ink)]">£{minBid.toLocaleString("en-GB")}</span></p>
+            <p>Increment: <span className="text-[var(--vs-ink)]">£{currentIncrement}</span></p>
           </div>
 
           {/* Below minimum warning */}
           {belowMin && (
-            <p className="text-[11px] text-red-600 font-semibold mt-1.5 bg-red-50 border border-red-200 px-3 py-1.5">
+            <p className="text-sm text-[var(--vs-red)] mt-2">
               Minimum bid for this lot is £{minBid.toLocaleString("en-GB")}
             </p>
           )}
 
           {/* Invalid increment warning — offer to round up */}
           {invalidIncrement && suggestedAmount && (
-            <div className="mt-1.5 bg-amber-50 border border-amber-300 px-3 py-2.5 flex items-center justify-between gap-3">
+            <div className="mt-2 vs-band border border-[var(--vs-line)] px-3 py-2.5 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-bold text-amber-800">
+                <p className="text-sm">
                   £{bidAmount.toLocaleString("en-GB")} isn&apos;t a valid bid increment
                 </p>
-                <p className="text-[10px] text-amber-600 mt-0.5">
+                <p className="text-xs text-[var(--vs-muted)] mt-0.5">
                   The next valid amount is £{suggestedAmount.toLocaleString("en-GB")}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={acceptSuggestion}
-                className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 transition-colors whitespace-nowrap"
-              >
+              <button type="button" onClick={acceptSuggestion} className="vs-btn vs-btn-sm shrink-0">
                 Use £{suggestedAmount.toLocaleString("en-GB")}
               </button>
             </div>
@@ -236,13 +221,13 @@ export default function LotBidPanel({
 
         {/* Result messages */}
         {result?.error && (
-          <div className="bg-red-50 border border-red-300 px-3 py-2.5 mb-3">
-            <p className="text-xs font-bold text-red-700">{result.error}</p>
+          <div className="border border-[var(--vs-red)] px-3 py-2.5 mb-3" role="alert">
+            <p className="text-sm text-[var(--vs-red)]">{result.error}</p>
             {result.suggestedAmount && (
               <button
                 type="button"
                 onClick={() => { setBidAmount(result.suggestedAmount!); setResult(null) }}
-                className="mt-2 text-[10px] font-black text-red-700 underline uppercase tracking-wider"
+                className="vs-link vs-link-sm vs-link-plain mt-2"
               >
                 Use £{result.suggestedAmount.toLocaleString("en-GB")} instead
               </button>
@@ -250,10 +235,10 @@ export default function LotBidPanel({
           </div>
         )}
 
-        {/* Outbid notification — inline red text matching existing site style */}
+        {/* Outbid notification — red text, as the real site words it */}
         {result?.success && result.outbid && (
-          <div className="mb-3">
-            <p className="text-sm font-bold text-[#DB0606] leading-snug">
+          <div className="mb-3" role="status">
+            <p className="text-sm text-[var(--vs-red)] leading-snug">
               Another bidder has entered a higher maximum bid and you have been outbid!{" "}
               To have a chance of securing this lot, please increase your maximum bid.
             </p>
@@ -264,17 +249,17 @@ export default function LotBidPanel({
                 setBidAmount(newBid)
                 setResult(null)
               }}
-              className="mt-2 text-xs font-bold text-[#32348A] underline hover:text-[#DB0606] transition-colors"
+              className="vs-link vs-link-sm mt-2"
             >
-              Set bid to £{nextBid(result.currentLeadingBid ?? bidAmount).toLocaleString("en-GB")} to take the lead →
+              Set bid to £{nextBid(result.currentLeadingBid ?? bidAmount).toLocaleString("en-GB")} to take the lead
             </button>
           </div>
         )}
 
         {/* Bid placed successfully (not outbid) */}
         {result?.success && !result.outbid && (
-          <div className="bg-green-50 border border-green-300 text-green-700 text-xs font-semibold px-3 py-2 mb-3">
-            {result.updated ? "✓ Your bid has been updated." : "✓ Bid placed successfully! You are currently leading."}
+          <div className="border border-[var(--vs-navy)] text-[var(--vs-navy)] text-sm px-3 py-2 mb-3" role="status">
+            {result.updated ? "Your bid has been updated." : "Bid placed successfully. You are currently leading."}
           </div>
         )}
 
@@ -283,49 +268,54 @@ export default function LotBidPanel({
           type="button"
           onClick={handleBidClick}
           disabled={!canSubmit}
-          className="w-full bg-[#32348A] hover:bg-[#28296e] disabled:opacity-50 text-white font-black uppercase tracking-widest text-sm py-3 transition-colors mb-3"
+          className="vs-btn vs-btn-block vs-btn-lg mb-3"
         >
           {isPending
-            ? "Placing Bid…"
+            ? "Placing bid…"
             : !isLoggedIn
-            ? "Log In to Bid"
+            ? "Login to bid"
             : !isRegistered
-            ? "Register & Place Bid"
+            ? "Register & place bid"
             : existingMaxBid
             ? `Update to £${bidAmount.toLocaleString("en-GB")}`
-            : `Place Bid — £${bidAmount.toLocaleString("en-GB")}`}
+            : `Place bid — £${bidAmount.toLocaleString("en-GB")}`}
         </button>
 
         {/* Increment table toggle */}
         <button
           type="button"
           onClick={() => setShowTable(v => !v)}
-          className="w-full text-[10px] text-gray-400 hover:text-[#32348A] transition-colors text-center py-1"
+          aria-expanded={showTable}
+          className="vs-link vs-link-sm vs-link-plain mx-auto flex"
         >
-          {showTable ? "▲ Hide" : "▼ Show"} bid increment table
+          {showTable ? "Hide" : "Show"} bid increment table
         </button>
 
         {showTable && (
-          <div className="mt-3 border border-gray-200 text-xs overflow-hidden">
-            <div className="grid grid-cols-2 bg-gray-50 border-b border-gray-200 px-3 py-1.5">
-              <span className="font-black uppercase tracking-widest text-gray-400 text-[10px]">Bid Range</span>
-              <span className="font-black uppercase tracking-widest text-gray-400 text-[10px]">Increment</span>
-            </div>
-            {INCREMENT_TABLE.map((row, i) => {
-              const active = bidAmount >= row.from && (row.to === null || bidAmount < row.to)
-              return (
-                <div key={i} className={`grid grid-cols-2 px-3 py-1.5 border-b border-gray-100 last:border-b-0 ${active ? "bg-[#32348A]/5 font-bold text-[#32348A]" : "text-gray-500"}`}>
-                  <span>£{row.from.toLocaleString("en-GB")} {row.to ? `– £${row.to.toLocaleString("en-GB")}` : "+"}</span>
-                  <span>£{row.inc.toLocaleString("en-GB")}</span>
-                </div>
-              )
-            })}
-          </div>
+          <table className="w-full mt-3 text-sm border border-[var(--vs-line)]">
+            <thead>
+              <tr className="vs-band">
+                <th scope="col" className="vs-label !mb-0 text-left px-3 py-2">Bid range</th>
+                <th scope="col" className="vs-label !mb-0 text-left px-3 py-2">Increment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {INCREMENT_TABLE.map((row, i) => {
+                const active = bidAmount >= row.from && (row.to === null || bidAmount < row.to)
+                return (
+                  <tr key={i} className={`border-t border-[var(--vs-line)] ${active ? "bg-[var(--vs-bg)] font-semibold text-[var(--vs-navy)]" : "text-[var(--vs-muted)]"}`}>
+                    <td className="px-3 py-1.5">£{row.from.toLocaleString("en-GB")} {row.to ? `– £${row.to.toLocaleString("en-GB")}` : "+"}</td>
+                    <td className="px-3 py-1.5">£{row.inc.toLocaleString("en-GB")}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         )}
 
-        <p className="text-[10px] text-gray-400 mt-3 leading-relaxed text-center">
+        <p className="text-xs text-[var(--vs-muted)] mt-3 leading-relaxed text-center">
           Commission bids are executed on your behalf up to your maximum.
-          A buyer&apos;s premium of 22% + VAT applies to all winning lots.
+          A buyer&apos;s premium of 22.5% + VAT applies to all winning lots.
         </p>
       </div>
 

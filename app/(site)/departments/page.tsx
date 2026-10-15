@@ -18,9 +18,9 @@ export async function generateMetadata() {
 export default async function DepartmentsPage() {
   const page = await publishedPage("departments")
   if (page) return <PageBlocks data={page.data} />
+  // No kicker: vectis.co.uk heads this page with the title and a line of intro alone.
   return (
     <DepartmentsIndex
-      kicker="Specialist teams"
       heading="Departments"
       intro="Vectis has a number of specialist departments, each holding a series of auctions through the year. Pick a department for what we sell, highlighted lots, the latest news and past results."
     />
