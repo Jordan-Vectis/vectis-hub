@@ -2659,9 +2659,9 @@ export const MIGRATIONS = [
     "updatedAt"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "GoodsInAgreement_pkey" PRIMARY KEY ("contactId")
   )`,
-  `DO $ BEGIN
+  `DO $$ BEGIN
     ALTER TABLE "GoodsInAgreement" ADD CONSTRAINT "GoodsInAgreement_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "Contact"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  EXCEPTION WHEN duplicate_object THEN NULL; END $`,
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

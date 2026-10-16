@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"be4f95257def318bbf3a29e5d70960100bf92321","author":"jack-vectis","date":"2026-10-16T10:31:22+01:00","subject":"Goods In check-in: tote numbers and labels on the goods step, no fees step"},
   {"sha":"d8ba0de73de923f8af8a95a8e9d465d95168d0fe","author":"jack-vectis","date":"2026-10-16T09:07:17+01:00","subject":"Goods In Locations: filters, remove, bulk changes and a page per location"},
   {"sha":"6a589c71519b2fc7062a1fa132e1cf18deb150ad","author":"jack-vectis","date":"2026-10-15T15:51:52+01:00","subject":"Goods In: the Hub's own check-in replaces the Warehouse prototype"},
   {"sha":"de21416ab69aa70ab3b94ac27e35f4c0ed6d78d1","author":"jack-vectis","date":"2026-10-15T14:40:18+01:00","subject":"Add CONTRIBUTORS.md naming the Hub's developers"},
