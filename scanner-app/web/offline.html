@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Can't reach the Hub</title>
+<!--
+  Vectis Scanner's offline page. The app opens it (Capacitor server.errorPath) whenever the Hub's
+  page can't be loaded: no Wi-Fi, a Wi-Fi dead spot, or the Hub answering with an error (for
+  example while it restarts after an update).
+
+  It is served from inside the app at https://localhost/offline.html and that is the ONLY file the
+  app serves locally, so everything it needs is in this one file. The HUB placeholder in the script is filled in by
+  scripts/build-web.mjs when `cap sync` runs, with the Hub this build of the app belongs to.
+-->
+<style>
+  :root {
+    --bg: #030712; --card: #111827; --line: #1f2937; --text: #f9fafb; --muted: #9ca3af;
+    --go: #4f46e5; --go-hi: #6366f1; --warn-bg: #451a03; --warn-text: #fde68a; --warn-line: #b45309;
+    --ok: #34d399;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f3f4f6; --card: #ffffff; --line: #e5e7eb; --text: #111827; --muted: #4b5563;
+      --go: #4f46e5; --go-hi: #4338ca; --warn-bg: #fffbeb; --warn-text: #78350f; --warn-line: #f59e0b;
+      --ok: #047857;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 18px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+  main { flex: 1; display: flex; flex-direction: column; gap: 16px; max-width: 520px; width: 100%; margin: 0 auto; }
+  .banner {
+    border: 2px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-text);
+    border-radius: 14px; padding: 18px 16px;
+  }
+  h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.2; }
+  .banner p { margin: 0; font-size: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card p { margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  .safe { font-weight: 700; }
+  .safe::before { content: "\2713\00a0"; color: var(--ok); }
+  #status { color: var(--muted); font-size: 17px; min-height: 1.5em; margin: 0; }
+  button {
+    appearance: none; border: 0; border-radius: 14px; width: 100%; min-height: 72px;
+    font-family: inherit; font-weight: 700; font-size: 22px; line-height: 1.2;
+    color: #fff; background: var(--go);
+    cursor: pointer; touch-action: manipulation;
+  }
+  button:active, button:focus-visible { background: var(--go-hi); outline: 3px solid var(--go-hi); outline-offset: 2px; }
+  button[disabled] { opacity: 0.6; }
+  footer { margin-top: 16px; color: var(--muted); font-size: 15px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <div class="banner" role="alert">
+    <h1>Can't reach the Hub</h1>
+    <p id="why">This scanner can't get through to the Hub right now.</p>
+  </div>
+
+  <div class="card">
+    <p class="safe">Scans you've already made are safe on this scanner.</p>
+    <p>They send by themselves as soon as the Hub is back &mdash; you don't need to scan them again.</p>
+    <p>If you're in a Wi-Fi dead spot, walk back into signal. This page keeps trying on its own.</p>
+  </div>
+
+  <div class="card" id="old" hidden>
+    <p><strong>This scanner's web viewer is out of date.</strong></p>
+    <p id="old-text">The Hub needs Android System WebView 111 or newer. If the scan screen won't open even
+      with good Wi-Fi, ask IT to update Android System WebView on this scanner.</p>
+  </div>
+
+  <p id="status" aria-live="polite">&nbsp;</p>
+  <button id="retry" type="button">Try again now</button>
+</main>
+<footer id="hub">&nbsp;</footer>
+
+<script>
+(function () {
+  "use strict";
+  // Filled in by scripts/build-web.mjs: { url, label, name }.
+  var HUB = __HUB__;
+  var target = HUB.url.replace(/\/+$/, "") + "/scan";
+
+  var statusEl = document.getElementById("status");
+  var whyEl = document.getElementById("why");
+  var btn = document.getElementById("retry");
+  document.getElementById("hub").textContent =
+    HUB.label === "production" ? "Vectis Hub" : "Vectis Hub — " + HUB.name.replace(/^Vectis Scanner\s*/, "").replace(/[()]/g, "");
+
+  // The Hub's pages need Chrome 111 or newer (Next.js 16). On a scanner whose built-in web viewer is
+  // older, the Hub may not open at all, which would look exactly like no Wi-Fi — so say so.
+  // The app also opens this page straight away on such a scanner (android.minWebViewVersion 111).
+  // Retrying on its own would then only land on a Hub page that loads but doesn't work, so it
+  // doesn't: the card says what to do, and "Try anyway" is there for someone who wants to.
+  var chrome = /Chrome\/(\d+)/.exec(navigator.userAgent || "");
+  var oldViewer = !!(chrome && Number(chrome[1]) < 111);
+  if (oldViewer) {
+    document.getElementById("old").hidden = false;
+    document.getElementById("old-text").textContent =
+      "This scanner has Android System WebView " + chrome[1] + ", and the Hub needs 111 or newer. Ask IT " +
+      "to update Android System WebView on this scanner (from the Play Store, or a Newland firmware update).";
+    whyEl.textContent = "This scanner's web viewer is too old for the Hub.";
+    btn.textContent = "Try anyway";
+  }
+
+  // How many times in a row this page has been shown, so retries back off (5 s, 10 s, 20 s, then
+  // every 30 s). Kept for this session only; storage may be unavailable, so every use is guarded.
+  var KEY = "vectis-scanner-offline";
+  var attempts = 0;
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(KEY) || "null");
+    if (saved && typeof saved.n === "number" && Date.now() - saved.at < 3 * 60 * 1000) attempts = saved.n;
+  } catch (e) { attempts = 0; }
+
+  function remember(n) {
+    try { sessionStorage.setItem(KEY, JSON.stringify({ n: n, at: Date.now() })); } catch (e) { /* not needed */ }
+  }
+
+  var leaving = false;
+  function tryNow() {
+    if (leaving) return;
+    leaving = true;
+    btn.disabled = true;
+    statusEl.textContent = "Trying the Hub now…";
+    remember(attempts + 1);
+    // replace(), so Back doesn't land on this page again.
+    window.location.replace(target);
+  }
+
+  var delays = [5, 10, 20, 30];
+  var wait = delays[Math.min(attempts, delays.length - 1)];
+  var left = wait;
+  var online = navigator.onLine !== false;
+
+  function tick() {
+    if (leaving) return;
+    if (oldViewer) {
+      statusEl.textContent = "Not trying by itself until the web viewer is updated.";
+      return;
+    }
+    online = navigator.onLine !== false;
+    if (!online) {
+      whyEl.textContent = "This scanner isn't connected to Wi-Fi.";
+      statusEl.textContent = "Waiting for Wi-Fi — it'll try as soon as it's connected.";
+      left = 2; // try promptly once the connection comes back
+      return;
+    }
+    if (left <= 0) { tryNow(); return; }
+    statusEl.textContent = "Trying again in " + left + " second" + (left === 1 ? "" : "s") + "…";
+    left -= 1;
+  }
+
+  btn.addEventListener("click", tryNow);
+  window.addEventListener("online", function () { left = Math.min(left, 2); tick(); });
+  window.addEventListener("offline", tick);
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

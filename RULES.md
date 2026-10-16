@@ -1866,8 +1866,8 @@ the same way, never as an export of an actions file.
   still be printed, or downloaded and emailed by hand. A copy is kept in the mailbox's Sent Items.
   Microsoft 365 is listed as a processor on Data & Compliance and the DPIA for this.
 - **New tables only**: `GoodsInCustomer`, `GoodsInReceipt`, `GoodsInContainer`, `GoodsInLocation`,
-  `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth`, and (2026-10-16) `GoodsInAgreement`
-  (**NEEDS Run Migrations**). ⚠ **Nothing was
+  `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth`, and (2026-10-16) `GoodsInAgreement` and
+  `GoodsInScanEvent` (the handheld scanner's record, below) (**NEEDS Run Migrations**). ⚠ **Nothing was
   added to `Contact`, `CatalogueLot` or `User`** — a shipped-but-unmigrated column there breaks every
   contact or lot save, or login, between the deploy and Run Migrations. Keep it that way. Until the
   tables exist every Goods In screen says it isn't set up yet rather than crashing.
@@ -1908,7 +1908,7 @@ the same way, never as an export of an actions file.
   `/tools/warehouse/check-in?receipt=<receipt number>` (a receipt that isn't a draft opens its receipt
   page instead).
 - Registered in `lib/help-map.ts` (Book in · Receipt list · Scan to move · Benches · Code lookup ·
-  Locations & labels · Number series & email · Movement record · Fees & agreement). ⚠ Those names and their keywords avoid everyday words
+  Locations & labels · Number series & email · Movement record · Fees & agreement · Handheld scanner). ⚠ Those names and their keywords avoid everyday words
   ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that
   matches a tool the asker can't open, and a cataloguer asking "where do I find…" must never be told
   Goods In isn't part of their Hub.
@@ -1944,8 +1944,9 @@ the same way, never as an export of an actions file.
     CODE ORDER first (`… FROM (SELECT … ORDER BY "code" FOR UPDATE)`), the same order `removeLocations`
     uses, so two managers' overlapping changes queue instead of deadlocking; a deadlock that still
     happens is reported as "someone else was changing the same locations — nothing was changed".
-    ⚠ `moveTo` in `goods-in.ts` doesn't take the FOR SHARE lock yet (a single Scan to move racing a
-    remove of its target) — a known gap, not fixed in passing.
+    `moveTo` takes the same FOR SHARE lock on its target since 2026-10-16 (its rules moved into the
+    shared `moveItem` in `lib/goods-in/move-core.ts` for the handheld scanner — see below), so a single
+    Scan to move racing a remove of its target is covered too.
   - **The Locations screens never re-create or overwrite a location from a stale screen.** Add uses
     `createLocations` (reports "added by someone else a moment ago"), Edit and Change name or kind use
     `updateLocation` (writes only the fields that changed, and reports a location removed meanwhile
@@ -1980,3 +1981,155 @@ the same way, never as an export of an actions file.
   - **No new tables or columns.** Area, aisle, bay and shelf are worked out from the code
     (`parseLocationCode`); "last used" and "ever used" from `GoodsInMovement`. Removing is confirmed
     in the page (Confirm / Cancel), never with `window.confirm`.
+
+### 📱 Goods In → the handheld scanner: `/scan` and the Vectis Scanner app (2026-10-16)
+
+Jack: *"Right now we use scanners to locate things — they're Newland scanners. I need to make a hand
+scanner app."* He chose a real Android app — *"its not linked to pc purely for the Hub warehouse we
+have made"* — that **saves scans offline and sends them when it reconnects**, and **takes scans straight
+from the scanner** so a scan can't land in the wrong box, as a **thin wrapper around a scanner screen in
+the Hub**, not a separate build.
+
+- **Three parts, one set of rules.**
+  - **The screen** — `/scan` (`app/(scanner)/scan/`): its own full-screen, phone-sized, one-handed
+    layout with no Hub nav, gated like the warehouse pages (no Goods In access → a plain message and
+    sign in / sign out). Put away / Move, Find, Check a location. Works in any browser with a scanner
+    set to keyboard output. Its queue, sync and scanner input are `lib/goods-in/scan-client/`.
+  - **The app** — `scanner-app/`: a Capacitor 7 Android app whose WebView loads the Hub's `/scan`
+    (`server.url`), so it signs in with the Hub's own login and cookies. A small native plugin
+    (`NewlandScanner`) receives Newland scans by broadcast and hands them to the page; other brands and
+    plain browsers use keyboard output. Production, staging and sandbox builds install side by side.
+    It is its own project (own package.json) — not part of the Hub's dependencies, tsconfig, eslint or
+    Next build.
+  - **The server** — `app/api/goods-in/scan/{sync,bootstrap,lookup}`. The contract (types, limits, the
+    not-set-up message) is `lib/goods-in/scan-contract.ts`; change both sides together.
+- ⚠⚠ **A move from the scanner is exactly a move from Scan to move.** The rules — a tote or pallet by
+  its number, else the newest lot with that barcode; the target must exist and be switched on;
+  catalogued and returned keep their status, otherwise `STATUS_FOR_KIND`; one `GoodsInMovement` with
+  `fromCode`, note and who; a tote on a not-booked-in-yet check-in can still be moved — live ONCE, in
+  `moveItem` (`lib/goods-in/move-core.ts`), which `moveTo` and the sync both call, with the same
+  messages. Change them there; never fork them into the route or the screen. It locks the target
+  `FOR SHARE` (as `moveEverything` does), a tote or pallet `FOR UPDATE`, and a lot by a
+  transaction-scoped advisory lock on its id (`hashtext('goods-in-lot:' || id)`).
+  - `moveEverything` (`lib/actions/goods-in-locations.ts`) takes the same per-lot advisory lock for
+    every lot it moves, in lot-id order, then re-reads the lots' latest moves, so a lot a scanner
+    moved away while it waited drops out instead of being moved back. Any new code that moves lots
+    must take that lock too (with `$executeRaw` — the lock returns void, which `$queryRaw` can't read).
+- ⚠ **Nothing touches Business Central, and the login gate is unchanged.** `/scan` is behind the Hub
+  login like every Hub page (its service worker registers while signed in); the three API routes check
+  the session and Goods In access themselves (`gate()` — fresh from the database, effective session),
+  as every `/api` route must. Don't add `/scan` or its worker to `publicPaths`.
+  - ⚠⚠ **The service worker must stay an extensionless ROUTE — `app/(scanner)/scan/sw` (URL
+    `/scan/sw`) — never a `.js` file in `/public`.** `proxy.ts`'s matcher lets every `*.js` path
+    through without a login, so moving it to `public/scan-sw.js` would put it outside the login gate
+    without anyone touching `publicPaths`. The route sends `Service-Worker-Allowed: /scan` and is
+    registered with scope `/scan`, only from the /scan page.
+  - ⚠ **Signing in from a plain browser lands on `/hub`, not back on `/scan`** — `loginAction`
+    (`app/login/actions.ts`) always redirects to `/hub` and ignores `callbackUrl`. The app works round
+    it (below) and Switch user signs in on the screen itself; the fix is for login to honour a safe
+    same-origin relative `callbackUrl`.
+- **The offline queue.** Every scan is queued on the device (IndexedDB, localStorage as a fallback)
+  with its own uuid and the time it was scanned, and sent in scan order, at most 200 a call, to
+  `POST /api/goods-in/scan/sync` whenever the device is online. Nothing is dropped silently: an event
+  the server didn't answer stays queued. A service worker scoped to `/scan` lets the screen open with
+  no Wi-Fi, and the bootstrap (`GET …/bootstrap` — who is signed in, which Hub, every location) is kept
+  so location codes are still recognised offline. Find (`GET …/lookup`) is online only and says so
+  (it does say what THIS scanner last did with the item, from its own queue).
+  - **What the service worker does** (`app/(scanner)/scan/sw/source.ts`): the /scan page is network
+    first with a 4-second fallback to the saved copy (a Wi-Fi dead spot doesn't leave it hanging); only
+    a page carrying `data-scan-ready` is saved — never the sign-in page, a redirect or the no-access
+    message. ⚠ A page that ISN'T the one loading its own files (the slow answer that arrives after the
+    copy was shown, or the copy fetched on a first visit) is saved only once every `/_next/static/`
+    file it names is in the cache; otherwise the old copy is kept. A new build saved without its chunks
+    would open offline looking normal and never take a scan. Next's static files are
+    stale-while-revalidate; the bootstrap falls back to a saved copy marked `X-Scan-From-Cache: 1`. It
+    never handles a POST, a lookup or any other route. Signing out or switching user deletes the saved
+    page and bootstrap (they are one person's).
+  - The queue asks the browser to keep its storage (`navigator.storage.persist()`); a plain browser
+    that won't promise it is named in the screen's settings.
+- ⚠⚠ **Idempotent by event id — `GoodsInScanEvent`.** Each event's row is inserted FIRST, in the SAME
+  transaction as its move (on conflict do nothing), then given its outcome. A retry after a lost answer,
+  or two sync calls racing, waits for the first, finds the row and answers **already** — a scan is
+  applied once or not at all. One transaction per event, in order. Outcomes: **applied** · **already**
+  · **refused** (in plain words — unknown item or location, switched off, already there, too old; it is
+  RECORDED, so it isn't retried for ever, and a replay answers the same) · **stale**.
+- ⚠ **The stale rule.** A scan whose item has a recorded move NEWER than the scan (its latest
+  `GoodsInMovement`, or the tote's `movedAt`) — someone moved it since — is NOT applied; the message
+  says who moved it, where and when. An applied move is stamped with the time it was SCANNED, not when
+  it arrived, so History reads in the order things really happened. A `scannedAt` in the future is
+  taken as now; older than 7 days is refused as too old. ⚠ The rule compares the scanner's clock with
+  the Hub's, so a scanner whose clock is wrong can be told "stale" wrongly — keep the devices on
+  automatic time. The screen corrects its own stamps with the Hub's clock (from every answer, and saved
+  for a reload with no Wi-Fi) and shows a red strip when the device is more than 5 minutes out.
+- **Shared devices.** Every scan carries `scannedBy` — the person signed in when it was made — and the
+  sync refuses one sent by anyone else ("Scanned by someone else — sign in as them to send it"). That
+  refusal alone is NOT recorded, so signing in as them still sends it. The screen blocks Switch user
+  while scans are waiting (sending them first when online). Moves are recorded under the effective
+  user, as `moveTo` does. After 20 minutes with no scan or tap the next scan asks **"Still (their name)?"**
+  (that scan isn't used), so the next person to pick a scanner up doesn't scan under the last one's
+  name; and a location that stays set is let go after 10 minutes with no scan.
+- **The screen's feedback.** The banner answering each scan sits OUTSIDE the scrolling part, so it is
+  on screen however far down the lists someone has scrolled — keep it there. Every answer to a scan
+  beeps and buzzes; "Location set" and "Checking …" have their own two rising pips, because from then
+  on every item goes to that place. Refused and stale scans stay in "Need a look" on every screen until
+  dismissed, with a red button to them in the status bar. In keyboard mode a scanner's burst typed
+  into one of the screen's own boxes (the note, Type a code) is caught as a scan and taken back out
+  of the box (`lib/goods-in/scan-client/scanner.ts`), so it is never lost or sent as a note.
+- ⚠⚠ **Run Migrations.** `GoodsInScanEvent` is a new table (one row per scan: who, which device, item,
+  location, when scanned and when received, outcome, message — in `lib/data-map.ts` as staff data).
+  Until it exists the sync answers **503 "Goods In scanner isn't set up — an admin needs to press Run
+  Migrations."** before touching anything, the scanner keeps its queue, and the bootstrap says
+  `ready: false`. Nothing was added to `Contact`, `CatalogueLot` or `User`.
+- **A call that can't finish.** The sync stops starting new events after about 25 seconds, and stops at
+  any unexpected error (a lock, a timeout, the connection, a fault in the Hub's own code): the events
+  already done are answered, the rest get no result (`unsent`, with `error` saying why) and stay queued.
+  ⚠ Only a fault in one scan's own DATA (a value the database won't store) is recorded as a refusal,
+  so one bad scan can't hold up the queue behind it. Don't widen that to "any error": a bug would then
+  turn every scanner's backlog into refusals that have to be redone by hand.
+  - ⚠ **The timings fit together**: 25 s, plus one event's worst case (5 s waiting for a connection, 10 s
+    running), stays inside the screen's 50-second wait for an answer (`postSync`). An answer that
+    arrives later is lost on the screen and read as "no Wi-Fi". Change them together.
+  - A `scannedAt` before 2020 (a scanner's clock reset after a battery pull, or a value Postgres can't
+    store) is treated as no time and refused — recorded — rather than failing the call on every retry.
+- **The build.** GitHub builds the APKs (`.github/workflows/scanner-app.yml` — a push to `staging` or
+  `main` that touches `scanner-app/**`, or run by hand); nothing is built on anyone's PC. Release builds
+  are signed with a key held ONLY as GitHub secrets (`SCANNER_KEYSTORE_BASE64`,
+  `SCANNER_KEYSTORE_PASSWORD`, `SCANNER_KEY_ALIAS`, `SCANNER_KEY_PASSWORD`), made once by
+  `scanner-app/scripts/make-signing-key.mjs`, which saves the keystore and its passwords to
+  `Documents\Vectis Scanner signing key\` on the PC that ran it — never the repo — and never prints a
+  secret. ⚠⚠ **Keep that key safe**: an update installs over the old app only when it is signed with the
+  SAME key. Lose it and every scanner has to uninstall the app (losing any scans still queued on it)
+  and install afresh. Without the secrets the workflow still builds, debug-signed, and says so loudly;
+  ⚠ with the secrets present but not fitting together (wrong password or alias, cut-short base64) it
+  builds NOTHING, so a wrongly signed app can't go out. "Run workflow" only appears once the workflow
+  file is on `main` (the default branch); until then a push under `scanner-app/` or "Re-run all jobs"
+  builds. ⚠ Check every `run:` block with `bash -n` before pushing — an apostrophe inside a
+  `${var:-word}` in double quotes broke the summary step once, which turns every run red.
+  The install guide for the Newland scanners is `scanner-app/README.md`.
+- **App facts** (`scanner-app/`):
+  - **JDK 21, not 17** — Capacitor 7's Android code is compiled for Java 21. **targetSdk 36** (Play's
+    level since 31 Aug 2026), which needs Android build plugin **8.10.1**; Gradle 8.11.1; minSdk 24.
+  - The NewlandScanner plugin takes scans by broadcast (`nlscan.action.SCANNER_RESULT` /
+    `SCAN_BARCODE1`, the older `com.android.server.scannerservice.broadcast` / `scannerdata`, and one
+    custom broadcast for other makes) and, while the app is on screen, sets the scan service to API
+    output (`ACTION_BAR_SCANCFG`, `EXTRA_SCAN_MODE` 3). ⚠ When the app leaves the screen it sets
+    `plugins.NewlandScanner.keyboardOutputMode` in `capacitor.config.ts` — **2 "Simulate keystroke"
+    by default**, 1 = Fill in EditText, 3 = API output, 0 = send nothing. Newland gives no way to read
+    the setting from before, so it is a device-wide change: check what else scans on those devices
+    (another app may need 3) before the first rollout.
+  - A scan that arrives while the page has no plugin listener is offered as a cancelable
+    `vectis-scan` window event; the page takes it with `preventDefault()`, and one nobody takes shows
+    "Scan not taken — scan it again". Back is offered to the page first as a cancelable `vectis:back`
+    event (the screen uses it to cancel signing in, put down a waiting item, or let go of a location
+    that stays set), then steps back through `/scan` pages, and only closes the app after asking.
+  - The Hub's login always lands on `/hub`, so inside the app arriving at `/hub`, `/submissions` or
+    `/` goes straight back to `/scan`.
+  - The offline page (`server.errorPath`) is for the Hub being unreachable or answering 5xx only; a
+    Hub 404 or 403 shows the Hub's own page (`ScannerWebViewClient`). Keep
+    `android.resolveServiceWorkerRequests` on, or the page the service worker serves offline has no
+    native bridge and scans taken straight from the scanner are lost.
+  - Scanners need **Android System WebView 111 or newer** (Next 16 / Tailwind v4):
+    `android.minWebViewVersion: 111` opens the offline page instead on an older one, which says so and
+    doesn't retry by itself.
+- Registered in `lib/help-map.ts` as **"Goods In → Handheld scanner"** — never plain "Scanner", which
+  would refuse a cataloguer whose tablet "scanner isn't working" with Goods In.

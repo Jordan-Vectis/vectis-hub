@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"9796646cdbe209a594091229f42bbea295613771","author":"jack-vectis","date":"2026-10-16T11:18:37+01:00","subject":"Goods In: Fees & agreement tab on the customer page, and a tidier check-in"},
   {"sha":"859ace046ee71d170b14075a509431b33da53aa9","author":"jack-vectis","date":"2026-10-16T10:40:53+01:00","subject":"Fix the Goods In agreement migration: the foreign-key step lost one $ of its $$ quoting"},
   {"sha":"be4f95257def318bbf3a29e5d70960100bf92321","author":"jack-vectis","date":"2026-10-16T10:31:22+01:00","subject":"Goods In check-in: tote numbers and labels on the goods step, no fees step"},
   {"sha":"d8ba0de73de923f8af8a95a8e9d465d95168d0fe","author":"jack-vectis","date":"2026-10-16T09:07:17+01:00","subject":"Goods In Locations: filters, remove, bulk changes and a page per location"},

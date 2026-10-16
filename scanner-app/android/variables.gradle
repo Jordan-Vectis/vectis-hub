@@ -1,0 +1,20 @@
+ext {
+    // Vectis Scanner: Android 7.0 (API 24) and newer, which covers every Newland Android scanner
+    // still on sale. Targets API 36 (Android 16) — the level Google Play requires from 31 Aug 2026.
+    // Capacitor 7's own template ships 23 / 35 / 35; API 36 needs the Android Gradle plugin 8.9.1 or
+    // newer, so android/build.gradle uses 8.10.1 (still on the template's Gradle 8.11.1).
+    minSdkVersion = 24
+    compileSdkVersion = 36
+    targetSdkVersion = 36
+    androidxActivityVersion = '1.9.2'
+    androidxAppCompatVersion = '1.7.0'
+    androidxCoordinatorLayoutVersion = '1.2.0'
+    androidxCoreVersion = '1.15.0'
+    androidxFragmentVersion = '1.8.4'
+    coreSplashScreenVersion = '1.0.1'
+    androidxWebkitVersion = '1.12.1'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.2.1'
+    androidxEspressoCoreVersion = '3.6.1'
+    cordovaAndroidVersion = '10.1.1'
+}

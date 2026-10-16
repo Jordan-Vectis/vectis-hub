@@ -1,0 +1,17 @@
+# Vectis Scanner app (see README.md)
+node_modules/
+
+# Built from web/ by scripts/build-web.mjs on every `cap sync`
+www/
+
+# Build outputs
+*.apk
+*.aab
+
+# Signing keys never live in the repo (scripts/make-signing-key.mjs saves them in Documents)
+*.p12
+*.pfx
+*.jks
+*.keystore
+KEEP THIS SAFE*
+SCANNER_KEYSTORE_BASE64*

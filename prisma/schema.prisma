@@ -1272,6 +1272,27 @@ model GoodsInMailAuth {
   updatedAt    DateTime @updatedAt
 }
 
+/// Every scan the handheld scanner app (/scan, and the Android app around it) sent in. The id is the
+/// scanner's own id for that scan, so a scan sent twice (a retry after the Wi-Fi dropped, or the
+/// offline queue replaying) is applied once. Scans made offline carry the time they were scanned;
+/// receivedAt is when the Hub got them. No link to User on purpose (never add to User).
+model GoodsInScanEvent {
+  id         String   @id
+  userId     String
+  userName   String?
+  deviceId   String?
+  action     String
+  item       String?
+  location   String?
+  scannedAt  DateTime
+  receivedAt DateTime @default(now())
+  outcome    String
+  message    String?
+
+  @@index([userId, receivedAt])
+  @@index([deviceId, receivedAt])
+}
+
 model Parcel {
   id        String @id @default(cuid())
   reference String @unique @default(cuid())

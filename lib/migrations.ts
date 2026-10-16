@@ -2662,6 +2662,24 @@ export const MIGRATIONS = [
   `DO $$ BEGIN
     ALTER TABLE "GoodsInAgreement" ADD CONSTRAINT "GoodsInAgreement_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "Contact"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Goods In scanner app (2026-10-16) — every scan the handheld scanner sent in, keyed by the scanner's
+  // own id for it so an offline scan replayed twice is applied once. New table only, no foreign keys.
+  `CREATE TABLE IF NOT EXISTS "GoodsInScanEvent" (
+    "id"         TEXT NOT NULL,
+    "userId"     TEXT NOT NULL,
+    "userName"   TEXT,
+    "deviceId"   TEXT,
+    "action"     TEXT NOT NULL,
+    "item"       TEXT,
+    "location"   TEXT,
+    "scannedAt"  TIMESTAMP(3) NOT NULL,
+    "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "outcome"    TEXT NOT NULL,
+    "message"    TEXT,
+    CONSTRAINT "GoodsInScanEvent_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInScanEvent_userId_receivedAt_idx" ON "GoodsInScanEvent"("userId", "receivedAt")`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInScanEvent_deviceId_receivedAt_idx" ON "GoodsInScanEvent"("deviceId", "receivedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Android scanner app is its own project (own package.json, generated Android code).
+    "scanner-app/**",
   ]),
 ]);
 

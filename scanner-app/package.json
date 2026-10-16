@@ -1,0 +1,26 @@
+{
+  "name": "vectis-scanner-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vectis Scanner: the Android app for the Newland handheld scanners. A thin Capacitor wrapper around the Hub's /scan screen. Not part of the Hub's Next.js build.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "sync": "cap sync android",
+    "capacitor:copy:before": "node scripts/build-web.mjs",
+    "make-signing-key": "node scripts/make-signing-key.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "7.6.9",
+    "@capacitor/core": "7.6.9",
+    "@capacitor/haptics": "7.0.5"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "7.6.9",
+    "@types/node": "20.19.43",
+    "node-forge": "1.4.0",
+    "typescript": "5.9.3"
+  }
+}

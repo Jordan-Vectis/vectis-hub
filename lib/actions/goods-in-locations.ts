@@ -26,7 +26,8 @@ import type { Result } from "@/lib/actions/goods-in"
 // two managers changing overlapping lists queue rather than deadlock. moveEverything holds its
 // target location FOR SHARE, so a remove or switch-off of that location waits for the move (and
 // then sees the goods), or the move waits for it (and then finds it gone or switched off) — goods
-// can never land at a location being deleted. (moveTo in goods-in.ts doesn't take that lock yet.)
+// can never land at a location being deleted. moveTo and the handheld scanner (through moveItem in
+// lib/goods-in/move-core.ts) take the same FOR SHARE lock on their target, and the same per-lot lock.
 
 export type BulkProblem = { code: string; reason: string }
 
@@ -428,7 +429,7 @@ export async function moveEverything(fromCode: string, toCode: string, note?: st
       // Lots whose LATEST move is to `from` (a lot's shelf is its latest move). Each new move carries
       // the lot's barcode as it is NOW — as moveTo records it — so a barcode corrected in the lot
       // editor since it was shelved is the one History finds.
-      const lots = await tx.$queryRaw<{ lotId: string; barcode: string | null }[]>`
+      const findLots = () => tx.$queryRaw<{ lotId: string; barcode: string | null }[]>`
         SELECT latest."lotId", COALESCE(cl."barcode", latest."barcode") AS "barcode"
         FROM (
           SELECT DISTINCT ON (m."lotId") m."lotId", m."barcode", m."locationCode"
@@ -439,7 +440,18 @@ export async function moveEverything(fromCode: string, toCode: string, note?: st
           ORDER BY m."lotId", m."movedAt" DESC
         ) latest
         LEFT JOIN "CatalogueLot" cl ON cl."id" = latest."lotId"
-        WHERE latest."locationCode" = ${from}`
+        WHERE latest."locationCode" = ${from}
+        ORDER BY latest."lotId"`
+      let lots = await findLots()
+      // The same per-lot lock a single move takes (moveItem in lib/goods-in/move-core.ts), in id
+      // order so two bulk moves queue rather than deadlock; then read again, so a lot a scan moved
+      // away while we waited isn't moved back.
+      if (lots.length > 0 && lots.length <= MAX_BULK_LOCATIONS) {
+        const ids = lots.map(l => `goods-in-lot:${l.lotId}`)
+        // $executeRaw, not $queryRaw: the lock returns void, which Prisma can't read back as a row.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(t.k)) FROM unnest(${ids}::text[]) WITH ORDINALITY AS t(k, n) ORDER BY t.n`
+        lots = await findLots()
+      }
 
       const total = containers.length + lots.length
       if (total === 0) throw new Refusal(`There's nothing at ${from} to move.`)

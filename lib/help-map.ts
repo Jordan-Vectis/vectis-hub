@@ -221,6 +221,20 @@ export const DESTINATIONS: Destination[] = [
     what: "Scan a tote, pallet or lot barcode, then the label of the location it is going to, and the move is recorded with your name and the time. Moving a tote to a bench marks it as being catalogued; a finished lot is moved onto its shelf the same way.",
     also: ["put away", "putting away", "move a tote", "move a pallet", "move a lot to a shelf", "put a lot on a shelf", "shelve a lot", "take a tote to a bench", "scan a location"],
   },
+  // The handheld scanner screen and the Vectis Scanner app (2026-10-16). ⚠ Named "Handheld scanner",
+  // never plain "Scanner": a name part scores the moment it appears as a word, so "Goods In →
+  // Scanner" would refuse a cataloguer whose tablet "scanner isn't working" with Goods In. Every
+  // keyword names the handheld or its app. No `ask`, so the Goods In suggestions stay as they were.
+  {
+    name: "Goods In → Handheld scanner", href: "/scan", app: "WAREHOUSE",
+    what: "A phone-sized Goods In screen for the warehouse's handheld scanners, at /scan — in any browser with a scanner set to keyboard output, or in the Vectis Scanner app on the Newland scanners, which opens the same screen and takes each scan straight from the scanner. Put away / Move (scan the tote, pallet or lot, then the location; or scan a location first and everything scanned after goes there until Done), Find (what a code is and where it is now — needs Wi-Fi) and Check a location. Scans made with no Wi-Fi are kept on the scanner and sent in order when it reconnects: each is applied once even if it is sent twice, stamped with the time it was scanned, and one whose item someone else has moved since isn't applied — it says who moved it, where and when. The top of the screen shows who is signed in; on a shared scanner use Switch user (the waiting scans are sent first). Until an admin has pressed Run Migrations for it, scans wait on the scanner rather than being sent. The app is built by GitHub and its install file comes from there.",
+    also: [
+      "handheld scanner", "handheld scanners", "the handheld", "scanner app", "vectis scanner", "vectis scanner app",
+      "newland scanner app", "install the scanner app", "update the scanner app", "scanner apk", "goods in scanner",
+      "scan offline", "scanning offline", "scans waiting to send", "scans not sent", "send the waiting scans",
+      "switch user on the scanner", "scanner switch user", "stale scan",
+    ],
+  },
   {
     name: "Goods In → Benches", href: "/tools/warehouse/bench", app: "WAREHOUSE",
     what: "What is at each cataloguing bench right now — the totes and pallets waiting to be made into lots, and whose they are.",

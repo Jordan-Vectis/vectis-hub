@@ -7,12 +7,13 @@ import { GoodsInAccessError, atLeast, requireGoodsIn } from "@/lib/goods-in/acce
 import type { WarehouseRole } from "@/lib/apps"
 import { NumberingNotSetError, takeNumbers } from "@/lib/goods-in/numbers"
 import {
-  COUNTERS, DEFAULT_TERMS, LABEL_GIVEN_UP_NOTE, STATUS_FOR_KIND, THROWN_AWAY_NOTE, normaliseCode,
+  COUNTERS, DEFAULT_TERMS, LABEL_GIVEN_UP_NOTE, THROWN_AWAY_NOTE, normaliseCode,
   type ContainerKind, type ContainerStatus, type CounterKey, type LocationKind, type ReceiptTerms,
 } from "@/lib/goods-in/model"
 import { LOCATION_CODE_HELP, LOCATION_CODE_RULE } from "@/lib/goods-in/location-codes"
 import { CUSTOMER_INCLUDE, customerRow, snapshot } from "@/lib/goods-in/customer-row"
 import { AGREEMENT_UNREAD, findAgreement } from "@/lib/goods-in/agreement"
+import { moveItem } from "@/lib/goods-in/move-core"
 
 // Goods In — every write, and the reads the screens share. SERVER ONLY (server actions).
 //
@@ -431,39 +432,17 @@ export async function lookupCode(raw: string): Promise<Result<ScanHit | null>> {
 /**
  * Move a tote, pallet or single lot (by its barcode) to a location. Moving a tote to a BENCH
  * marks it as being catalogued; to storage, as stored. A lot's location is simply its latest move.
+ *
+ * ⚠ The rules themselves are moveItem in lib/goods-in/move-core.ts, shared with the handheld
+ * scanner's sync (app/api/goods-in/scan/sync) — change them THERE, never by forking them here.
  */
 export async function moveTo(rawItem: string, rawLocation: string, note?: string | null): Promise<Result<{ item: string; locationCode: string; kind: LocationKind }>> {
   try {
     const me = await who()
-    const item = normaliseCode(rawItem)
-    const locationCode = normaliseCode(rawLocation)
-    const loc = await prisma.goodsInLocation.findUnique({ where: { code: locationCode } })
-    if (!loc) return { ok: false, error: `There's no location ${locationCode} — add it in Goods In → Locations first.` }
-    if (loc.active === false) return { ok: false, error: `Location ${locationCode} is switched off.` }
-    const kind = (loc.kind as LocationKind) ?? "storage"
-
-    const container = await prisma.goodsInContainer.findUnique({ where: { id: item } })
-    if (container) {
-      if (container.locationCode === locationCode) return { ok: false, error: `${item} is already at ${locationCode}.` }
-      const status = container.status === "catalogued" || container.status === "returned" ? container.status : STATUS_FOR_KIND[kind]
-      await prisma.$transaction([
-        prisma.goodsInMovement.create({ data: { containerId: item, locationCode, fromCode: container.locationCode, note: blank(note), movedById: me.id, movedByName: me.name } }),
-        prisma.goodsInContainer.update({ where: { id: item }, data: { locationCode, locationKind: kind, movedAt: new Date(), status } }),
-      ])
-      revalidatePath("/tools/warehouse", "layout")
-      return { ok: true, data: { item, locationCode, kind } }
-    }
-
-    // Newest lot with the barcode — the one Find shows first; an older lot with it has moved on.
-    const lot = await prisma.catalogueLot.findFirst({ where: { barcode: { equals: item, mode: "insensitive" } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, barcode: true } })
-    if (lot) {
-      const last = await prisma.goodsInMovement.findFirst({ where: { lotId: lot.id }, orderBy: { movedAt: "desc" }, select: { locationCode: true } })
-      if (last?.locationCode === locationCode) return { ok: false, error: `${item} is already at ${locationCode}.` }
-      await prisma.goodsInMovement.create({ data: { lotId: lot.id, barcode: lot.barcode, locationCode, fromCode: last?.locationCode ?? null, note: blank(note), movedById: me.id, movedByName: me.name } })
-      revalidatePath("/tools/warehouse", "layout")
-      return { ok: true, data: { item: lot.barcode ?? item, locationCode, kind } }
-    }
-    return { ok: false, error: `${item} isn't a tote, pallet or lot barcode the Hub knows.` }
+    const r = await prisma.$transaction(tx => moveItem(tx, me, rawItem, rawLocation, { note }), { timeout: 15_000 })
+    if (!r.ok) return { ok: false, error: r.error }
+    revalidatePath("/tools/warehouse", "layout")
+    return { ok: true, data: { item: r.item, locationCode: r.locationCode, kind: r.kind } }
   } catch (e) { return fail(e) }
 }
 
