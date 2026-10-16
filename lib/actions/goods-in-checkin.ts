@@ -6,9 +6,10 @@ import { revalidatePath } from "next/cache"
 import { GoodsInAccessError, requireGoodsIn } from "@/lib/goods-in/access"
 import { NumberingNotSetError, takeNumbers } from "@/lib/goods-in/numbers"
 import {
-  DEFAULT_TERMS, LABEL_GIVEN_UP_NOTE, THROWN_AWAY_NOTE, labelsGivenUp, normaliseCode, type ContainerKind, type ReceiptTerms,
+  DEFAULT_TERMS, LABEL_GIVEN_UP_NOTE, THROWN_AWAY_NOTE, labelsGivenUp, normaliseCode, usualTermsFrom, type ContainerKind, type ReceiptTerms,
 } from "@/lib/goods-in/model"
 import { CUSTOMER_INCLUDE, customerRow, snapshot } from "@/lib/goods-in/customer-row"
+import { AGREEMENT_UNREAD, findAgreement, readAgreement, type AgreementTerms } from "@/lib/goods-in/agreement"
 import type { CustomerRow, Result } from "@/lib/actions/goods-in"
 
 // Goods In → Check in: the check-in is SAVED AS IT GOES, so every tote and pallet has its real
@@ -31,8 +32,12 @@ import type { CustomerRow, Result } from "@/lib/actions/goods-in"
 // • Every action that writes locks the receipt row FIRST (SELECT … FOR UPDATE), then its totes and
 //   pallets in id order, so two tabs on the same check-in queue instead of interleaving, and a
 //   double-tapped Book in books once.
-// • Terms are the customer's usual ones (or DEFAULT_TERMS) unless the clerk changed them for this
-//   receipt — check-in no longer has a Terms step and never asks.
+// • Terms are the customer's usual ones unless the clerk changed them for this receipt — check-in
+//   no longer has a Terms step and never asks. "Usual" = their Fees & agreement tab: fees from
+//   GoodsInCustomer, reserve from GoodsInAgreement, DEFAULT_TERMS where either is blank. The
+//   agreement (and its special arrangement, copied into the customer snapshot) is read tolerantly
+//   and BEFORE each transaction (lib/goods-in/agreement.ts): it needs Run Migrations, and a failed
+//   query inside a transaction would abort the save.
 //
 // ⚠ Each action RETURNS { ok, error } rather than throwing (a thrown server-action error is redacted
 // in production — RULES.md). Nothing here reads or writes Business Central.
@@ -112,7 +117,9 @@ const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOStrin
 const asKind = (k: string | null | undefined): ContainerKind => (k === "pallet" ? "pallet" : "tote")
 const londonNow = () =>
   new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())
-const snapJson = (c: CustomerRow, vendorNo: string | null) => ({ ...snapshot(c), vendorNo }) as unknown as Prisma.InputJsonValue
+/** The customer as the receipt keeps them, with their special arrangement as it stands now. */
+const snapJson = (c: CustomerRow, vendorNo: string | null, a: AgreementTerms) =>
+  ({ ...snapshot(c, { specialArrangement: a.specialArrangement }), vendorNo }) as unknown as Prisma.InputJsonValue
 
 // ─── Notes ─────────────────────────────────────────────────────────────────────────────────
 // A draft's notes are what the clerk typed, followed by any LABEL_GIVEN_UP_NOTE lines the Hub keeps
@@ -315,14 +322,8 @@ function readTerm(rule: (typeof TERM_RULES)[number], v: unknown): { value: numbe
 
 const termsIn = (t: unknown) => (t && typeof t === "object" ? (t as Record<string, unknown>) : {})
 
-/** The customer's usual terms, falling back to the standard ones (reserve is never per customer). */
-const usualTerms = (c: CustomerRow): ReceiptTerms => ({
-  commission: c.commission ?? DEFAULT_TERMS.commission,
-  lottingFee: c.lottingFee ?? DEFAULT_TERMS.lottingFee,
-  photographyFee: c.photographyFee ?? DEFAULT_TERMS.photographyFee,
-  unsoldFee: c.unsoldFee ?? DEFAULT_TERMS.unsoldFee,
-  reservePercent: DEFAULT_TERMS.reservePercent,
-})
+/** The customer's usual terms — their fees and their agreement's reserve, the standard ones where blank. */
+const usualTerms = (c: CustomerRow, a: AgreementTerms): ReceiptTerms => usualTermsFrom(c, a.reservePercent)
 
 /** A draft's terms: each one sent and readable, else `base`'s. A half-typed term never stops a save. */
 function mergeTerms(sent: unknown, base: ReceiptTerms): ReceiptTerms {
@@ -375,6 +376,8 @@ export async function saveCheckIn(input: CheckInInput): Promise<Result<{ receipt
     const cust = await prisma.contact.findUnique({ where: { id: contactId }, include: CUSTOMER_INCLUDE })
     if (!cust) return { ok: false, error: "That customer couldn't be found — search for them again." }
     const c = customerRow(cust)
+    // Their usual reserve and special arrangement — tolerant, and before the transaction (never inside it).
+    const a = await readAgreement(c.id)
     const asked = blank(input.receiptId) ? normaliseCode(input.receiptId!) : null
     const takenOff = cleanRemoved(input.removed)
 
@@ -383,8 +386,8 @@ export async function saveCheckIn(input: CheckInInput): Promise<Result<{ receipt
         const [receiptId] = await takeNumbers(tx, "receipt", 1)
         await tx.goodsInReceipt.create({
           data: {
-            id: receiptId, contactId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo),
-            ...mergeTerms(input.terms, usualTerms(c)),
+            id: receiptId, contactId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo, a),
+            ...mergeTerms(input.terms, usualTerms(c, a)),
             ownerConfirmed: !!input.ownerConfirmed, agentConfirmed: !!input.agentConfirmed, notes: draftNotes(input.notes, null, null),
             status: "draft", createdById: me.id, createdByName: me.name,
           },
@@ -399,11 +402,11 @@ export async function saveCheckIn(input: CheckInInput): Promise<Result<{ receipt
       const synced = await syncRows(tx, receiptId, rows, takenOff, me.name)
       const add = synced.removedPrinted.length ? givenUpLine(synced.removedPrinted, me.name) : null
       // A different customer brings their own usual terms with them, unless terms were sent.
-      const terms = r.contactId !== c.id ? mergeTerms(input.terms, usualTerms(c)) : sentTerms(input.terms)
+      const terms = r.contactId !== c.id ? mergeTerms(input.terms, usualTerms(c, a)) : sentTerms(input.terms)
       await tx.goodsInReceipt.update({
         where: { id: receiptId },
         data: {
-          contactId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo), ...terms,
+          contactId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo, a), ...terms,
           ...(input.notes !== undefined || add ? { notes: draftNotes(input.notes, r.notes, add) } : {}),
           ...(input.ownerConfirmed !== undefined ? { ownerConfirmed: !!input.ownerConfirmed } : {}),
           ...(input.agentConfirmed !== undefined ? { agentConfirmed: !!input.agentConfirmed } : {}),
@@ -418,7 +421,8 @@ export async function saveCheckIn(input: CheckInInput): Promise<Result<{ receipt
 /**
  * Book the check-in in: the same row sync as saveCheckIn, then — in the same transaction — the terms
  * saved, a vendor number given only when the customer has none AND an admin has set the vendor
- * series up (as createReceipt), the customer's details copied afresh, and the draft turned "open"
+ * series up (as createReceipt), the customer's details copied afresh (with the special arrangement
+ * from their Fees & agreement tab as it stands now, so a reprint shows what applied on the day), and the draft turned "open"
  * with the booking time and the booker's name. A second press (or a retry after a lost answer)
  * waits on the lock, finds it already open, and gets the receipt back rather than an error.
  */
@@ -432,6 +436,14 @@ export async function bookInCheckIn(input: CheckInInput & { receiptId: string; t
     const contactId = blank(input.contactId)
     if (!contactId) return { ok: false, error: "Choose the customer first." }
     const t = bookingTerms(input.terms)
+    // The special arrangement copied onto the receipt — read BEFORE the transaction (the table needs
+    // Run Migrations, and a failed query inside the transaction would abort the booking), and
+    // STRICTLY: a missing table is "no arrangement yet" (ready: false), but any other fault refuses
+    // the booking below rather than book a receipt that silently leaves off what was agreed.
+    const a = await findAgreement(contactId).catch((e: unknown) => {
+      console.error("goods-in book in: couldn't read the customer's agreement:", e)
+      return null
+    })
 
     const out = await prisma.$transaction(async tx => {
       const r = await lockReceipt(tx, id)
@@ -441,6 +453,7 @@ export async function bookInCheckIn(input: CheckInInput & { receiptId: string; t
         return { receiptId: id, containerIds: held.map(h => h.id), vendorNo: r.vendorNo }
       }
       if (!r || r.status !== "draft") throw new Refusal(notADraft(id, r))
+      if (!a) throw new Refusal(AGREEMENT_UNREAD)
       if (rows.length === 0) throw new Refusal("Add at least one tote or pallet before booking in.")
       if (t.error !== null) throw new Refusal(t.error)
 
@@ -467,7 +480,7 @@ export async function bookInCheckIn(input: CheckInInput & { receiptId: string; t
       const booked = await tx.goodsInReceipt.updateMany({
         where: { id, status: "draft" },
         data: {
-          status: "open", contactId: c.id, vendorNo, customer: snapJson(c, vendorNo), ...t.terms,
+          status: "open", contactId: c.id, vendorNo, customer: snapJson(c, vendorNo, a), ...t.terms,
           // What was typed, then the record of any label printed for a number since given up.
           notes: draftNotes(input.notes, r.notes, add),
           ...(input.ownerConfirmed !== undefined ? { ownerConfirmed: !!input.ownerConfirmed } : {}),

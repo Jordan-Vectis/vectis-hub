@@ -1779,14 +1779,83 @@ the same way, never as an export of an actions file.
     first then waits in "Check-ins not finished" to be thrown away.
 - **Check in never asks about fees** (Jack, 2026-10-16: *"it's more the checking in asking for fees
   part you have done is annoying"*). There is **no Terms step** — the steps are Customer · What
-  they've brought · Check & book in. Every receipt takes the customer's usual terms automatically
-  (commission and lotting / photography / unsold fees from their `GoodsInCustomer`, or `DEFAULT_TERMS`
-  where they have none; the reserve is the standard one). Check & book in shows them as one plain line
-  with a small "Change for this receipt" link that opens the terms fields (closed by default); that
-  changes THIS receipt only. A customer's usual terms are changed on their customer page, not at the
+  they've brought · Check & book in. Every receipt takes the customer's usual terms automatically —
+  their **Fees & agreement** tab (next rule): commission and lotting / photography / unsold fees from
+  their `GoodsInCustomer`, their usual reserve from `GoodsInAgreement`, and `DEFAULT_TERMS` for any
+  that is blank (`usualTermsFrom` in `lib/goods-in/model.ts` is the one way it is worked out — the
+  server's check-in actions and `createReceipt` use it, and so do the screens). Check & book in
+  shows them as one plain line with a small "Change for this receipt" link that opens the terms fields
+  (closed by default); that changes THIS receipt only, and its hint links (a full-size link, new
+  tab) to the customer's Fees & agreement tab, where their usual terms are changed — not at the
   counter. An unusual value never blocks or nags — only an impossible one (a negative fee, more than
   100%) is refused, and Book in refuses it on the server too. ⚠ Don't bring back a Terms step or a
   "check the fees" question without asking Jack.
+  - **How Check in reads the agreement.** `getAgreement` whenever the customer changes and whenever
+    the browser tab comes back into view (so a change made on their tab in another browser tab shows
+    when the clerk returns); terms still at their usual values follow it, terms changed for this
+    receipt are left alone, and nothing changes during a booking. The special arrangement shows under
+    the terms line as a small indigo note, and one quiet grey *"Vendor terms not signed yet — they'll
+    sign the receipt."* only once the agreement has been read and is `ready` — never a guess, a nag or
+    a block.
+  - ⚠ **A read that fails is never shown as their usual terms** (design rule 7). Book in waits for
+    the FIRST read for the customer on screen ("Reading their fees…", 6 seconds at most); a read that
+    fails is tried once more after 3 seconds, and meanwhile Check & book in labels the line *"The fees
+    on their record"* with one amber line — *"Their Fees & agreement couldn't be read — the reserve
+    shown is the standard one"* — and Try again. Booking is then still allowed. A failed RE-read keeps
+    what was read before.
+- **A customer's Fees & agreement tab** (2026-10-16 — Jack: *"need a tab for fees and agreement and
+  stuff"*, and asked where: *"Tab on the customer's page"*). `/tools/warehouse/customers/<id>?tab=fees`,
+  beside Overview: their fees and usual reserve (each blank = standard, shown as the placeholder), the
+  day they **signed Vectis's vendor terms** and who recorded it (the terms themselves fold out from
+  `VENDOR_TERMS`), and a **special arrangement** in plain words ("15% on any single lot over £5,000 —
+  agreed with Jordan, March 2026"). Set once there; Check in just uses it and has no fees tab at all —
+  it shows the arrangement as a small note and, if the terms aren't signed, one quiet line (never a
+  block or a nag). The customer form has no fees any more: new customers start on the standard terms.
+  - **Where it is kept.** The fees stay on `GoodsInCustomer`; the reserve, the signed date + who
+    recorded it, the special arrangement (≤ 1,000 characters, `SPECIAL_ARRANGEMENT_MAX`) and who
+    changed any of it last are ONE new table, **`GoodsInAgreement`** (one row per contact, cascade —
+    **NEEDS Run Migrations**). Nothing was added to `Contact` or `GoodsInCustomer`. The signed day is
+    stored at 12:00 UTC on that London day, so it reads as that day.
+  - **Editing** is `getAgreement` / `saveAgreement` in `lib/actions/goods-in-agreement.ts` — anyone
+    in Goods In (as with the rest of a customer), `{ ok, error }`, every value checked before
+    anything is written and then written in one transaction; null puts a field back to standard /
+    not signed / none. ⚠ `saveCustomer` now leaves a fee it isn't sent ALONE (it used to write a
+    missing fee as null — with the fees gone from the form, every address edit would have put the
+    customer back on the standard fees).
+  - ⚠⚠ **Every read of `GoodsInAgreement` is tolerant** — `readAgreement` / `readAgreements` in
+    `lib/goods-in/agreement.ts` (never throw; a missing table → nulls, `ready: false`). Its OWN query
+    in try/catch: **never `include` it** in a contact or customer query (`CUSTOMER_INCLUDE` or any
+    other a screen depends on) — between the deploy and Run Migrations that would break the
+    customer screens and Check in. And **never read it inside a transaction**: a failed query aborts
+    the whole Postgres transaction, so a missing table would take a booking down with it — the
+    check-in actions and `createReceipt` read it first, then open the transaction. Until Run
+    Migrations the tab still shows and saves the FEES and says the rest needs Run Migrations;
+    `saveAgreement` refuses anything that would put something in the table (clearing is fine), before
+    writing anything; Check in falls back to the standard reserve and no arrangement.
+  - ⚠ **The one strict read is BOOK IN.** `bookInCheckIn` and `createReceipt` use `findAgreement`
+    (still before the transaction): a missing table is `ready: false` as above, but any other fault
+    refuses the booking — nothing booked, `AGREEMENT_UNREAD`, "press Book in again" — rather than
+    copy "no special arrangement" onto a receipt nobody could check. (A second press of a check-in
+    that DID book still gets its receipt back.) The autosave, `saveCheckIn`, stays tolerant: Book in
+    copies the arrangement afresh anyway. On the customer page a failed read says so too — the
+    Overview summary says "couldn't read their agreement just now" instead of the standard reserve,
+    and the tab's cards say "couldn't be read", not "needs Run Migrations".
+  - **The special arrangement is COPIED onto the receipt** at booking, inside the customer snapshot
+    (`GoodsInReceipt.customer.specialArrangement` — JSON, no schema change), and the receipt PDF
+    prints it on page 1 under the terms as "Special arrangement: …" from that copy, never from the
+    customer's current agreement: a reprint shows what applied on the day, and changing the agreement
+    changes future receipts only. It is fitted so the signature lines never leave page 1 — the PDF
+    measures the rest of page 1 with the same drawing code (`dry`) before sizing it: the largest size
+    down to 7pt as written, then with its line breaks joined by " / " (a list takes a line per item),
+    and only when even that won't fit does page 1 end it "... (continued overleaf)" and page 2 print
+    the WHOLE arrangement above the tote table. ⚠ Nothing agreed is ever cut off without trace — don't
+    go back to simply truncating it. `safe()` keeps € and • (WinAnsi has both) and turns a tab into a
+    space (`saveAgreement` stores tabs as spaces, so what's kept is what's printed). The labels'
+    layout is unchanged.
+  - The arrangement is **indigo** wherever it shows (the tab, the Overview summary, Check in) — amber
+    means a warning everywhere else in Goods In, and an arrangement isn't one.
+  - ⚠ Never put bank details in a special arrangement or anywhere else (rule below) — the box says so
+    to the staff typing in it, as it's printed on their receipts.
 - ⚠⚠ **A customer's bank details are never stored or shown.** The bank form on the printed receipt
   is blank by design and the customer fills it in by hand — nothing in the Hub is locked down enough
   to hold them. Don't add fields for them.
@@ -1797,14 +1866,17 @@ the same way, never as an export of an actions file.
   still be printed, or downloaded and emailed by hand. A copy is kept in the mailbox's Sent Items.
   Microsoft 365 is listed as a processor on Data & Compliance and the DPIA for this.
 - **New tables only**: `GoodsInCustomer`, `GoodsInReceipt`, `GoodsInContainer`, `GoodsInLocation`,
-  `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth` (**NEEDS Run Migrations**). ⚠ **Nothing was
+  `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth`, and (2026-10-16) `GoodsInAgreement`
+  (**NEEDS Run Migrations**). ⚠ **Nothing was
   added to `Contact`, `CatalogueLot` or `User`** — a shipped-but-unmigrated column there breaks every
   contact or lot save, or login, between the deploy and Run Migrations. Keep it that way. Until the
   tables exist every Goods In screen says it isn't set up yet rather than crashing.
   - A Goods In customer **is** a CRM contact; `GoodsInCustomer` holds only the Goods In half (vendor
-    number, mobile, town, county, country, VAT number and terms), one row per contact.
-  - A receipt **copies** the customer's details when it is booked (`GoodsInReceipt.customer`), so a
-    reprint next year says what it said on the day. Editing the customer changes future receipts only.
+    number, mobile, town, county, country, VAT number and fees), one row per contact; their reserve,
+    signed vendor terms and special arrangement are `GoodsInAgreement` (above).
+  - A receipt **copies** the customer's details when it is booked (`GoodsInReceipt.customer`, with
+    their special arrangement as it was then), so a reprint next year says what it said on the day.
+    Editing the customer, or their agreement, changes future receipts only.
 - **A lot's shelf is its latest `GoodsInMovement` with that `lotId`** — never a column on the lot. A
   tote's current location is kept on `GoodsInContainer` as well, so lists don't have to work it out;
   a move writes both in one transaction.
@@ -1836,7 +1908,7 @@ the same way, never as an export of an actions file.
   `/tools/warehouse/check-in?receipt=<receipt number>` (a receipt that isn't a draft opens its receipt
   page instead).
 - Registered in `lib/help-map.ts` (Book in · Receipt list · Scan to move · Benches · Code lookup ·
-  Locations & labels · Number series & email · Movement record). ⚠ Those names and their keywords avoid everyday words
+  Locations & labels · Number series & email · Movement record · Fees & agreement). ⚠ Those names and their keywords avoid everyday words
   ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that
   matches a tool the asker can't open, and a cataloguer asking "where do I find…" must never be told
   Goods In isn't part of their Hub.

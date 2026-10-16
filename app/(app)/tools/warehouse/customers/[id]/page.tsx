@@ -4,20 +4,34 @@ import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/app/generated/prisma/client"
 import { getGoodsInUser } from "@/lib/goods-in/access"
 import { getDepartmentAccess, canSeeAuction } from "@/lib/departments"
-import { CONTAINER_STATUS, LOCATION_KINDS, type ContainerStatus } from "@/lib/goods-in/model"
+import { CONTAINER_STATUS, DEFAULT_TERMS, LOCATION_KINDS, type ContainerStatus } from "@/lib/goods-in/model"
 import type { CustomerRow } from "@/lib/actions/goods-in"
+import { getAgreement, type CustomerAgreement } from "@/lib/actions/goods-in-agreement"
 import {
   box, btn, btnGo, mono, th, td, ukDate, ukDateTime,
   PageHeader, StatusBadge, StatusKey, KindBadge, Empty, NotReady, ErrorBox, OkBox, isMissingTable,
 } from "../../_components/ui"
 import { BOOKED_LIVE, NOT_DRAFT, carryOnHref } from "../../receipts/_parts"
 import CustomerPanel from "./customer-panel"
+import CustomerTabs, { type CustomerTab } from "./customer-tabs"
+import FeesAgreement from "./fees-agreement"
+import VendorTermsText from "./vendor-terms-text"
 
-// Goods In → one customer: their details and usual terms (editable in place), a button to book
-// goods in for them, every receipt they have, the totes and pallets of theirs in the warehouse now
-// with where each one is, and the lots made from their totes with the sale and shelf. Read with
-// prisma directly (server component); every write goes through lib/actions/goods-in.ts. Nothing
-// here reads or writes Business Central, and no bank details are ever held or shown.
+// Goods In → one customer, on two tabs (?tab=fees, so Back and a shared link keep the tab):
+//
+//   Overview          their details (editable in place) with a one-line summary of their fees and
+//                     agreement, a button to book goods in for them, every receipt they have, the
+//                     totes and pallets of theirs in the warehouse now with where each one is, and
+//                     the lots made from their totes with the sale and shelf.
+//   Fees & agreement  their fees and usual reserve, whether they've signed the vendor terms, and any
+//                     special arrangement — set once here, used by every check-in for them
+//                     (fees-agreement.tsx; Jack, 2026-10-16: check-in has no fees step at all).
+//
+// Read with prisma directly (server component), only what the open tab needs; every write goes
+// through lib/actions (goods-in.ts, goods-in-agreement.ts). The agreement is read with getAgreement
+// on its own — never `include`d in the customer query — because its table only exists after Run
+// Migrations and must never break this page before then. Nothing here reads or writes Business
+// Central, and no bank details are ever held or shown.
 //
 // A check-in for them that hasn't been booked in yet (a draft receipt) isn't one of their receipts:
 // it's left out of every count and list here and offered at the top instead, to carry on with.
@@ -92,11 +106,14 @@ type LotRaw = {
   total: number
 }
 
-type Loaded = {
+type Customer = {
   customer: CustomerRow
   since: Date
-  receipts: ReceiptView[]
   receiptTotal: number
+}
+
+type Overview = {
+  receipts: ReceiptView[]
   unfinished: UnfinishedView[]
   inWarehouse: ContainerView[]
   inWarehouseTotal: number
@@ -112,7 +129,7 @@ const receiptStatus = (s: string | null) => (s === "void" ? "Void" : s === "clos
 const muted = "text-gray-500 dark:text-gray-400"
 const link = "text-indigo-700 dark:text-indigo-300 hover:underline"
 
-async function load(id: string, viewer: { id: string; role: string }): Promise<Loaded | null> {
+async function loadCustomer(id: string): Promise<Customer | null> {
   const c = await prisma.contact.findUnique({ where: { id }, include: { goodsInCustomer: true, _count: { select: { goodsInReceipts: { where: NOT_DRAFT } } } } })
   if (!c) return null
   const g = c.goodsInCustomer
@@ -124,7 +141,31 @@ async function load(id: string, viewer: { id: string; role: string }): Promise<L
     photographyFee: g?.photographyFee ?? null, unsoldFee: g?.unsoldFee ?? null,
     receipts: c._count.goodsInReceipts,
   }
+  return { customer, since: c.createdAt, receiptTotal: c._count.goodsInReceipts }
+}
 
+/**
+ * Their fees and agreement, read on their own (getAgreement is tolerant of the new table not being
+ * there yet — `ready: false`). If it fails outright, the fees from the customer record stand in and
+ * the reason is passed on, so the page still shows and the fees can still be changed.
+ */
+async function loadAgreement(c: CustomerRow): Promise<{ agreement: CustomerAgreement; error: string | null }> {
+  const fallback: CustomerAgreement = {
+    contactId: c.id,
+    fees: { commission: c.commission, lottingFee: c.lottingFee, photographyFee: c.photographyFee, unsoldFee: c.unsoldFee },
+    reservePercent: null, termsSignedAt: null, termsRecordedBy: null, specialArrangement: null,
+    updatedAt: null, updatedByName: null, ready: false,
+  }
+  try {
+    const res = await getAgreement(c.id)
+    return res.ok ? { agreement: res.data, error: null } : { agreement: fallback, error: res.error }
+  } catch (e) {
+    console.error("goods-in customer page (agreement):", e)
+    return { agreement: fallback, error: "something went wrong reading it" }
+  }
+}
+
+async function loadOverview(id: string, viewer: { id: string; role: string }): Promise<Overview> {
   // In the warehouse now = not yet catalogued or given back, on a receipt that was booked in and
   // wasn't voided. (Prisma's "not" leaves out NULLs, so a blank status is let in explicitly.)
   const inWarehouseWhere: Prisma.GoodsInContainerWhereInput = {
@@ -199,9 +240,6 @@ async function load(id: string, viewer: { id: string; role: string }): Promise<L
   const loc = new Map(locations.map(l => [l.code, l]))
 
   return {
-    customer,
-    since: c.createdAt,
-    receiptTotal: c._count.goodsInReceipts,
     unfinished: unfinished.map(u => ({ id: u.id, createdAt: u.createdAt, updatedAt: u.updatedAt, createdByName: u.createdByName, rows: u._count.containers })),
     receipts: receipts.map(r => {
       const counts = new Map<ContainerStatus, number>()
@@ -314,70 +352,76 @@ function Shelf({ l }: { l: LotView }) {
   )
 }
 
-export default async function CustomerPage({ params, searchParams }: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+
+// ─── Overview ─────────────────────────────────────────────────────────────────────────────────
+
+const FEE_WORDS = [
+  { key: "lottingFee", word: "lotting" },
+  { key: "photographyFee", word: "photography" },
+  { key: "unsoldFee", word: "unsold" },
+] as const
+
+const pounds = (n: number) => `£${n.toFixed(2)}`
+const Dot = () => <>{" "}<span aria-hidden className="px-0.5 text-gray-400 dark:text-gray-500">·</span>{" "}</>
+
+/**
+ * "Fees: 25% commission, standard fees · reserve 60% · vendor terms signed 12 Oct 2026 — Change", at
+ * the foot of their details. `unread`: the agreement couldn't be read, so only the fees (from their
+ * customer record) are said — never the standard reserve as if it were theirs.
+ */
+function AgreementSummary({ a, href, unread }: { a: CustomerAgreement; href: string; unread: boolean }) {
+  const own = FEE_WORDS.filter(f => a.fees[f.key] != null)
+  const fees = own.length === 0
+    ? "standard fees"
+    : [
+        ...own.map(f => { const v = a.fees[f.key]!; return v > 0 ? `${pounds(v)} ${f.word} fee` : `no ${f.word} fee` }),
+        ...(own.length < FEE_WORDS.length ? ["other fees standard"] : []),
+      ].join(", ")
+  return (
+    <div className="flex flex-wrap items-center gap-x-4">
+      <p className="min-w-0 flex-1 basis-64 py-2 text-sm text-gray-700 dark:text-gray-300">
+        <span className="font-semibold text-gray-900 dark:text-white">Fees:</span>{" "}
+        {a.fees.commission ?? DEFAULT_TERMS.commission}% commission, {fees}
+        {unread ? (
+          <><Dot /><span className={muted}>couldn&apos;t read their agreement just now</span></>
+        ) : (
+          <>
+            <Dot />reserve {a.reservePercent ?? DEFAULT_TERMS.reservePercent}%
+            {a.ready && (
+              <>
+                <Dot />
+                {a.termsSignedAt ? <>vendor terms signed {ukDate(a.termsSignedAt)}</> : <span className={muted}>vendor terms not signed yet</span>}
+              </>
+            )}
+            {/* Indigo, as at check-in: a special arrangement is a note, not a warning. */}
+            {a.ready && a.specialArrangement && <><Dot /><span className="font-semibold text-indigo-700 dark:text-indigo-300">special arrangement</span></>}
+          </>
+        )}
+      </p>
+      <Link href={href} className={`inline-flex min-h-11 items-center text-sm font-semibold ${link}`} aria-label="Change their fees and agreement">
+        Change
+      </Link>
+    </div>
+  )
+}
+
+function OverviewTab({ c, overview, receiptTotal, bookHref, summary, feesHref }: {
+  c: CustomerRow
+  overview: Overview
+  receiptTotal: number
+  bookHref: string
+  summary: React.ReactNode
+  feesHref: string
 }) {
-  const { id } = await params
-  const sp = await searchParams
-  const justAdded = sp.added === "1"
-
-  const me = await getGoodsInUser()
-  if (!me) {
-    return <div className="p-4 sm:p-6 lg:p-8"><ErrorBox>Your account doesn&apos;t have Warehouse access. Ask a manager to add it.</ErrorBox></div>
-  }
-
-  let data: Loaded | null = null
-  let missing = false
-  let failed: string | null = null
-  try {
-    data = await load(id, me)
-  } catch (e) {
-    if (isMissingTable(e)) missing = true
-    else {
-      console.error("goods-in customer page:", e)
-      failed = "This customer couldn't be loaded just now. Try again in a moment — if it keeps happening, tell Jack."
-    }
-  }
-
-  if (missing || failed) {
-    return (
-      <div className="p-4 sm:p-6 lg:p-8">
-        <PageHeader title="Customer" back={{ href: BASE, label: "Customers" }} />
-        {missing ? <NotReady /> : <ErrorBox>{failed}</ErrorBox>}
-      </div>
-    )
-  }
-  // notFound() works by throwing, so it sits outside the try/catch above.
-  if (!data) notFound()
-
-  const { customer: c, receipts, inWarehouse, lots } = data
+  const data = { ...overview, receiptTotal }
+  const { receipts, inWarehouse, lots } = data
   const totesIn = inWarehouse.filter(x => x.kind !== "pallet").length
   const palletsIn = inWarehouse.length - totesIn
   const lastBooked = receipts[0]?.createdAt ?? null
-  const bookHref = `/tools/warehouse/check-in?customer=${encodeURIComponent(c.id)}`
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-8">
+    <div className="space-y-8">
       <div className="space-y-4">
-        <PageHeader
-          title={[c.salutation, c.name].filter(Boolean).join(" ")}
-          back={{ href: BASE, label: "Customers" }}
-          intro={
-            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              {c.vendorNo
-                ? <span>Vendor no. <span className={`${mono} font-semibold text-gray-800 dark:text-gray-100`}>{c.vendorNo}</span></span>
-                : <span>No vendor number yet — one is given when goods are first booked in, once the vendor number series is set up.</span>}
-              <span>On the system since {ukDate(data.since)}</span>
-            </span>
-          }
-          actions={<Link href={bookHref} className={`${btnGo} !min-h-12`}>Book goods in for this customer</Link>}
-        />
-        {justAdded && (
-          <OkBox>
-            {c.name} has been added{c.vendorNo ? <> with vendor number <span className={`${mono} font-semibold`}>{c.vendorNo}</span></> : " (no vendor number yet)"}. Book their goods in with the button above when you&apos;re ready.
-          </OkBox>
-        )}
         {data.unfinished.length > 0 && (
           <section aria-labelledby="unfinished" className="rounded-xl border border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 space-y-2">
             <h2 id="unfinished" className="text-sm font-semibold text-amber-900 dark:text-amber-100">
@@ -402,7 +446,7 @@ export default async function CustomerPage({ params, searchParams }: {
             <p className="text-xs text-amber-800 dark:text-amber-200/90">Not booked in until Book in is pressed. Open one to throw it away.</p>
           </section>
         )}
-        <CustomerPanel customer={c} />
+        <CustomerPanel customer={c} summary={summary} feesHref={feesHref} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -646,6 +690,103 @@ export default async function CustomerPage({ params, searchParams }: {
           </>
         )}
       </Section>
+    </div>
+  )
+}
+
+// ─── The page ─────────────────────────────────────────────────────────────────────────────────
+
+export default async function CustomerPage({ params, searchParams }: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const { id } = await params
+  const sp = await searchParams
+  const justAdded = sp.added === "1"
+  const tab: CustomerTab = sp.tab === "fees" ? "fees" : "overview"
+
+  const me = await getGoodsInUser()
+  if (!me) {
+    return <div className="p-4 sm:p-6 lg:p-8"><ErrorBox>Your account doesn&apos;t have Warehouse access. Ask a manager to add it.</ErrorBox></div>
+  }
+
+  let cust: Customer | null = null
+  let overview: Overview | null = null
+  let agreed: Awaited<ReturnType<typeof loadAgreement>> | null = null
+  let missing = false
+  let failed: string | null = null
+  try {
+    cust = await loadCustomer(id)
+    // The agreement is read beside the overview (loadAgreement never throws — it falls back).
+    if (cust) [overview, agreed] = await Promise.all([tab === "overview" ? loadOverview(id, me) : null, loadAgreement(cust.customer)])
+  } catch (e) {
+    if (isMissingTable(e)) missing = true
+    else {
+      console.error("goods-in customer page:", e)
+      failed = "This customer couldn't be loaded just now. Try again in a moment — if it keeps happening, tell Jack."
+    }
+  }
+
+  if (missing || failed) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <PageHeader title="Customer" back={{ href: BASE, label: "Customers" }} />
+        {missing ? <NotReady /> : <ErrorBox>{failed}</ErrorBox>}
+      </div>
+    )
+  }
+  // notFound() works by throwing, so it sits outside the try/catch above.
+  if (!cust) notFound()
+
+  const c = cust.customer
+  const { agreement, error: agreementError } = agreed ?? (await loadAgreement(c))
+  const bookHref = `/tools/warehouse/check-in?customer=${encodeURIComponent(c.id)}`
+  const feesHref = `${BASE}/${encodeURIComponent(c.id)}?tab=fees`
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8">
+      <PageHeader
+        title={[c.salutation, c.name].filter(Boolean).join(" ")}
+        back={{ href: BASE, label: "Customers" }}
+        intro={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {c.vendorNo
+              ? <span>Vendor no. <span className={`${mono} font-semibold text-gray-800 dark:text-gray-100`}>{c.vendorNo}</span></span>
+              : <span>No vendor number yet — one is given when goods are first booked in, once the vendor number series is set up.</span>}
+            <span>On the system since {ukDate(cust.since)}</span>
+          </span>
+        }
+        actions={<Link href={bookHref} className={`${btnGo} !min-h-12`}>Book goods in for this customer</Link>}
+      />
+      {justAdded && (
+        <div className="mb-6">
+          <OkBox>
+            {c.name} has been added{c.vendorNo ? <> with vendor number <span className={`${mono} font-semibold`}>{c.vendorNo}</span></> : " (no vendor number yet)"}. They start on the standard fees — set theirs on the{" "}
+            <Link href={feesHref} className="font-semibold underline underline-offset-2">Fees &amp; agreement tab</Link> if they&apos;re different. Book their goods in with the button above when you&apos;re ready.
+          </OkBox>
+        </div>
+      )}
+
+      <CustomerTabs id={c.id} tab={tab} />
+
+      {tab === "fees" ? (
+        <FeesAgreement
+          contactId={c.id}
+          name={c.name}
+          initial={agreement}
+          loadError={agreementError}
+          termsText={<VendorTermsText />}
+        />
+      ) : (
+        <OverviewTab
+          c={c}
+          overview={overview!}
+          receiptTotal={cust.receiptTotal}
+          bookHref={bookHref}
+          summary={<AgreementSummary a={agreement} href={feesHref} unread={!!agreementError} />}
+          feesHref={feesHref}
+        />
+      )}
     </div>
   )
 }

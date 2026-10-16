@@ -98,6 +98,13 @@ export type CustomerSnapshot = {
   phone: string | null
   vatRegNo: string | null
   vendorNo: string | null
+  /**
+   * The special arrangement on the customer's Fees & agreement tab AS IT WAS WHEN THE RECEIPT WAS
+   * BOOKED (GoodsInAgreement.specialArrangement), printed on the receipt under the terms — so a
+   * reprint shows what applied on the day. Absent or null = none. (JSON inside
+   * GoodsInReceipt.customer, so no schema change; receipts booked before 2026-10-16 don't have it.)
+   */
+  specialArrangement?: string | null
 }
 
 /** A receipt's terms, with the defaults the example receipt carries. */
@@ -109,6 +116,29 @@ export type ReceiptTerms = {
   reservePercent: number
 }
 export const DEFAULT_TERMS: ReceiptTerms = { commission: 25, lottingFee: 0, photographyFee: 0, unsoldFee: 0, reservePercent: 60 }
+
+/** The longest special arrangement a customer's Fees & agreement tab takes (characters). */
+export const SPECIAL_ARRANGEMENT_MAX = 1000
+
+/**
+ * A customer's USUAL receipt terms — what Check in starts every receipt with: their own fees
+ * (GoodsInCustomer) and their usual reserve (GoodsInAgreement) where set, the standard ones
+ * (DEFAULT_TERMS) where not. null / undefined = standard. Pure, so the server and the screens work
+ * it out the same way.
+ */
+export function usualTermsFrom(
+  fees: { commission?: number | null; lottingFee?: number | null; photographyFee?: number | null; unsoldFee?: number | null } | null | undefined,
+  reservePercent?: number | null,
+): ReceiptTerms {
+  const pick = (v: number | null | undefined, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d)
+  return {
+    commission: pick(fees?.commission, DEFAULT_TERMS.commission),
+    lottingFee: pick(fees?.lottingFee, DEFAULT_TERMS.lottingFee),
+    photographyFee: pick(fees?.photographyFee, DEFAULT_TERMS.photographyFee),
+    unsoldFee: pick(fees?.unsoldFee, DEFAULT_TERMS.unsoldFee),
+    reservePercent: pick(reservePercent, DEFAULT_TERMS.reservePercent),
+  }
+}
 
 /** Location codes and tote/receipt numbers are compared in upper case with spaces removed — scanners and typing both vary. */
 export const normaliseCode = (s: string) => s.replace(/\s+/g, "").toUpperCase()

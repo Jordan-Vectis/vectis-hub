@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getCustomer, type CustomerRow } from "@/lib/actions/goods-in"
+import { getAgreement, type CustomerAgreement } from "@/lib/actions/goods-in-agreement"
 import { listUnfinishedCheckIns, loadCheckIn, type CheckInLoaded } from "@/lib/actions/goods-in-checkin"
 import { atLeast, getGoodsInUser } from "@/lib/goods-in/access"
 import { COUNTER_KEYS, normaliseCode, type CounterKey } from "@/lib/goods-in/model"
@@ -11,9 +12,10 @@ import CheckInFlow from "./check-in-flow"
 import type { UnfinishedCheckIn } from "./shared"
 
 // Goods In → Check in (the counter's main screen). The page checks who is asking and whether the
-// number series are set up, reads any check-in being carried on (?receipt=) and the check-ins not
-// booked in yet, then hands over to the step flow, which does the rest in the browser — saving the
-// check-in as it goes (lib/actions/goods-in-checkin.ts). Nothing here touches Business Central.
+// number series are set up, reads any check-in being carried on (?receipt=), the customer's Fees &
+// agreement (so the terms are right from the first draw) and the check-ins not booked in yet, then
+// hands over to the step flow, which does the rest in the browser — saving the check-in as it goes
+// (lib/actions/goods-in-checkin.ts). Nothing here touches Business Central.
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Check in — Goods In" }
@@ -23,7 +25,7 @@ const Shell = ({ children }: { children: ReactNode }) => (
     <PageHeader
       title="Check in"
       back={{ href: "/tools/warehouse", label: "Goods In" }}
-      intro="Book a customer's goods in: find the customer, list their totes and pallets, then check and book in. Each tote and pallet gets its number as soon as you add it, so its label can be printed straight away — the receipt counts as booked in only when you press Book in."
+      intro="Find the customer, list their totes and pallets, then book them in. Each tote and pallet is numbered as soon as you add it, so its label can go on straight away — nothing counts as booked in until you press Book in."
     />
     {children}
   </div>
@@ -80,6 +82,16 @@ export default async function CheckInPage({ searchParams }: { searchParams: Prom
     else customerProblem = r.ok ? "That customer couldn't be found — search for them below." : `Couldn't open that customer (${r.error}) — search for them below.`
   }
 
+  // Their Fees & agreement (customer page → Fees & agreement): the reserve, a special arrangement and
+  // whether they've signed the vendor terms. Not read → the screen reads it itself, and until then
+  // the fees on their record and the standard reserve apply.
+  let initialAgreement: CustomerAgreement | null = null
+  const forContact = initialCheckIn?.customer?.id ?? initialCustomer?.id ?? null
+  if (forContact) {
+    const a = await getAgreement(forContact).catch(() => null)
+    if (a?.ok) initialAgreement = a.data
+  }
+
   // Check-ins not booked in yet — the person's own first, each marked `mine` by the Hub. The Customer
   // step offers their own back; everyone's are used to spot a customer who already has one.
   let unfinished: UnfinishedCheckIn[] = []
@@ -109,6 +121,7 @@ export default async function CheckInPage({ searchParams }: { searchParams: Prom
         userId={user.id}
         initialCustomer={initialCustomer}
         initialCheckIn={initialCheckIn}
+        initialAgreement={initialAgreement}
         unfinished={unfinished}
       />
     </Shell>

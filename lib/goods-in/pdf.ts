@@ -12,6 +12,11 @@ import type { CustomerSnapshot } from "./model"
 //    vendor details and terms, the tote/pallet table, the vendor terms of sale, and a BLANK bank
 //    details form. ⚠ The Hub never stores or prints a customer's bank details: the form is for the
 //    customer to fill in by hand (2026-10-15 — nothing in the Hub is locked down enough for them).
+//    When the receipt's customer snapshot carries a special arrangement (from the customer's Fees &
+//    agreement tab, copied at booking), page 1 prints it under the terms as "Special arrangement:
+//    …", shrunk to fit so the signature lines always stay on page 1 — and if even that can't hold
+//    it, page 1 shows the start "... (continued overleaf)" and page 2 prints the whole of it above
+//    the tote table, so nothing agreed is ever left off.
 //  • buildLabelsPdf — one 100 × 50 mm label per tote/pallet (or location), barcode included.
 
 const NAVY = rgb(0.18, 0.196, 0.557)
@@ -22,21 +27,39 @@ const LINE = rgb(0.75, 0.75, 0.75)
 const COMPANY_LINE = "Fleck Way, Stockton-on-Tees, TS17 9JZ | (+44) 01642 750 616 | Admin@Vectis.co.uk | www.vectis.co.uk"
 const COMPANY_REG = "Registered in England and Wales No. 03298762, VAT No. 647566303"
 
-/** WinAnsi-safe text: curly quotes straightened, anything else outside Latin-1 dropped. */
+/**
+ * WinAnsi-safe text: curly quotes straightened, a tab made a space (the font can't draw one, and
+ * dropping it would glue two words together), € and • kept (WinAnsi has both), anything else
+ * outside Latin-1 dropped.
+ */
 export function safe(s: string | null | undefined): string {
   return String(s ?? "")
-    .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...")
-    .replace(/[^\x20-\x7E\xA0-\xFF\n]/g, "")
+    .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...").replace(/\t/g, " ")
+    .replace(/[^\x20-\x7E\xA0-\xFF\n€•]/g, "")
 }
 
-function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
+/**
+ * `text` as lines no wider than `width`. `firstIndent` leaves room at the start of the very first
+ * line (for a bold label drawn in front of it). A single word wider than a whole line (a long
+ * reference or web address) is broken rather than run off the edge.
+ */
+function wrap(text: string, font: PDFFont, size: number, width: number, firstIndent = 0): string[] {
   const out: string[] = []
+  const fits = (t: string) => font.widthOfTextAtSize(t, size) <= (out.length === 0 ? width - firstIndent : width)
   for (const para of safe(text).split("\n")) {
     const words = para.split(/\s+/).filter(Boolean)
     let line = ""
-    for (const w of words) {
+    for (let w of words) {
       const t = line ? `${line} ${w}` : w
-      if (font.widthOfTextAtSize(t, size) > width && line) { out.push(line); line = w } else line = t
+      if (fits(t)) { line = t; continue }
+      if (line) { out.push(line); line = "" }
+      while (!fits(w) && w.length > 1) {
+        let n = w.length - 1
+        while (n > 1 && !fits(w.slice(0, n))) n--
+        out.push(w.slice(0, n))
+        w = w.slice(n)
+      }
+      line = w
     }
     out.push(line)
   }
@@ -77,11 +100,20 @@ export async function buildReceiptPdf(r: ReceiptForPdf): Promise<Uint8Array> {
 
   let page!: PDFPage
   let y = 0
+  // While `dry`, nothing is drawn and no page is added — the same code only moves `y`, so page 1's
+  // fixed part can be MEASURED before the special arrangement is sized to fit above it.
+  // `dryLow` is the lowest point any need() asked for while dry, so the measurement includes the
+  // headroom each need() wants (the signature's need(30) asks for more than it then draws).
+  let dry = false
+  let dryLow = Infinity
   const newPage = () => { page = doc.addPage(A4); y = TOP }
-  const need = (h: number) => { if (y - h < BOTTOM) newPage() }
-  const text = (s: string, x: number, size: number, f = font, color = INK) => page.drawText(safe(s), { x, y: y - size, size, font: f, color })
+  const need = (h: number) => {
+    if (dry) { dryLow = Math.min(dryLow, y - h); return }
+    if (y - h < BOTTOM) newPage()
+  }
+  const text = (s: string, x: number, size: number, f = font, color = INK) => { if (!dry) page.drawText(safe(s), { x, y: y - size, size, font: f, color }) }
   const para = (s: string, size: number, f = font, width = W, x = M, lead = 1.32, color = INK) => {
-    for (const line of wrap(s, f, size, width)) { need(size * lead); page.drawText(line, { x, y: y - size, size, font: f, color }); y -= size * lead }
+    for (const line of wrap(s, f, size, width)) { need(size * lead); if (!dry) page.drawText(line, { x, y: y - size, size, font: f, color }); y -= size * lead }
   }
 
   // ── Page 1: the customer, the terms, the declarations ──
@@ -122,40 +154,111 @@ export async function buildReceiptPdf(r: ReceiptForPdf): Promise<Uint8Array> {
   y = Math.min(leftEnd, y - 16) - 14
 
   const heading = (s: string) => { need(28); y -= 6; text(s, M, 11, bold, NAVY); y -= 17 }
-  heading("RESERVE INSTRUCTIONS")
-  para(`All items are automatically reserved at ${r.reservePercent}% of bottom estimate (rounded to bidding increment)`, 9.5)
-  y -= 6
-  heading("UNSOLD LOTS")
-  for (const p of [
-    "You will be sent the results of each auction by email; this will detail the hammer price or if the lot is unsold. Following this you will be sent a further email with our recommendations for re-entering any unsold lot in a future auction.",
-    "In the event of re-offering a lot estimates and reserves will be reduced.",
-    "It is the vendor's responsibility to instruct Vectis if they do not wish to re-offer the lot and must make arrangements to collect items within ten working days or storage charges will be incurred.",
-    "All instructions must be received via email.",
-  ]) { para(p, 9.5); y -= 4 }
-  y -= 8
-
   const tick = (label: string, on: boolean) => {
     const lines = wrap(label, font, 9.5, W - 24)
     need(lines.length * 13 + 4)
-    page.drawRectangle({ x: M, y: y - 11, width: 10, height: 10, borderColor: INK, borderWidth: 0.8 })
-    if (on) page.drawText("X", { x: M + 2, y: y - 9.5, size: 9, font: bold, color: INK })
-    lines.forEach((l, i) => page.drawText(l, { x: M + 18, y: y - 10 - i * 13, size: 9.5, font, color: INK }))
+    if (!dry) {
+      page.drawRectangle({ x: M, y: y - 11, width: 10, height: 10, borderColor: INK, borderWidth: 0.8 })
+      if (on) page.drawText("X", { x: M + 2, y: y - 9.5, size: 9, font: bold, color: INK })
+      lines.forEach((l, i) => page.drawText(l, { x: M + 18, y: y - 10 - i * 13, size: 9.5, font, color: INK }))
+    }
     y -= lines.length * 13 + 6
   }
-  tick("I confirm I am the legal owner of the property", r.ownerConfirmed)
-  tick("I confirm I am authorised to act as agent on behalf of the legal owner of the property", r.agentConfirmed)
-  y -= 4
-  para("I authorise you to sell these items as detailed here, I am aware of and agree to the conditions of sale printed here and on Vectis website.", 9.5)
-  y -= 34
-  need(30)
-  page.drawLine({ start: { x: M, y }, end: { x: M + colW, y }, thickness: 0.6, color: INK })
-  page.drawLine({ start: { x: M + W / 2 + 10, y }, end: { x: M + W, y }, thickness: 0.6, color: INK })
-  y -= 4
-  text("Vendor Signature", M, 9, font, MUTED)
-  text(`For Vectis${r.createdByName ? `: ${r.createdByName}` : ""}`, M + W / 2 + 10, 9, font, MUTED)
+  // Everything on page 1 below the terms, down to the signature lines. Drawn once for real, and —
+  // when there is a special arrangement — once `dry` first, to measure it.
+  const restOfPageOne = () => {
+    heading("RESERVE INSTRUCTIONS")
+    para(`All items are automatically reserved at ${r.reservePercent}% of bottom estimate (rounded to bidding increment)`, 9.5)
+    y -= 6
+    heading("UNSOLD LOTS")
+    for (const p of [
+      "You will be sent the results of each auction by email; this will detail the hammer price or if the lot is unsold. Following this you will be sent a further email with our recommendations for re-entering any unsold lot in a future auction.",
+      "In the event of re-offering a lot estimates and reserves will be reduced.",
+      "It is the vendor's responsibility to instruct Vectis if they do not wish to re-offer the lot and must make arrangements to collect items within ten working days or storage charges will be incurred.",
+      "All instructions must be received via email.",
+    ]) { para(p, 9.5); y -= 4 }
+    y -= 8
 
-  // ── The totes and pallets ──
+    tick("I confirm I am the legal owner of the property", r.ownerConfirmed)
+    tick("I confirm I am authorised to act as agent on behalf of the legal owner of the property", r.agentConfirmed)
+    y -= 4
+    para("I authorise you to sell these items as detailed here, I am aware of and agree to the conditions of sale printed here and on Vectis website.", 9.5)
+    y -= 34
+    need(30)
+    if (!dry) {
+      page.drawLine({ start: { x: M, y }, end: { x: M + colW, y }, thickness: 0.6, color: INK })
+      page.drawLine({ start: { x: M + W / 2 + 10, y }, end: { x: M + W, y }, thickness: 0.6, color: INK })
+    }
+    y -= 4
+    text("Vendor Signature", M, 9, font, MUTED)
+    text(`For Vectis${r.createdByName ? `: ${r.createdByName}` : ""}`, M + W / 2 + 10, 9, font, MUTED)
+    y -= 9
+  }
+
+  // The special arrangement agreed with this customer (copied onto the receipt when it was booked),
+  // under the terms, in a light box. It is sized to the room left above the rest of page 1, so it
+  // never pushes the signature lines onto another page: the largest size that fits, down to 7pt —
+  // as written, then (a list takes a line per item) with its line breaks joined by " / ", which
+  // loses nothing. Only when even that can't fit does page 1 show the start of it, ending
+  // "... (continued overleaf)", and the whole of it is printed at the top of page 2 (`overleaf`).
+  const arrangement = safe(c.specialArrangement ?? "").trim()
+  let overleaf: string | null = null
+  if (arrangement) {
+    const top = y
+    dry = true
+    dryLow = Infinity
+    restOfPageOne()
+    dry = false
+    const restH = top - Math.min(y, dryLow)
+    y = top
+    const GAP = 10, PAD = 6, INSET = 8, LEAD = 1.3, SMALLEST = 7
+    const label = "Special arrangement: "
+    const innerW = W - 2 * INSET
+    const room = top - BOTTOM - restH - GAP
+    const fit = (s: string, size: number) => {
+      const indent = bold.widthOfTextAtSize(label, size)
+      const lines = wrap(s, font, size, innerW, indent)
+      return { size, indent, lines, h: 2 * PAD + lines.length * size * LEAD }
+    }
+    const largest = (s: string) => {
+      for (const size of [9.5, 9, 8.5, 8, 7.5, SMALLEST]) { const f = fit(s, size); if (f.h <= room) return f }
+      return null
+    }
+    // One line per item becomes "item / item / item" (a "- " or "• " in front of each goes — the " / " says it).
+    const joined = arrangement.split("\n").map(l => l.trim().replace(/^[-•*]\s+/, "")).filter(Boolean).join(" / ")
+    let f = largest(arrangement) ?? (joined !== arrangement ? largest(joined) : null)
+    if (!f) {
+      overleaf = arrangement
+      const all = fit(joined, SMALLEST)
+      const MORE = "... (continued overleaf)"
+      const lines = all.lines.slice(0, Math.max(1, Math.floor((room - 2 * PAD) / (SMALLEST * LEAD))))
+      const last = lines.length - 1
+      const max = last === 0 ? innerW - all.indent : innerW
+      let t = lines[last]
+      while (t && font.widthOfTextAtSize(`${t}${MORE}`, SMALLEST) > max) t = t.slice(0, -1)
+      lines[last] = `${t.trimEnd()}${MORE}`
+      f = { ...all, lines, h: 2 * PAD + lines.length * SMALLEST * LEAD }
+    }
+    page.drawRectangle({ x: M, y: y - f.h, width: W, height: f.h, color: rgb(0.95, 0.96, 0.99), borderColor: LINE, borderWidth: 0.6 })
+    const lead = f.size * LEAD
+    f.lines.forEach((l, i) => {
+      const base = y - PAD - f.size - i * lead + f.size * 0.15
+      if (i === 0) page.drawText(label.trimEnd(), { x: M + INSET, y: base, size: f.size, font: bold, color: NAVY })
+      page.drawText(l, { x: M + INSET + (i === 0 ? f.indent : 0), y: base, size: f.size, font, color: INK })
+    })
+    y -= f.h + GAP
+  }
+
+  restOfPageOne()
+
+  // ── The totes and pallets ── (after the whole special arrangement, when page 1 couldn't hold it)
   newPage()
+  if (overleaf) {
+    heading("SPECIAL ARRANGEMENT (CONTINUED FROM PAGE 1)")
+    para(overleaf, 9.5)
+    y -= 14
+    need(60) // never the table's heading alone at the foot of a page
+  }
   const cols = [{ label: "Tote No.", x: M, w: 80 }, { label: "Type", x: M + 84, w: 50 }, { label: "Category", x: M + 138, w: 110 }, { label: "Description", x: M + 252, w: W - 252 }]
   const tableHead = () => {
     page.drawRectangle({ x: M, y: y - 18, width: W, height: 18, color: NAVY })

@@ -1,8 +1,23 @@
 import type { CustomerRow } from "@/lib/actions/goods-in"
+import type { CustomerAgreement } from "@/lib/actions/goods-in-agreement"
 import type { CheckInRowSaved } from "@/lib/actions/goods-in-checkin"
-import { DEFAULT_TERMS, type ContainerKind, type ReceiptTerms } from "@/lib/goods-in/model"
+import { usualTermsFrom, type ContainerKind, type ReceiptTerms } from "@/lib/goods-in/model"
 
 // Check in — the shapes and small helpers the steps share. Pure: no hooks, no server code.
+
+/**
+ * The look of a notice on the check-in screens — one shape and padding (the same as ErrorBox and
+ * OkBox), three tones. Cards are `box` (rounded-xl); notices are these (rounded-lg).
+ */
+export const NOTE = {
+  info: "rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-100",
+  warn: "rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200",
+  ok: "rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200",
+  plain: "rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-700 dark:text-gray-300",
+} as const
+
+/** A small underlined button that reads as a link — still a 44px tap target. */
+export const linkBtn = "inline-flex min-h-11 items-center font-semibold text-indigo-700 dark:text-indigo-300 underline underline-offset-2 hover:text-indigo-600 dark:hover:text-indigo-200"
 
 /** The categories the counter books goods in under most often. Free text is allowed too. */
 export const CATEGORIES = [
@@ -87,6 +102,14 @@ export function labelState(r: GoodsRow, printedAs: Readonly<Record<string, strin
   return was !== undefined && was !== labelText(r) ? "changed" : "printed"
 }
 
+/** The words for a label's state — the same on the goods step and on Check & book in. */
+export const LABEL_WORDS = {
+  printed: "✓ Printed",
+  /** Printed, but what's in it has changed since — the label shows the old words. */
+  changed: "Needs reprint",
+  none: "Not printed",
+} as const
+
 /** "T026156", "T026156 and T026157", "T026156, T026157 and P000003" */
 export function listNumbers(ids: string[]) {
   return ids.length <= 1 ? ids.join("") : `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}`
@@ -113,35 +136,47 @@ export function kindsPhrase(totes: number, pallets: number, joiner: ", " | " and
 /** The terms as typed — strings, so a half-typed "2." doesn't jump about. */
 export type TermsDraft = Record<keyof ReceiptTerms, string>
 
-export const TERM_FIELDS: { key: keyof ReceiptTerms; label: string; unit: "%" | "£"; help: string; max: number; whole?: boolean; perCustomer: boolean }[] = [
-  { key: "commission", label: "Commission", unit: "%", help: "Of the hammer price.", max: 100, perCustomer: true },
-  { key: "lottingFee", label: "Lotting fee", unit: "£", help: "Per lot.", max: 100000, perCustomer: true },
-  { key: "photographyFee", label: "Photography", unit: "£", help: "Per lot.", max: 100000, perCustomer: true },
-  { key: "unsoldFee", label: "Unsold fee", unit: "£", help: "Per unsold lot.", max: 100000, perCustomer: true },
-  { key: "reservePercent", label: "Reserve", unit: "%", help: "Of the bottom estimate.", max: 100, whole: true, perCustomer: false },
+export const TERM_FIELDS: { key: keyof ReceiptTerms; label: string; unit: "%" | "£"; help: string; max: number; whole?: boolean }[] = [
+  { key: "commission", label: "Commission", unit: "%", help: "Of the hammer price.", max: 100 },
+  { key: "lottingFee", label: "Lotting fee", unit: "£", help: "Per lot.", max: 100000 },
+  { key: "photographyFee", label: "Photography", unit: "£", help: "Per lot.", max: 100000 },
+  { key: "unsoldFee", label: "Unsold fee", unit: "£", help: "Per unsold lot.", max: 100000 },
+  { key: "reservePercent", label: "Reserve", unit: "%", help: "Of the bottom estimate.", max: 100, whole: true },
 ]
 
-/** A customer's usual terms, field by field, falling back to the standard terms where they have none. */
-export function usualTerms(c: CustomerRow | null): ReceiptTerms {
-  return {
-    commission: c?.commission ?? DEFAULT_TERMS.commission,
-    lottingFee: c?.lottingFee ?? DEFAULT_TERMS.lottingFee,
-    photographyFee: c?.photographyFee ?? DEFAULT_TERMS.photographyFee,
-    unsoldFee: c?.unsoldFee ?? DEFAULT_TERMS.unsoldFee,
-    reservePercent: DEFAULT_TERMS.reservePercent,
-  }
+// A customer's standing fees, reserve and any special arrangement are set once, on their customer
+// page → Fees & agreement (Jack, 2026-10-16: "Tab on the customer's page"). Check in only uses them.
+// The agreement is read on its own (getAgreement) and can be missing — before Run Migrations, or
+// while it is still being read — and then the fees on their record and the standard reserve apply.
+
+/** Their Fees & agreement — only when it is this customer's. */
+export const agreementOf = (c: Pick<CustomerRow, "id"> | null | undefined, a: CustomerAgreement | null | undefined): CustomerAgreement | null =>
+  c && a && a.contactId === c.id ? a : null
+
+type Fee = Exclude<keyof ReceiptTerms, "reservePercent">
+
+/** The customer's own value for a term, or null when they use the standard one. */
+export function customerTerm(c: CustomerRow | null, key: keyof ReceiptTerms, a?: CustomerAgreement | null): number | null {
+  if (!c) return null
+  const own = agreementOf(c, a)
+  if (key === "reservePercent") return own?.reservePercent ?? null
+  return (own ? own.fees[key as Fee] : c[key as Fee]) ?? null
 }
 
-/** The customer's own value for a term, or null when they use the standard one (reserve is never per customer). */
-export function customerTerm(c: CustomerRow | null, key: keyof ReceiptTerms): number | null {
-  if (!c || key === "reservePercent") return null
-  return c[key] ?? null
+/** A customer's usual terms, field by field, falling back to the standard terms where they have none — worked out exactly as the Hub does (usualTermsFrom). */
+export function usualTerms(c: CustomerRow | null, a?: CustomerAgreement | null): ReceiptTerms {
+  const own = agreementOf(c, a)
+  // The agreement is read after the customer's record, so its fees are the fresher of the two.
+  return usualTermsFrom(own ? own.fees : c, own?.reservePercent)
 }
+
+/** True when two sets of terms are the same, term by term. */
+export const equalTerms = (a: ReceiptTerms, b: ReceiptTerms) => TERM_FIELDS.every(f => a[f.key] === b[f.key])
 
 /** True when what's typed is exactly these terms (an unreadable entry never matches). */
 export function sameTerms(d: TermsDraft, t: ReceiptTerms) {
   const p = parseTerms(d).terms
-  return !!p && TERM_FIELDS.every(f => p[f.key] === t[f.key])
+  return !!p && equalTerms(p, t)
 }
 
 export const termsDraft = (t: ReceiptTerms): TermsDraft => ({

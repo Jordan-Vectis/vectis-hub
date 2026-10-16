@@ -29,10 +29,16 @@ export const customerRow = (c: ContactWithGoodsIn): CustomerRow => ({
   receipts: c._count.goodsInReceipts,
 })
 
-/** The customer as a receipt prints them — copied onto the receipt so a reprint never changes. */
-export function snapshot(c: CustomerRow): CustomerSnapshot {
+/**
+ * The customer as a receipt prints them — copied onto the receipt so a reprint never changes.
+ * `specialArrangement` is their Fees & agreement tab's special arrangement as it stands at booking
+ * (read tolerantly, BEFORE the booking transaction — lib/goods-in/agreement.ts), printed on the
+ * receipt under the terms.
+ */
+export function snapshot(c: CustomerRow, extra?: { specialArrangement?: string | null }): CustomerSnapshot {
   return {
     salutation: c.salutation, name: c.name, addressLine1: c.addressLine1, addressLine2: c.addressLine2, town: c.town, county: c.county,
     postcode: c.postcode, country: c.country, email: c.email, mobile: c.mobile, phone: c.phone, vatRegNo: c.vatRegNo, vendorNo: c.vendorNo,
+    specialArrangement: extra?.specialArrangement?.trim() || null,
   }
 }

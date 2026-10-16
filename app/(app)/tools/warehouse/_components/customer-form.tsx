@@ -5,15 +5,20 @@ import { saveCustomer, type CustomerInput, type CustomerRow } from "@/lib/action
 import { btn, btnGo, ErrorBox, input, label } from "./ui"
 
 // One customer form for Goods In — used to add a customer at the counter (Check in) and to edit
-// one (Customers). Saves the CRM contact and its Goods In terms together through saveCustomer.
+// one (Customers). Saves the CRM contact and its Goods In half together through saveCustomer.
 // The vendor number is given automatically from the series when left blank and "give one" is
 // ticked; an existing customer's number from before the Hub can be typed in.
+//
+// Their fees are NOT on this form (Jack, 2026-10-16): they live on the customer's own page, on
+// its Fees & agreement tab, and are set there once. A new customer starts on the standard terms.
+// The form never sends the fees at all — saveCustomer leaves a fee that isn't sent exactly as it is —
+// so a copy of the customer read before their fees were changed can't put the old ones back.
 
-export default function CustomerForm({ initial, onSaved, onCancel, compact }: {
+export default function CustomerForm({ initial, onSaved, onCancel }: {
   initial?: CustomerRow | null
   onSaved: (c: CustomerRow) => void
   onCancel?: () => void
-  /** Hide the terms section (check-in shows the terms on its own step). */
+  /** No longer does anything — the form has no terms section any more. Kept so older callers still compile. */
   compact?: boolean
 }) {
   const [f, setF] = useState<CustomerInput>(() => ({
@@ -22,12 +27,10 @@ export default function CustomerForm({ initial, onSaved, onCancel, compact }: {
     mobile: initial?.mobile ?? "", addressLine1: initial?.addressLine1 ?? "", addressLine2: initial?.addressLine2 ?? "",
     town: initial?.town ?? "", county: initial?.county ?? "", postcode: initial?.postcode ?? "", country: initial?.country ?? "Great Britain",
     vatRegNo: initial?.vatRegNo ?? "", notes: initial?.notes ?? "", vendorNo: initial?.vendorNo ?? "", newVendorNo: !initial?.vendorNo,
-    commission: initial?.commission ?? null, lottingFee: initial?.lottingFee ?? null, photographyFee: initial?.photographyFee ?? null, unsoldFee: initial?.unsoldFee ?? null,
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const set = (k: keyof CustomerInput) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(p => ({ ...p, [k]: e.target.value }))
-  const setNum = (k: keyof CustomerInput) => (e: React.ChangeEvent<HTMLInputElement>) => setF(p => ({ ...p, [k]: e.target.value === "" ? null : Number(e.target.value) }))
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,20 +92,6 @@ export default function CustomerForm({ initial, onSaved, onCancel, compact }: {
           <textarea id="cf-notes" rows={2} className={input} value={f.notes ?? ""} onChange={set("notes")} />
         </div>
       </div>
-
-      {!compact && (
-        <fieldset className="rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-          <legend className="px-1 text-xs font-semibold text-gray-600 dark:text-gray-300">Their usual terms (blank = the standard terms)</legend>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {([["commission", "Commission %"], ["lottingFee", "Lotting fee £"], ["photographyFee", "Photography £"], ["unsoldFee", "Unsold fee £"]] as const).map(([k, t]) => (
-              <div key={k}>
-                <label className={label} htmlFor={`cf-${k}`}>{t}</label>
-                <input id={`cf-${k}`} type="number" min={0} step="0.01" inputMode="decimal" className={input} value={(f[k] as number | null) ?? ""} onChange={setNum(k)} />
-              </div>
-            ))}
-          </div>
-        </fieldset>
-      )}
 
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={btnGo} disabled={saving || !f.name.trim()}>{saving ? "Saving…" : initial ? "Save changes" : "Add customer"}</button>

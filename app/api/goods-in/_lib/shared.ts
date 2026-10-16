@@ -83,12 +83,17 @@ export function customerSnapshot(
       salutation: str(o, "salutation"), name: str(o, "name")!, addressLine1: str(o, "addressLine1"), addressLine2: str(o, "addressLine2"),
       town: str(o, "town"), county: str(o, "county"), postcode: str(o, "postcode"), country: str(o, "country"), email: str(o, "email"),
       mobile: str(o, "mobile"), phone: str(o, "phone"), vatRegNo: str(o, "vatRegNo"), vendorNo: str(o, "vendorNo") ?? vendorNo,
+      // The special arrangement as it was when the receipt was booked — never the customer's current
+      // one, so a reprint shows what applied on the day.
+      specialArrangement: str(o, "specialArrangement"),
     }
   }
+  // No snapshot at all (a receipt from before snapshots): no special arrangement either — today's
+  // wouldn't be what applied on the day.
   return {
     salutation: fallback?.salutation ?? null, name: fallback?.name ?? "", addressLine1: fallback?.addressLine1 ?? null, addressLine2: fallback?.addressLine2 ?? null,
     town: null, county: null, postcode: fallback?.postcode ?? null, country: null, email: fallback?.email ?? null, mobile: null,
-    phone: fallback?.phone ?? null, vatRegNo: null, vendorNo,
+    phone: fallback?.phone ?? null, vatRegNo: null, vendorNo, specialArrangement: null,
   }
 }
 

@@ -12,6 +12,7 @@ import {
 } from "@/lib/goods-in/model"
 import { LOCATION_CODE_HELP, LOCATION_CODE_RULE } from "@/lib/goods-in/location-codes"
 import { CUSTOMER_INCLUDE, customerRow, snapshot } from "@/lib/goods-in/customer-row"
+import { AGREEMENT_UNREAD, findAgreement } from "@/lib/goods-in/agreement"
 
 // Goods In — every write, and the reads the screens share. SERVER ONLY (server actions).
 //
@@ -101,7 +102,11 @@ async function nextContactId(tx: Prisma.TransactionClient): Promise<string> {
   return `c${String((Number(rows[0]?.n) || 0) + 1).padStart(5, "0")}`
 }
 
-/** Create or update a customer — the CRM contact and its Goods In terms together. */
+/**
+ * Create or update a customer — the CRM contact and its Goods In half together. Their fees are
+ * changed on the Fees & agreement tab (saveAgreement); a fee that is sent is still saved, and one
+ * left out is left alone.
+ */
 export async function saveCustomer(input: CustomerInput): Promise<Result<CustomerRow>> {
   try {
     await who()
@@ -113,7 +118,11 @@ export async function saveCustomer(input: CustomerInput): Promise<Result<Custome
       addressLine1: blank(input.addressLine1), addressLine2: blank(input.addressLine2), postcode: blank(input.postcode)?.toUpperCase() ?? null,
       notes: blank(input.notes), isSeller: true,
     }
-    const terms = (v: number | null | undefined) => (v == null || !Number.isFinite(Number(v)) ? null : money(v, 0))
+    // ⚠ A fee LEFT OUT is left as it is (undefined → Prisma doesn't touch it). The customer form no
+    // longer has the fees — they live on the customer's Fees & agreement tab (saveAgreement in
+    // goods-in-agreement.ts) — so writing a missing one as null would put every customer back on
+    // the standard fees each time their address was edited. null still means "standard".
+    const terms = (v: number | null | undefined) => (v === undefined ? undefined : v == null || !Number.isFinite(Number(v)) ? null : money(v, 0))
     const extra = {
       mobile: blank(input.mobile), town: blank(input.town), county: blank(input.county), country: blank(input.country),
       vatRegNo: blank(input.vatRegNo), commission: terms(input.commission), lottingFee: terms(input.lottingFee),
@@ -180,12 +189,23 @@ export async function createReceipt(input: ReceiptInput): Promise<Result<{ recei
     const cust = await prisma.contact.findUnique({ where: { id: input.contactId }, include: CUSTOMER_INCLUDE })
     if (!cust) return { ok: false, error: "That customer couldn't be found — search for them again." }
     const c = customerRow(cust)
+    // Their usual reserve and special arrangement (the Fees & agreement tab) — read BEFORE the
+    // transaction (GoodsInAgreement needs Run Migrations, and a failed query inside the transaction
+    // would abort the booking) and strictly: a missing table is "standard reserve, no arrangement",
+    // but any other fault refuses, rather than book a receipt that silently leaves off what was agreed.
+    const a = await findAgreement(c.id).catch((e: unknown) => {
+      console.error("goods-in createReceipt: couldn't read the customer's agreement:", e)
+      return null
+    })
+    if (!a) return { ok: false, error: AGREEMENT_UNREAD }
+    const usualReserve = a.reservePercent ?? DEFAULT_TERMS.reservePercent
+    const reserve = Number(input.terms?.reservePercent ?? usualReserve)
     const t: ReceiptTerms = {
       commission: money(input.terms?.commission ?? c.commission, DEFAULT_TERMS.commission),
       lottingFee: money(input.terms?.lottingFee ?? c.lottingFee, DEFAULT_TERMS.lottingFee),
       photographyFee: money(input.terms?.photographyFee ?? c.photographyFee, DEFAULT_TERMS.photographyFee),
       unsoldFee: money(input.terms?.unsoldFee ?? c.unsoldFee, DEFAULT_TERMS.unsoldFee),
-      reservePercent: Math.min(100, Math.max(0, Math.round(Number(input.terms?.reservePercent ?? DEFAULT_TERMS.reservePercent)))),
+      reservePercent: Math.min(100, Math.max(0, Math.round(Number.isFinite(reserve) ? reserve : usualReserve))),
     }
 
     const made = await prisma.$transaction(async tx => {
@@ -204,7 +224,7 @@ export async function createReceipt(input: ReceiptInput): Promise<Result<{ recei
       const palletNos = pallets ? await takeNumbers(tx, "pallet", pallets) : []
       await tx.goodsInReceipt.create({
         data: {
-          id: receiptId, contactId: c.id, vendorNo, customer: { ...snapshot(c), vendorNo } as unknown as Prisma.InputJsonValue,
+          id: receiptId, contactId: c.id, vendorNo, customer: { ...snapshot(c, { specialArrangement: a.specialArrangement }), vendorNo } as unknown as Prisma.InputJsonValue,
           ...t, ownerConfirmed: !!input.ownerConfirmed, agentConfirmed: !!input.agentConfirmed,
           notes: blank(input.notes), status: "open", createdById: me.id, createdByName: me.name,
         },

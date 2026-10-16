@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, useTransition, type ReactNode } from "react"
 import { getCustomer, type CustomerRow } from "@/lib/actions/goods-in"
+import { getAgreement, type CustomerAgreement } from "@/lib/actions/goods-in-agreement"
 import { bookInCheckIn, discardCheckIn, loadCheckIn, type CheckInInput, type CheckInLoaded } from "@/lib/actions/goods-in-checkin"
 import { COUNTERS, DEFAULT_TERMS, type CounterKey, type ReceiptTerms } from "@/lib/goods-in/model"
 import { ErrorBox, btn, btnDanger, btnGo, mono, ukDateTime } from "../_components/ui"
@@ -14,8 +15,8 @@ import { clearDraft, readDraft, writeDraft, type CheckInDraft } from "./draft"
 import GoodsStep from "./goods-step"
 import { useCheckInSaving, type SaveAnswer, type SaveWhen } from "./save-engine"
 import {
-  LABELS_TAB, MAX_ROWS, blankRow, countKinds, fullName, isBlankRow, isNumberingError, isPrinted, kindsPhrase, labelText, labelsUrl, listNumbers,
-  mergeSaved, parseTerms, rowFromSaved, sameTerms, termsDraft, usualTerms,
+  LABELS_TAB, MAX_ROWS, NOTE, agreementOf, blankRow, countKinds, equalTerms, fullName, isBlankRow, isNumberingError, isPrinted, kindsPhrase, labelText,
+  labelsUrl, listNumbers, mergeSaved, parseTerms, rowFromSaved, sameTerms, termsDraft, usualTerms,
   type GoodsRow, type TermsDraft, type UnfinishedCheckIn,
 } from "./shared"
 
@@ -32,7 +33,13 @@ import {
 //
 // The terms are not a step any more (Jack: "it's more the checking in asking for fees part you
 // have done is annoying"): every receipt uses the customer's usual terms (the standard terms where
-// they have none), shown as one line on Check & book in with a "Change for this receipt".
+// they have none), shown as one line on Check & book in with a "Change for this receipt". Their
+// fees, reserve and any special arrangement are set once, on their customer page → Fees &
+// agreement; this screen reads that (getAgreement) whenever the customer changes and whenever the
+// tab comes back into view — so a change made there in another tab shows here — and terms not
+// changed for this receipt follow it. Until it has been read, or before Run Migrations, the fees
+// on their record and the standard reserve apply — Book in waits for the first read (a few seconds
+// at most), and a read that fails says so on Check & book in with Try again, never silently.
 //
 // A check-in left part way is kept in the Hub (and, for this tab, in sessionStorage — draft.ts)
 // and offered back: "Carry on" here, from Receipts, the dashboard or the customer's page. Starting
@@ -48,6 +55,10 @@ const STEPS = [
   { title: "Check & book in", short: "Book in" },
 ] as const
 const LAST = STEPS.length - 1
+/** A failed read of their Fees & agreement is tried once more after this long. */
+const AGREEMENT_RETRY_MS = 3_000
+/** The longest Book in waits for the first read of their Fees & agreement. */
+const AGREEMENT_WAIT_MS = 6_000
 
 type BookError = { kind: "server"; message: string } | { kind: "lost" }
 /** What was printed: row key → its number, and row key → what its label says. */
@@ -65,7 +76,7 @@ const reopenNeeded = (m: string) => /open the check-in again/i.test(m)
 const thrownAwayMsg = (m: string) => /was thrown away/i.test(m)
 const bookedOrVoidMsg = (m: string) => /has already been booked in|has been voided/i.test(m)
 
-export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCustomer = null, initialCheckIn = null, unfinished: unfinishedAtLoad = [] }: {
+export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCustomer = null, initialCheckIn = null, initialAgreement = null, unfinished: unfinishedAtLoad = [] }: {
   /** Number series not yet set up in Settings (null = couldn't check). */
   missingSeries: CounterKey[] | null
   isAdmin: boolean
@@ -75,6 +86,8 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   initialCustomer?: CustomerRow | null
   /** The check-in the page was opened to carry on (?receipt=). */
   initialCheckIn?: CheckInLoaded | null
+  /** That customer's Fees & agreement, read by the page (null when it couldn't be). */
+  initialAgreement?: CustomerAgreement | null
   /** Check-ins not booked in yet (the person's own first), offered on the Customer step. */
   unfinished?: UnfinishedCheckIn[]
 }) {
@@ -88,7 +101,9 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   const [customerMode, setCustomerMode] = useState<CustomerMode>("view")
   const [receiptId, setReceiptId] = useState<string | null>(opened?.receiptId ?? null)
   const [rows, setRows] = useState<GoodsRow[]>(() => (opened ? opened.rows.map(rowFromSaved) : [blankRow("tote")]))
-  const [terms, setTerms] = useState<TermsDraft>(() => termsDraft(opened ? opened.terms : usualTerms(initialCustomer)))
+  /** The Fees & agreement last read — used only while it is the customer on screen's (agreementOf). */
+  const [agreement, setAgreement] = useState<CustomerAgreement | null>(initialAgreement)
+  const [terms, setTerms] = useState<TermsDraft>(() => termsDraft(opened ? opened.terms : usualTerms(initialCustomer, initialAgreement)))
   const [termsOpen, setTermsOpen] = useState(false)
   const [notes, setNotes] = useState(opened?.notes ?? "")
   const [owner, setOwner] = useState(opened?.ownerConfirmed ?? false)
@@ -169,6 +184,81 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       return m
     })
 
+  // ── Their Fees & agreement (the tab on their customer page) ──
+  // Read whenever the customer changes, and again whenever this tab comes back into view — "Change
+  // for this receipt" opens their Fees & agreement tab in a new tab. Terms on screen that are still
+  // their usual ones follow it; terms changed for this receipt are left as they are. Nothing is
+  // changed under a booking.
+  const gotAgreement = useRef<(a: CustomerAgreement) => void>(() => {})
+  useLayoutEffect(() => {
+    gotAgreement.current = a => {
+      if (!customer || a.contactId !== customer.id || booked || bookingRef.current) return
+      const before = usualTerms(customer, agreement)
+      const after = usualTerms(customer, a)
+      setAgreement(a)
+      if (!equalTerms(before, after) && sameTerms(terms, before)) {
+        setTerms(termsDraft(after))
+        saving.changed("now")
+      }
+    }
+  })
+  // Whether it has been read for the customer on screen — never a guess (design rule 7): until the
+  // first answer Book in waits ("Reading their fees…", AGREEMENT_WAIT_MS at most), and a read that
+  // fails says so on Check & book in, with Try again — the fees on their record and the standard
+  // reserve are what's shown then. A failed RE-read (the tab coming back) keeps what was read before.
+  const [agreementRead, setAgreementRead] = useState<{ contactId: string; state: "ok" | "failed" | "reading" } | null>(() => {
+    const c = opened ? opened.customer : initialCustomer
+    return c && initialAgreement?.contactId === c.id ? { contactId: c.id, state: "ok" } : null
+  })
+  const [agreementTry, setAgreementTry] = useState(0)
+  const contactId = customer?.id ?? null
+  useEffect(() => {
+    if (!contactId) return
+    const id = contactId
+    let live = true
+    let retried = false
+    let retry: ReturnType<typeof setTimeout> | undefined
+    const settle = (state: "ok" | "failed") =>
+      setAgreementRead(s => (state === "failed" && s?.contactId === id && s.state === "ok" ? s : { contactId: id, state }))
+    const read = () => {
+      getAgreement(id).then(
+        r => {
+          if (!live) return
+          if (!r.ok) { failed(); return }
+          gotAgreement.current(r.data)
+          settle("ok")
+        },
+        () => failed(),
+      )
+    }
+    const failed = () => {
+      if (!live) return
+      settle("failed")
+      // One quiet try again a moment later (a Wi-Fi blip), then it waits for Try again or the tab coming back.
+      if (!retried) { retried = true; retry = setTimeout(read, AGREEMENT_RETRY_MS) }
+    }
+    read()
+    // Book in never waits on it for longer than this.
+    const slow = setTimeout(() => {
+      if (live) setAgreementRead(s => (s?.contactId === id && s.state !== "reading" ? s : { contactId: id, state: "failed" }))
+    }, AGREEMENT_WAIT_MS)
+    const back = () => { if (document.visibilityState === "visible") read() }
+    document.addEventListener("visibilitychange", back)
+    return () => {
+      live = false
+      clearTimeout(retry)
+      clearTimeout(slow)
+      document.removeEventListener("visibilitychange", back)
+    }
+  }, [contactId, agreementTry])
+  const agreementState = !customer ? null : agreementRead?.contactId === customer.id ? agreementRead.state : "reading"
+  const retryAgreement = () => {
+    if (!customer) return
+    setAgreementRead({ contactId: customer.id, state: "reading" })
+    setAgreementTry(n => n + 1)
+  }
+  const shownAgreement = agreementOf(customer, agreement)
+
   const ok = [!!customer && customerMode === "view", rows.length > 0 && rows.length <= MAX_ROWS, !!parsedTerms]
   const blocked = [
     customer ? (customerMode === "edit" ? "Save or cancel the customer's details first." : "Pick the customer first.") : "Find or add the customer first.",
@@ -176,7 +266,9 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
     "Fix the terms marked in red.",
   ]
   const reachable = (i: number) => ok.slice(0, i).every(Boolean)
-  const canBook = ok.every(Boolean) && !!customer && !!parsedTerms
+  // Not while their Fees & agreement is still being read for the first time (a few seconds at most).
+  const readingFees = agreementState === "reading"
+  const canBook = ok.every(Boolean) && !!customer && !!parsedTerms && !readingFees
 
   // Number series this check-in needs that aren't set up — saving it (and so numbering) would be refused.
   const needed: CounterKey[] = ["receipt", ...(totes ? (["tote"] as const) : []), ...(pallets ? (["pallet"] as const) : [])]
@@ -465,7 +557,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       }
     }
     const rs = d.rows.length ? d.rows.map(r => ({ ...r, id: null, idKind: null, labelPrintedAt: null })) : [blankRow("tote")]
-    const ts = d.terms ?? termsDraft(usualTerms(c))
+    const ts = d.terms ?? termsDraft(usualTerms(c, agreement))
     // Back to the step they were on, but never past one that isn't complete any more.
     const firstGap = [!!c, rs.length > 0 && rs.length <= MAX_ROWS].findIndex(v => !v)
     const cap = firstGap < 0 ? LAST : firstGap
@@ -522,7 +614,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   // ── Customer ──
   const pickCustomer = (c: CustomerRow) => {
     // Same person re-saved with the terms already changed for this receipt: keep the changes.
-    const keepTerms = customer?.id === c.id && !sameTerms(terms, usualTerms(customer))
+    const keepTerms = customer?.id === c.id && !sameTerms(terms, usualTerms(customer, agreement))
     // Each label carries the customer's name. Labels already printed on this check-in still say the
     // name they were printed with — once it's someone else (or their name is corrected), say so.
     if (receiptId && customer) {
@@ -532,14 +624,14 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
     }
     setCustomer(c)
     setCustomerMode("view")
-    if (!keepTerms) setTerms(termsDraft(usualTerms(c)))
+    if (!keepTerms) setTerms(termsDraft(usualTerms(c, agreement)))
     focusNext.current = true
     saving.changed("now")
   }
 
   // ── Terms, notes, declaration (typed — saved a moment after the last change) ──
   const setTerm = (k: keyof ReceiptTerms, v: string) => { setTerms(t => ({ ...t, [k]: v })); saving.changed("typing") }
-  const resetTerms = () => { setTerms(termsDraft(usualTerms(customer))); saving.changed("now") }
+  const resetTerms = () => { setTerms(termsDraft(usualTerms(customer, agreement))); saving.changed("now") }
   const changeNotes = (v: string) => { setNotes(v); saving.changed("typing") }
   const changeOwner = (v: boolean) => { setOwner(v); saving.changed("typing") }
   const changeAgent = (v: boolean) => { setAgent(v); saving.changed("typing") }
@@ -607,11 +699,11 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
 
   const printNoteNode: ReactNode = printNote && (
     printNote.kind === "opened" ? (
-      <p role="status" className="text-xs text-gray-500 dark:text-gray-400">
+      <p role="status" className="text-xs text-gray-500 dark:text-gray-400 @xl:text-right">
         {printNote.count === 1 ? "The label has" : `${printNote.count} labels have`} opened in a new tab — print {printNote.count === 1 ? "it" : "them"} on the label printer.
       </p>
     ) : printNote.kind === "blocked" ? (
-      <div role="status" className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-2 text-sm text-amber-900 dark:text-amber-200">
+      <div role="status" className={`${NOTE.warn} flex flex-wrap items-center gap-x-3 gap-y-2 !py-2`}>
         <span className="flex-1 min-w-[12rem]">The browser didn&apos;t open a new tab for the labels.</span>
         <a
           href={printNote.url}
@@ -716,8 +808,8 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       ) : (
         <>
           <b>Couldn&apos;t book in:</b> {bookError.message}
-          {/* Thrown away or voided elsewhere: pressing again can't help, and the message says what it is. */}
-          {thrownAwayMsg(bookError.message) || bookedOrVoidMsg(bookError.message) ? null : <> It hasn&apos;t been booked in — fix it and press Book in again.</>}
+          {/* Thrown away or voided elsewhere: pressing again can't help, and the message says what it is. One that already says nothing was booked needs no second line. */}
+          {thrownAwayMsg(bookError.message) || bookedOrVoidMsg(bookError.message) || /nothing was booked in/i.test(bookError.message) ? null : <> It hasn&apos;t been booked in — fix it and press Book in again.</>}
         </>
       )}
     </ErrorBox>
@@ -743,10 +835,15 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   // be fixed by trying again — then the button is the thing that helps instead.
   const failedMsg = saving.error?.message ?? null
   const fixBtn = "inline-flex min-h-11 items-center px-1 font-semibold underline"
+  const savingNow = (
+    <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-indigo-400 motion-safe:animate-pulse" />Saving…
+    </span>
+  )
   const status: ReactNode = !active ? null
-    : saving.inFlight ? <span className="text-gray-500 dark:text-gray-400">Saving…</span>
+    : saving.inFlight ? savingNow
     : saving.error ? (
-      <span role="alert" className="inline-flex flex-wrap items-center justify-end gap-x-2 text-red-700 dark:text-red-300">
+      <span role="alert" className="inline-flex flex-wrap items-center gap-x-2 text-red-700 dark:text-red-300">
         <span>
           {failedMsg == null ? "Not saved — the Hub didn't answer." : <>Not saved: {failedMsg}</>}
           {failedMsg && isNumberingError(failedMsg) && (
@@ -764,8 +861,8 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
         )}
       </span>
     )
-    : saving.pending ? <span className="text-gray-500 dark:text-gray-400">Saving…</span>
-    : receiptId ? <span className="text-gray-500 dark:text-gray-400">✓ Saved</span>
+    : saving.pending ? savingNow
+    : receiptId ? <span className="text-gray-500 dark:text-gray-400"><span aria-hidden className="text-emerald-600 dark:text-emerald-400">✓</span> Saved</span>
     : null
 
   const firstProblem = ok.findIndex(v => !v)
@@ -792,35 +889,30 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       <div ref={topRef} className="scroll-mt-4" />
 
       {notice && (
-        <div
-          role="status"
-          className={`mb-5 flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${notice.tone === "ok"
-            ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200"
-            : "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"}`}
-        >
+        <div role="status" className={`${notice.tone === "ok" ? NOTE.ok : NOTE.warn} mb-5 flex items-start gap-3`}>
           <span className="flex-1">{notice.text}</span>
           <button type="button" className="-my-3 inline-flex min-h-11 items-center px-2 text-xs underline" onClick={() => setNotice(null)}>Dismiss</button>
         </div>
       )}
 
       {relabel && (
-        <div role="status" className="mb-5 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+        <div role="status" className={`${NOTE.warn} mb-5`}>
           <p>
             The {relabel.ids.length === 1 ? "label" : "labels"} printed for <span className={`${mono} font-semibold`}>{listNumbers(relabel.ids)}</span> still
             {" "}{relabel.ids.length === 1 ? "says" : "say"} <b>{relabel.was}</b> — reprint {relabel.ids.length === 1 ? "it" : "them"}{customer ? <> so {relabel.ids.length === 1 ? "it shows" : "they show"} <b>{customer.name}</b></> : null}.
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button type="button" className={btnGo} disabled={printing} onClick={() => printLabels(relabel.keys, () => setRelabel(null))} aria-busy={printing}>
               {printing ? "Getting the labels ready…" : relabel.ids.length === 1 ? "Reprint it" : "Reprint them"}
             </button>
             <button type="button" className={btn} onClick={() => setRelabel(null)}>Dismiss</button>
           </div>
-          {step !== 1 && printNote && <div className="mt-2">{printNoteNode}</div>}
+          {step !== 1 && printNote && <div className="mt-3">{printNoteNode}</div>}
         </div>
       )}
 
       {leave && (
-        <div ref={leaveRef} className="mb-5 scroll-mt-4 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+        <div ref={leaveRef} className={`${NOTE.warn} mb-5 scroll-mt-4`}>
           <p className="font-semibold">
             {customer ? <>{fullName(customer)}&apos;s check-in</> : "This check-in"} isn&apos;t booked in yet
           </p>
@@ -829,8 +921,8 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
             {" "}Keep it for later and it stays as it is, not booked in — anyone can carry on with it from Check in or Receipts. Or throw it away
             {printedHere.length ? <>: its numbers won&apos;t be used again, so throw away the labels printed for {listNumbers(printedHere)} too</> : null}.
           </p>
-          {leaveError && <div className="mt-2"><ErrorBox onDismiss={() => setLeaveError(null)}>{leaveError}</ErrorBox></div>}
-          <div className="mt-2 flex flex-wrap gap-2">
+          {leaveError && <div className="mt-3"><ErrorBox onDismiss={() => setLeaveError(null)}>{leaveError}</ErrorBox></div>}
+          <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={btnGo} disabled={!!leaveBusy} onClick={() => void keepForLater()} aria-busy={leaveBusy === "keep"}>
               {leaveBusy === "keep" ? "Saving it…" : "Keep it for later"}
             </button>
@@ -843,7 +935,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       )}
 
       {shownOffer && (
-        <div className="mb-5 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-100">
+        <div className={`${NOTE.info} mb-5`}>
           <p className="font-semibold">
             There&apos;s an unfinished check-in{shownOffer.customerName ? <> for {shownOffer.customerName}</> : null} in this tab
           </p>
@@ -852,9 +944,9 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
             {shownOffer.receiptId ? <>It&apos;s receipt <span className={`${mono} font-semibold`}>{shownOffer.receiptId}</span>, not booked in yet.</> : "Nothing from it has been booked in."}
             {screenHasWork && " Carrying on with it replaces what's on this screen now."}
           </p>
-          {offerError && <div className="mt-2"><ErrorBox onDismiss={() => setOfferError(null)}>{offerError}</ErrorBox></div>}
+          {offerError && <div className="mt-3"><ErrorBox onDismiss={() => setOfferError(null)}>{offerError}</ErrorBox></div>}
           {offerAsk && shownOffer.receiptId ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="basis-full">
                 Throw {shownOffer.receiptId} away? Its numbers won&apos;t be used again — any label already printed for it goes in the bin too.
               </span>
@@ -864,7 +956,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
               <button type="button" className={btn} disabled={offerBusy} onClick={() => setOfferAsk(false)}>Keep it</button>
             </div>
           ) : (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" className={btnGo} disabled={restoring || booking || !!opening} onClick={carryOn} aria-busy={restoring || opening === shownOffer.receiptId}>
                 {restoring || (opening && opening === shownOffer.receiptId) ? "Opening it…" : shownOffer.customerName ? `Carry on with the check-in for ${shownOffer.customerName}` : "Carry on with that check-in"}
               </button>
@@ -881,10 +973,10 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       )}
 
       {showUnfinished && (
-        <div className="mb-5 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-100">
+        <div className={`${NOTE.info} mb-5 !pt-1`}>
           <div className="flex flex-wrap items-center justify-between gap-x-3">
             <p className="font-semibold">Your check-ins not booked in yet</p>
-            <button type="button" className="inline-flex min-h-11 items-center px-1 text-xs underline" onClick={() => setHideUnfinished(true)}>Hide</button>
+            <button type="button" className="-mr-1 inline-flex min-h-11 items-center px-1 text-xs underline" onClick={() => setHideUnfinished(true)}>Hide</button>
           </div>
           <ul className="divide-y divide-indigo-200 dark:divide-indigo-800/60">
             {others.slice(0, 5).map(u => (
@@ -915,7 +1007,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       )}
 
       {missingNeeded.length > 0 && (
-        <div className="mb-5 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+        <div className={`${NOTE.warn} mb-5`}>
           <p className="font-semibold">Numbers can&apos;t be given yet</p>
           <p className="mt-1">
             The {listWords(missingNeeded.map(k => COUNTERS[k].label.toLowerCase().replace(/s$/, "")))} numbers haven&apos;t been set up, so the Hub has no number to give — rows can&apos;t be numbered or labelled, and nothing can be booked in.{" "}
@@ -925,7 +1017,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
           </p>
           <button
             type="button"
-            className={`${btn} mt-2`}
+            className={`${btn} mt-3`}
             disabled={checking}
             onClick={() => { startChecking(() => router.refresh()); saving.saveNow() }}
           >
@@ -936,12 +1028,33 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
 
       <StepBar step={step} furthest={furthest} ok={ok} reachable={reachable} go={go} subs={subs} />
 
-      {step === 1 && customer && (
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-          Booking in for <b className="text-gray-900 dark:text-white">{fullName(customer)}</b>
-          {customer.vendorNo && <> · <span className="font-mono">{customer.vendorNo}</span></>}
-          {" "}· {kindsPhrase(totes, pallets)}
-        </p>
+      {/* Who it's for, and the receipt as the Hub has it — the same strip on both steps after Customer. */}
+      {step >= 1 && customer && (
+        <div className="mb-5 flex min-h-11 flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-gray-200 dark:border-gray-800 pb-3 text-sm">
+          <p className="min-w-0 text-gray-600 dark:text-gray-400">
+            Booking in for <b className="text-gray-900 dark:text-white">{fullName(customer)}</b>
+            {customer.vendorNo && <> · <span className={`${mono} text-gray-700 dark:text-gray-300`}>{customer.vendorNo}</span></>}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-2 text-gray-500 dark:text-gray-400">
+            {receiptId ? (
+              <>
+                <span>Receipt <span className={`${mono} font-semibold text-gray-900 dark:text-white`}>{receiptId}</span></span>
+                <span aria-hidden>·</span>
+                <span>not booked in yet</span>
+                {status && (
+                  <>
+                    <span aria-hidden>·</span>
+                    {status}
+                  </>
+                )}
+              </>
+            ) : saving.error ? (
+              status
+            ) : (
+              <span>{numbering ? "Taking a receipt number…" : "No receipt number yet"}</span>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="min-h-[40vh]">
@@ -962,9 +1075,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
           <GoodsStep
             rows={rows}
             editRows={editRows}
-            receiptId={receiptId}
             numbering={numbering}
-            status={status}
             goneIds={goneIds}
             rowNotes={rowNotes}
             onRowNote={setRowNote}
@@ -977,6 +1088,9 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
         {step === 2 && customer && (
           <CheckStep
             customer={customer}
+            agreement={shownAgreement}
+            agreementUnread={agreementState === "failed" && !shownAgreement}
+            onRetryAgreement={retryAgreement}
             rows={rows}
             terms={terms}
             setTerm={setTerm}
@@ -990,9 +1104,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
             agent={agent}
             setAgent={changeAgent}
             vendorSeries={vendorSeries}
-            receiptId={receiptId}
             numbering={numbering}
-            status={status}
             goTo={go}
             onRemoveBlank={() => editRows(rs => rs.filter(r => !isBlankRow(r)), "now")}
             error={errorBox}
@@ -1017,6 +1129,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
               <button type="button" className={`${btnGo} !min-h-14 !px-8 !text-base`} disabled={booking || !canBook} onClick={() => void bookIn()} aria-busy={booking}>
                 {booking
                   ? <><span aria-hidden className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Booking in {kindsPhrase(totes, pallets)}…</>
+                  : readingFees && ok.every(Boolean) ? "Reading their fees…"
                   : rows.length ? <>Book in {kindsPhrase(totes, pallets)}</> : "Book in"}
               </button>
             )}

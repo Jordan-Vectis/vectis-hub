@@ -190,7 +190,7 @@ export const DESTINATIONS: Destination[] = [
   {
     ask: "How do I book a customer's goods in?",
     name: "Goods In → Book in", href: "/tools/warehouse/check-in", app: "WAREHOUSE",
-    what: "Book a customer's goods in at the counter, in three steps — Customer, What they've brought, Check & book in. Find the customer in the customer database (or add them), then list their goods as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote. Each tote and pallet gets its number as soon as its row is added, so its barcode label can be printed right there on the goods step (Print labels prints every one not printed yet; each row has its own Print / Reprint). The customer's usual commission and fees are used automatically; change them for one receipt on the last step, or for good on the customer's page. Press Book in, then print or email the receipt. A check-in left part-way is kept as \"not booked in yet\" — carry on with it from Check in, the Receipts list, the Goods In dashboard or the customer's page, or throw it away.",
+    what: "Book a customer's goods in at the counter, in three steps — Customer, What they've brought, Check & book in. Find the customer in the customer database (or add them), then list their goods as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote. Each tote and pallet gets its number as soon as its row is added, so its barcode label can be printed right there on the goods step (Print labels prints every one not printed yet; each row has its own Print / Reprint). The customer's usual commission, fees and reserve are used automatically, and any special arrangement agreed with them is shown on the last step; change the terms for one receipt there, or for good on the customer's Fees & agreement tab. Press Book in, then print or email the receipt. A check-in left part-way is kept as \"not booked in yet\" — carry on with it from Check in, the Receipts list, the Goods In dashboard or the customer's page, or throw it away.",
     also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "customer bringing in", "print tote labels at check in", "tote number at check in", "unfinished check in", "carry on checking in", "check in not booked in", "not booked in yet", "throw away a check in"],
   },
   {
@@ -198,6 +198,22 @@ export const DESTINATIONS: Destination[] = [
     name: "Goods In → Receipt list", href: "/tools/warehouse/receipts", app: "WAREHOUSE",
     what: "Every Goods In receipt, newest first. Open one to reprint it, email it to the customer, print its tote and pallet labels again, or add another tote or pallet to it. Only a manager can void one. A check-in that hasn't been booked in yet is marked \"Not booked in yet\" — open it to carry on checking in or throw it away; its labels can be printed, but the receipt itself can't be printed or emailed until it is booked in.",
     also: ["reprint a receipt", "reprint the receipt", "print a receipt", "email a receipt", "email the receipt", "send the receipt", "lost their receipt", "reprint tote labels", "void a receipt", "add a tote to a receipt"],
+  },
+  // A customer's Fees & agreement tab (2026-10-16). ⚠ Named "Fees & agreement", never "Customers" or
+  // "Customer page": a CRM user without Goods In asking "where are the customers?" must not be
+  // refused with Goods In. No `ask`, so the Goods In suggestions stay as they were. The single fee
+  // names ("lotting fee", "photography fee") are left out on purpose — Lotting Up and Photography
+  // would lose a cataloguer's question to this. Every keyword is about a Goods In customer's terms;
+  // apostrophes become spaces in matchScore, hence "customer s".
+  {
+    name: "Goods In → Fees & agreement", href: "/tools/warehouse/customers", app: "WAREHOUSE",
+    what: "Each Goods In customer's page has a Fees & agreement tab — open Goods In → Customers, pick the customer, then Fees & agreement. Set their usual commission, lotting, photography and unsold fees and their usual reserve (leave one blank for the standard one); record the day they signed Vectis's vendor terms (the terms themselves can be read there too); and write down any special arrangement agreed with them, in plain words. Set it once: Check in uses it automatically and never asks, the special arrangement is shown at check-in and printed on their receipts (a receipt keeps the arrangement as it was when it was booked). Anyone in Goods In can change it, and the tab says who changed it last.",
+    also: [
+      "fees and agreement", "customer commission", "customer s commission", "commission for a customer", "change their commission",
+      "vendor commission", "usual commission", "customer fees", "customer s fees", "vendor fees", "standard fees", "usual fees",
+      "usual reserve", "reserve percentage", "vendor terms", "signed the vendor terms", "signed vendor terms", "terms signed",
+      "special arrangement", "special arrangements", "special agreement", "customer agreement", "vendor agreement",
+    ],
   },
   {
     ask: "How do I move a tote to a new location?",
