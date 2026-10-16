@@ -18,7 +18,10 @@ import { normaliseCode, type CustomerSnapshot } from "@/lib/goods-in/model"
 // tote catalogued … this is the previous customer", which is false for a Goods In tote (each one
 // is a new number on one receipt). `syncedAt` is null because nothing was synced.
 // ⚠ A tote on a VOIDED receipt is not offered — the booking was cancelled, and filling its customer
-// in would start a batch under a receipt that no longer stands.
+// in would start a batch under a receipt that no longer stands. Nor is one on a check-in that hasn't
+// been booked in yet (a DRAFT receipt): its numbers are taken (so its labels can be printed at the
+// counter) but nothing is booked in until Book in is pressed, and the check-in may still be thrown
+// away — so it is left out exactly like a void. (Hub tables only; no BC change.)
 // ⚠ Migration-safe: the Goods In tables only exist after Run Migrations, so any failure reading
 // them is "Goods In has nothing" and the reply is exactly what it was before this was added.
 
@@ -58,7 +61,7 @@ async function goodsInTote(raw: string) {
       where:  { id },
       select: { id: true, category: true, description: true, locationCode: true, receipt: { select: RECEIPT_SELECT } },
     })
-    if (!c || c.receipt.status === "void") return null
+    if (!c || c.receipt.status === "void" || c.receipt.status === "draft") return null   // not booked in (see above)
     return {
       ...goodsInWho(c.receipt),
       receiptNo: c.receipt.id,
@@ -75,7 +78,7 @@ async function goodsInReceipt(raw: string) {
   if (!id) return null
   try {
     const r = await prisma.goodsInReceipt.findUnique({ where: { id }, select: RECEIPT_SELECT })
-    if (!r || r.status === "void") return null
+    if (!r || r.status === "void" || r.status === "draft") return null   // not booked in (see above)
     return { ...goodsInWho(r), receiptNo: r.id }
   } catch {
     return null

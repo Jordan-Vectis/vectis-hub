@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/app/generated/prisma/client"
 import { atLeast, getGoodsInUser } from "@/lib/goods-in/access"
 import { mailStatus } from "@/lib/goods-in/mail"
+import { listUnfinishedCheckIns } from "@/lib/actions/goods-in-checkin"
 import type { ContainerStatus, CounterKey, CustomerSnapshot } from "@/lib/goods-in/model"
 import { GoodsInFindBox } from "@/components/warehouse-sidebar"
-import { Empty, ErrorBox, NotReady, PageHeader, StatusBadge, box, btnGo, isMissingTable, mono, td, th, ukDateTime } from "./_components/ui"
+import { Empty, ErrorBox, NotReady, PageHeader, StatusBadge, box, btn, btnGo, isMissingTable, mono, td, th, ukDateTime } from "./_components/ui"
 import { londonDayStart, londonYmd, mondayOfYmd } from "./history/london-days"
 import { FromTo, MOVE_SELECT, MoveKindChip, findHref, moveItem, moveKind, type MoveRow } from "./history/move-parts"
+import { BOOKED_LIVE, NOT_DRAFT, carryOnHref } from "./receipts/_parts"
 
 // Goods In — the dashboard. What the counter needs at a glance: book goods in, scan anything,
 // how much is waiting where, and what has just happened. Read straight from the Goods In tables
@@ -26,14 +28,18 @@ async function loadDashboard() {
   const today = londonYmd()
   const dayStart = londonDayStart(today)
   const weekStart = londonDayStart(mondayOfYmd(today))
-  // A voided receipt's totes aren't real goods — leave them out of every figure.
-  const liveReceipt: Prisma.GoodsInReceiptWhereInput = { OR: [{ status: null }, { status: { not: "void" } }] }
+  // A voided receipt's totes aren't real goods, and a check-in that hasn't been booked in yet (a
+  // draft) isn't booked in at all — leave both out of every figure. A draft's createdAt becomes the
+  // booking time when it is booked in, so "booked today" counts it on the day it really was.
+  const liveReceipt: Prisma.GoodsInReceiptWhereInput = BOOKED_LIVE
 
-  const [bookedToday, byStatus, cataloguedWeek, receipts, moves, counters, locations, mail] = await Promise.all([
+  const [bookedToday, byStatus, cataloguedWeek, receipts, moves, counters, locations, mail, unfinished] = await Promise.all([
     prisma.goodsInReceipt.count({ where: { createdAt: { gte: dayStart }, ...liveReceipt } }),
     prisma.goodsInContainer.groupBy({ by: ["status", "kind"], where: { receipt: liveReceipt }, _count: { _all: true } }),
     prisma.goodsInContainer.groupBy({ by: ["kind"], where: { status: "catalogued", updatedAt: { gte: weekStart }, receipt: liveReceipt }, _count: { _all: true } }),
+    // Recent receipts are ones booked in; check-ins not finished have their own list.
     prisma.goodsInReceipt.findMany({
+      where: NOT_DRAFT,
       take: 10,
       orderBy: { createdAt: "desc" },
       select: { id: true, customer: true, status: true, createdByName: true, createdAt: true, contact: { select: { name: true } }, containers: { select: { kind: true } } },
@@ -42,6 +48,8 @@ async function loadDashboard() {
     prisma.goodsInCounter.findMany({ select: { key: true } }),
     prisma.goodsInLocation.count({ where: { OR: [{ active: null }, { active: true }] } }),
     mailStatus(),
+    // Never let this list stop the dashboard: a failure is shown as a quiet line instead.
+    listUnfinishedCheckIns().catch(e => ({ ok: false as const, error: String((e as { message?: string })?.message ?? e).slice(0, 200) })),
   ])
 
   const status: Record<"booked" | "stored" | "bench", KindCount> = { booked: none(), stored: none(), bench: none() }
@@ -59,7 +67,7 @@ async function loadDashboard() {
 
   const haveSeries = new Set(counters.map(c => c.key))
   return {
-    bookedToday, status, catalogued, receipts, moves: moves as MoveRow[], locations, mail,
+    bookedToday, status, catalogued, receipts, moves: moves as MoveRow[], locations, mail, unfinished,
     missingSeries: NEEDED_SERIES.filter(k => !haveSeries.has(k)),
   }
 }
@@ -111,6 +119,8 @@ export default async function GoodsInDashboard() {
           <section className={`${box} p-4 sm:p-5`} aria-label="Find anything">
             <GoodsInFindBox autoFocus />
           </section>
+
+          {data && <Unfinished data={data} />}
 
           {data && <Figures data={data} />}
 
@@ -198,6 +208,62 @@ function SetupChecklist({ data, isAdmin, isManager }: { data: Data; isAdmin: boo
 
 const listWords = (w: string[]) => (w.length <= 1 ? w.join("") : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`)
 
+// ─── Check-ins not finished ──────────────────────────────────────────────────────────────
+
+/** How many unfinished check-ins the dashboard lists before pointing at Receipts — it mustn't push the figures down. */
+const UNFINISHED_SHOWN = 3
+
+/** Check-ins started at the counter but not booked in yet (draft receipts) — carry one on, or open it to throw it away. */
+function Unfinished({ data }: { data: Data }) {
+  const res = data.unfinished
+  if (!res.ok) {
+    return <p className="text-xs text-gray-500 dark:text-gray-400">Check-ins not finished couldn&apos;t be listed just now ({res.error}). They are still on the Receipts list under <b>Not booked in yet</b>.</p>
+  }
+  const list = res.data
+  if (list.length === 0) return null
+  // The person's own come first (listUnfinishedCheckIns), then everyone else's, newest first.
+  const shown = list.slice(0, UNFINISHED_SHOWN)
+  const more = list.length - shown.length
+  return (
+    <section className="rounded-xl border border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 p-4 sm:p-5" aria-labelledby="unfinished-checkins">
+      <div className="flex flex-wrap items-center justify-between gap-x-4">
+        {/* listUnfinishedCheckIns gives at most 20, so 20 may mean more. */}
+        <h2 id="unfinished-checkins" className="text-base font-semibold text-amber-900 dark:text-amber-100">Check-ins not finished ({list.length >= 20 ? "20+" : list.length.toLocaleString("en-GB")})</h2>
+        <Link href="/tools/warehouse/receipts?status=draft" className="inline-flex items-center min-h-11 text-sm font-medium text-amber-900 dark:text-amber-100 underline">See them in Receipts</Link>
+      </div>
+      <p className="text-sm text-amber-800 dark:text-amber-200/90">Started at the counter but not booked in yet. Carry one on to finish it, or open it to throw it away.</p>
+      <ul className="mt-3 space-y-2">
+        {shown.map(u => {
+          const who = u.mine ? "you" : u.createdByName
+          return (
+            <li key={u.receiptId} className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-white/80 dark:bg-gray-900/70 p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="min-w-0 flex-1 basis-56">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">
+                  {u.customer || "No customer"} <span className={`${mono} font-normal text-gray-500 dark:text-gray-400`}>{u.receiptId}</span>
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
+                  {u.rows === 0 ? "Nothing added yet" : `${plural(u.rows, "tote or pallet", "totes and pallets")} numbered`}
+                  {who ? ` · started by ${who}` : ""} · last saved {ukDateTime(u.updatedAt)}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href={carryOnHref(u.receiptId)} className={btnGo}>Carry on</Link>
+                <Link href={`/tools/warehouse/receipts/${encodeURIComponent(u.receiptId)}`} className={btn}>Open</Link>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      {more > 0 && (
+        <p className="mt-2 text-sm text-amber-900 dark:text-amber-100">
+          And {list.length >= 20 ? "more" : `${more.toLocaleString("en-GB")} more`} —{" "}
+          <Link href="/tools/warehouse/receipts?status=draft" className="inline-flex items-center min-h-11 font-medium underline">see them in Receipts</Link>.
+        </p>
+      )}
+    </section>
+  )
+}
+
 // ─── Figure tiles ────────────────────────────────────────────────────────────────────────
 
 function Figures({ data }: { data: Data }) {
@@ -227,7 +293,7 @@ function Figures({ data }: { data: Data }) {
         ))}
       </ul>
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        The tote and pallet figures leave out voided receipts, and the chip on each tile is the status it counts.
+        The figures leave out voided receipts and check-ins not booked in yet, and the chip on each tile is the status it counts.
         &ldquo;Catalogued this week&rdquo; is totes and pallets marked catalogued since Monday.
       </p>
     </section>

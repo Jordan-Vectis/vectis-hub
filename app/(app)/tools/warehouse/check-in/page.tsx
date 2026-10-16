@@ -1,14 +1,19 @@
 import type { ReactNode } from "react"
+import { redirect } from "next/navigation"
+import { prisma } from "@/lib/prisma"
 import { getCustomer, type CustomerRow } from "@/lib/actions/goods-in"
+import { listUnfinishedCheckIns, loadCheckIn, type CheckInLoaded } from "@/lib/actions/goods-in-checkin"
 import { atLeast, getGoodsInUser } from "@/lib/goods-in/access"
-import { COUNTER_KEYS, type CounterKey } from "@/lib/goods-in/model"
+import { COUNTER_KEYS, normaliseCode, type CounterKey } from "@/lib/goods-in/model"
 import { readCounters } from "@/lib/goods-in/numbers"
 import { ErrorBox, NotReady, PageHeader, isMissingTable } from "../_components/ui"
 import CheckInFlow from "./check-in-flow"
+import type { UnfinishedCheckIn } from "./shared"
 
 // Goods In → Check in (the counter's main screen). The page checks who is asking and whether the
-// number series are set up, then hands over to the step flow, which does the rest in the browser
-// and books in through createReceipt. Nothing here touches Business Central.
+// number series are set up, reads any check-in being carried on (?receipt=) and the check-ins not
+// booked in yet, then hands over to the step flow, which does the rest in the browser — saving the
+// check-in as it goes (lib/actions/goods-in-checkin.ts). Nothing here touches Business Central.
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Check in — Goods In" }
@@ -18,17 +23,19 @@ const Shell = ({ children }: { children: ReactNode }) => (
     <PageHeader
       title="Check in"
       back={{ href: "/tools/warehouse", label: "Goods In" }}
-      intro="Book a customer's goods in: find the customer, list their totes and pallets, check the terms, then book in. Nothing is booked until you press Book in."
+      intro="Book a customer's goods in: find the customer, list their totes and pallets, then check and book in. Each tote and pallet gets its number as soon as you add it, so its label can be printed straight away — the receipt counts as booked in only when you press Book in."
     />
     {children}
   </div>
 )
 
-export default async function CheckInPage({ searchParams }: { searchParams: Promise<{ customer?: string | string[] }> }) {
+export default async function CheckInPage({ searchParams }: { searchParams: Promise<{ customer?: string | string[]; receipt?: string | string[] }> }) {
   const sp = await searchParams
   // "Book in" on the Customers list and on a customer's page arrive with ?customer=<contact id>,
-  // so the counter starts with that customer already picked.
+  // so the counter starts with that customer already picked. "Carry on checking in" (Receipts, the
+  // dashboard, a customer's page) arrives with ?receipt=<receipt not booked in yet>.
   const wantedId = [sp.customer].flat()[0]?.trim() || null
+  const wantedReceipt = normaliseCode([sp.receipt].flat()[0] ?? "") || null
   const user = await getGoodsInUser()
   if (!user) {
     return (
@@ -38,7 +45,7 @@ export default async function CheckInPage({ searchParams }: { searchParams: Prom
     )
   }
 
-  // Which number series are set up. Unset ones make Book in refuse, so the counter is told up front.
+  // Which number series are set up. Unset ones make numbering refuse, so the counter is told up front.
   let missing: CounterKey[] | null = null
   let readProblem: string | null = null
   let initialCustomer: CustomerRow | null = null
@@ -52,18 +59,43 @@ export default async function CheckInPage({ searchParams }: { searchParams: Prom
     readProblem = String((e as { message?: string })?.message ?? e).slice(0, 200)
   }
 
-  // getCustomer answers { ok, error } rather than throwing, so a bad id never stops the screen.
-  if (wantedId) {
+  // The actions answer { ok, error } rather than throwing, so a bad id never stops the screen.
+  let initialCheckIn: CheckInLoaded | null = null
+  let receiptProblem: string | null = null
+  if (wantedReceipt) {
+    const r = await loadCheckIn(wantedReceipt)
+    if (r.ok) {
+      initialCheckIn = r.data
+    } else {
+      // Not a check-in any more (booked in, or thrown away and kept as voided): its own page says what it is.
+      const found = await prisma.goodsInReceipt.findUnique({ where: { id: wantedReceipt }, select: { status: true } }).catch(() => null)
+      if (found && found.status !== "draft") redirect(`/tools/warehouse/receipts/${encodeURIComponent(wantedReceipt)}`)
+      receiptProblem = `Couldn't carry on with ${wantedReceipt}: ${r.error}`
+    }
+  }
+
+  if (wantedId && !initialCheckIn) {
     const r = await getCustomer(wantedId)
     if (r.ok && r.data) initialCustomer = r.data
     else customerProblem = r.ok ? "That customer couldn't be found — search for them below." : `Couldn't open that customer (${r.error}) — search for them below.`
   }
 
+  // Check-ins not booked in yet — the person's own first, each marked `mine` by the Hub. The Customer
+  // step offers their own back; everyone's are used to spot a customer who already has one.
+  let unfinished: UnfinishedCheckIn[] = []
+  const u = await listUnfinishedCheckIns().catch(() => null)
+  if (u?.ok) unfinished = u.data
+
   return (
     <Shell>
       {readProblem && (
         <div className="mb-5">
-          <ErrorBox>Couldn&apos;t check the number series ({readProblem}). You can still fill in the check-in — Book in will say if anything is missing.</ErrorBox>
+          <ErrorBox>Couldn&apos;t check the number series ({readProblem}). You can still fill in the check-in — it will say if a number can&apos;t be given.</ErrorBox>
+        </div>
+      )}
+      {receiptProblem && (
+        <div className="mb-5">
+          <ErrorBox>{receiptProblem}</ErrorBox>
         </div>
       )}
       {customerProblem && (
@@ -71,7 +103,14 @@ export default async function CheckInPage({ searchParams }: { searchParams: Prom
           <ErrorBox>{customerProblem}</ErrorBox>
         </div>
       )}
-      <CheckInFlow missingSeries={missing} isAdmin={atLeast(user, "admin")} userId={user.id} initialCustomer={initialCustomer} />
+      <CheckInFlow
+        missingSeries={missing}
+        isAdmin={atLeast(user, "admin")}
+        userId={user.id}
+        initialCustomer={initialCustomer}
+        initialCheckIn={initialCheckIn}
+        unfinished={unfinished}
+      />
     </Shell>
   )
 }

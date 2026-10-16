@@ -3,10 +3,11 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getGoodsInUser, atLeast } from "@/lib/goods-in/access"
 import { getDepartmentAccess, canSeeAuction } from "@/lib/departments"
-import { normaliseCode, type CustomerSnapshot } from "@/lib/goods-in/model"
+import { THROWN_AWAY_NOTE, labelsGivenUp, normaliseCode, type CustomerSnapshot } from "@/lib/goods-in/model"
 import { ErrorBox, NotReady, PageHeader, StatusKey, box, isMissingTable, mono, ukDateTime } from "../../_components/ui"
-import { RECEIPT_STATUS, ReceiptStatusBadge, StatusCounts, kindCounts, receiptStatus } from "../_parts"
+import { CarryOnLink, RECEIPT_STATUS, ReceiptStatusBadge, StatusCounts, kindCounts, receiptStatus } from "../_parts"
 import ReceiptActions from "./receipt-actions"
+import DraftBanner from "./draft-banner"
 import ContainersTable from "./containers-table"
 import AddContainers from "./add-containers"
 import NotesEditor from "./notes-editor"
@@ -17,6 +18,10 @@ import { CATEGORY_LIST_ID, type ContainerView, type LotView } from "./types"
 // printed on the day (with a note when their record has changed since), the terms, every tote and
 // pallet with where it is and the lots made from it, and the buttons to print, email, add to,
 // close or void it. Reads with prisma directly; every write goes through lib/actions/goods-in.
+//
+// A check-in that hasn't been booked in yet (status "draft") opens here too: a banner offers Carry on
+// checking in and Throw it away; its labels can be printed, but the receipt itself can't be printed,
+// emailed, closed, voided or added to until it's booked in, and its notes are written at Check & book in.
 //
 // ⚠ Never shows bank details — the Hub doesn't hold any (the printed receipt's bank form is blank).
 // Nothing here reads or writes Business Central.
@@ -100,6 +105,10 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
   const { r, containers, otherLots, snap, live, changed, liveName } = loaded
   const status = receiptStatus(r.status)
   const isVoid = status === "void"
+  const isDraft = status === "draft"
+  // A check-in thrown away after labels were printed (or a tote moved) is kept as void with this note
+  // (discardCheckIn's wording). It was never booked in, so it isn't offered back as a booked receipt.
+  const thrownAway = isVoid && (r.notes ?? "").includes(THROWN_AWAY_NOTE)
   const lotsMade = containers.reduce((n, c) => n + c.lots.length, 0)
   const labelsPrinted = containers.filter(c => c.labelPrintedAt).length
   const highlightRaw = sp.tote ? normaliseCode(sp.tote) : null
@@ -115,46 +124,74 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
         intro={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <ReceiptStatusBadge status={r.status} />
-            <span>Booked {ukDateTime(r.createdAt)}{r.createdByName ? <> by <span className="font-medium text-gray-700 dark:text-gray-200">{r.createdByName}</span></> : null}</span>
+            <span>{isDraft ? "Check-in started" : "Booked"} {ukDateTime(r.createdAt)}{r.createdByName ? <> by <span className="font-medium text-gray-700 dark:text-gray-200">{r.createdByName}</span></> : null}</span>
             <span aria-hidden>·</span>
             <span className="font-medium text-gray-700 dark:text-gray-200">{customerName}</span>
             {r.vendorNo && <span className={mono}>({r.vendorNo})</span>}
-            {!isVoid && <span className="basis-full text-xs">{RECEIPT_STATUS[status].label}: {RECEIPT_STATUS[status].help}</span>}
+            {!isVoid && !isDraft && <span className="basis-full text-xs">{RECEIPT_STATUS[status].label}: {RECEIPT_STATUS[status].help}</span>}
           </span>
         }
       />
 
       {isVoid && (
         <div role="note" className="mb-4 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-200 px-4 py-3 text-sm leading-relaxed">
-          <p className="font-semibold">This receipt is void</p>
-          <p>{RECEIPT_STATUS.void.help} It can&apos;t be printed, emailed or added to.{atLeast(me, "manager") ? " You can restore it below." : " A manager can restore it."}</p>
+          {thrownAway ? (
+            <>
+              <p className="font-semibold">This check-in was thrown away before it was booked in</p>
+              <p>Nothing on it was booked in. It&apos;s kept, marked void, because labels had been printed for it or a tote had been moved — the notes below name them, so a stray labelled tote can be traced. Throw any of those labels away.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold">This receipt is void</p>
+              <p>{RECEIPT_STATUS.void.help} It can&apos;t be printed, emailed or added to.{atLeast(me, "manager") ? " You can restore it below." : " A manager can restore it."}</p>
+            </>
+          )}
         </div>
+      )}
+
+      {isDraft && (
+        <DraftBanner
+          id={r.id}
+          customer={customerName}
+          startedBy={r.createdByName}
+          // Labels printed for totes still on it, and for ones taken off it after printing (the notes record those).
+          printed={[...new Set([...containers.filter(c => c.labelPrintedAt).map(c => c.id), ...labelsGivenUp(r.notes)])]}
+          moved={containers.some(c => !!c.movedAt || !!c.locationCode)}
+          rows={containers.length}
+        />
       )}
 
       <ReceiptActions
         id={r.id}
         status={status}
-        canVoid={atLeast(me, "manager")}
+        canVoid={atLeast(me, "manager") && !thrownAway}
         snapshotEmail={snap?.email ?? null}
         liveEmail={live.email && !same(live.email, snap?.email) ? live.email : null}
         containerCount={containers.length}
+        unprintedLabels={containers.filter(c => !c.labelPrintedAt).map(c => c.id)}
         userName={me.name}
       />
 
-      {/* What has gone out, and when */}
-      <p className="-mt-3 mb-6 text-sm text-gray-600 dark:text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
-        <span>{r.printedAt ? <>Printed <b className="font-semibold">{ukDateTime(r.printedAt)}</b></> : <span className="text-gray-500 dark:text-gray-400">Not printed yet</span>}</span>
-        <span aria-hidden className="text-gray-400">·</span>
-        <span>{r.emailedAt ? <>Emailed{r.emailedTo ? <> to <b className="font-semibold break-all">{r.emailedTo}</b></> : null} <b className="font-semibold">{ukDateTime(r.emailedAt)}</b></> : <span className="text-gray-500 dark:text-gray-400">Not emailed yet</span>}</span>
-        {containers.length > 0 && (
-          <>
-            <span aria-hidden className="text-gray-400">·</span>
-            <span className={labelsPrinted < containers.length ? "text-amber-700 dark:text-amber-300" : undefined}>
-              Labels printed for {labelsPrinted} of {containers.length}
-            </span>
-          </>
-        )}
-      </p>
+      {/* What has gone out, and when (a check-in not booked in yet has only labels to print) */}
+      {(!isDraft || containers.length > 0) && (
+        <p className="-mt-3 mb-6 text-sm text-gray-600 dark:text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
+          {!isDraft && (
+            <>
+              <span>{r.printedAt ? <>Printed <b className="font-semibold">{ukDateTime(r.printedAt)}</b></> : <span className="text-gray-500 dark:text-gray-400">Not printed yet</span>}</span>
+              <span aria-hidden className="text-gray-400">·</span>
+              <span>{r.emailedAt ? <>Emailed{r.emailedTo ? <> to <b className="font-semibold break-all">{r.emailedTo}</b></> : null} <b className="font-semibold">{ukDateTime(r.emailedAt)}</b></> : <span className="text-gray-500 dark:text-gray-400">Not emailed yet</span>}</span>
+            </>
+          )}
+          {containers.length > 0 && (
+            <>
+              {!isDraft && <span aria-hidden className="text-gray-400">·</span>}
+              <span className={labelsPrinted < containers.length ? "text-amber-700 dark:text-amber-300" : undefined}>
+                Labels printed for {labelsPrinted} of {containers.length}
+              </span>
+            </>
+          )}
+        </p>
+      )}
 
       {/* ── Totes & pallets ── */}
       <section className="mb-8" aria-labelledby="totes-heading">
@@ -166,7 +203,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
               {containers.length > 0 && <> · {lotsMade === 0 ? "no lots made yet" : `${lotsMade} lot${lotsMade === 1 ? "" : "s"} made so far`}</>}
             </p>
           </div>
-          {containers.length > 0 && <StatusCounts containers={containers} />}
+          {containers.length > 0 && !isDraft && <StatusCounts containers={containers} />}
         </div>
 
         <datalist id={CATEGORY_LIST_ID}>
@@ -175,14 +212,19 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
 
         {containers.length === 0 ? (
           <div className={`${box} px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400`}>
-            No totes or pallets on this receipt.{status === "open" ? " Add them below." : ""}
+            No totes or pallets on this receipt.{status === "open" ? " Add them below." : isDraft ? " Add them when you carry on checking in." : ""}
           </div>
         ) : (
-          <ContainersTable receiptId={r.id} containers={containers} highlight={highlight} isVoid={isVoid} />
+          <ContainersTable receiptId={r.id} containers={containers} highlight={highlight} isVoid={isVoid} isDraft={isDraft} />
         )}
 
         <div className="mt-4">
           {status === "open" && <AddContainers receiptId={r.id} categoriesListId={CATEGORY_LIST_ID} />}
+          {isDraft && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              To add, change or remove totes and pallets, <CarryOnLink receiptId={r.id} className="inline-flex items-center min-h-11 font-medium text-indigo-700 dark:text-indigo-300 underline">carry on checking in</CarryOnLink>.
+            </p>
+          )}
           {status === "closed" && (
             <p className="text-sm text-gray-500 dark:text-gray-400">This receipt is closed. Reopen it (button at the top) to add more totes or pallets.</p>
           )}
@@ -215,7 +257,11 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
               Open their record →
             </Link>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{snap ? "As printed on the receipt." : "No copy was kept on this receipt — this is their record as it is now."}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            {isDraft
+              ? "As it will go on the receipt — brought up to date from their record when it's booked in."
+              : snap ? "As printed on the receipt." : "No copy was kept on this receipt — this is their record as it is now."}
+          </p>
 
           <p className="font-semibold text-gray-900 dark:text-white">{[shown.salutation, shown.name || liveName].filter(Boolean).join(" ")}</p>
           <address className="not-italic text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
@@ -240,7 +286,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
             )}
           </dl>
 
-          {snap && changed.length > 0 && (
+          {!isDraft && snap && changed.length > 0 && (
             <div role="note" className="mt-4 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2.5 text-sm text-amber-900 dark:text-amber-200 leading-relaxed">
               <p>
                 <b>Their record has changed since this was booked</b> — {changed.join(", ")}. The receipt keeps the details as they were on the day.
@@ -252,7 +298,11 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
 
         <section className={`${box} p-4`} aria-labelledby="terms-heading">
           <h2 id="terms-heading" className="text-base font-bold text-gray-900 dark:text-white mb-1">Terms</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Agreed when the goods were booked in, as printed on the receipt.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            {isDraft
+              ? "The terms it will be booked in on. They can be changed for this receipt at Check & book in."
+              : "Agreed when the goods were booked in, as printed on the receipt."}
+          </p>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
             <dt className="text-gray-500 dark:text-gray-400">Commission</dt>
             <dd className="font-semibold text-gray-900 dark:text-white tabular-nums">{percent(r.commission)}</dd>
@@ -269,7 +319,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
             <li className="flex items-start gap-2">
               <span aria-hidden className={r.ownerConfirmed ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-gray-500 dark:text-gray-400"}>{r.ownerConfirmed ? "✓" : "○"}</span>
               <span className={r.ownerConfirmed ? "text-gray-800 dark:text-gray-200" : "text-gray-500 dark:text-gray-400"}>
-                {r.ownerConfirmed ? "Confirmed they are the legal owner" : "Didn't tick “legal owner”"}
+                {r.ownerConfirmed ? "Confirmed they are the legal owner" : isDraft ? "“Legal owner” not ticked yet" : "Didn't tick “legal owner”"}
               </span>
             </li>
             <li className="flex items-start gap-2">
@@ -283,7 +333,15 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
 
         <section className={`${box} p-4 md:col-span-2 xl:col-span-1`} aria-labelledby="notes-heading">
           <h2 id="notes-heading" className="text-base font-bold text-gray-900 dark:text-white mb-3">Notes</h2>
-          <NotesEditor receiptId={r.id} notes={r.notes} />
+          {isDraft ? (
+            // A draft's notes are written on the Check in screen (the receipt can't be changed from here until it's booked in).
+            <>
+              <p className={`text-sm whitespace-pre-line ${r.notes ? "text-gray-800 dark:text-gray-200" : "text-gray-500 dark:text-gray-400 italic"}`}>{r.notes || "None yet"}</p>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Notes are added at Check &amp; book in. Staff only — not printed on the receipt.</p>
+            </>
+          ) : (
+            <NotesEditor receiptId={r.id} notes={r.notes} />
+          )}
         </section>
       </div>
     </div>

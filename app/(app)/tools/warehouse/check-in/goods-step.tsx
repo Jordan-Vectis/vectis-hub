@@ -1,23 +1,59 @@
 "use client"
 
-import { useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react"
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { CONTAINER_KINDS, type ContainerKind } from "@/lib/goods-in/model"
-import { box, btn, btnDanger, input, label } from "../_components/ui"
-import { CATEGORIES, MAX_ROWS, blankRow, countKinds, isBlankRow, kindsPhrase, newKey, type GoodsRow } from "./shared"
+import { box, btn, btnDanger, btnGo, input, label, mono } from "../_components/ui"
+import type { SaveWhen } from "./save-engine"
+import { CATEGORIES, MAX_ROWS, blankRow, countKinds, isBlankRow, isPrinted, kindsPhrase, labelState, rowNumber, type GoodsRow } from "./shared"
 
 // Step 2 — what they've brought. One row per tote or pallet, grouped by CATEGORY not item
 // ("5x boxes of comics" is one tote). Built for the counter: the first row is ready to type in,
 // Enter in a description starts the next row (a keyboard or a scanner's Enter both work), and
-// duplicate / remove are a tap each, with Undo for a slip. No numbers yet — they are handed out
-// at Book in, all together, so two clerks can never be given the same one.
+// duplicate / remove are a tap each, with Undo for a slip.
+//
+// Every row gets its real number as soon as it exists (the check-in is saved as a receipt that
+// isn't booked in yet — check-in-flow.tsx), so its label can be printed from here: one Print
+// labels (N) button for every label not printed yet (a row with nothing written in it waits — its
+// label would be for an empty tote), and a Print / Reprint on each row. A row whose contents change
+// after its label was printed says "Printed — changed since", so Reprint is the obvious tap. A number
+// is never used twice, so a numbered row switched between tote and pallet, or removed, gives its
+// number up for good — the screen says so before it happens, and says to throw a printed label away.
 
 const DATALIST_ID = "gi-checkin-categories"
 
-export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows: Dispatch<SetStateAction<GoodsRow[]>> }) {
+// One template for the column headings and every row on a wide screen. "What's in it" never goes
+// below 12rem: the number and Print button made the row longer, and the category gives up width
+// first on a narrow desktop, so the description stays roomy and the row stays one line.
+const WIDE_COLS = "@4xl:grid-cols-[13rem_minmax(9rem,14rem)_minmax(12rem,1fr)_auto]"
+
+export default function GoodsStep({ rows, editRows, receiptId, numbering, status, goneIds, rowNotes, onRowNote, onPrint, printing, printNote, printedAs }: {
+  rows: GoodsRow[]
+  /** Change the rows; `when` says how soon the check-in is saved. */
+  editRows: (fn: (rs: GoodsRow[]) => GoodsRow[], when: SaveWhen) => void
+  /** The receipt the check-in is saved as (not booked in yet), or null before the Hub has answered. */
+  receiptId: string | null
+  /** A save is under way or due — a row with no number yet is being numbered. */
+  numbering: boolean
+  /** "Saved" / "Saving…" / "Not saved — …" with Retry. */
+  status: ReactNode
+  /** Numbers the Hub has already given up (a removed row that was saved without it). */
+  goneIds: ReadonlySet<string>
+  /** A note under a row, by row key (a row that had to be given a new number). */
+  rowNotes: Record<string, string>
+  onRowNote: (key: string, note: string | null) => void
+  /** Print these rows' labels (row keys). */
+  onPrint: (keys: string[]) => void
+  printing: boolean
+  printNote: ReactNode
+  /** What each row's label said when it was printed, by row key — a row changed since says so. */
+  printedAs: Readonly<Record<string, string>>
+}) {
   const fields = useRef(new Map<string, HTMLInputElement>())
   // Where the cursor goes after the next render: the first row on arrival, a new row when one is added.
   const pendingFocus = useRef<string | null>(rows[0] && isBlankRow(rows[0]) ? `${rows[0].key}:cat` : null)
   const [removed, setRemoved] = useState<{ row: GoodsRow; index: number } | null>(null)
+  // A numbered row about to switch between tote and pallet — asked in the row first.
+  const [kindAsk, setKindAsk] = useState<{ key: string; to: ContainerKind } | null>(null)
 
   useLayoutEffect(() => {
     const k = pendingFocus.current
@@ -29,39 +65,66 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
 
   const { totes, pallets } = countKinds(rows)
   const full = rows.length >= MAX_ROWS
+  // A row with nothing written in it yet (the one Enter has just started) isn't printed by the main
+  // button — its label would be for an empty tote. Its own Print button still prints it.
+  const unprinted = rows.filter(r => !isPrinted(r) && !isBlankRow(r))
+  const waitingForWords = rows.some(r => !isPrinted(r) && isBlankRow(r))
 
   const bind = (key: string) => (el: HTMLInputElement | null) => {
     if (el) fields.current.set(key, el)
     else fields.current.delete(key)
   }
-  const update = (key: string, patch: Partial<GoodsRow>) => setRows(rs => rs.map(r => (r.key === key ? { ...r, ...patch } : r)))
+  const update = (key: string, patch: Partial<GoodsRow>, when: SaveWhen) => editRows(rs => rs.map(r => (r.key === key ? { ...r, ...patch } : r)), when)
 
   const add = (kind: ContainerKind) => {
     if (full) return
     const r = blankRow(kind)
-    setRows(rs => [...rs, r])
+    editRows(rs => [...rs, r], "now")
     setRemoved(null)
     pendingFocus.current = `${r.key}:cat`
   }
   const duplicate = (i: number) => {
     if (full) return
-    const r = { ...rows[i], key: newKey() }
-    setRows(rs => [...rs.slice(0, i + 1), r, ...rs.slice(i + 1)])
+    const { kind, category, description } = rows[i]
+    const r: GoodsRow = { ...blankRow(kind), category, description }
+    editRows(rs => [...rs.slice(0, i + 1), r, ...rs.slice(i + 1)], "now")
     setRemoved(null)
     pendingFocus.current = `${r.key}:desc`
   }
   const remove = (i: number) => {
     const row = rows[i]
-    setRows(rs => rs.filter(r => r.key !== row.key))
+    // Not saved straight away: an Undo before the next save keeps the same number.
+    editRows(rs => rs.filter(r => r.key !== row.key), "removal")
     setRemoved({ row, index: i })
+    if (kindAsk?.key === row.key) setKindAsk(null)
+    onRowNote(row.key, null)
     const next = rows[i + 1] ?? rows[i - 1]
     if (next) pendingFocus.current = `${next.key}:cat`
   }
   const undo = () => {
     if (!removed) return
-    setRows(rs => [...rs.slice(0, removed.index), removed.row, ...rs.slice(removed.index)])
-    pendingFocus.current = `${removed.row.key}:desc`
+    const was = removed.row
+    // Already saved without it: the Hub has given that number up, so it comes back with a new one.
+    const gone = !!was.id && goneIds.has(was.id)
+    const back: GoodsRow = gone ? { ...was, id: null, idKind: null, labelPrintedAt: null } : was
+    editRows(rs => [...rs.slice(0, removed.index), back, ...rs.slice(removed.index)], "now")
+    if (gone) onRowNote(back.key, `${was.id} had already been given up, so this row gets a new number${isPrinted(was) ? ` — throw away the ${was.id} label` : ""}.`)
+    pendingFocus.current = `${back.key}:desc`
     setRemoved(null)
+  }
+
+  const setKind = (r: GoodsRow, kind: ContainerKind) => {
+    if (r.kind === kind) { if (kindAsk?.key === r.key) setKindAsk(null); return }
+    // A row showing its number gives it up by changing kind — say so first.
+    if (rowNumber(r)) { setKindAsk({ key: r.key, to: kind }); return }
+    update(r.key, { kind }, "now")
+  }
+  const confirmKind = (r: GoodsRow) => {
+    if (!kindAsk || kindAsk.key !== r.key) return
+    const num = rowNumber(r)
+    update(r.key, { kind: kindAsk.to }, "now")
+    onRowNote(r.key, num && isPrinted(r) ? `The ${num} label isn't used any more — throw it away.` : null)
+    setKindAsk(null)
   }
 
   const onCategoryKey = (e: KeyboardEvent<HTMLInputElement>, row: GoodsRow) => {
@@ -78,6 +141,9 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
     else add(rows[i].kind)
   }
 
+  const kindWord = (k: ContainerKind) => (k === "pallet" ? "pallet" : "tote")
+  const removedNo = removed ? rowNumber(removed.row) : null
+
   return (
     <section aria-labelledby="gi-step-1-heading" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
@@ -85,12 +151,18 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
           <h2 id="gi-step-1-heading" tabIndex={-1} className="text-lg font-bold text-gray-900 dark:text-white outline-none">What they&apos;ve brought</h2>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 max-w-3xl">
             One row for each tote or pallet. Group by category, not by item — &ldquo;5x boxes of comics&rdquo; is one tote.
+            Each row gets its number as soon as it&apos;s added, so its label can go on straight away.
             Press Enter in <b>What&apos;s in it</b> to start the next row.
           </p>
         </div>
         <div className="text-right">
           <p className="text-lg font-bold text-gray-900 dark:text-white" aria-live="polite">{kindsPhrase(totes, pallets)}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Numbers are given when you book in.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {receiptId
+              ? <>Receipt <span className={`${mono} font-semibold text-gray-700 dark:text-gray-300`}>{receiptId}</span> · not booked in yet</>
+              : numbering ? "Taking a receipt number…" : "No receipt number yet"}
+          </p>
+          {status && <div className="text-xs">{status}</div>}
         </div>
       </div>
 
@@ -99,21 +171,32 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
       </datalist>
 
       {rows.length > 0 && (
-        <div className="hidden @4xl:grid grid-cols-[10rem_minmax(9rem,14rem)_minmax(0,1fr)_auto] gap-3 px-[13px] text-xs font-semibold text-gray-500 dark:text-gray-400">
+        <div className={`hidden @4xl:grid ${WIDE_COLS} gap-3 px-[13px] text-xs font-semibold text-gray-500 dark:text-gray-400`}>
           <span>Tote or pallet</span><span>Category</span><span>What&apos;s in it</span><span aria-hidden />
         </div>
       )}
 
       <ol className="space-y-2">
         {rows.map((r, i) => {
-          const n = i + 1
+          const num = rowNumber(r)
+          const printed = isPrinted(r)
+          const labelIs = labelState(r, printedAs)
+          const name = num ?? `Row ${i + 1}`
+          const ask = kindAsk?.key === r.key ? kindAsk : null
+          const note = rowNotes[r.key]
           return (
             <li key={r.key} className={`${box} p-3`}>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2 @4xl:grid-cols-[10rem_minmax(9rem,14rem)_minmax(0,1fr)_auto] @4xl:items-center">
-                {/* Row number + tote/pallet */}
+              <div className={`grid grid-cols-2 gap-x-3 gap-y-2 ${WIDE_COLS} @4xl:items-center`}>
+                {/* The row's number + tote/pallet */}
                 <div className="order-1 col-span-2 @xl:col-span-1 flex items-center gap-2">
-                  <span className="w-7 shrink-0 text-right font-mono text-sm font-semibold text-gray-500 dark:text-gray-400">{n}</span>
-                  <div role="group" aria-label={`Row ${n}: tote or pallet`} className="inline-flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
+                  <div className="w-[5.75rem] shrink-0 leading-tight">
+                    {num
+                      ? <span className={`${mono} block text-lg font-bold text-gray-900 dark:text-white`}>{num}</span>
+                      : <span className="block text-xs text-gray-500 dark:text-gray-400">{numbering ? "Numbering…" : "No number yet"}</span>}
+                    {labelIs === "printed" && <span className="block text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">✓ Printed</span>}
+                    {labelIs === "changed" && <span className="block text-[11px] font-semibold text-amber-700 dark:text-amber-300">Printed — changed since</span>}
+                  </div>
+                  <div role="group" aria-label={`${name}: tote or pallet`} className="inline-flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-700">
                     {CONTAINER_KINDS.map(k => {
                       const on = r.kind === k.value
                       return (
@@ -121,7 +204,7 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
                           key={k.value}
                           type="button"
                           aria-pressed={on}
-                          onClick={() => update(r.key, { kind: k.value })}
+                          onClick={() => setKind(r, k.value)}
                           className={`min-h-11 min-w-[3.25rem] px-2.5 text-sm font-semibold transition-colors ${on ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
                         >
                           {k.label}
@@ -131,8 +214,19 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
                   </div>
                 </div>
 
-                {/* Duplicate / remove — beside the row number on tablets, at the end of the line on a wide screen */}
-                <div className="order-4 col-span-2 @xl:order-2 @xl:col-span-1 @4xl:order-4 flex justify-end gap-2">
+                {/* Print / duplicate / remove — beside the number on tablets, at the end of the line on a wide screen */}
+                <div className="order-4 col-span-2 @xl:order-2 @xl:col-span-1 @4xl:order-4 flex flex-wrap @4xl:flex-nowrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className={`${btn} min-w-[5.25rem]`}
+                    onClick={() => onPrint([r.key])}
+                    disabled={!num || printing}
+                    aria-label={num
+                      ? `${printed ? "Reprint" : "Print"} the label for ${num}${labelIs === "changed" ? " (changed since it was printed)" : ""}`
+                      : "Print this row's label (once it has its number)"}
+                  >
+                    {printed ? "Reprint" : "Print"}
+                  </button>
                   <button type="button" className={btn} onClick={() => duplicate(i)} disabled={full} title="Add another row just like this one">Duplicate</button>
                   <button type="button" className={btnDanger} onClick={() => remove(i)}>Remove</button>
                 </div>
@@ -145,7 +239,7 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
                     className={`${input} scroll-mb-28`}
                     list={DATALIST_ID}
                     value={r.category}
-                    onChange={e => update(r.key, { category: e.target.value })}
+                    onChange={e => update(r.key, { category: e.target.value }, "typing")}
                     onKeyDown={e => onCategoryKey(e, r)}
                     placeholder="e.g. Comics"
                     maxLength={80}
@@ -161,7 +255,7 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
                     ref={bind(`${r.key}:desc`)}
                     className={`${input} scroll-mb-28`}
                     value={r.description}
-                    onChange={e => update(r.key, { description: e.target.value })}
+                    onChange={e => update(r.key, { description: e.target.value }, "typing")}
                     onKeyDown={e => onDescriptionKey(e, i)}
                     placeholder="e.g. 5x boxes of comics"
                     maxLength={500}
@@ -169,6 +263,22 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
                     enterKeyHint={i === rows.length - 1 ? "enter" : "next"}
                   />
                 </div>
+
+                {ask && num && (
+                  <div role="alert" className="order-5 col-span-2 @4xl:col-span-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+                    <span className="flex-1 min-w-[14rem]">
+                      Make <b className={mono}>{num}</b> a {kindWord(ask.to)}? A {kindWord(ask.to)} has its own numbers, so this row gets a new one and{" "}
+                      <span className={mono}>{num}</span> won&apos;t be used again.
+                      {printed && <> Throw away the <span className={mono}>{num}</span> label you printed.</>}
+                    </span>
+                    <button type="button" className={btn} onClick={() => confirmKind(r)}>Make it a {kindWord(ask.to)}</button>
+                    <button type="button" className={btn} onClick={() => setKindAsk(null)}>Keep it a {kindWord(r.kind)}</button>
+                  </div>
+                )}
+
+                {note && (
+                  <p role="status" className="order-6 col-span-2 @4xl:col-span-4 text-sm text-amber-800 dark:text-amber-300">{note}</p>
+                )}
               </div>
             </li>
           )
@@ -184,8 +294,9 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
       {removed && (
         <div role="status" className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
           <span className="flex-1 min-w-0">
-            Removed row {removed.index + 1} ({removed.row.kind === "pallet" ? "pallet" : "tote"}
-            {removed.row.category.trim() ? ` — ${removed.row.category.trim()}` : ""}).
+            {removedNo ? <>Removed <b className={mono}>{removedNo}</b></> : <>Removed row {removed.index + 1}</>}
+            {" "}({kindWord(removed.row.kind)}{removed.row.category.trim() ? ` — ${removed.row.category.trim()}` : ""}).
+            {removedNo && <> Its number won&apos;t be used again{isPrinted(removed.row) ? " — throw its label away" : ""}.</>}
           </span>
           <button type="button" className={btn} onClick={undo}>Undo</button>
         </div>
@@ -194,8 +305,22 @@ export default function GoodsStep({ rows, setRows }: { rows: GoodsRow[]; setRows
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={`${btn} !min-h-12 font-semibold`} onClick={() => add("tote")} disabled={full}>+ Add tote</button>
         <button type="button" className={`${btn} !min-h-12 font-semibold`} onClick={() => add("pallet")} disabled={full}>+ Add pallet</button>
+        <button
+          type="button"
+          className={`${btnGo} !min-h-12`}
+          onClick={() => onPrint(unprinted.map(r => r.key))}
+          disabled={printing || unprinted.length === 0}
+          aria-busy={printing}
+          title={unprinted.length === 0 && waitingForWords ? "Write what's in a row first — or use that row's own Print button" : undefined}
+        >
+          {printing ? "Getting the labels ready…"
+            : unprinted.length ? `Print labels (${unprinted.length})`
+            : rows.length === 0 || waitingForWords ? "Print labels"
+            : "All labels printed"}
+        </button>
         {full && <span className="text-sm text-amber-700 dark:text-amber-300">That&apos;s the most one receipt can hold ({MAX_ROWS}) — book these in, then start a second receipt.</span>}
       </div>
+      {printNote}
     </section>
   )
 }

@@ -171,6 +171,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "WarehouseLocation", what: "The shelf and location codes goods can be put in." },
       { model: "WarehouseMovement", personal: "staff", what: "Every move of a container to a location, with who moved it and when." },
       { model: "GoodsInCustomer", personal: "customer", what: "The Goods In half of a customer record: their vendor number, mobile, town, county, country, VAT number and the commission and fees their receipts carry." },
+      { model: "GoodsInAgreement", personal: "customer", what: "A Goods In customer's standing agreement: their usual reserve, when they signed Vectis's vendor terms and who recorded it, and any special arrangement agreed with them." },
       { model: "GoodsInReceipt", personal: "customer", what: "A Goods In receipt — what a customer handed in and on what terms — with a copy of their name, address and contact details as they were on the day, who booked it in, and when it was printed or emailed." },
       { model: "GoodsInContainer", personal: "staff", what: "A tote or pallet on a Goods In receipt: its category and description, where it is now, and who booked it in." },
       { model: "GoodsInLocation", what: "The places Goods In can put things — storage locations, cataloguing benches and shelves." },

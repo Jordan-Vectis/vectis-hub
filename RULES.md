@@ -1672,19 +1672,25 @@ Jack rebuilt the Warehouse section (`/tools/warehouse`, app key `WAREHOUSE`, tie
 In" (key, href and app key unchanged). The flow, in the words staff see:
 
 1. Find the customer in the customer database (the CRM `Contact`), or add them at the counter.
-2. **Book in** their goods onto a **receipt** (R010244).
+2. **Check in** their goods onto a **receipt** (R010244) — three steps: Customer · What they've
+   brought · Check & book in.
 3. Group the goods **by category, not item**, into **totes** (T027657) and **pallets** (P…) —
-   "5x boxes of comics" is one tote.
-4. Print and/or email the receipt, and print a barcode label (100 × 50 mm) for every tote and pallet.
+   "5x boxes of comics" is one tote. Each gets its number the moment its row is added, and its
+   barcode label (100 × 50 mm) can be printed right there on the goods step.
+4. **Book in**, then print and/or email the receipt.
 5. Put the totes away at a **storage** location; later move them to a **bench** to be catalogued.
 6. Cataloguers make lots from a tote in the Add Lot wizard exactly as now — each lot keeps the tote,
    receipt and vendor number, so its barcode still ties back to the receipt.
 7. Move each finished lot to a **shelf** until it sells.
 
-Every write is a server action in `lib/actions/goods-in.ts` returning `{ ok, error }`; the shared words
-and shapes are in `lib/goods-in/model.ts`; who may do what is `lib/goods-in/access.ts` (read fresh from
-the database, judged on the effective session). Managers void receipts and edit locations; only a
-Warehouse admin sets the number series.
+Every write is a server action in `lib/actions/goods-in.ts` (Check in's own in
+`lib/actions/goods-in-checkin.ts`) returning `{ ok, error }`; the shared words and shapes are in
+`lib/goods-in/model.ts`; who may do what is `lib/goods-in/access.ts` (read fresh from the database,
+judged on the effective session). Managers void receipts and edit locations; only a Warehouse admin
+sets the number series. ⚠ A `"use server"` file may only export async functions (and types), so the
+customer helpers both action files share (`customerRow`, `CUSTOMER_INCLUDE`, `snapshot`) live in the
+plain module `lib/goods-in/customer-row.ts` — put any other shared non-async helper in a plain module
+the same way, never as an export of an actions file.
 
 - ⚠⚠ **Goods In never touches Business Central** (Jack: *"don't do anything with BC"*). No BC API call,
   no BC sync table written, and End of Day, Tote Check, Locking Check, BC Match, Change Vendor,
@@ -1696,15 +1702,91 @@ Warehouse admin sets the number series.
   - ⚠ **A decision for Jack and Jordan before real stock is booked in this way.** Don't quieten those
     flags by teaching the checks about Goods In without that decision — they are telling the truth.
 - **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken
-  with a single `UPDATE … RETURNING` inside the booking transaction, so two clerks booking in at once
-  can never be handed the same number (the prototype's read-the-highest-and-add-one could). A number
-  that already exists in Goods In is skipped, never reused. The series **carry on from BC's** — an
-  admin sets the next receipt, tote and pallet number in Goods In → Settings on the day BC stops, and
-  until a series is set, booking in refuses with a plain message rather than guessing.
+  with a single `UPDATE … RETURNING` inside the transaction that needs it, so two clerks at once can
+  never be handed the same number (the prototype's read-the-highest-and-add-one could). At check-in
+  the numbers are taken **as the rows are added**, not at Book in (next rule). A number that already
+  exists in Goods In is skipped, never reused. The series **carry on from BC's** — an admin sets the
+  next receipt, tote and pallet number in Goods In → Settings on the day BC stops, and until a series
+  is set, check-in refuses with a plain message rather than guessing.
+  - ⚠ **Numbers are never reused, so there are GAPS, and that is accepted.** A row removed at
+    check-in, a tote switched to a pallet (it takes a new pallet number), and a thrown-away check-in
+    all give their numbers up for good — the counter has already moved past them. Don't "fill" gaps
+    and don't set a series back to reuse them: a printed label may still be out there carrying one.
   - ⚠ **The vendor series is deliberately optional.** BC still hands out C-numbers for website
     sign-ups, so the Hub carrying the C-series on could give two customers the same number. With no
     vendor series set, a customer without a vendor number simply gets a receipt without one. Don't
     make it compulsory without asking.
+- **Check in saves as it goes: a receipt is a DRAFT until Book in** (2026-10-16 — Jack, on the goods
+  step: *"this needs to show the tote number and also needs to be able to print the tote labels etc
+  from this"*). `GoodsInReceipt.status = "draft"` means **not booked in yet** — a free-text column, so
+  no schema change. The actions are in `lib/actions/goods-in-checkin.ts`:
+  - `saveCheckIn` saves the check-in so far. The first save (on reaching the goods step) takes the
+    receipt number and makes the draft; every save numbers each row that has no number yet, in screen
+    order, so the number shows on the row straight away. Labels print from the goods step through
+    `GET /api/goods-in/labels?containers=…`, which records `labelPrintedAt`. ⚠ `saveCheckIn` does
+    **not** `revalidatePath` — it runs on every add, remove and pause in typing, and the check-in page
+    must not re-render under the clerk.
+  - `bookInCheckIn` books it in: the same row save, then (one transaction) the terms, a vendor number
+    exactly as `createReceipt` gives one (only when the customer has none AND the vendor series is
+    set), the customer's details copied afresh, `status` draft → `"open"`, `createdAt` = the booking
+    time and `createdById/Name` = whoever pressed Book in. A double tap books once (the second waits
+    on the lock, finds it open, and gets the receipt back, not an error). Check in no longer uses
+    `createReceipt`.
+  - ⚠⚠ **Nothing about a draft counts as booked in.** Every count, figure and "booked in" list leaves
+    drafts out (a customer's receipt count too — `CUSTOMER_INCLUDE`); the Add Lot wizard and Lotting
+    Up fallback leave them out exactly like voided receipts; the receipt PDF and email refuse one (409);
+    `addContainers`, `updateReceipt`, `updateContainer` and `markReceiptSent` refuse one ("carry on
+    with it in Check in") — its totes can be moved, but not edited, catalogued or returned from
+    elsewhere, because the check-in's next save would write over them. Its **labels can** be printed
+    — that is the point of it. A draft is shown as "Not booked in yet" with a Carry on link wherever
+    it appears.
+  - ⚠ **Locks.** Every check-in write locks the receipt row first (`SELECT … FOR UPDATE`), then its
+    totes and pallets in id order, so two tabs on one check-in queue instead of interleaving, and a
+    Scan to move or label print of one of its totes waits for the save (or the save sees it).
+  - ⚠⚠ **Anything that has moved is never deleted or re-numbered** — a tote or pallet with any
+    `GoodsInMovement` (or a location recorded on it) can't be removed from a check-in or switched
+    between tote and pallet; the save is refused, naming it, and nothing is changed. Its history must
+    still read.
+  - ⚠⚠ **A printed label is never lost without trace.** Taking a tote or pallet off a check-in after
+    its label was printed (removed, or switched between tote and pallet) adds a line to the receipt's
+    notes — *"Taken off this check-in after its label was printed: T…, T… (date, by …)"*
+    (`LABEL_GIVEN_UP_NOTE`, read back by `labelsGivenUp`). The Hub keeps those lines itself: the
+    check-in screen is sent only what was typed in Notes, and every save puts them back after it. And
+    each save says which numbers the screen took off (`removed`), so a labelled tote the screen never
+    had — another tab added it, or the screen is an older copy — is **refused**, naming it ("open the
+    check-in again"), instead of being taken off unseen.
+  - **Throwing a check-in away** (`discardCheckIn`) **deletes** the draft (its totes and pallets with
+    it) when no label was printed — for a tote still on it, or one taken off after printing — and
+    nothing moved; otherwise it **voids** it with a note — *"Thrown away at check-in before booking in
+    — labels had been printed for T…, T…"* — so a stray labelled tote can be traced. That void is
+    final: it was never booked in, so `updateReceipt` refuses to reopen it, even for a manager, and
+    its notes can be added to but never have that record taken out (it is also what tells it apart
+    from a booked receipt a manager voided). Carrying on (`loadCheckIn`, `?receipt=R…` on Check in),
+    printing and throwing away are **anyone in Goods In**; voiding a BOOKED receipt is still a
+    manager's. Unfinished check-ins are offered to carry on from Check in (the person's own only —
+    and, once a customer is picked, a quiet line if that customer already has one waiting, anyone's),
+    the Receipts list, the Goods In dashboard ("Check-ins not finished", the first three) and the
+    customer's page. A check-in with nothing written, ticked or printed on it is thrown away without
+    asking when the clerk moves on to another one.
+  - Check in takes `?receipt=` / `?customer=` off the address once it has opened (replaceState):
+    Book in and Throw it away refresh the page on the server, and with `?receipt=` still there that
+    refresh would redirect off the Done panel to the receipt page.
+  - Known limits, accepted for now: each save sends every row on the screen and the server makes the
+    receipt match, so a second, out-of-date tab on the same check-in takes off rows it never saw —
+    refused if they had moved or had a label printed; an unlabelled one becomes a gap. A save that
+    hasn't answered in 30 seconds is treated as not answered (Retry), so the screen never waits for
+    ever. And if the answer to the very FIRST save is lost, the retry makes a second draft — the
+    first then waits in "Check-ins not finished" to be thrown away.
+- **Check in never asks about fees** (Jack, 2026-10-16: *"it's more the checking in asking for fees
+  part you have done is annoying"*). There is **no Terms step** — the steps are Customer · What
+  they've brought · Check & book in. Every receipt takes the customer's usual terms automatically
+  (commission and lotting / photography / unsold fees from their `GoodsInCustomer`, or `DEFAULT_TERMS`
+  where they have none; the reserve is the standard one). Check & book in shows them as one plain line
+  with a small "Change for this receipt" link that opens the terms fields (closed by default); that
+  changes THIS receipt only. A customer's usual terms are changed on their customer page, not at the
+  counter. An unusual value never blocks or nags — only an impossible one (a negative fee, more than
+  100%) is refused, and Book in refuses it on the server too. ⚠ Don't bring back a Terms step or a
+  "check the fees" question without asking Jack.
 - ⚠⚠ **A customer's bank details are never stored or shown.** The bank form on the printed receipt
   is blank by design and the customer fills it in by hand — nothing in the Hub is locked down enough
   to hold them. Don't add fields for them.
@@ -1731,8 +1813,9 @@ Warehouse admin sets the number series.
   a shell tote and one with no vendor included — answers byte-for-byte as before; Goods In is asked
   only when BC has **no row at all** for the number, and answers in the same shape with
   `source: "goods-in"`. ⚠ `catalogued` is always null there (the wizard words a true value as BC's
-  tick on a re-used tote, which a Goods In tote never is), totes on a **voided** receipt are not
-  offered, and a missing table simply means nothing from Goods In.
+  tick on a re-used tote, which a Goods In tote never is), totes on a **voided** receipt — or on a
+  **draft** one, not booked in yet — are not offered, and a missing table simply means nothing from
+  Goods In.
   - ⚠ The wizard still says "BC" in places ("Type the BC tote number…", "Typed by hand, not taken from
     BC"), and a Goods In receipt with no vendor number cannot fill the wizard's required Vendor box —
     the cataloguer types it. Wording on those screens is a cataloguing change, not a Goods In one.
@@ -1743,11 +1826,15 @@ Warehouse admin sets the number series.
 - **Voiding and un-voiding a receipt both need a manager.** `updateReceipt` reads the current status
   and changes it in one step, so two people changing it at once can't both win; a void reason is
   added to the notes on the server (`appendNote`), never overwriting them.
-- **A half-finished check-in is kept** in that browser tab's `sessionStorage` (customer id and name,
-  rows, terms and ticks only, every access in try/catch) and offered back only to the same user. It is
+- **A half-finished check-in is kept on the server** as its draft receipt (above). The browser tab's
+  `sessionStorage` (v2) also keeps the receipt number, customer id and name, rows, terms and ticks only
+  (every access in try/catch), offered back only to the same user; carrying on from it loads the draft
+  from the server (`loadCheckIn`), and a v1 copy (no receipt number) still restores as before. It is
   cleared on Book in. Never put anything more personal in it.
 - Check in opens with a customer already chosen from `/tools/warehouse/check-in?customer=<contact id>`
-  (the Customers list and customer page use it).
+  (the Customers list and customer page use it), or carries on a draft from
+  `/tools/warehouse/check-in?receipt=<receipt number>` (a receipt that isn't a draft opens its receipt
+  page instead).
 - Registered in `lib/help-map.ts` (Book in · Receipt list · Scan to move · Benches · Code lookup ·
   Locations & labels · Number series & email · Movement record). ⚠ Those names and their keywords avoid everyday words
   ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that

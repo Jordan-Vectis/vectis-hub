@@ -139,6 +139,7 @@ model Contact {
   submissions     Submission[]       @relation("ContactSubmissions")
   customerAccount CustomerAccount?
   goodsInCustomer GoodsInCustomer?
+  goodsInAgreement GoodsInAgreement?
   goodsInReceipts GoodsInReceipt[]
 }
 
@@ -1142,6 +1143,21 @@ model GoodsInCustomer {
   unsoldFee       Float?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+/// A customer's standing Goods In agreement, one row per contact: their usual reserve, whether and
+/// when they signed Vectis's vendor terms, and any special arrangement in plain words (shown at
+/// check-in and printed on their receipts). Their fees themselves are on GoodsInCustomer.
+model GoodsInAgreement {
+  contactId          String    @id
+  contact            Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  reservePercent     Int?
+  termsSignedAt      DateTime?
+  termsRecordedBy    String?
+  specialArrangement String?
+  updatedByName      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 /// A receipt: the record of what a customer handed in, on which day, on what terms. The id IS

@@ -10,6 +10,7 @@ import { normaliseCode } from "@/lib/goods-in/model"
 import { box, btn, btnGo, mono, th, td, ErrorBox, KindBadge, NotReady, PageHeader, StatusBadge, StatusKey, isMissingTable, ukDate, ukDateTime } from "../_components/ui"
 import { kindWord, plural } from "../move/words"
 import { MarkCatalogued } from "../bench/bench-actions"
+import { CarryOnLink, ReceiptStatusBadge } from "../receipts/_parts"
 import FindBox from "./find-box"
 
 // Goods In → Find. One box for anything: a tote or pallet, a lot barcode, a receipt, a location or
@@ -19,6 +20,10 @@ import FindBox from "./find-box"
 //
 // ⚠ A sale is linked only for someone whose departments let them open it (lib/departments.ts —
 // RULES "Departments gate which sales a cataloguer sees"); anyone else sees the sale code as text.
+//
+// A tote or pallet on a check-in that hasn't been booked in yet (a draft receipt) says so plainly —
+// "Not booked in yet", with Carry on checking in — rather than reading as booked in. Its label can
+// still be printed (labels are allowed for a draft).
 
 export const dynamic = "force-dynamic"
 
@@ -97,7 +102,7 @@ async function loadLots(where: Prisma.CatalogueLotWhereInput) {
   ])
   const receiptIds = strings([...lots.map(l => (l.receipt ? normaliseCode(l.receipt) : null)), ...containers.map(c => c.receiptId)])
   const [receipts, places] = await Promise.all([
-    prisma.goodsInReceipt.findMany({ where: { id: { in: receiptIds } }, select: { id: true, contactId: true, contact: { select: { name: true } } } }),
+    prisma.goodsInReceipt.findMany({ where: { id: { in: receiptIds } }, select: { id: true, status: true, contactId: true, contact: { select: { name: true } } } }),
     placesFor(strings([...moves.flatMap(m => [m.locationCode, m.fromCode]), ...containers.map(c => c.locationCode)])),
   ])
   return { lots, moves, containers, receipts, places }
@@ -108,7 +113,7 @@ async function loadLocation(code: string) {
     prisma.goodsInLocation.findUnique({ where: { code }, select: { code: true, name: true, kind: true, active: true } }),
     prisma.goodsInContainer.findMany({
       where: { locationCode: code },
-      select: { id: true, kind: true, category: true, description: true, status: true, movedAt: true, receiptId: true, receipt: { select: { contactId: true, contact: { select: { name: true } } } } },
+      select: { id: true, kind: true, category: true, description: true, status: true, movedAt: true, receiptId: true, receipt: { select: { status: true, contactId: true, contact: { select: { name: true } } } } },
       orderBy: { movedAt: "desc" },
       take: 500,
     }),
@@ -383,19 +388,28 @@ function ContainerView({ d, canOpen }: { d: ContainerData; canOpen: CanOpen }) {
   const here = c.locationCode ? places[c.locationCode] : null
   const atBench = c.locationKind === "bench" && !!c.locationCode
   const shelved = lots.filter(l => l.shelf).length
+  const isDraft = c.receipt.status === "draft"
   return (
     <div className="space-y-4">
       <section className={`${box} p-4 sm:p-5 space-y-4`}>
         <div className="flex flex-wrap items-center gap-3">
           <h2 className={`${mono} text-3xl font-bold text-gray-900 dark:text-white`}>{c.id}</h2>
           <KindBadge kind={c.kind} />
-          <StatusBadge status={c.status} />
+          {isDraft ? <DraftChips status={c.status} /> : <StatusBadge status={c.status} />}
           <div className="ml-auto flex flex-wrap gap-2">
             <Link href={`/tools/warehouse/move?item=${encodeURIComponent(c.id)}`} className={btnGo}>Move it</Link>
             {/* A voided receipt's labels aren't printed (the labels route refuses them too). */}
             {c.receipt.status !== "void" && <a href={`/api/goods-in/labels?containers=${encodeURIComponent(c.id)}`} target="_blank" rel="noopener" className={btn}>Print its label</a>}
           </div>
         </div>
+        {isDraft && (
+          <div role="note" className="rounded-lg border border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="min-w-0 flex-1 basis-64">
+              <b>Not booked in yet.</b> {c.id} is on check-in <span className={`${mono} font-semibold`}>{c.receipt.id}</span> for {c.receipt.contact.name}, which hasn&apos;t been booked in.
+            </p>
+            <CarryOnLink receiptId={c.receipt.id} className={btnGo} />
+          </div>
+        )}
         <Facts
           items={[
             [
@@ -415,7 +429,7 @@ function ContainerView({ d, canOpen }: { d: ContainerData; canOpen: CanOpen }) {
               "Receipt",
               <span key="r">
                 <Link href={`/tools/warehouse/receipts/${encodeURIComponent(c.receipt.id)}`} className={`${mono} font-semibold underline-offset-2 hover:underline`}>{c.receipt.id}</Link>
-                <span className="text-gray-500 dark:text-gray-400"> · booked in {ukDate(c.receipt.createdAt)}</span>
+                <span className="text-gray-500 dark:text-gray-400">{isDraft ? ` · check-in started ${ukDate(c.receipt.createdAt)}, not booked in yet` : ` · booked in ${ukDate(c.receipt.createdAt)}`}</span>
                 {c.receipt.status === "void" && <span className="ml-1 font-semibold text-red-700 dark:text-red-300">(voided)</span>}
               </span>,
             ],
@@ -423,7 +437,7 @@ function ContainerView({ d, canOpen }: { d: ContainerData; canOpen: CanOpen }) {
             ["Description", c.description ?? "—"],
             ["Vendor no.", c.receipt.vendorNo ? <span className={mono}>{c.receipt.vendorNo}</span> : "—"],
             ["Lots made from it", lots.length === 0 ? "None yet" : `${plural(lots.length, "lot")}${shelved ? ` · ${shelved.toLocaleString("en-GB")} on a shelf` : ""}`],
-            ["Booked in by", c.createdByName ?? "—"],
+            [isDraft ? "Numbered by" : "Booked in by", c.createdByName ?? "—"],
             ["Label printed", c.labelPrintedAt ? ukDateTime(c.labelPrintedAt) : "Not yet"],
           ]}
         />
@@ -442,7 +456,7 @@ function ContainerView({ d, canOpen }: { d: ContainerData; canOpen: CanOpen }) {
 
       <div className="grid gap-4 xl:grid-cols-2 items-start">
         <Section title="Where it has been" count={c.movements.length}>
-          {c.movements.length === 0 ? <Quiet>Not moved yet — it hasn&apos;t been put anywhere since it was booked in.</Quiet> : <MoveHistory moves={c.movements} places={places} />}
+          {c.movements.length === 0 ? <Quiet>Not moved yet — it hasn&apos;t been put anywhere since it was {isDraft ? "numbered" : "booked in"}.</Quiet> : <MoveHistory moves={c.movements} places={places} />}
         </Section>
         <Section title="Lots made from it" count={lots.length}>
           {lots.length === 0 ? (
@@ -469,6 +483,16 @@ function ContainerView({ d, canOpen }: { d: ContainerData; canOpen: CanOpen }) {
         </Section>
       </div>
     </div>
+  )
+}
+
+/** A tote on a check-in not booked in yet: "Not booked in yet", plus where it has got to if it has been moved. */
+function DraftChips({ status }: { status: string | null }) {
+  return (
+    <>
+      <ReceiptStatusBadge status="draft" />
+      {status && status !== "booked" && <StatusBadge status={status} />}
+    </>
   )
 }
 
@@ -543,7 +567,10 @@ function LotCard({ lot, d, canOpenSale }: { lot: LotsData["lots"][number]; d: Lo
               "Receipt",
               receiptId ? (
                 receipt ? (
-                  <Link key="r" href={`/tools/warehouse/receipts/${encodeURIComponent(receipt.id)}`} className={`${mono} font-semibold underline-offset-2 hover:underline`}>{receipt.id}</Link>
+                  <span key="r">
+                    <Link href={`/tools/warehouse/receipts/${encodeURIComponent(receipt.id)}`} className={`${mono} font-semibold underline-offset-2 hover:underline`}>{receipt.id}</Link>
+                    {receipt.status === "draft" && <span className="ml-1 font-semibold text-amber-700 dark:text-amber-300">(not booked in yet)</span>}
+                  </span>
                 ) : (
                   <Link key="r" href={findHref(receiptId)} className={`${mono} font-semibold underline-offset-2 hover:underline`}>{receiptId}</Link>
                 )
@@ -604,7 +631,7 @@ function LocationView({ d, code, canOpen }: { d: LocationData; code: string; can
                       <div className="flex flex-wrap items-center gap-2">
                         <Link href={findHref(c.id)} className={`${mono} font-bold text-gray-900 dark:text-white hover:underline`}>{c.id}</Link>
                         <KindBadge kind={c.kind} />
-                        <StatusBadge status={c.status} />
+                        {c.receipt.status === "draft" ? <DraftChips status={c.status} /> : <StatusBadge status={c.status} />}
                         <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">since {ukDateTime(c.movedAt)}</span>
                       </div>
                       <p className="text-sm text-gray-700 dark:text-gray-200 break-words">

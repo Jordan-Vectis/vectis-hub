@@ -6,9 +6,9 @@ import type { Prisma } from "@/app/generated/prisma/client"
 import { getGoodsInUser } from "@/lib/goods-in/access"
 import { normaliseCode } from "@/lib/goods-in/model"
 import {
-  Empty, ErrorBox, NotReady, PageHeader, StatusKey, btn, btnGo, box, input, isMissingTable, label, mono, td, th, ukDate, ukDateTime,
+  Empty, ErrorBox, NotReady, OkBox, PageHeader, StatusKey, btn, btnGo, box, input, isMissingTable, label, mono, td, th, ukDate, ukDateTime,
 } from "../_components/ui"
-import { ReceiptStatusBadge, ReceiptStatusKey, StatusCounts, kindCounts, receiptStatus } from "./_parts"
+import { CarryOnLink, ReceiptStatusBadge, ReceiptStatusKey, StatusCounts, kindCounts, receiptStatus } from "./_parts"
 import SearchBox from "./search-box"
 
 // Goods In → Receipts. Every receipt the Hub has booked, newest first, 50 a page, with where its
@@ -16,18 +16,23 @@ import SearchBox from "./search-box"
 // filtered list can be shared and the back button works. A barcode scanner can be used in the
 // search box — scanning a receipt or a tote/pallet label goes straight to that receipt.
 //
+// A check-in that hasn't been booked in yet (status "draft") already has its receipt number, so it
+// is listed too — marked "Not booked in yet", with Carry on checking in — and has its own filter.
+// "Open" means booked in and still being added to, so it never includes a draft.
+//
 // Nothing here reads or writes Business Central.
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Receipts · Goods In" }
 
 const PAGE_SIZE = 50
-const STATUSES = ["all", "open", "closed", "void"] as const
+const STATUSES = ["all", "draft", "open", "closed", "void"] as const
 type StatusFilter = (typeof STATUSES)[number]
-const STATUS_LABEL: Record<StatusFilter, string> = { all: "All", open: "Open", closed: "Closed", void: "Void" }
+const STATUS_LABEL: Record<StatusFilter, string> = { all: "All", draft: "Not booked in yet", open: "Open", closed: "Closed", void: "Void" }
 
-/** `id` is what the old prototype's links (e.g. from Contacts) pass — treated as a search, so a Goods In receipt number still opens. */
-type SP = { q?: string; status?: string; from?: string; to?: string; page?: string; id?: string }
+/** `id` is what the old prototype's links (e.g. from Contacts) pass — treated as a search, so a Goods In receipt number still opens.
+ *  `gone` is a check-in just thrown away from its receipt page (it no longer exists, so it lands here). */
+type SP = { q?: string; status?: string; from?: string; to?: string; page?: string; id?: string; gone?: string }
 
 /** "14:02", London time — the second line under the booked date. */
 const ukTime = (d: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" }).format(d)
@@ -86,10 +91,13 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
   const from = londonStartOfDay(fromStr)
   const toExclusive = londonStartOfDay(toStr, 1)
   const askedPage = Math.max(1, Math.floor(Number(sp.page)) || 1)
+  const goneCode = normaliseCode(sp.gone ?? "")
+  const gone = /^[A-Z]{1,3}\d{3,10}$/.test(goneCode) ? goneCode : null
 
   let goTo: string | null = null
   let rows: Row[] = []
   let total = 0
+  let draftsListed = 0
   let page = askedPage
   let everAny = true
   let problem: "migrate" | string | null = null
@@ -123,7 +131,13 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
       if (toExclusive) and.push({ createdAt: { lt: toExclusive } })
       const where: Prisma.GoodsInReceiptWhereInput = and.length ? { AND: and } : {}
 
-      total = await prisma.goodsInReceipt.count({ where })
+      const [n, drafts] = await Promise.all([
+        prisma.goodsInReceipt.count({ where }),
+        // How many of "All" are check-ins not booked in yet, so the count line can say so.
+        status === "all" ? prisma.goodsInReceipt.count({ where: { AND: [...and, { status: "draft" }] } }) : Promise.resolve(0),
+      ])
+      total = n
+      draftsListed = drafts
       const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
       page = Math.min(askedPage, pages)
       const found = total === 0 ? [] : await prisma.goodsInReceipt.findMany({
@@ -177,12 +191,18 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         title="Receipts"
         back={{ href: "/tools/warehouse", label: "Goods In" }}
-        intro="Every receipt booked in, newest first. Scan or type a receipt, tote or pallet number to go straight to it."
+        intro="Every receipt, newest first — a check-in not finished at the counter is marked Not booked in yet. Scan or type a receipt, tote or pallet number to go straight to it."
         actions={<Link href="/tools/warehouse/check-in" className={btnGo}>Book goods in</Link>}
       />
 
       {problem === "migrate" ? <NotReady /> : (
         <>
+          {gone && (
+            <div className="mb-4">
+              <OkBox>Check-in <span className={`${mono} font-semibold`}>{gone}</span> was thrown away. Nothing was booked in, and its numbers won&apos;t be used again.</OkBox>
+            </div>
+          )}
+
           {/* ── Filters ── */}
           <div className={`${box} p-4 mb-4`}>
             <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Show receipts that are">
@@ -227,7 +247,13 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
           {problem ? (
             <ErrorBox>Couldn&apos;t load the receipts: {problem}</ErrorBox>
           ) : rows.length === 0 ? (
-            !everAny ? (
+            status === "draft" && !q && !fromStr && !toStr ? (
+              <Empty>
+                <p className="font-semibold text-gray-700 dark:text-gray-200 mb-1">No check-ins waiting</p>
+                <p className="mb-4">Every check-in started at the counter has been booked in or thrown away.</p>
+                <Link href="/tools/warehouse/receipts" className={btn}>See every receipt</Link>
+              </Empty>
+            ) : !everAny ? (
               <Empty>
                 <p className="font-semibold text-gray-700 dark:text-gray-200 mb-1">No receipts yet</p>
                 <p className="mb-4">Receipts appear here once goods are booked in at the counter.</p>
@@ -250,34 +276,47 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
             <>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
                 {total.toLocaleString("en-GB")} receipt{total === 1 ? "" : "s"}{filtered ? " match" : ""}
+                {draftsListed > 0 && <> ({draftsListed.toLocaleString("en-GB")} not booked in yet — <Link href={href({ status: "draft" })} className="underline">show only those</Link>)</>}
                 {pages > 1 && <> · showing {((page - 1) * PAGE_SIZE + 1).toLocaleString("en-GB")}–{Math.min(page * PAGE_SIZE, total).toLocaleString("en-GB")}</>}
               </p>
 
               {/* ── Phones and iPads: cards (two across once there's room) ── */}
               <ul className="xl:hidden grid gap-3 md:grid-cols-2">
-                {rows.map(r => (
-                  <li key={r.id} className="min-w-0">
-                    <Link href={`/tools/warehouse/receipts/${encodeURIComponent(r.id)}`} className={`${box} block h-full p-4 hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors ${receiptStatus(r.status) === "void" ? "opacity-70" : ""}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className={`${mono} text-lg font-bold text-indigo-700 dark:text-indigo-300`}>{r.id}</p>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{r.customerName}</p>
-                          {r.vendorNo && <p className={`${mono} text-xs text-gray-500 dark:text-gray-400`}>Vendor {r.vendorNo}</p>}
+                {rows.map(r => {
+                  const draft = receiptStatus(r.status) === "draft"
+                  return (
+                    // The whole card opens the receipt (its link is stretched over the card); a draft's
+                    // Carry on button sits above that link so it can be pressed on its own.
+                    <li key={r.id} className="min-w-0">
+                      <div className={`${box} relative h-full p-4 hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors ${receiptStatus(r.status) === "void" ? "opacity-70" : ""} ${draft ? "!border-amber-300 dark:!border-amber-700/70" : ""}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <Link href={`/tools/warehouse/receipts/${encodeURIComponent(r.id)}`} className={`${mono} text-lg font-bold text-indigo-700 dark:text-indigo-300 after:absolute after:inset-0 after:rounded-xl`}>{r.id}</Link>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{r.customerName}</p>
+                            {r.vendorNo && <p className={`${mono} text-xs text-gray-500 dark:text-gray-400`}>Vendor {r.vendorNo}</p>}
+                          </div>
+                          <ReceiptStatusBadge status={r.status} />
                         </div>
-                        <ReceiptStatusBadge status={r.status} />
+                        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-700 dark:text-gray-200">
+                          <span className="font-medium">{draft && r.containers.length === 0 ? "Nothing added yet" : kindCounts(r.containers)}</span>
+                          {!draft && <StatusCounts containers={r.containers} />}
+                        </div>
+                        {draft ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Check-in started {ukDateTime(r.createdAt)}{r.createdByName ? ` by ${r.createdByName}` : ""}</span>
+                            <CarryOnLink receiptId={r.id} className={`${btnGo} relative z-10`} />
+                          </div>
+                        ) : (
+                          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                            <span>Booked {ukDateTime(r.createdAt)}{r.createdByName ? ` by ${r.createdByName}` : ""}</span>
+                            <span>{r.printedAt ? <span className="text-emerald-700 dark:text-emerald-300">✓ Printed</span> : "Not printed"}</span>
+                            <span>{r.emailedAt ? <span className="text-emerald-700 dark:text-emerald-300">✓ Emailed</span> : "Not emailed"}</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-700 dark:text-gray-200">
-                        <span className="font-medium">{kindCounts(r.containers)}</span>
-                        <StatusCounts containers={r.containers} />
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-                        <span>Booked {ukDateTime(r.createdAt)}{r.createdByName ? ` by ${r.createdByName}` : ""}</span>
-                        <span>{r.printedAt ? <span className="text-emerald-700 dark:text-emerald-300">✓ Printed</span> : "Not printed"}</span>
-                        <span>{r.emailedAt ? <span className="text-emerald-700 dark:text-emerald-300">✓ Emailed</span> : "Not emailed"}</span>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
 
               {/* ── Wide screens: the table (it needs ~950px, more than an iPad has beside the menu) ── */}
@@ -299,6 +338,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {rows.map(r => {
                       const void_ = receiptStatus(r.status) === "void"
+                      const draft = receiptStatus(r.status) === "draft"
                       return (
                         <tr key={r.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${void_ ? "opacity-70" : ""}`}>
                           <td className={td}>
@@ -306,8 +346,10 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
                               {r.id}
                             </Link>
                             {receiptStatus(r.status) !== "open" && <div className="mt-1"><ReceiptStatusBadge status={r.status} /></div>}
+                            {draft && <div><CarryOnLink receiptId={r.id} className="inline-flex items-center min-h-11 text-sm font-semibold text-indigo-700 dark:text-indigo-300 underline whitespace-nowrap" /></div>}
                           </td>
                           <td className={`${td} whitespace-nowrap`}>
+                            {draft && <div className="text-xs text-gray-500 dark:text-gray-400">Started</div>}
                             {ukDate(r.createdAt)}
                             <div className="text-xs text-gray-500 dark:text-gray-400">{ukTime(r.createdAt)}</div>
                           </td>
@@ -315,8 +357,8 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
                             <Link href={`/tools/warehouse/customers/${encodeURIComponent(r.contactId)}`} className="hover:underline">{r.customerName}</Link>
                           </td>
                           <td className={`${td} ${mono} whitespace-nowrap`}>{r.vendorNo ?? <span className="text-gray-500 dark:text-gray-400">—</span>}</td>
-                          <td className={td}>{kindCounts(r.containers)}</td>
-                          <td className={td}><StatusCounts containers={r.containers} /></td>
+                          <td className={td}>{draft && r.containers.length === 0 ? "Nothing added yet" : kindCounts(r.containers)}</td>
+                          <td className={td}>{draft ? <span className="text-xs text-gray-500 dark:text-gray-400">Not booked in yet</span> : <StatusCounts containers={r.containers} />}</td>
                           <td className={td}>{r.createdByName ?? <span className="text-gray-500 dark:text-gray-400">—</span>}</td>
                           <td className={`${td} text-center whitespace-nowrap`}>
                             {r.printedAt
@@ -355,7 +397,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
             <StatusKey />
             <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 pt-1">The receipt itself</p>
             <ReceiptStatusKey />
-            <p className="text-xs text-gray-500 dark:text-gray-400 pt-1">✓ in Printed or Emailed shows the receipt has gone out, with the day it last did.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 pt-1">✓ in Printed or Emailed shows the receipt has gone out, with the day it last did. A check-in can&apos;t be printed or emailed until it&apos;s booked in.</p>
           </div>
         </>
       )}

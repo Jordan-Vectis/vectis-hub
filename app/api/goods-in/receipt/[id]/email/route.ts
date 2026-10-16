@@ -13,6 +13,7 @@ export const maxDuration = 60
 // Emails the receipt PDF to the customer from the receipts mailbox, then records who it went to
 // and when (shown on the receipt page). Anyone with Warehouse access. When the mailbox isn't
 // connected yet the answer says so plainly — the clerk can still print it or download it.
+// A voided receipt, and a check-in that hasn't been booked in yet (a draft), are refused (409).
 
 const NOT_SET_UP = "Email isn't set up yet — an admin connects the receipts mailbox in Goods In → Settings. Until then, print the receipt, or download it and email it by hand."
 
@@ -26,13 +27,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const to = cleanEmail(body?.to)
     if (!to) return errorJson("That email address doesn't look right — check it and try again.", 400)
 
-    const mail = await mailStatus()
-    if (!mail.connected) return errorJson(NOT_SET_UP, 409)
-
+    // The receipt is checked first, so a draft or a void is told why whether or not the mailbox is connected.
     const r = await loadReceiptForPdf(id)
     if (!r) return errorJson(`Receipt ${id.toUpperCase()} couldn't be found.`, 404)
     if (r.status === "void") return errorJson(`Receipt ${r.pdf.id} has been voided, so it can't be emailed.`, 409)
+    if (r.status === "draft") return errorJson(`${r.pdf.id} hasn't been booked in yet — finish the check-in first.`, 409)
     if (r.pdf.containers.length === 0) return errorJson(`Receipt ${r.pdf.id} has no totes or pallets on it yet, so there's nothing to send.`, 409)
+
+    const mail = await mailStatus()
+    if (!mail.connected) return errorJson(NOT_SET_UP, 409)
 
     const pdf = await buildReceiptPdf(r.pdf)
     const c = r.pdf.customer

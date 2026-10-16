@@ -10,6 +10,7 @@ import {
   box, btn, btnGo, mono, th, td, ukDate, ukDateTime,
   PageHeader, StatusBadge, StatusKey, KindBadge, Empty, NotReady, ErrorBox, OkBox, isMissingTable,
 } from "../../_components/ui"
+import { BOOKED_LIVE, NOT_DRAFT, carryOnHref } from "../../receipts/_parts"
 import CustomerPanel from "./customer-panel"
 
 // Goods In → one customer: their details and usual terms (editable in place), a button to book
@@ -17,6 +18,9 @@ import CustomerPanel from "./customer-panel"
 // with where each one is, and the lots made from their totes with the sale and shelf. Read with
 // prisma directly (server component); every write goes through lib/actions/goods-in.ts. Nothing
 // here reads or writes Business Central, and no bank details are ever held or shown.
+//
+// A check-in for them that hasn't been booked in yet (a draft receipt) isn't one of their receipts:
+// it's left out of every count and list here and offered at the top instead, to carry on with.
 
 export const dynamic = "force-dynamic"
 
@@ -52,6 +56,14 @@ type ContainerView = {
   receiptId: string
 }
 
+type UnfinishedView = {
+  id: string
+  createdAt: Date
+  updatedAt: Date
+  createdByName: string | null
+  rows: number
+}
+
 type LotView = {
   id: string
   barcode: string | null
@@ -85,6 +97,7 @@ type Loaded = {
   since: Date
   receipts: ReceiptView[]
   receiptTotal: number
+  unfinished: UnfinishedView[]
   inWarehouse: ContainerView[]
   inWarehouseTotal: number
   lots: LotView[]
@@ -100,7 +113,7 @@ const muted = "text-gray-500 dark:text-gray-400"
 const link = "text-indigo-700 dark:text-indigo-300 hover:underline"
 
 async function load(id: string, viewer: { id: string; role: string }): Promise<Loaded | null> {
-  const c = await prisma.contact.findUnique({ where: { id }, include: { goodsInCustomer: true, _count: { select: { goodsInReceipts: true } } } })
+  const c = await prisma.contact.findUnique({ where: { id }, include: { goodsInCustomer: true, _count: { select: { goodsInReceipts: { where: NOT_DRAFT } } } } })
   if (!c) return null
   const g = c.goodsInCustomer
   const customer: CustomerRow = {
@@ -112,16 +125,16 @@ async function load(id: string, viewer: { id: string; role: string }): Promise<L
     receipts: c._count.goodsInReceipts,
   }
 
-  // In the warehouse now = not yet catalogued or given back, on a receipt that wasn't voided.
-  // (Prisma's "not" leaves out NULLs, so a blank status is let in explicitly.)
+  // In the warehouse now = not yet catalogued or given back, on a receipt that was booked in and
+  // wasn't voided. (Prisma's "not" leaves out NULLs, so a blank status is let in explicitly.)
   const inWarehouseWhere: Prisma.GoodsInContainerWhereInput = {
-    receipt: { contactId: id, OR: [{ status: null }, { status: { not: "void" } }] },
+    receipt: { contactId: id, ...BOOKED_LIVE },
     OR: [{ status: null }, { status: { notIn: ["catalogued", "returned"] } }],
   }
 
-  const [receipts, inWarehouse, inWarehouseTotal, access] = await Promise.all([
+  const [receipts, inWarehouse, inWarehouseTotal, access, unfinished] = await Promise.all([
     prisma.goodsInReceipt.findMany({
-      where: { contactId: id },
+      where: { contactId: id, ...NOT_DRAFT },
       orderBy: { createdAt: "desc" },
       take: RECEIPT_LIMIT,
       select: {
@@ -137,6 +150,13 @@ async function load(id: string, viewer: { id: string; role: string }): Promise<L
     }),
     prisma.goodsInContainer.count({ where: inWarehouseWhere }),
     getDepartmentAccess(viewer.id, viewer.role),
+    // Their check-ins not booked in yet, newest first.
+    prisma.goodsInReceipt.findMany({
+      where: { contactId: id, status: "draft" },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+      select: { id: true, createdAt: true, updatedAt: true, createdByName: true, _count: { select: { containers: true } } },
+    }),
   ])
 
   // Lots made from their totes. CatalogueLot.tote is typed or scanned by the cataloguer, so it is
@@ -154,6 +174,7 @@ async function load(id: string, viewer: { id: string; role: string }): Promise<L
         JOIN "GoodsInContainer" c ON c."id" = upper(btrim(l."tote"))
         JOIN "GoodsInReceipt" r ON r."id" = c."receiptId"
         WHERE r."contactId" = ${id}
+          AND (r."status" IS NULL OR r."status" <> 'draft')
           AND l."createdAt" >= c."createdAt"
         ORDER BY l."createdAt" DESC
         LIMIT ${LOT_LIMIT}`
@@ -181,6 +202,7 @@ async function load(id: string, viewer: { id: string; role: string }): Promise<L
     customer,
     since: c.createdAt,
     receiptTotal: c._count.goodsInReceipts,
+    unfinished: unfinished.map(u => ({ id: u.id, createdAt: u.createdAt, updatedAt: u.updatedAt, createdByName: u.createdByName, rows: u._count.containers })),
     receipts: receipts.map(r => {
       const counts = new Map<ContainerStatus, number>()
       for (const x of r.containers) {
@@ -355,6 +377,30 @@ export default async function CustomerPage({ params, searchParams }: {
           <OkBox>
             {c.name} has been added{c.vendorNo ? <> with vendor number <span className={`${mono} font-semibold`}>{c.vendorNo}</span></> : " (no vendor number yet)"}. Book their goods in with the button above when you&apos;re ready.
           </OkBox>
+        )}
+        {data.unfinished.length > 0 && (
+          <section aria-labelledby="unfinished" className="rounded-xl border border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 space-y-2">
+            <h2 id="unfinished" className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              {data.unfinished.length === 1 ? "A check-in for them isn't booked in yet" : `${data.unfinished.length} check-ins for them aren't booked in yet`}
+            </h2>
+            <ul className="space-y-2">
+              {data.unfinished.map(u => (
+                <li key={u.id} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="min-w-0 flex-1 basis-56 text-sm text-amber-900 dark:text-amber-100">
+                    <Link href={receiptHref(u.id)} className={`${mono} font-semibold underline`}>{u.id}</Link>
+                    {" · "}{u.rows === 0 ? "nothing added yet" : `${u.rows.toLocaleString("en-GB")} ${u.rows === 1 ? "tote or pallet" : "totes and pallets"} numbered`}
+                    {" · "}started {ukDateTime(u.createdAt)}{u.createdByName ? ` by ${u.createdByName}` : ""}
+                    {u.updatedAt.getTime() - u.createdAt.getTime() > 60_000 ? `, last saved ${ukDateTime(u.updatedAt)}` : ""}
+                  </span>
+                  <span className="flex flex-wrap gap-2">
+                    <Link href={carryOnHref(u.id)} className={btnGo}>Carry on checking in</Link>
+                    <Link href={receiptHref(u.id)} className={btn}>Open</Link>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-amber-800 dark:text-amber-200/90">Not booked in until Book in is pressed. Open one to throw it away.</p>
+          </section>
         )}
         <CustomerPanel customer={c} />
       </div>

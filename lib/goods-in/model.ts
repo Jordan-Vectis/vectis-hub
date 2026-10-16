@@ -32,7 +32,44 @@ export const LOCATION_KINDS: { value: LocationKind; label: string; help: string 
 /** A tote's status after it is moved to a location of this kind. */
 export const STATUS_FOR_KIND: Record<LocationKind, ContainerStatus> = { storage: "stored", bench: "bench", shelf: "stored", other: "stored" }
 
-export type ReceiptStatus = "open" | "closed" | "void"
+/**
+ * A receipt's status. "draft" is a check-in that hasn't been booked in yet: it is saved from the
+ * moment the clerk reaches the goods step, so the receipt and every tote and pallet already have
+ * their numbers (and their labels can be printed), but NOTHING about it counts as booked in — no
+ * count, no "booked in" list, no receipt PDF or email, no Lotting Up / Add Lot fallback — until Book
+ * in turns it "open". A thrown-away draft is deleted, or voided when a label was printed or a tote
+ * moved (lib/actions/goods-in-checkin.ts). A receipt saved before statuses existed (null) is open.
+ */
+export type ReceiptStatus = "draft" | "open" | "closed" | "void"
+/** The statuses of a receipt that HAS been booked in — what Receipts' close / reopen / void work on. */
+export type BookedReceiptStatus = Exclude<ReceiptStatus, "draft">
+export const isDraftReceipt = (status: string | null | undefined) => status === "draft"
+/** The first words of the note a thrown-away check-in is voided with (labels printed or a tote moved),
+ *  so a screen can tell "thrown away before booking in" from a booked receipt a manager voided. */
+export const THROWN_AWAY_NOTE = "Thrown away at check-in before booking in"
+
+/**
+ * The first words of the line a check-in's notes get when a tote or pallet whose label had been
+ * printed is taken off it (removed, or switched between tote and pallet) — its number is gone for
+ * good, but the label may still be stuck on something, so the record stays with the receipt:
+ * "Taken off this check-in after its label was printed: T026156, T026157 (16 Oct 2026, 10:42, by Jack)."
+ * Throwing the check-in away reads these back (labelsGivenUp), so it is voided, not deleted.
+ */
+export const LABEL_GIVEN_UP_NOTE = "Taken off this check-in after its label was printed"
+
+/** The tote and pallet numbers named on LABEL_GIVEN_UP_NOTE lines in a receipt's notes. */
+export function labelsGivenUp(notes: string | null | undefined): string[] {
+  const out: string[] = []
+  for (const line of (notes ?? "").split(/\r?\n/)) {
+    if (!line.startsWith(LABEL_GIVEN_UP_NOTE)) continue
+    const list = line.slice(LABEL_GIVEN_UP_NOTE.length).replace(/^:\s*/, "").split(" (")[0]
+    for (const part of list.split(/,\s*/)) {
+      const id = normaliseCode(part)
+      if (/^[A-Z]{1,3}\d{3,9}$/.test(id) && !out.includes(id)) out.push(id)
+    }
+  }
+  return out
+}
 
 /** The number series Goods In hands out. */
 export type CounterKey = "receipt" | "tote" | "pallet" | "vendor"

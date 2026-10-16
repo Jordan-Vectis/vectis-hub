@@ -7,6 +7,7 @@ import { lookupCode, updateContainer } from "@/lib/actions/goods-in"
 import { CONTAINER_STATUS, LOCATION_KINDS, STATUS_FOR_KIND, normaliseCode, type ContainerStatus, type LocationKind } from "@/lib/goods-in/model"
 import ScanInput from "../../_components/scan-input"
 import { ErrorBox, KindBadge, StatusBadge, btn, input, mono, th, td, ukDateTime } from "../../_components/ui"
+import { ReceiptStatusBadge } from "../_parts"
 import LotList from "./lot-list"
 import { useRefreshOnReturn } from "./refresh-on-return"
 import { CATEGORY_LIST_ID, type ContainerView } from "./types"
@@ -16,6 +17,10 @@ import { CATEGORY_LIST_ID, type ContainerView } from "./types"
 // copy of the edit boxes). Category and description are edited in place (updateContainer); the
 // lots made from each tote open underneath it. A scanner can be used in the box at the top to find
 // a tote on this receipt (or say which receipt it IS on).
+//
+// On a check-in that hasn't been booked in yet (a draft) the rows are read-only here: what's in each
+// tote is still being typed on the Check in screen, which would write over a change made here, and
+// nothing can be catalogued or given back before it's booked in. Labels print and totes move as usual.
 
 const kindLabel = (k: string | null) => LOCATION_KINDS.find(l => l.value === k)?.label ?? null
 
@@ -25,11 +30,13 @@ const statusFromLocation = (c: { locationCode: string | null; locationKind: stri
 
 type ScanNote = { tone: "ok" | "info" | "warn"; text: React.ReactNode }
 
-export default function ContainersTable({ receiptId, containers, highlight, isVoid = false }: {
+export default function ContainersTable({ receiptId, containers, highlight, isVoid = false, isDraft = false }: {
   receiptId: string
   containers: ContainerView[]
   /** The receipt is void: its totes keep their numbers, but no label is printed for them. */
   isVoid?: boolean
+  /** The receipt is a check-in not booked in yet: what's in each tote is changed on the Check in screen. */
+  isDraft?: boolean
   /** A tote/pallet to pick out (arrived from a scan on the receipts list). */
   highlight: string | null
 }) {
@@ -106,6 +113,7 @@ export default function ContainersTable({ receiptId, containers, highlight, isVo
               onToggle={() => setExpanded(e => ({ ...e, [c.id]: !e[c.id] }))}
               flashed={flash === c.id}
               isVoid={isVoid}
+              isDraft={isDraft}
             />
           ))}
         </table>
@@ -114,7 +122,7 @@ export default function ContainersTable({ receiptId, containers, highlight, isVo
   )
 }
 
-function ContainerRow({ c, open, onToggle, flashed, isVoid }: { c: ContainerView; open: boolean; onToggle: () => void; flashed: boolean; isVoid: boolean }) {
+function ContainerRow({ c, open, onToggle, flashed, isVoid, isDraft }: { c: ContainerView; open: boolean; onToggle: () => void; flashed: boolean; isVoid: boolean; isDraft: boolean }) {
   const router = useRouter()
   const refreshOnReturn = useRefreshOnReturn()
   const [editing, setEditing] = useState(false)
@@ -188,7 +196,13 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid }: { c: ContainerView
         {/* What's in it — edited in place */}
         <td className={`${td} max-xl:p-0 max-md:order-3 md:max-xl:order-2 max-xl:col-span-2 xl:min-w-[13rem] xl:w-[30%]`}>
           <div className="xl:hidden text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">What&apos;s in it</div>
-          {editing ? (
+          {isDraft ? (
+            <div className="py-1.5">
+              <span className={`block text-sm font-semibold ${category ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400 font-normal italic"}`}>{category || "No category"}</span>
+              <span className={`block text-sm whitespace-pre-line ${description ? "text-gray-700 dark:text-gray-300" : "text-gray-500 dark:text-gray-400 italic"}`}>{description || "No description"}</span>
+              <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400">Changed in Check in until it&apos;s booked in.</span>
+            </div>
+          ) : editing ? (
             <div
               className="space-y-2"
               onKeyDown={e => {
@@ -227,7 +241,8 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid }: { c: ContainerView
 
         {/* Status */}
         <td className={`${td} max-xl:p-0 max-md:order-2 md:max-xl:order-3 max-xl:text-right`}>
-          <StatusBadge status={status} />
+          {/* A tote on a draft hasn't been booked in, so "Booked in" would be untrue — until it's moved, it says so. */}
+          {isDraft && status === "booked" ? <ReceiptStatusBadge status="draft" /> : <StatusBadge status={status} />}
         </td>
 
         {/* Where it is: location (+ its kind) and when it last moved */}
@@ -272,7 +287,7 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid }: { c: ContainerView
               ? <button type="button" className={btn} disabled title="A void receipt’s labels can’t be printed.">Print label</button>
               : <a href={`/api/goods-in/labels?containers=${encodeURIComponent(c.id)}`} target="_blank" rel="noopener" className={btn} onClick={refreshOnReturn}>Print label</a>}
             <Link href={`/tools/warehouse/move?item=${encodeURIComponent(c.id)}`} className={btn}>Move</Link>
-            {!done && confirm === null && (
+            {!isDraft && !done && confirm === null && (
               <>
                 <button type="button" className={btn} disabled={!!busy} onClick={() => (lotsN === 0 ? setConfirm("catalogued") : void setStatus("catalogued"))}>
                   {busy === "catalogued" ? "Saving…" : "Mark catalogued"}
@@ -280,7 +295,7 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid }: { c: ContainerView
                 <button type="button" className={btn} disabled={!!busy} onClick={() => setConfirm("returned")}>Mark returned</button>
               </>
             )}
-            {done && (
+            {!isDraft && done && (
               <button type="button" className={btn} disabled={!!busy} onClick={() => void setStatus(back)}>
                 {busy === back ? "Saving…" : `Undo — back to ${CONTAINER_STATUS[back].label.toLowerCase()}`}
               </button>

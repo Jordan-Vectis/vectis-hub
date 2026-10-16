@@ -12,13 +12,16 @@ import { normaliseCode, type CustomerSnapshot } from "@/lib/goods-in/model"
 // shape as a BC row, plus `source: "goods-in"`. Any search BC answers is returned exactly as before.
 // ⚠ `catalogued` is null (the wizard words a true value as BC's tick and "the previous customer",
 // false for a Goods In tote); `syncedAt` is null (nothing was synced). Totes on a VOIDED receipt
-// are left out. Migration-safe: before Run Migrations the tables don't exist, and any failure here
+// are left out, and so are totes on a check-in that hasn't been booked in yet (a DRAFT receipt —
+// numbered so its labels can be printed, but not booked in, and it may still be thrown away).
+// Migration-safe: before Run Migrations the tables don't exist, and any failure here
 // means "Goods In has nothing" — the reply is then the same empty list it always was.
 async function searchGoodsIn(q: string) {
   const code = normaliseCode(q)
   if (!code) return []
-  // A receipt with no status counts as live; Prisma's `not` alone would drop NULLs as well as voids.
-  const live = { receipt: { is: { OR: [{ status: null }, { status: { not: "void" } }] } } }
+  // A receipt with no status counts as live; Prisma's `notIn` alone would drop NULLs as well as
+  // voids. Drafts (not booked in yet) are left out exactly like voids — see above.
+  const live = { receipt: { is: { OR: [{ status: null }, { status: { notIn: ["void", "draft"] } }] } } }
   const select = {
     id: true, category: true, description: true, locationCode: true,
     receipt: {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { updateReceipt } from "@/lib/actions/goods-in"
 import type { ReceiptStatus } from "@/lib/goods-in/model"
 import { ErrorBox, OkBox, box, btn, btnDanger, btnGo, input, label, mono, ukDateTime } from "../../_components/ui"
+import type { ReceiptStatusShown } from "../_parts"
 import { useRefreshOnReturn } from "./refresh-on-return"
 
 // The receipt's own buttons: print it, print every label, email it, close/reopen it, void it.
@@ -17,20 +18,25 @@ import { useRefreshOnReturn } from "./refresh-on-return"
 //   route records the send itself.
 // • Void is managers only, and asks in place (never window.confirm — a modal is easy to dismiss by
 //   accident on an iPad and blocks the page).
+// • A check-in that hasn't been booked in yet (a draft) shows only its labels: there is no receipt
+//   to print or email until it's booked in (both routes refuse a draft), nothing to close, and it is
+//   thrown away from the banner above rather than voided.
 
 type MailStatus = { configured?: boolean; connected?: boolean; mailbox?: string | null; connectedBy?: string | null; error?: string }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export default function ReceiptActions({ id, status, canVoid, snapshotEmail, liveEmail, containerCount, userName }: {
+export default function ReceiptActions({ id, status, canVoid, snapshotEmail, liveEmail, containerCount, unprintedLabels = [], userName }: {
   id: string
-  status: ReceiptStatus
+  status: ReceiptStatusShown
   canVoid: boolean
   /** The address on the receipt as it was booked. */
   snapshotEmail: string | null
   /** The customer's record's address now, when it differs from the receipt's. */
   liveEmail: string | null
   containerCount: number
+  /** Totes/pallets whose label hasn't been printed yet (used on a draft, where labels are all there is to print). */
+  unprintedLabels?: string[]
   userName: string | null
 }) {
   const router = useRouter()
@@ -44,12 +50,14 @@ export default function ReceiptActions({ id, status, canVoid, snapshotEmail, liv
   const [voidReason, setVoidReason] = useState("")
 
   const isVoid = status === "void"
+  const isDraft = status === "draft"
   const pdfHref = `/api/goods-in/receipt/${encodeURIComponent(id)}/pdf?print=1`
   const downloadHref = `/api/goods-in/receipt/${encodeURIComponent(id)}/pdf?download=1`
   const labelsHref = `/api/goods-in/labels?receipt=${encodeURIComponent(id)}`
 
-  // Is the receipts mailbox connected? Asked once when the page opens.
+  // Is the receipts mailbox connected? Asked once when the page opens (not for a draft — it can't be emailed yet).
   useEffect(() => {
+    if (isDraft) return
     let live = true
     fetch("/api/goods-in/mail/status", { cache: "no-store" })
       .then(async r => {
@@ -60,7 +68,7 @@ export default function ReceiptActions({ id, status, canVoid, snapshotEmail, liv
       })
       .catch(e => { if (live) setMail({ error: String(e?.message ?? e) }) })
     return () => { live = false }
-  }, [])
+  }, [isDraft])
 
   const emailBlocked: string | null = isVoid
     ? "A void receipt can't be emailed."
@@ -78,7 +86,31 @@ export default function ReceiptActions({ id, status, canVoid, snapshotEmail, liv
 
   const opened = () => { setError(null); setOk(null); refreshOnReturn() }
 
-  const setStatus = async (next: ReceiptStatus, extra?: { appendNote?: string }) => {
+  // A check-in not booked in yet: labels only.
+  if (isDraft) {
+    const unprintedHref = `/api/goods-in/labels?containers=${unprintedLabels.map(encodeURIComponent).join(",")}`
+    return (
+      <div className="mb-6 space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {unprintedLabels.length > 0 && unprintedLabels.length < containerCount && (
+            <a href={unprintedHref} target="_blank" rel="noopener" className={btnGo} onClick={opened}>
+              Print labels not printed yet ({unprintedLabels.length})
+            </a>
+          )}
+          {containerCount === 0 ? (
+            <button type="button" className={btn} disabled>Print all labels</button>
+          ) : (
+            <a href={labelsHref} target="_blank" rel="noopener" className={unprintedLabels.length === containerCount ? btnGo : btn} onClick={opened}>
+              Print all labels ({containerCount})
+            </a>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">The receipt itself can be printed and emailed once it&apos;s booked in.</p>
+      </div>
+    )
+  }
+
+  const setStatus = async (next: Exclude<ReceiptStatus, "draft">, extra?: { appendNote?: string }) => {
     setBusy(next)
     setError(null)
     setOk(null)

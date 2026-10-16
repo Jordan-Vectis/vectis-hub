@@ -185,17 +185,18 @@ export const DESTINATIONS: Destination[] = [
   // find the photos?" that Goods In isn't part of their Hub. Every phrase here is one only someone
   // asking about Goods In would type. Lotting Up talks about "a bench of items", BC Warehouse
   // answers "tote" and "where is a lot", and Packing (open to everyone) owns "labels" and parcels —
-  // don't steal those.
+  // don't steal those. Write keywords without hyphens: matchScore reads "check-in" in a question as
+  // "check in", so a hyphenated keyword never matches.
   {
     ask: "How do I book a customer's goods in?",
     name: "Goods In → Book in", href: "/tools/warehouse/check-in", app: "WAREHOUSE",
-    what: "Book a customer's goods in at the counter: find the customer in the customer database (or add them), put their goods on a new receipt as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote — then print or email the receipt and print a barcode label for every tote and pallet.",
-    also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "customer bringing in"],
+    what: "Book a customer's goods in at the counter, in three steps — Customer, What they've brought, Check & book in. Find the customer in the customer database (or add them), then list their goods as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote. Each tote and pallet gets its number as soon as its row is added, so its barcode label can be printed right there on the goods step (Print labels prints every one not printed yet; each row has its own Print / Reprint). The customer's usual commission and fees are used automatically; change them for one receipt on the last step, or for good on the customer's page. Press Book in, then print or email the receipt. A check-in left part-way is kept as \"not booked in yet\" — carry on with it from Check in, the Receipts list, the Goods In dashboard or the customer's page, or throw it away.",
+    also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "customer bringing in", "print tote labels at check in", "tote number at check in", "unfinished check in", "carry on checking in", "check in not booked in", "not booked in yet", "throw away a check in"],
   },
   {
     ask: "How do I reprint or email a receipt?",
     name: "Goods In → Receipt list", href: "/tools/warehouse/receipts", app: "WAREHOUSE",
-    what: "Every Goods In receipt, newest first. Open one to reprint it, email it to the customer, print its tote and pallet labels again, or add another tote or pallet to it. Only a manager can void one.",
+    what: "Every Goods In receipt, newest first. Open one to reprint it, email it to the customer, print its tote and pallet labels again, or add another tote or pallet to it. Only a manager can void one. A check-in that hasn't been booked in yet is marked \"Not booked in yet\" — open it to carry on checking in or throw it away; its labels can be printed, but the receipt itself can't be printed or emailed until it is booked in.",
     also: ["reprint a receipt", "reprint the receipt", "print a receipt", "email a receipt", "email the receipt", "send the receipt", "lost their receipt", "reprint tote labels", "void a receipt", "add a tote to a receipt"],
   },
   {
@@ -384,7 +385,7 @@ export type HelpContext = {
 export function allowedHelpContext(
   role: string,
   allowedApps: string[],
-  appPermissions: Record<string, any> | null | undefined,
+  appPermissions: Parameters<typeof getAllowedSections>[1],
 ): HelpContext {
   const canOpen = (app?: AppKey, section?: string): boolean => {
     if (!app) return true

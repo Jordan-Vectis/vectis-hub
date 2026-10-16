@@ -5,12 +5,17 @@ import type { Prisma } from "@/app/generated/prisma/client"
 import { getGoodsInUser } from "@/lib/goods-in/access"
 import { normaliseCode } from "@/lib/goods-in/model"
 import { box, btn, btnGo, mono, th, td, ukDate, PageHeader, Empty, NotReady, ErrorBox, isMissingTable } from "../_components/ui"
+import { NOT_DRAFT, carryOnHref } from "../receipts/_parts"
 import CustomerSearchBox from "./new/search-box"
 
 // Goods In → Customers. One search over the CRM's customer database (the same fields the counter's
 // customer picker searches: name, postcode, email, phone, vendor number) run on the server, 50 to a
 // page. With nothing searched it lists the customers who have booked goods in, most recent first.
 // A scanned vendor-number card goes straight to that customer. Nothing here touches Business Central.
+//
+// Receipt counts and "last booked" leave out check-ins not booked in yet (draft receipts) — a
+// customer whose only receipt is a draft hasn't booked anything in. A scanned draft receipt or tote
+// says so, with Carry on checking in.
 
 export const dynamic = "force-dynamic"
 
@@ -32,7 +37,7 @@ type Row = {
 }
 
 /** A scanned or typed receipt / tote / pallet number — we say whose it is rather than "no customer found". */
-type CodeHit = { what: "receipt" | "tote" | "pallet"; code: string; receiptId: string; customerId: string; customer: string }
+type CodeHit = { what: "receipt" | "tote" | "pallet"; code: string; receiptId: string; customerId: string; customer: string; draft: boolean }
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? ""
 const plural = (n: number, word: string) => `${n.toLocaleString("en-GB")} ${word}${n === 1 ? "" : "s"}`
@@ -62,7 +67,7 @@ function searchWhere(s: string): Prisma.ContactWhereInput {
   return { OR: or }
 }
 
-const CONTACT_INCLUDE = { goodsInCustomer: true, _count: { select: { goodsInReceipts: true } } } as const
+const CONTACT_INCLUDE = { goodsInCustomer: true, _count: { select: { goodsInReceipts: { where: NOT_DRAFT } } } } as const
 type ContactWithGoodsIn = Prisma.ContactGetPayload<{ include: typeof CONTACT_INCLUDE }>
 
 const toRow = (c: ContactWithGoodsIn, lastBooked: Date | null, receipts?: number): Row => ({
@@ -96,13 +101,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       if (looksLikeCode(code)) {
         const [vendor, receipt, container] = await Promise.all([
           prisma.goodsInCustomer.findUnique({ where: { vendorNo: code }, select: { contactId: true } }),
-          prisma.goodsInReceipt.findUnique({ where: { id: code }, select: { id: true, contactId: true, contact: { select: { name: true } } } }),
-          prisma.goodsInContainer.findUnique({ where: { id: code }, select: { id: true, kind: true, receiptId: true, receipt: { select: { contactId: true, contact: { select: { name: true } } } } } }),
+          prisma.goodsInReceipt.findUnique({ where: { id: code }, select: { id: true, status: true, contactId: true, contact: { select: { name: true } } } }),
+          prisma.goodsInContainer.findUnique({ where: { id: code }, select: { id: true, kind: true, receiptId: true, receipt: { select: { status: true, contactId: true, contact: { select: { name: true } } } } } }),
         ])
         // A scanned vendor-number card: straight to that customer.
         if (vendor) goTo = `${BASE}/${encodeURIComponent(vendor.contactId)}`
-        else if (receipt) hit = { what: "receipt", code: receipt.id, receiptId: receipt.id, customerId: receipt.contactId, customer: receipt.contact.name }
-        else if (container) hit = { what: container.kind === "pallet" ? "pallet" : "tote", code: container.id, receiptId: container.receiptId, customerId: container.receipt.contactId, customer: container.receipt.contact.name }
+        else if (receipt) hit = { what: "receipt", code: receipt.id, receiptId: receipt.id, customerId: receipt.contactId, customer: receipt.contact.name, draft: receipt.status === "draft" }
+        else if (container) hit = { what: container.kind === "pallet" ? "pallet" : "tote", code: container.id, receiptId: container.receiptId, customerId: container.receipt.contactId, customer: container.receipt.contact.name, draft: container.receipt.status === "draft" }
       }
       if (!goTo) {
         const where = searchWhere(q)
@@ -113,7 +118,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         total = count
         const ids = contacts.map(c => c.id)
         const last = ids.length
-          ? await prisma.goodsInReceipt.groupBy({ by: ["contactId"], where: { contactId: { in: ids } }, _max: { createdAt: true } })
+          ? await prisma.goodsInReceipt.groupBy({ by: ["contactId"], where: { contactId: { in: ids }, ...NOT_DRAFT }, _max: { createdAt: true } })
           : []
         const lastOf = new Map(last.map(l => [l.contactId, l._max.createdAt ?? null]))
         rows = contacts.map(c => toRow(c, lastOf.get(c.id) ?? null))
@@ -123,13 +128,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       const [groups, count] = await Promise.all([
         prisma.goodsInReceipt.groupBy({
           by: ["contactId"],
+          where: NOT_DRAFT,
           _max: { createdAt: true },
           _count: { _all: true },
           orderBy: { _max: { createdAt: "desc" } },
           skip,
           take: PAGE_SIZE,
         }),
-        prisma.contact.count({ where: { goodsInReceipts: { some: {} } } }),
+        prisma.contact.count({ where: { goodsInReceipts: { some: NOT_DRAFT } } }),
       ])
       total = count
       const contacts = groups.length
@@ -186,12 +192,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           {hit && (
             <div className="rounded-lg border border-indigo-300 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-100 px-4 py-3 text-sm flex flex-wrap items-center gap-x-4 gap-y-2">
               <span>
-                <span className={`${mono} font-semibold`}>{hit.code}</span> is {hit.what === "receipt" ? "a receipt" : `a ${hit.what} on receipt `}
-                {hit.what !== "receipt" && <span className={mono}>{hit.receiptId}</span>} for <b>{hit.customer}</b>.
+                <span className={`${mono} font-semibold`}>{hit.code}</span> is {hit.what === "receipt" ? (hit.draft ? "a check-in" : "a receipt") : `a ${hit.what} on ${hit.draft ? "check-in" : "receipt"} `}
+                {hit.what !== "receipt" && <span className={mono}>{hit.receiptId}</span>} for <b>{hit.customer}</b>
+                {hit.draft ? <> — <b>not booked in yet</b>.</> : "."}
               </span>
               <span className="flex flex-wrap gap-2">
+                {hit.draft && <Link href={carryOnHref(hit.receiptId)} className={btnGo}>Carry on checking in</Link>}
                 <Link href={`${BASE}/${encodeURIComponent(hit.customerId)}`} className={btn}>Open {hit.customer}</Link>
-                <Link href={`/tools/warehouse/receipts/${encodeURIComponent(hit.receiptId)}`} className={btn}>Open receipt {hit.receiptId}</Link>
+                <Link href={`/tools/warehouse/receipts/${encodeURIComponent(hit.receiptId)}`} className={btn}>Open {hit.draft ? "check-in" : "receipt"} {hit.receiptId}</Link>
               </span>
             </div>
           )}

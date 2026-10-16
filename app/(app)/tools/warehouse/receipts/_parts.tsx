@@ -1,11 +1,24 @@
+import Link from "next/link"
+import type { ReactNode } from "react"
+import type { Prisma } from "@/app/generated/prisma/client"
 import { CONTAINER_STATUS, type ContainerStatus, type ReceiptStatus } from "@/lib/goods-in/model"
 import { StatusBadge } from "../_components/ui"
 
 // Goods In → Receipts: the small pieces the list and the receipt page share. Server-safe (no hooks),
 // so both the server pages and the client parts can use them.
 
+/** Every status a receipt can be shown with. "draft" is a check-in still going on at the counter:
+ *  it has its receipt, tote and pallet numbers (so labels can be printed) but it isn't booked in
+ *  until Book in is pressed. Written as a union so it holds whether or not model.ts names "draft". */
+export type ReceiptStatusShown = ReceiptStatus | "draft"
+
 /** A receipt's own status. A receipt saved before statuses existed (null) counts as open. */
-export const RECEIPT_STATUS: Record<ReceiptStatus, { label: string; help: string; tone: string }> = {
+export const RECEIPT_STATUS: Record<ReceiptStatusShown, { label: string; help: string; tone: string }> = {
+  draft: {
+    label: "Not booked in yet",
+    help: "Still being checked in — its numbers are taken and labels can be printed, but it isn't booked in until Book in is pressed.",
+    tone: "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700",
+  },
   open: {
     label: "Open",
     help: "Being worked on — more totes or pallets can be added.",
@@ -23,7 +36,24 @@ export const RECEIPT_STATUS: Record<ReceiptStatus, { label: string; help: string
   },
 }
 
-export const receiptStatus = (s: string | null | undefined): ReceiptStatus => (s === "closed" || s === "void" ? s : "open")
+export const receiptStatus = (s: string | null | undefined): ReceiptStatusShown =>
+  s === "closed" || s === "void" || s === "draft" ? s : "open"
+
+
+// The filters every count and "booked in" list uses. Prisma's `not` / `notIn` leave out NULLs as
+// well, so a receipt saved before statuses existed (null — it counts as open) is let in explicitly.
+/** Receipts that have been booked in: everything except a check-in still going on (a draft). */
+export const NOT_DRAFT: Prisma.GoodsInReceiptWhereInput = { OR: [{ status: null }, { status: { not: "draft" } }] }
+/** Receipts whose goods are real, standing goods: booked in (not a draft) and not voided. */
+export const BOOKED_LIVE: Prisma.GoodsInReceiptWhereInput = { OR: [{ status: null }, { status: { notIn: ["draft", "void"] } }] }
+
+/** Where a check-in that hasn't been booked in is carried on. */
+export const carryOnHref = (receiptId: string) => `/tools/warehouse/check-in?receipt=${encodeURIComponent(receiptId)}`
+
+/** The "Carry on checking in" button. */
+export function CarryOnLink({ receiptId, className, children }: { receiptId: string; className: string; children?: ReactNode }) {
+  return <Link href={carryOnHref(receiptId)} className={className}>{children ?? "Carry on checking in"}</Link>
+}
 
 export function ReceiptStatusBadge({ status }: { status: string | null | undefined }) {
   const s = receiptStatus(status)
@@ -38,7 +68,7 @@ export function ReceiptStatusBadge({ status }: { status: string | null | undefin
 export function ReceiptStatusKey() {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500 dark:text-gray-400">
-      {(Object.keys(RECEIPT_STATUS) as ReceiptStatus[]).map(s => (
+      {(Object.keys(RECEIPT_STATUS) as ReceiptStatusShown[]).map(s => (
         <span key={s} className="inline-flex items-center gap-1.5"><ReceiptStatusBadge status={s} /> {RECEIPT_STATUS[s].help}</span>
       ))}
     </div>

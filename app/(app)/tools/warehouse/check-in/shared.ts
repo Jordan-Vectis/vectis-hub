@@ -1,4 +1,5 @@
 import type { CustomerRow } from "@/lib/actions/goods-in"
+import type { CheckInRowSaved } from "@/lib/actions/goods-in-checkin"
 import { DEFAULT_TERMS, type ContainerKind, type ReceiptTerms } from "@/lib/goods-in/model"
 
 // Check in — the shapes and small helpers the steps share. Pure: no hooks, no server code.
@@ -10,15 +11,88 @@ export const CATEGORIES = [
   "Trading Cards", "Tinplate", "Militaria", "Sports Memorabilia", "Toy Soldiers", "Model Kits", "General Toys",
 ]
 
-/** One tote or pallet on the receipt being built. It has no number until it is booked in. */
-export type GoodsRow = { key: string; kind: ContainerKind; category: string; description: string }
+/**
+ * One tote or pallet on the check-in. `key` is this browser's own id for the row; `id` is its real
+ * number once the Hub has given it one (the check-in is saved as a receipt that isn't booked in yet,
+ * so a row is numbered as soon as it exists). `idKind` is the kind that number was given for — a
+ * tote switched to a pallet keeps showing "Numbering…" until the Hub swaps its number.
+ */
+export type GoodsRow = {
+  key: string
+  id: string | null
+  idKind: ContainerKind | null
+  kind: ContainerKind
+  category: string
+  description: string
+  /** When the label for `id` was printed (ISO), or null. */
+  labelPrintedAt: string | null
+}
 
 let seq = 0
 export const newKey = () => `row-${++seq}-${Date.now().toString(36)}`
-export const blankRow = (kind: ContainerKind): GoodsRow => ({ key: newKey(), kind, category: "", description: "" })
+export const blankRow = (kind: ContainerKind): GoodsRow => ({ key: newKey(), id: null, idKind: null, kind, category: "", description: "", labelPrintedAt: null })
 export const isBlankRow = (r: GoodsRow) => !r.category.trim() && !r.description.trim()
 
-/** Most totes and pallets one receipt can hold (createReceipt refuses more). */
+/** The row's number as it stands — null while it hasn't one, or while a kind change is waiting for a new one. */
+export const rowNumber = (r: Pick<GoodsRow, "id" | "idKind" | "kind">) => (r.id && r.idKind === r.kind ? r.id : null)
+/** True when the label for the row's current number has been printed. */
+export const isPrinted = (r: GoodsRow) => !!rowNumber(r) && !!r.labelPrintedAt
+
+/** A row as the Hub saved it (a carried-on check-in) — its number is its key. */
+export const rowFromSaved = (r: CheckInRowSaved): GoodsRow => ({
+  key: r.id, id: r.id, idKind: r.kind, kind: r.kind, category: r.category ?? "", description: r.description ?? "", labelPrintedAt: r.labelPrintedAt,
+})
+
+/**
+ * The Hub's answer to a save, merged into the rows on screen by each row's key: only the numbers
+ * and label dates come back — never the text, so nothing typed since the save was sent is lost.
+ * A row whose number the Hub let go (removed, then brought back with Undo after the save) loses it
+ * and is numbered again by the next save.
+ */
+export function mergeSaved(rs: GoodsRow[], a: { rows: CheckInRowSaved[]; removed: string[] }): GoodsRow[] {
+  const byKey = new Map(a.rows.map(r => [r.key, r]))
+  const gone = new Set(a.removed)
+  return rs.map(r => {
+    const s = byKey.get(r.key)
+    if (s) {
+      const same = s.id === r.id
+      const printedAt = same ? (r.labelPrintedAt ?? s.labelPrintedAt) : s.labelPrintedAt
+      if (same && r.idKind === s.kind && printedAt === r.labelPrintedAt) return r
+      return { ...r, id: s.id, idKind: s.kind, labelPrintedAt: printedAt }
+    }
+    return r.id && gone.has(r.id) ? { ...r, id: null, idKind: null, labelPrintedAt: null } : r
+  })
+}
+
+/** A check-in someone left without booking in, offered back on the Customer step (`mine`: the person at the counter started it). */
+export type { UnfinishedCheckIn } from "@/lib/actions/goods-in-checkin"
+
+/** What a row's label says about its contents (the labels route prints "category – description"). */
+export const labelText = (r: Pick<GoodsRow, "category" | "description">) => [r.category.trim(), r.description.trim()].filter(Boolean).join(" – ")
+
+/** The labels route, for these totes and pallets in this order. */
+export const labelsUrl = (ids: string[]) => `/api/goods-in/labels?containers=${ids.map(encodeURIComponent).join(",")}`
+
+/** The one browser tab labels open in — reused, so printing row by row on the iPad doesn't stack up a tab per label. */
+export const LABELS_TAB = "gi-labels"
+
+/**
+ * Where a row's label stands: not printed, printed, or printed but the row's contents changed since
+ * (the label shows "category – description" as it was). `printedAs` is what each row's label said
+ * when this screen printed it, by row key.
+ */
+export function labelState(r: GoodsRow, printedAs: Readonly<Record<string, string>>): "none" | "printed" | "changed" {
+  if (!isPrinted(r)) return "none"
+  const was = printedAs[r.key]
+  return was !== undefined && was !== labelText(r) ? "changed" : "printed"
+}
+
+/** "T026156", "T026156 and T026157", "T026156, T026157 and P000003" */
+export function listNumbers(ids: string[]) {
+  return ids.length <= 1 ? ids.join("") : `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}`
+}
+
+/** Most totes and pallets one receipt can hold (saving the check-in refuses more). */
 export const MAX_ROWS = 200
 
 export function countKinds(rows: { kind: ContainerKind }[]) {
@@ -103,6 +177,20 @@ export const termText = (key: keyof ReceiptTerms, n: number) => {
   return f.unit === "£" ? pounds(n) : `${n}%`
 }
 
+const FEES = [
+  { key: "lottingFee", word: "lotting" },
+  { key: "photographyFee", word: "photography" },
+  { key: "unsoldFee", word: "unsold" },
+] as const
+
+/** The terms as one plain line: "25% commission · no lotting, photography or unsold fees · 60% reserve". */
+export function termsLine(t: ReceiptTerms) {
+  const charged = FEES.filter(f => t[f.key] > 0).map(f => `${pounds(t[f.key])} ${f.word} fee`)
+  const none = FEES.filter(f => !(t[f.key] > 0)).map(f => f.word)
+  const noneText = none.length === 0 ? "" : `no ${none.length === 1 ? none[0] : `${none.slice(0, -1).join(", ")} or ${none[none.length - 1]}`} ${none.length === 1 ? "fee" : "fees"}`
+  return [`${t.commission}% commission`, ...charged, noneText, `${t.reservePercent}% reserve`].filter(Boolean).join(" · ")
+}
+
 // ─── Customers ─────────────────────────────────────────────────────────────────────────────
 
 export const fullName = (c: Pick<CustomerRow, "salutation" | "name">) => [c.salutation, c.name].filter(Boolean).join(" ")
@@ -114,5 +202,5 @@ export const addressLines = (c: CustomerRow) =>
 
 export const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim())
 
-/** createReceipt's refusal when a number series isn't set — the clerk is sent to Settings. */
+/** The Hub's refusal when a number series isn't set (saving a check-in or booking in) — the clerk is sent to Settings. */
 export const isNumberingError = (msg: string) => /numbering hasn't been set up|free .* number|Goods In → Settings/i.test(msg)

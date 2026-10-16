@@ -11,7 +11,9 @@ export const maxDuration = 60
 //                                      ?download=1  → saved as a file instead
 //                                      ?print=1     → also records that it was printed (shown on the receipt page)
 // Anyone with Warehouse access. The customer's details come from the snapshot taken at booking.
-// A voided receipt is refused (409), the same as the email route.
+// A voided receipt is refused (409), the same as the email route — and so is a check-in that hasn't
+// been booked in yet (a draft): it has its number, but no receipt exists until Book in is pressed.
+// (Its labels can still be printed — the labels route allows a draft.)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const g = await gate("warehouse")
@@ -22,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!r) return errorJson(`Receipt ${id.toUpperCase()} couldn't be found.`, 404)
     // As the email route: a voided receipt must never go out looking like a live one.
     if (r.status === "void") return errorJson(`Receipt ${r.pdf.id} has been voided, so it can't be printed.`, 409)
+    if (r.status === "draft") return errorJson(`${r.pdf.id} hasn't been booked in yet — finish the check-in first.`, 409)
 
     const bytes = await buildReceiptPdf(r.pdf)
 

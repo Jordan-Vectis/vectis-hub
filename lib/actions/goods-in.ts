@@ -7,10 +7,11 @@ import { GoodsInAccessError, atLeast, requireGoodsIn } from "@/lib/goods-in/acce
 import type { WarehouseRole } from "@/lib/apps"
 import { NumberingNotSetError, takeNumbers } from "@/lib/goods-in/numbers"
 import {
-  COUNTERS, DEFAULT_TERMS, STATUS_FOR_KIND, normaliseCode,
-  type ContainerKind, type ContainerStatus, type CounterKey, type CustomerSnapshot, type LocationKind, type ReceiptTerms,
+  COUNTERS, DEFAULT_TERMS, LABEL_GIVEN_UP_NOTE, STATUS_FOR_KIND, THROWN_AWAY_NOTE, normaliseCode,
+  type ContainerKind, type ContainerStatus, type CounterKey, type LocationKind, type ReceiptTerms,
 } from "@/lib/goods-in/model"
 import { LOCATION_CODE_HELP, LOCATION_CODE_RULE } from "@/lib/goods-in/location-codes"
+import { CUSTOMER_INCLUDE, customerRow, snapshot } from "@/lib/goods-in/customer-row"
 
 // Goods In — every write, and the reads the screens share. SERVER ONLY (server actions).
 //
@@ -32,6 +33,9 @@ const fail = (e: unknown): { ok: false; error: string } => {
 const who = (minRole: WarehouseRole = "warehouse") => requireGoodsIn(minRole)
 
 const blank = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null)
+// A receipt with status "draft" is a check-in that hasn't been booked in yet (goods-in-checkin.ts
+// owns it until Book in): nothing here may add to it or change it.
+const NOT_BOOKED_YET = "This check-in hasn't been booked in yet — carry on with it in Check in."
 const money = (v: unknown, dflt: number) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : dflt }
 
 // ─── Customers ────────────────────────────────────────────────────────────────────────────
@@ -44,16 +48,8 @@ export type CustomerRow = {
   receipts: number
 }
 
-const customerRow = (c: Prisma.ContactGetPayload<{ include: { goodsInCustomer: true; _count: { select: { goodsInReceipts: true } } } }>): CustomerRow => ({
-  id: c.id, salutation: c.salutation, name: c.name, email: c.email, phone: c.phone,
-  addressLine1: c.addressLine1, addressLine2: c.addressLine2, postcode: c.postcode, notes: c.notes,
-  vendorNo: c.goodsInCustomer?.vendorNo ?? null, mobile: c.goodsInCustomer?.mobile ?? null, town: c.goodsInCustomer?.town ?? null,
-  county: c.goodsInCustomer?.county ?? null, country: c.goodsInCustomer?.country ?? null, vatRegNo: c.goodsInCustomer?.vatRegNo ?? null,
-  commission: c.goodsInCustomer?.commission ?? null, lottingFee: c.goodsInCustomer?.lottingFee ?? null,
-  photographyFee: c.goodsInCustomer?.photographyFee ?? null, unsoldFee: c.goodsInCustomer?.unsoldFee ?? null,
-  receipts: c._count.goodsInReceipts,
-})
-const CUSTOMER_INCLUDE = { goodsInCustomer: true, _count: { select: { goodsInReceipts: true } } } as const
+// customerRow, CUSTOMER_INCLUDE and snapshot live in lib/goods-in/customer-row.ts: Check in's actions
+// (goods-in-checkin.ts) use them too, and a "use server" file may only export async functions.
 
 /** Find customers by name, vendor number, postcode, email or phone (a scanned or typed vendor number matches exactly first). */
 export async function searchCustomers(q: string): Promise<Result<CustomerRow[]>> {
@@ -170,13 +166,6 @@ export type ReceiptInput = {
   agentConfirmed?: boolean
 }
 
-function snapshot(c: CustomerRow): CustomerSnapshot {
-  return {
-    salutation: c.salutation, name: c.name, addressLine1: c.addressLine1, addressLine2: c.addressLine2, town: c.town, county: c.county,
-    postcode: c.postcode, country: c.country, email: c.email, mobile: c.mobile, phone: c.phone, vatRegNo: c.vatRegNo, vendorNo: c.vendorNo,
-  }
-}
-
 /**
  * Book a customer's goods in: one receipt number, one number per tote and pallet, all in one
  * transaction — either the whole receipt exists or none of it does. A customer with no vendor
@@ -247,6 +236,7 @@ export async function addContainers(receiptId: string, containers: ContainerInpu
       const r = await tx.goodsInReceipt.findUnique({ where: { id: receiptId }, select: { status: true } })
       if (!r) throw new Error("That receipt couldn't be found.")
       if (r.status === "void") throw new Error("That receipt has been voided.")
+      if (r.status === "draft") throw new Error(NOT_BOOKED_YET)
       const out: string[] = []
       for (const row of rows) {
         const [id] = await takeNumbers(tx, row.kind, 1)
@@ -265,6 +255,12 @@ export async function addContainers(receiptId: string, containers: ContainerInpu
 export async function updateContainer(id: string, patch: { category?: string | null; description?: string | null; status?: ContainerStatus }): Promise<Result> {
   try {
     await who()
+    // A tote on a check-in that isn't booked in yet belongs to the Check in screen: its next save
+    // would write over a category or description changed here, and it can't be catalogued or
+    // returned before it's booked in. (Moving it is still allowed — that's moveTo.)
+    const cur = await prisma.goodsInContainer.findUnique({ where: { id }, select: { receipt: { select: { status: true } } } })
+    if (!cur) return { ok: false, error: `${id} couldn't be found.` }
+    if (cur.receipt.status === "draft") return { ok: false, error: NOT_BOOKED_YET }
     await prisma.goodsInContainer.update({
       where: { id },
       data: {
@@ -288,8 +284,27 @@ export async function updateReceipt(id: string, patch: { notes?: string | null; 
   try {
     const me = await who()
     if (patch.status && !["open", "closed", "void"].includes(patch.status)) return { ok: false, error: "Unknown receipt status." }
-    const cur = await prisma.goodsInReceipt.findUnique({ where: { id }, select: { status: true } })
+    const cur = await prisma.goodsInReceipt.findUnique({ where: { id }, select: { status: true, notes: true } })
     if (!cur) return { ok: false, error: "That receipt couldn't be found." }
+    // Nothing here — notes, close, void — changes a check-in that isn't booked in yet; Check in
+    // throws one away instead (discardCheckIn in goods-in-checkin.ts).
+    if (cur.status === "draft") return { ok: false, error: NOT_BOOKED_YET }
+    // A check-in thrown away after a label was printed is kept as void for the record. It was never
+    // booked in, so it can't be brought back as if it had been.
+    const thrownAway = cur.status === "void" && (cur.notes ?? "").includes(THROWN_AWAY_NOTE)
+    if (thrownAway && patch.status && patch.status !== "void") {
+      return { ok: false, error: "This check-in was thrown away before it was booked in, so it can't be reopened — check the goods in again." }
+    }
+    // Its notes are the record of it (and of the labels printed for it, so a stray labelled tote can
+    // be traced) — and what tells it apart from a booked receipt a manager voided. They can be added
+    // to, never have that record taken out.
+    if (thrownAway && patch.notes !== undefined) {
+      const next = blank(patch.notes) ?? ""
+      const record = (cur.notes ?? "").split(/\r?\n/).map(l => l.trim()).filter(l => l.includes(THROWN_AWAY_NOTE) || l.startsWith(LABEL_GIVEN_UP_NOTE))
+      if (record.some(l => !next.includes(l))) {
+        return { ok: false, error: "The note saying this check-in was thrown away, and which labels had been printed, has to stay — you can add to the notes, but not take that out." }
+      }
+    }
     const was = cur.status ?? "open"
     const managerOnly = patch.status === "void" || (was === "void" && !!patch.status)
     if (managerOnly && !atLeast(me, "manager")) return { ok: false, error: "Only a Warehouse manager or admin can do that." }
@@ -317,6 +332,9 @@ export async function updateReceipt(id: string, patch: { notes?: string | null; 
 export async function markReceiptSent(id: string, how: { printed?: boolean; emailedTo?: string | null; labels?: boolean }): Promise<Result> {
   try {
     await who()
+    const cur = await prisma.goodsInReceipt.findUnique({ where: { id }, select: { status: true } })
+    if (!cur) return { ok: false, error: "That receipt couldn't be found." }
+    if (cur.status === "draft") return { ok: false, error: NOT_BOOKED_YET }
     const now = new Date()
     if (how.printed || how.emailedTo) {
       await prisma.goodsInReceipt.update({ where: { id }, data: { ...(how.printed ? { printedAt: now } : {}), ...(how.emailedTo ? { emailedAt: now, emailedTo: how.emailedTo } : {}) } })

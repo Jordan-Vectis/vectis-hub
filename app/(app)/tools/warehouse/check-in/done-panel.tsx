@@ -2,20 +2,24 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { getCustomer, type CustomerRow } from "@/lib/actions/goods-in"
+import type { CustomerRow } from "@/lib/actions/goods-in"
 import type { ContainerKind } from "@/lib/goods-in/model"
 import { ErrorBox, KindBadge, OkBox, box, btn, btnGo, input, mono } from "../_components/ui"
-import { countKinds, fullName, kindsPhrase, looksLikeEmail } from "./shared"
+import { LABELS_TAB, countKinds, fullName, kindsPhrase, labelsUrl, looksLikeEmail } from "./shared"
 
-// The end of a check-in: the receipt number big and plain, every tote and pallet number it was
-// given, and what to do next — print the receipt, print the labels, email it, open it, or book in
-// the next customer. Printing opens the PDF in a new tab (print from there on the iPad's share
-// sheet or the PC's print dialog). Email is offered only when an admin has connected the mailbox.
+// The end of a check-in: the receipt number big and plain, every tote and pallet number, and what
+// to do next — print the receipt, print the labels, email it, open it, or book in the next
+// customer. Printing opens the PDF in a new tab (print from there on the iPad's share sheet or the
+// PC's print dialog). Labels may already have been printed from the goods step, so Print labels
+// prints the ones that haven't been, or all of them again when every one has — its words say
+// which. Email is offered only when an admin has connected the mailbox.
 
 export type Booked = {
   receiptId: string
-  containers: { id: string; kind: ContainerKind; category: string | null; description: string | null }[]
+  containers: { id: string; kind: ContainerKind; category: string | null; description: string | null; labelPrintedAt: string | null }[]
   customer: CustomerRow
+  /** The vendor number on the receipt (one is given at Book in when they had none and the series is set). */
+  vendorNo: string | null
 }
 
 type MailStatus = { state: "checking" } | { state: "ready"; connected: boolean; mailbox: string | null } | { state: "unknown" }
@@ -26,11 +30,23 @@ export default function DonePanel({ booked, onAnother }: { booked: Booked; onAno
   const { receiptId, containers, customer } = booked
   const { totes, pallets } = countKinds(containers)
   const id = encodeURIComponent(receiptId)
+  // A customer with no vendor number is given one at booking when that series is set up — show it.
+  const vendorGiven = !customer.vendorNo && booked.vendorNo ? booked.vendorNo : null
 
   const topRef = useRef<HTMLDivElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const [vendorGiven, setVendorGiven] = useState<string | null>(null)
   const [opened, setOpened] = useState<{ receipt?: boolean; labels?: boolean }>({})
+  // Labels printed from this panel (the labels route records them; this keeps the button honest).
+  const [printedHere, setPrintedHere] = useState<ReadonlySet<string>>(() => new Set())
+  const printed = (c: Booked["containers"][number]) => !!c.labelPrintedAt || printedHere.has(c.id)
+  const unprinted = containers.filter(c => !printed(c))
+  const nonePrinted = unprinted.length === containers.length
+  const labelsHref = unprinted.length && !nonePrinted ? labelsUrl(unprinted.map(c => c.id)) : `/api/goods-in/labels?receipt=${id}`
+  const labelsText = nonePrinted
+    ? `Print labels (${containers.length})`
+    : unprinted.length
+      ? `Print the ${unprinted.length === 1 ? "label" : `${unprinted.length} labels`} not printed yet`
+      : `Print all ${containers.length} labels again`
 
   const [mail, setMail] = useState<MailStatus>({ state: "checking" })
   const [to, setTo] = useState(customer.email ?? "")
@@ -43,16 +59,6 @@ export default function DonePanel({ booked, onAnother }: { booked: Booked; onAno
     topRef.current?.scrollIntoView({ block: "start" })
     headingRef.current?.focus({ preventScroll: true })
   }, [])
-
-  // A customer with no vendor number is given one at booking when that series is set up — show it.
-  useEffect(() => {
-    if (customer.vendorNo) return
-    let live = true
-    getCustomer(customer.id)
-      .then(r => { if (live && r.ok && r.data?.vendorNo) setVendorGiven(r.data.vendorNo) })
-      .catch(() => { /* only a nicety — the receipt page shows it either way */ })
-    return () => { live = false }
-  }, [customer.id, customer.vendorNo])
 
   useEffect(() => {
     let live = true
@@ -113,7 +119,7 @@ export default function DonePanel({ booked, onAnother }: { booked: Booked; onAno
           </p>
         )}
         <p className="mt-4 text-sm text-gray-600 dark:text-gray-400 max-w-3xl">
-          Next: print the labels and stick one on each {pallets && !totes ? "pallet" : pallets ? "tote and pallet" : "tote"}, give the customer their receipt, then put the goods away in{" "}
+          Next: {unprinted.length ? "print the labels and stick one on" : "check there's a label on"} each {pallets && !totes ? "pallet" : pallets ? "tote and pallet" : "tote"}, give the customer their receipt, then put the goods away in{" "}
           <Link href="/tools/warehouse/move" className="font-semibold text-indigo-700 dark:text-indigo-300 underline">Move</Link>.
         </p>
       </section>
@@ -134,13 +140,17 @@ export default function DonePanel({ booked, onAnother }: { booked: Booked; onAno
         </div>
         <div>
           <a
-            href={`/api/goods-in/labels?receipt=${id}`}
-            target="_blank"
+            href={labelsHref}
+            target={LABELS_TAB}
             rel="noopener"
-            className={`${btnGo} ${big}`}
-            onClick={() => setOpened(o => ({ ...o, labels: true }))}
+            className={`${unprinted.length ? btnGo : btn} ${big}`}
+            onClick={() => {
+              const ids = (unprinted.length ? unprinted : containers).map(c => c.id)
+              setPrintedHere(s => new Set([...s, ...ids]))
+              setOpened(o => ({ ...o, labels: true }))
+            }}
           >
-            Print labels ({containers.length})
+            {labelsText}
           </a>
           {opened.labels && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Opened in a new tab — print them on the label printer (100 × 50 mm).</p>}
         </div>
@@ -194,9 +204,10 @@ export default function DonePanel({ booked, onAnother }: { booked: Booked; onAno
         <ul className="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
           {containers.map(c => (
             <li key={c.id} className={`${box} px-4 py-3 min-w-0`}>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`${mono} text-xl font-bold text-gray-900 dark:text-white`}>{c.id}</span>
                 <KindBadge kind={c.kind} />
+                {printed(c) && <span className="ml-auto text-xs font-semibold text-emerald-700 dark:text-emerald-300">✓ Label printed</span>}
               </div>
               <p className="mt-1 text-sm font-semibold text-gray-800 dark:text-gray-200 break-words">{c.category ?? <span className="font-normal text-gray-500 dark:text-gray-400">No category</span>}</p>
               {c.description && <p className="text-sm text-gray-600 dark:text-gray-400 break-words">{c.description}</p>}
