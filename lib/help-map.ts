@@ -224,8 +224,16 @@ export const DESTINATIONS: Destination[] = [
   },
   {
     name: "Goods In → Locations & labels", href: "/tools/warehouse/locations", app: "WAREHOUSE",
-    what: "Every storage location, cataloguing bench and shelf Goods In can put things in, how many totes are at each, and barcode labels to print for them. Managers add locations, or load the warehouse's own location list in one go.",
-    also: ["location labels", "location label", "add a location", "new location", "shelf labels", "bench labels"],
+    what: "Every storage location, cataloguing bench and shelf Goods In can put things in. Filter the list by kind, aisle, bay, shelf, what is there now and when each was last used (or not used); sort by last used or date added; see how many totes, pallets and lots are at each; export the list, or everything at the ticked locations, to a spreadsheet; and print barcode labels. Tick locations (shift-click for a run, or scan their labels) and move everything at them to one other location in one go. Open a location to see what is there and its recent moves, move everything at it elsewhere, export what is there, or check the shelf by scanning what is really on it. Managers add one location, a whole range (an aisle's bays and shelves, benches, cabinet shelves) or a pasted list (a saved CSV works), switch locations off or on, change their kind or give them their usual names many at a time, replace a location's code with a new one, and remove them — a location that was never used is deleted, one used before is switched off so its history stays, and one with goods still there is refused until they are moved out.",
+    also: [
+      "location labels", "location label", "add a location", "new location", "shelf labels", "bench labels",
+      "remove a location", "delete a location", "remove locations", "delete locations", "switch off a location",
+      "switch a location off", "add a range of locations", "add a whole aisle", "paste a list of locations",
+      "move everything out of a location", "empty a location", "goods in locations",
+      // matchScore turns punctuation into spaces, so these are written without apostrophes.
+      "check a location", "stock check a location", "check what is at a location", "empty an aisle", "clear an aisle",
+      "export what is at a location", "replace a location code", "change a location code", "rename locations",
+    ],
   },
   {
     name: "Goods In → Number series & email", href: "/tools/warehouse/settings", app: "WAREHOUSE",

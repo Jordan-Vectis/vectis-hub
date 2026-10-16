@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"6a589c71519b2fc7062a1fa132e1cf18deb150ad","author":"jack-vectis","date":"2026-10-15T15:51:52+01:00","subject":"Goods In: the Hub's own check-in replaces the Warehouse prototype"},
   {"sha":"de21416ab69aa70ab3b94ac27e35f4c0ed6d78d1","author":"jack-vectis","date":"2026-10-15T14:40:18+01:00","subject":"Add CONTRIBUTORS.md naming the Hub's developers"},
   {"sha":"2878e5c0af270205a6682fc12f2c323b13f3dbd5","author":"Jack Collings","date":"2026-10-15T09:53:12+01:00","subject":"Test website: the banner's side boxes use the vivid department tile pictures, not the pale banners"},
   {"sha":"e8a3b88b6173c38dc12ef165ede3830b22e26cb8","author":"Jack Collings","date":"2026-10-15T09:47:00+01:00","subject":"Test website: the banner rotates the upcoming sales, with the two picture boxes beside it"},

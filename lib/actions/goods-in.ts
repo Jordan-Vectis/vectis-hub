@@ -10,6 +10,7 @@ import {
   COUNTERS, DEFAULT_TERMS, STATUS_FOR_KIND, normaliseCode,
   type ContainerKind, type ContainerStatus, type CounterKey, type CustomerSnapshot, type LocationKind, type ReceiptTerms,
 } from "@/lib/goods-in/model"
+import { LOCATION_CODE_HELP, LOCATION_CODE_RULE } from "@/lib/goods-in/location-codes"
 
 // Goods In — every write, and the reads the screens share. SERVER ONLY (server actions).
 //
@@ -345,7 +346,7 @@ export async function saveLocation(input: { code: string; name?: string | null; 
   try {
     await who("manager")
     const code = normaliseCode(input.code ?? "")
-    if (!/^[A-Z0-9][A-Z0-9\-/.]{0,23}$/.test(code)) return { ok: false, error: "A location code is letters and numbers (and - / .), up to 24 characters." }
+    if (!LOCATION_CODE_RULE.test(code)) return { ok: false, error: LOCATION_CODE_HELP }
     await prisma.goodsInLocation.upsert({
       where: { code },
       create: { code, name: blank(input.name), kind: input.kind, active: input.active !== false },
@@ -440,7 +441,7 @@ export async function importLocationList(): Promise<Result<{ added: number; alre
     const list = (await import("@/lib/warehouse-locations.json")).default as { code: string; name: string; cataloguingBench: boolean }[]
     const rows = list
       .map(l => ({ code: normaliseCode(l.code), name: l.name || null, kind: (l.cataloguingBench ? "bench" : "storage") as LocationKind, active: true }))
-      .filter(l => /^[A-Z0-9][A-Z0-9\-/.]{0,23}$/.test(l.code))
+      .filter(l => LOCATION_CODE_RULE.test(l.code))
     const r = await prisma.goodsInLocation.createMany({ data: rows, skipDuplicates: true })
     revalidatePath("/tools/warehouse", "layout")
     return { ok: true, data: { added: r.count, already: rows.length - r.count } }

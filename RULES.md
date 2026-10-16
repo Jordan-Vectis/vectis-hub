@@ -1753,3 +1753,71 @@ Warehouse admin sets the number series.
   ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that
   matches a tool the asker can't open, and a cataloguer asking "where do I find…" must never be told
   Goods In isn't part of their Hub.
+- **Locations** (2026-10-15 — Jack: *"I need to be able to filter on this, remove locations etc — this
+  is missing a lot of functions"*). The list is `/tools/warehouse/locations`, each location has its own
+  page at `/tools/warehouse/locations/<code>`, the many-at-once actions are in
+  `lib/actions/goods-in-locations.ts`, and reading and making codes (aisle/bay/shelf, ranges, pasted
+  lists, CSV cells) is `lib/goods-in/location-codes.ts` — use those helpers, don't write another parser.
+  - ⚠⚠ **Remove only DELETES a location that was never used and is empty.** One with goods there now
+    (a tote or pallet that isn't returned, or a lot whose latest move is to it) is **refused** — move
+    them out first. One that was ever used (any move into or out of it, or any tote or pallet, even a
+    returned one, recorded there) is **switched off** instead, so its history still reads:
+    `GoodsInMovement` keeps codes as text with no foreign key, and deleting a used code would leave
+    moves pointing at a place that no longer exists. The checks and the delete run in one transaction
+    with the locations locked, and the DELETE re-checks "never used" itself. Don't simplify it into a
+    plain delete.
+  - **Adding, changing, switching off and removing locations — one or many — is manager+**, checked
+    on the server in every action, not just hidden on the screen. Viewing, labels, exporting and moving
+    goods are anyone in Goods In. A bulk action takes at most `MAX_BULK_LOCATIONS` (2,000).
+  - **Adding in bulk never changes an existing location** (`createLocations`, behind Add a range and
+    Paste a list) — a code that's already there is reported as already there and left exactly as it
+    is. Every way in (single edit, bulk add, the warehouse's list) checks codes with
+    `LOCATION_CODE_RULE`.
+  - **Move everything** (`moveEverything`) empties a location into another: every tote and pallet
+    there (not returned) and every lot whose latest move is there, one movement each noted "Moved
+    everything from …", all in one transaction. Status follows `moveTo`'s rule (catalogued and returned
+    keep theirs), and a lot's move carries its barcode as it is NOW (as `moveTo` does). The target must
+    exist and be switched on; the source may be switched off, or no longer a location at all — the
+    "no such location" page offers it for goods stranded at a removed code.
+  - ⚠⚠ **Locks.** `moveEverything` reads its target `FOR SHARE`, so a remove or switch-off of that
+    location waits for the move (then sees the goods) or the move waits for it (then finds it gone or
+    off) — goods can't land at a location being deleted. Every many-at-once UPDATE locks its rows in
+    CODE ORDER first (`… FROM (SELECT … ORDER BY "code" FOR UPDATE)`), the same order `removeLocations`
+    uses, so two managers' overlapping changes queue instead of deadlocking; a deadlock that still
+    happens is reported as "someone else was changing the same locations — nothing was changed".
+    ⚠ `moveTo` in `goods-in.ts` doesn't take the FOR SHARE lock yet (a single Scan to move racing a
+    remove of its target) — a known gap, not fixed in passing.
+  - **The Locations screens never re-create or overwrite a location from a stale screen.** Add uses
+    `createLocations` (reports "added by someone else a moment ago"), Edit and Change name or kind use
+    `updateLocation` (writes only the fields that changed, and reports a location removed meanwhile
+    instead of bringing it back), Switch on/off uses `setLocationsActive`. `saveLocation` (an upsert)
+    is no longer used by them — don't wire it back in.
+  - Changing a location's kind (one or many) doesn't touch the totes already there — they keep their
+    status and recorded kind until they're next moved, the same as the single edit form.
+  - **Bulk "Move everything to…"** (anyone in Goods In) is driven by the BROWSER, one location per
+    `moveEverything` call, with a moving count, a Stop, and a closing summary in numbers (design rule
+    7b); it stops by itself when the same error comes back three times in a row (the target, or the
+    connection). Bulk **Names…** (`setLocationsName`, manager+) gives the usual name or clears it; named
+    areas have no usual name and are left alone. **Export what's there** (`goodsAtLocations`, read-only,
+    anyone in Goods In) lists every tote, pallet and lot at the ticked locations, or at one location.
+  - **Check what's here** on a location's page is a shelf check: scan what is really there, see what
+    the Hub records but nobody scanned, and what was scanned but is recorded elsewhere. It stores
+    NOTHING — only its "Move it here" button writes, through `moveTo`. **Replace with a new code**
+    (manager+) is `createLocations` → `moveEverything` → `removeLocations`, reported step by step and
+    stopping at the first failure with what was done so far.
+  - **The list's filters live in the URL** (`window.history.replaceState`), so Back, a refresh and a
+    shared link keep them. Don't move them into localStorage. A choice is written at once; typing in
+    the search box a quarter-second after the last key. Picking an area clears aisle/bay/shelf/cabinet,
+    an aisle clears bay and shelf, a bay clears the shelf — and `computeFacets` counts each choice with
+    exactly those cleared, so the number beside a choice is what picking it shows (the picked one shows
+    the list's own count). ⚠ Change one and you must change the other.
+  - Conveniences in sessionStorage (all in try/catch): the ticked codes, read through
+    `useSyncExternalStore` so the server's first render (nothing ticked) still matches — never in a
+    `useState` initialiser, which mismatches on hydration; and the list's query, so deleting a location
+    from its page returns to the same filtered list (`?removed=CODE` is said only if CODE is really gone).
+  - A `<select>` picked with the MOUSE lets go of focus (`select-focus.ts`), or the next scanned label
+    types into it instead of the search box. Paste a list reads spreadsheet quoting, so the Locations
+    export pastes straight back in.
+  - **No new tables or columns.** Area, aisle, bay and shelf are worked out from the code
+    (`parseLocationCode`); "last used" and "ever used" from `GoodsInMovement`. Removing is confirmed
+    in the page (Confirm / Cancel), never with `window.confirm`.

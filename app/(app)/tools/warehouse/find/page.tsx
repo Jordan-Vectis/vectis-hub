@@ -581,6 +581,7 @@ function LocationView({ d, code, canOpen }: { d: LocationData; code: string; can
           <div className="ml-auto flex flex-wrap gap-2">
             {place?.active !== false && <Link href={`/tools/warehouse/move?to=${encodeURIComponent(code)}`} className={btnGo}>Move things here</Link>}
             <a href={`/api/goods-in/labels?locations=${encodeURIComponent(code)}`} target="_blank" rel="noopener" className={btn}>Print location label</a>
+            <Link href={`/tools/warehouse/locations/${encodeURIComponent(code)}`} className={btn}>Manage this location</Link>
           </div>
         </div>
         <p className="text-sm text-gray-700 dark:text-gray-200">
