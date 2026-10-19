@@ -2357,6 +2357,14 @@ export const MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "GoodsInScannerPass_tokenHash_key" ON "GoodsInScannerPass"("tokenHash")`,
   `CREATE INDEX IF NOT EXISTS "GoodsInScannerPass_userId_idx" ON "GoodsInScannerPass"("userId")`,
+  // Retired personal tables (removed 2026-10-19). Empty on production; safe to delete this line
+  // once Run Migrations has been pressed there.
+  `DO $$ DECLARE t text; BEGIN
+    FOR t IN SELECT table_name FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name ~ '^(Jordan|Mcoc)[A-Z]' LOOP
+      EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', t);
+    END LOOP;
+  END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

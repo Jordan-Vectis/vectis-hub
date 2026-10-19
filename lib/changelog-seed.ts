@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8c7628d6f884dbacc34a4031b0510c6730c98769","author":"jack-vectis","date":"2026-10-19T11:58:32+01:00","subject":"Handheld scanner: compact screens for the small Newland display, settings behind a cog"},
   {"sha":"934c572bbc131219de6b498a14a7c4091e13d4d4","author":"Jordan Orange","date":"2026-10-19T10:54:27+01:00","subject":"Memory page: drop the last mention of the old personal menu"},
   {"sha":"a8318888268ed0ff90ca5d8cac71c737683673e2","author":"Jordan Orange","date":"2026-10-19T10:50:38+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"3752262cc1f42b93666ab29f276ac631f884667d","author":"Jordan Orange","date":"2026-10-19T10:50:36+01:00","subject":"Remove the personal /jordan menu, its routes, tables and notes"},
