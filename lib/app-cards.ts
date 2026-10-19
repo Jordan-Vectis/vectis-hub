@@ -3,10 +3,9 @@ import type { AppKey } from "@/lib/apps"
 export const SECTION_DEFS = [
   // Colours are full literal class names so Tailwind picks them up.
   { key: "CATALOGUING_AI",   label: "Cataloguing & AI", icon: "📝", border: "border-blue-500",    btnBg: "bg-blue-600 hover:bg-blue-500",       glow: "hover:shadow-blue-900/40" },
-  { key: "PHOTOGRAPHY",      label: "Photography",      icon: "📸", border: "border-pink-500",    btnBg: "bg-pink-600 hover:bg-pink-500",       glow: "hover:shadow-pink-900/40" },
-  { key: "REPORTS",          label: "Reports",          icon: "📊", border: "border-amber-500",   btnBg: "bg-amber-600 hover:bg-amber-500",     glow: "hover:shadow-amber-900/40" },
+  { key: "MARKETING",        label: "Marketing",        icon: "📣", border: "border-pink-500",    btnBg: "bg-pink-600 hover:bg-pink-500",       glow: "hover:shadow-pink-900/40" },
   { key: "BUSINESS_CENTRAL", label: "Business Central", icon: "🏢", border: "border-cyan-500",    btnBg: "bg-cyan-600 hover:bg-cyan-500",       glow: "hover:shadow-cyan-900/40" },
-  { key: "OPERATIONS",       label: "Operations",       icon: "📦", border: "border-green-500",   btnBg: "bg-green-600 hover:bg-green-500",     glow: "hover:shadow-green-900/40" },
+  { key: "OPERATIONS",       label: "Admin & Operations", icon: "📦", border: "border-green-500",   btnBg: "bg-green-600 hover:bg-green-500",     glow: "hover:shadow-green-900/40" },
   { key: "FACILITIES",       label: "Facilities",       icon: "🏠", border: "border-teal-500",    btnBg: "bg-teal-600 hover:bg-teal-500",       glow: "hover:shadow-teal-900/40" },
   { key: "AUCTION",          label: "Auction",          icon: "🔨", border: "border-orange-500",  btnBg: "bg-orange-600 hover:bg-orange-500",   glow: "hover:shadow-orange-900/40" },
   { key: "IT_ADMIN",         label: "IT & Admin",       icon: "🛠️", border: "border-violet-500",  btnBg: "bg-violet-600 hover:bg-violet-500",   glow: "hover:shadow-violet-900/40" },
@@ -121,7 +120,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-fuchsia-400",
     btnBg:              "bg-fuchsia-600 hover:bg-fuchsia-500",
     glow:               "hover:shadow-fuchsia-900/40",
-    group:              "PHOTOGRAPHY",
+    group:              "CATALOGUING_AI",
     appKey:             "PHOTO_PREP",
   },
   {
@@ -134,7 +133,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-purple-400",
     btnBg:              "bg-purple-600 hover:bg-purple-500",
     glow:               "hover:shadow-purple-900/40",
-    group:              "REPORTS",
+    group:              "CATALOGUING_AI",
     appKey:             "REPORTS",
   },
   {
@@ -147,7 +146,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-pink-400",
     btnBg:              "bg-pink-600 hover:bg-pink-500",
     glow:               "hover:shadow-pink-900/40",
-    group:              "REPORTS",
+    group:              "MARKETING",
     appKey:             "MARKETING_REPORTS",
   },
   {
@@ -228,7 +227,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-red-400",
     btnBg:              "bg-red-600 hover:bg-red-500",
     glow:               "hover:shadow-red-900/40",
-    group:              "CATALOGUING_AI",
+    group:              "OPERATIONS",
     // Searches any customer's lots by receipt / tote / vendor across the Hub and
     // BC, so it stays off by default — admins always have it, a non-admin needs
     // the ADMIN_CENTRE app granted (Admin → Users & Permissions). Page + API
@@ -454,14 +453,14 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   {
     key:                "BC_MARKETING",
     href:               "/tools/bc-marketing",
-    defaultLabel:       "BC Marketing",
+    defaultLabel:       "Marketing Tools",
     defaultDescription: "AI-powered marketing tools — generate SEO news articles from auction results.",
     icon:               "📰",
     border:             "border-pink-500",
     iconBg:             "text-pink-400",
     btnBg:              "bg-pink-600 hover:bg-pink-500",
     glow:               "hover:shadow-pink-900/40",
-    group:              "BUSINESS_CENTRAL",
+    group:              "MARKETING",
     appKey:             "BC_MARKETING",
   },
   {
@@ -513,7 +512,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-orange-400",
     btnBg:              "bg-orange-600 hover:bg-orange-500",
     glow:               "hover:shadow-orange-900/40",
-    group:              "FACILITIES",
+    group:              "OPERATIONS",
     appKey:             "VANS",
   },
 ]

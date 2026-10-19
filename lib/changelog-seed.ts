@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"70bbda911c80fe1610522a1e83ef90e995d1393f","author":"Jordan Orange","date":"2026-10-19T14:58:20+01:00","subject":"Home page: each section card gets its own colour"},
   {"sha":"1c950a0188b406bd9530f2b29c4fec38c17d1da6","author":"Jordan Orange","date":"2026-10-19T14:42:42+01:00","subject":"Home page: sections become cards that open their own page"},
   {"sha":"6fc53a3d7293e17c57c98344a56938b507eb92c9","author":"Jordan Orange","date":"2026-10-19T12:54:24+01:00","subject":"Run Migrations drops the retired personal tables"},
   {"sha":"8c7628d6f884dbacc34a4031b0510c6730c98769","author":"jack-vectis","date":"2026-10-19T11:58:32+01:00","subject":"Handheld scanner: compact screens for the small Newland display, settings behind a cog"},

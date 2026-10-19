@@ -169,7 +169,7 @@ export const DESTINATIONS: Destination[] = [
     also: ["reports from bc", "packing report", "shipping"],
   },
   {
-    name: "BC Marketing", href: "/tools/bc-marketing", app: "BC_MARKETING",
+    name: "Marketing Tools", href: "/tools/bc-marketing", app: "BC_MARKETING",
     what: "Write marketing content from sale data — social posts, web descriptions, email lists, images.",
     also: ["social media", "marketing content", "newsletter"],
   },

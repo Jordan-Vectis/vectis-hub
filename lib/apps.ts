@@ -12,7 +12,7 @@ export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "AUCTION_CONTROLLER", label: "Auction Controller" },
   { key: "BC_WAREHOUSE",       label: "BC Warehouse" },
   { key: "AI_PRESENTER",       label: "AI Presenter" },
-  { key: "BC_MARKETING",       label: "BC Marketing" },
+  { key: "BC_MARKETING",       label: "Marketing Tools" },
   { key: "AUTO_CLERK",         label: "Auto Clerk" },
   { key: "MANAGER_PORTAL",     label: "Manager Portal" },
   { key: "SALE_STATISTICS",    label: "Sale Statistics" },
