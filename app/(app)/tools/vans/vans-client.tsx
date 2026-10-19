@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 // Facilities → Vans. Three collection vans: who has each one out, what's due, and the
-// history of everything done to them. Built from the /jordan garage with the personal
-// parts left out and a sign-out / sign-in added.
+// history of everything done to them, with a sign-out / sign-in.
 
 const box   = "rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
 const input = "w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:border-amber-500"

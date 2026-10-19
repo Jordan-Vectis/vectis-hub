@@ -6,7 +6,7 @@ export const maxDuration = 60
 
 // /api/vans/file — upload a van photo or a scanned invoice / MOT certificate; delete one.
 // Reads go through /api/catalogue/photo-proxy?key=… — these are shared staff records, so
-// the login-gated proxy is the right reader (unlike the /jordan garage, which is private).
+// the login-gated proxy is the right reader.
 const MAX_BYTES = 20 * 1024 * 1024
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"]
 const err = (e: any) => NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: e?.http ?? 500 })

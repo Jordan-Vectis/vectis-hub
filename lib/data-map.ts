@@ -305,31 +305,6 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "ClaudeMemory", dormant: true, what: "An older store for the Claude memory notes. The viewer at Admin → Claude Memory is a static page now, so nothing writes here — it only still appears in the backups." },
     ],
   },
-  {
-    area: "Personal tools (no Vectis data)",
-    blurb: "Tables behind one user's own private tools. No customer, staff or auction records are involved, and nothing here feeds any Vectis report.",
-    tables: [
-      { model: "JordanSavedChat", personal: "staff", what: "Saved personal AI chats — one user's own, visible only to them." },
-      { model: "JordanCvProfile", personal: "staff", what: "One user's own CV details, kept for the personal CV tool." },
-      { model: "JordanCvApplication", personal: "staff", what: "A job application written from that CV: the advert, the covering letter and the tailored CV." },
-      { model: "JordanCar", personal: "staff", what: "One user's own vehicle details and renewal dates." },
-      { model: "JordanCarRecord", personal: "staff", what: "A service, MOT or repair record against one of those vehicles." },
-      { model: "JordanCarValuation", personal: "staff", what: "What one of those vehicles was worth on a date — an AI estimate or a quote the user typed in." },
-      { model: "JordanDocFolder", what: "A folder in that user's personal document store." },
-      { model: "JordanDocFile", personal: "staff", what: "A file in that personal store: name, size and type. The file itself is in R2." },
-      { model: "JordanMealProfile", personal: "staff", what: "One user's own body measurements, calorie and macro targets and food likes, for the personal meal planner." },
-      { model: "JordanMealPlan", personal: "staff", what: "A meal plan written for that profile: its recipes and its shopping list." },
-      { model: "JordanGymProfile", personal: "staff", what: "One user's own training setup for the personal gym tool: days a week, equipment and injuries." },
-      { model: "JordanLift", what: "A list of gym exercises and how much the weight goes up by on each — reference data, nothing personal." },
-      { model: "JordanProgramme", personal: "staff", what: "A training programme written for that user: which exercises, how many sets and reps." },
-      { model: "JordanWorkout", personal: "staff", what: "One of that user's own gym sessions: when it was and how it went." },
-      { model: "JordanSet", personal: "staff", what: "One set from one of those sessions: the weight and the reps." },
-      { model: "McocChampion", what: "A game roster entry for a personal hobby tool." },
-      { model: "McocChampionProfile", what: "Reference notes for that game tool." },
-      { model: "McocWarFight", what: "A saved fight layout in that game tool." },
-      { model: "McocMiniNode", what: "A single node in one of those saved layouts." },
-    ],
-  },
 ]
 
 /** Every model named in the map, for the completeness check on the page. */

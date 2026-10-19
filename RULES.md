@@ -331,14 +331,12 @@ local memory looks out of date, then ask whether to refresh it from the shared r
 continuing.** Do not silently proceed on stale memory.
 
 ⚠ **`app/(app)/admin/memory/page.tsx` is a SERVER component — keep it that way.** It holds the
-`ENTRIES` array, filters it per-request against the viewer's session, and passes only the
-permitted entries to the client half (`memory-client.tsx`). Some entries are gated to a single
-user (`JORDAN_ONLY`). **Never add `"use client"` back to `page.tsx`** (or import `ENTRIES` into
-`memory-client.tsx`) "to simplify it": that compiles every entry into the JS bundle, where a
-gated entry is readable by anyone in view-source and the filter proves nothing. The route must
-also stay dynamic (`auth()` keeps it so) — a cached payload would serve one user's entries to
-another. Verify a change here by rebuilding and grepping `.next/static` for a gated entry's text:
-it must return **nothing**.
+`ENTRIES` array, checks the viewer is an admin, and passes the entries to the client half
+(`memory-client.tsx`). **Never add `"use client"` back to `page.tsx`** (or import `ENTRIES` into
+`memory-client.tsx`) "to simplify it": that compiles every entry into the JS bundle, where anyone
+can read them in view-source and the admin check proves nothing. The route must also stay dynamic
+(`getEffectiveSession()` keeps it so). Verify a change here by rebuilding and grepping
+`.next/static` for an entry's text: it must return **nothing**.
 
 Rules for the refresh:
 - Refresh only **project** and **reference** facts (shared project knowledge). Do **NOT** pull another

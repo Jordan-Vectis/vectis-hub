@@ -8,7 +8,6 @@ import AnnouncementBanner from "@/components/announcement-banner"
 import PatchNotesPopup from "@/components/patch-notes-popup"
 import ForceReloadListener from "@/components/force-reload-listener"
 import MigrationBanner from "@/components/migration-banner"
-import CrtMode from "@/components/crt-mode"
 import TermsGate from "@/components/terms-gate"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { prisma } from "@/lib/prisma"
@@ -66,7 +65,6 @@ export default async function AppLayout({
     //  · `max-sm:min-h-0`: min-h-screen is 100vh, which on a phone is taller than the visible
     //    screen, so the page scrolled by a toolbar's height on top of <main>. Phones only.
     <div className="hub-shell flex flex-col h-full min-h-screen max-sm:min-h-0 overflow-x-clip">
-      <CrtMode />
       {/* App-wide on purpose: the deploy banner lives only in the cataloguing
           shell, so an iPad parked on any other page would never hear about a
           refresh. Renders nothing. */}

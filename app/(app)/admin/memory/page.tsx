@@ -1,5 +1,4 @@
-﻿import { isJordan } from "@/lib/jordan-auth"
-import { redirect } from "next/navigation"
+﻿import { redirect } from "next/navigation"
 import { getEffectiveSession } from "@/lib/impersonation"
 import MemoryClient, { type Entry } from "./memory-client"
 import SetupBackups from "./setup-backups"
@@ -11,11 +10,6 @@ import SetupBackups from "./setup-backups"
 // and only the permitted ones are serialised to the browser. It must never go
 // back to "use client": that would ship every entry — including the gated ones
 // — inside the JS bundle, where hiding them in the UI proves nothing.
-
-// Entries only Jordan may see, keyed by filename. /jordan is a private menu that
-// 404s for everyone else, so documenting it on a page every admin can open would
-// give the whole thing away.
-const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
@@ -2218,7 +2212,7 @@ WARNING: the server action was always correct — it writes only fields that dif
     filename: "vans.md",
     content: `---
 name: reference_vans
-description: Facilities → Vans (/tools/vans, app key VANS) — the 3 collection vans; sign-out/in with mileage, due dates, MOT/service history, running costs; built 2026-10-02 from the garage minus the personal parts
+description: Facilities → Vans (/tools/vans, app key VANS) — the 3 collection vans; sign-out/in with mileage, due dates, MOT/service history, running costs; built 2026-10-02
 metadata:
   type: reference
 ---
@@ -2229,10 +2223,10 @@ Jordan: *"we have vans we use for collections … we only use 3 vans so its not 
 
 - \`/tools/vans\`, app key \`VANS\` (lib/apps.ts + lib/app-cards.ts, group FACILITIES, 🚐 orange). Layout gates on hasAppAccess; every API route calls \`requireVans()\` in lib/vans.ts (fresh DB read, returns the person's name for createdByName stamps).
 - Tables \`Van\` / \`VanRecord\` / \`VanTrip\` (migration 20261002150000_vans + MIGRATIONS array; in lib/data-map.ts). \`Van.active=false\` = retired/sold, history kept. Due dates nullable — "not recorded" is its own grey state.
-- Client \`app/(app)/tools/vans/vans-client.tsx\` is the garage client re-skinned in Hub grey/dark classes, 44px buttons: **WHO HAS WHAT** strip (IN green / OUT amber "with X since HH:MM", sign-out/in button on the tile), **DUE SOON** (≤60 days), cards with details, dates, History (+ RunningCosts per month/year by kind), Sign-outs list.
+- Client \`app/(app)/tools/vans/vans-client.tsx\` uses Hub grey/dark classes, 44px buttons: **WHO HAS WHAT** strip (IN green / OUT amber "with X since HH:MM", sign-out/in button on the tile), **DUE SOON** (≤60 days), cards with details, dates, History (+ RunningCosts per month/year by kind), Sign-outs list.
 - Trips: POST refuses a second sign-out (409, names who has it); PUT {signIn:true} refuses inMileage < outMileage; any mileage entered raises \`Van.mileage\` only if higher (updateMany with OR null/lt).
-- Files: POST /api/vans/file → R2 \`vans/…\`; READ via \`/api/catalogue/photo-proxy?key=\` (shared staff data — unlike the private /jordan garage proxy). DELETE van removes its R2 objects.
-- ⚠ Not built on purpose: advance bookings, fuel log, valuer/advert/watch (those stay in [[reference_jordan_secret_menu]]'s garage). Add only if asked.
+- Files: POST /api/vans/file → R2 \`vans/…\`; READ via \`/api/catalogue/photo-proxy?key=\` (shared staff data). DELETE van removes its R2 objects.
+- ⚠ Not built on purpose: advance bookings, fuel log. Add only if asked.
 - Shared ENTRIES copy: \`vans.md\` in app/(app)/admin/memory/page.tsx.`,
   },
   {
@@ -4233,7 +4227,7 @@ metadata:
 
 \`server.js\` used to do three things on **every** boot, local included. ⚠ **\`.env\` on Jordan's
 machine points at the PRODUCTION Neon database** — confirmed 2026-07-17 by a read-only count: 21
-users, 5,323 CatalogueLots, and **zero** MCOC rows (his MCOC data lives on staging, so this is
+users, 5,323 CatalogueLots, and none of the rows that only live on staging, so this is
 demonstrably not the staging DB). Not a copy, not staging — production. So simply starting the app
 on the laptop fired all of this at **live production data**, unattended, with nobody choosing it:
 
@@ -4290,21 +4284,21 @@ See [[reference_deploy_skew]] for the login/server-action work this was discover
 **\`.env\` = PRODUCTION. \`.env.staging\` = STAGING (filled in 2026-07-17).** Both work from this
 machine, so when a question is answerable from data, **query it — don't speculate and don't make
 Jordan go and look.** Choosing:
-- **Jordan's own work, his testing, anything he's looking at, any /jordan or MCOC question → STAGING.**
+- **Jordan's own work, his testing, anything he's looking at → STAGING.**
   This is the default: he works on staging and never runs the app locally.
 - **A live/production incident, or "is this on production yet?" → PRODUCTION** (\`.env\`).
 - Unsure → staging first, and say which one you read.
 
 Always state which environment a finding came from — "staging: 342 profiles, 330 profiled" — because
 the same query gives different answers per environment and a silent wrong-env read looks like missing
-data (this is exactly what happened on 2026-07-17: MCOC read as empty on production while 57 roster
+data (this is exactly what happened on 2026-07-17: a table read as empty on production while its
 rows sat on staging).
 
 ## Details — \`.env\` = PRODUCTION, \`.env.staging\` = staging
 
 ⚠ **\`.env\` is PRODUCTION.** Jordan works on **staging** (separate DBs), so a query against \`.env\`
-answers questions about the wrong environment — the MCOC tables read as *empty* there purely
-because their rows only live on staging. **Never conclude "the data is missing" from a local
+answers questions about the wrong environment — a table can read as *empty* there purely
+because its rows only live on staging. **Never conclude "the data is missing" from a local
 query without checking which DB you're on** (\`SELECT current_database()\` won't tell you; count
 rows in a table you expect data in).
 
@@ -4341,8 +4335,7 @@ Every one of these cost time in a single two-day session; none is about the app.
 - **A change to a source file AFTER \`tsc\` has started is not covered by it.** The shared memory page is a source file; edit it BEFORE the typecheck in the same chain, or run \`tsc\` again before committing.
 - **Escapes get decoded on the way in.** A \` \` typed into an Edit became a real NUL byte in a .tsx file (grep then called the file binary). A Bash heredoc ate the backslashes out of a regex. Anything with backslashes, \`\\u\` escapes, backticks-in-template-literals or apostrophes goes through the **Write tool to a scratch file**, applied by a small node patch script that asserts each anchor matches exactly once. Those scripts also handle CRLF (normalise to LF, write back as found).
 - **Node 24 strips types by itself** — \`node -e 'import("./lib/x.ts").then(…)'\` runs a plain TypeScript module with no build step, which is how a pure helper gets real test cases before it ships.
-- **The shared ENTRIES filenames are not the local filenames** — \`lot_archive.md\`, \`manage_lots_bulk_undo.md\`, \`ai_instruction_house_style.md\`, but \`reference_website_search.md\`. Find an entry by a phrase in its content. Its content is a template literal: no backticks, no \`\${\`.
-- ⚠ A /jordan change never goes in the shared ENTRIES or its index — local memory only.`,
+- **The shared ENTRIES filenames are not the local filenames** — \`lot_archive.md\`, \`manage_lots_bulk_undo.md\`, \`ai_instruction_house_style.md\`, but \`reference_website_search.md\`. Find an entry by a phrase in its content. Its content is a template literal: no backticks, no \`\${\`.`,
   },
   {
     filename: "deploy_skew.md",
@@ -4376,7 +4369,7 @@ it does NOT auto-recover for you. Three files:
 - **\`app/error.tsx\`** — the app's **first ever error boundary** (there were none before). Catches
   actions dispatched through a **transition** (\`useActionState\` — the login form).
 - **\`components/skew-reload.tsx\`** — \`unhandledrejection\` listener, mounted in \`app/layout.tsx\`
-  (renders null, follows the \`crt-mode.tsx\` pattern).
+  (renders null).
 
 ⚠ **BOTH are required — don't delete one as redundant.** The error boundary only sees
 transition-dispatched actions. **Most of the Hub \`await\`s actions directly in a click handler**
@@ -4426,62 +4419,6 @@ force a hard reload on mismatched *navigations*. Rejected for now: it does **not
 that matters (a stale tab submitting without navigating first — the server doesn't reject on the
 \`x-deployment-id\` header, it just fails to find the action), and it must match at **build AND
 runtime** or every client mismatches forever → reload loop. Revisit only if skew persists.`,
-  },
-  {
-    filename: "jordan_secret_menu.md",
-    content: `---
-name: Secret /jordan menu + CRT mode
-purpose: Jordan's personal easter-egg page and the app-wide CRT effect. Read before touching /jordan, components/crt-mode.tsx, or the crt-mode CSS in globals.css.
-last_updated: 2026-07-02
----
-
-# Secret /jordan menu + Retro CRT mode (2026-07-02)
-
-A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)/jordan/) is gated server-side: the session user's User.username must equal "jordan.orange" (case-insensitive); everyone else — including other admins — gets a plain 404 via notFound(), as if the route doesn't exist. It is allowed to reach production on normal merges.
-
-- Feature 01, Retro CRT mode: toggles the html.crt-mode class — scanlines, green phosphor tint, vignette and a subtle flicker across the whole Hub. CSS lives at the bottom of app/globals.css and uses FIXED OVERLAY PSEUDO-ELEMENTS ONLY — never apply a filter to html/body, because a root filter creates a containing block and breaks every position:fixed element in the app (sync bars, modals, floating buttons).
-- Persistence: localStorage key jordan_crt_mode ("1" = on), per browser. components/crt-mode.tsx (mounted in the (app) layout, renders null) re-applies the class on load so the mode survives navigation and reloads. The flag can only be set from /jordan.
-- If /jordan 404s for Jordan himself: his Hub user needs username = Jordan.Orange (Admin -> Users).
-
-## Slots 02 + 03 (added same day): Ask AI + Cooking
-- The gate is shared via lib/jordan-auth.ts isJordan() — pages call notFound(), the API routes return 404 JSON, so none of it exists for anyone else.
-- 02 ASK AI (/jordan/chat): casual day-to-day AI chat. 03 COOKING (/jordan/cooking): two tabs — Air Fryer Converter (photo upload -> POST /api/jordan/airfryer, Gemini vision returning strict JSON {food, state, mode, tempC, time, preheat, shake, safety, notes, confident} rendered as a settings card with an amber not-confident warning) and Ask the Chef (cooking-expert chat, UK measures).
-- "My air fryer" profile: a collapsible panel on the converter lets Jordan enter his machine's model/notes and its exact cooking modes (chips). Saved per browser in localStorage jordan_airfryer_profile {notes, modes}, sent as applianceNotes + applianceModes; buildPrompt tailors temp/time to the appliance and, when modes are given, makes the AI recommend EXACTLY one of them (shown as a big MODE card). A "Scan my air fryer" button (POST /api/jordan/airfryer-scan, vision) reads the mode names + model off a photo of the appliance and merges them into the profile.
-- Web search: both chats have a "WEB SEARCH [ON/OFF]" toggle in the footer. When on, /api/jordan/chat enables Gemini Google Search grounding (tools:[{googleSearch:{}}], same pattern as auction-ai chat-grounded) and returns the search queries, shown above the reply. A model without grounding support returns a clear 400 telling Jordan to turn it off or switch model.
-
-## MCOC is ONE menu section (Counters + Roster tabs) — NEEDS RUN MIGRATIONS
-- The secret menu has a single "MCOC" entry -> /jordan/mcoc, a tabbed hub (mcoc-hub.tsx): Counters + My Roster. Both tabs stay mounted (hidden when inactive) so switching keeps state. The page loads the roster server-side and passes it to the hub; ?tab=roster opens the roster tab, and /jordan/roster now just redirects to /jordan/mcoc?tab=roster.
-- The roster tab stores Jordan's Marvel Contest of Champions roster in a new McocChampion table {ownerId, name, class, stars (6/7), rank (1-5), bgsDeck} unique on (ownerId,name,stars). Added to schema.prisma AND the run-migrations MIGRATIONS array — click Admin -> Run Migrations after deploy or the roster page 500s.
-- Add champions by photo: POST /api/jordan/mcoc/scan-roster (Gemini vision) reads champion names + class (from portrait border colours) off a roster screenshot; a confirm step lets Jordan untick misreads, then addChampions upserts them at the chosen stars/rank with an optional "add to BGS deck" flag. Manual add too.
-- Server actions in lib/actions/mcoc.ts (all jordan-gated): addChampions, updateChampion, deleteChampion, setBgsDeck, setBgsDeckByNames. Shared constants in lib/mcoc.ts (MCOC_CLASSES, classColour, normaliseClass). Client groups by rank, per-champ star toggles BGS membership, click name to edit class/stars/rank.
-- Portraits + update + deck-fix (2026-07-02) — NEEDS RUN MIGRATIONS again (McocChampion.imageKey column). The scan-roster route now reads each champ's name/class/RANK plus a portrait bounding box, crops the portrait with sharp and stores it in R2 (mcoc/{userId}/...); the mcoc page signs imageKey into imageUrl. Portraits show in roster chips, scan-confirm lists and owned counter cards (fallback = class-coloured square).
-- Roster scan is now add AND update: BOTH the "These are 7*/6*" and the Rank selector are authoritative for the whole batch (a roster screenshot is one rank tier). The AI reads a per-champ rank but MISREADS the small badges (it put rank-5-selected champs in as rank 2/1), so the client ignores the AI rank and defaults every champ to the SELECTED rank; the per-champ dropdown in the confirm list is only for exceptions. addChampions upserts by (owner,name,stars) updating rank+class+portrait, so uploading each rank tier updates ranks. This is the "update roster by photo" feature.
-- BGS deck matching root cause + real fix: it kept being wrong (while roster-scan worked) because a roster grid prints champ NAMES under each portrait (easy to read) but a Battlegrounds deck screen is mostly portraits with little/no text, so reading names blind misfired and could return champs Jordan doesn't own. Fix: a dedicated POST /api/jordan/mcoc/scan-bgs takes the deck image + the roster champ names and asks the AI which of THOSE owned champions appear (recognition against a known list, server-filtered to real roster names). The client sends the roster names, maps matches to ids, shows a confirm/untick review, and applies via applyBgsDeck(ids, replace). The star toggle on each roster chip is the manual 100%-accurate alternative.
-- Counters tab now receives the roster and flags each suggested counter as OWNED (with stars/rank + portrait) or not-in-roster, matched by normChampName.
-
-## MCOC Champion DB (Phase 2a) — NEEDS RUN MIGRATIONS
-- Data foundation for the (not-yet-built) instant counter engine. There is no reliable public MCOC data source (Fandom blocks scraping; GitHub datasets are stale 2017/2019; the good live tools have no API), so the app builds its own with grounded AI and caches it.
-- New global McocChampionProfile table (id, name, nameNorm unique, class, immunities[], tags[], summary, profileAt) — needs Run Migrations. Fixed MCOC_IMMUNITIES + MCOC_TAGS vocab in lib/mcoc.ts; lib/mcoc-ai.ts has groundedJson + parseLooseJson (grounding can't use JSON response-mime so parse loosely; ungrounded fallback).
-- Routes: POST /api/jordan/mcoc/catalog {class} grounded-lists all champs of a class and upserts names (client loops the 6 classes); POST .../profiles/build {limit, staleBefore?} profiles a batch (grounded, tags/immunities filtered to the vocab) — staleBefore null = build unbuilt only, set = refresh all older than it; both terminate as done champs' profileAt->now drop out. GET .../profiles/status and .../profiles/list.
-- UI: a "Champion DB" tab in the MCOC hub (mounts on demand): status + progress, (1) Build champion list, (2) Build profiles (client loops until done, stops after 3 zero-progress rounds = rate limits), Update meta (refresh), and browse/search by name/tag/immunity. The build is long (~250 champs, one grounded call each) but resumable.
-- Phase 2b BUILT — the big MCOC expansion (2026-07-02). The MCOC hub now has FIVE tabs: Counters, Roster, Deck Builder, War, Champion DB. NEEDS Run Migrations (McocChampionProfile gains abilities JSONB, counters TEXT[], defenderNotes TEXT) and then an "Update meta" re-scan so existing profiles gain the new fields.
-- Profile v2: the build prompt also returns abilities [{name, details[]}] (spotlight-style kit breakdown like mcoc.gg), counters (best attackers into this champ as a defender) and defenderNotes. profiles/list is slim by default; ?full=1 adds abilities (Champion DB browse uses it). groundedJson accepts a parts array for image+text grounded calls.
-- INSTANT counters mode (default in the Counters tab — the "no AI wait in BGS" ask): loads the slim profile list once, pick a defender by autocomplete, and it instantly renders class + class-advantage chip, immunities, defender notes and the stored counters matched to the roster (in-deck first, then owned, then unowned; "BGS deck only" filter). The grounded AI lookup remains as the second mode.
-- Champion DB rows now expand to a full detail view: abilities sections, best-counters chips (owned flagged with portraits), defender notes; prompts to run Update meta when a profile predates the new fields.
-- DECK BUILDER tab: photograph the BGS season's nodes/meta (or describe it) + your roster -> a full N-champ deck (roles Attacker/Defender/Flex with reasons, strategy, watchouts) via POST /api/jordan/mcoc/deck-builder; "Set as my BGS deck" applies the matched champs.
-- WAR tab: Attack Path planner (enter the path's defenders + optional node notes -> best 3-champ team with per-fight assignments, risks, alternates via /api/jordan/mcoc/aw-path) and Defence Placer (optional map photo + notes + count -> node-by-node placements via /api/jordan/mcoc/aw-defence).
-- Manual BGS deck add: the deck panel has a type-ahead "add by name" box and a current-deck chip row (tap x to remove), alongside the star toggle on each roster chip.
-- Personal counters: McocChampionProfile.myCounters (NEEDS Run Migrations) — Jordan's own counter picks per defender, kept separate from the AI counters so Update-meta rebuilds never touch them (the build route only writes counters). addMyCounter/removeMyCounter actions (matched by nameNorm, deduped, capped 12). The instant Counters view shows them as a gold "My counters" section pinned above the AI list (which hides duplicates), with an add box (roster autocomplete) and per-chip remove; the Champion DB detail shows them as read-only gold chips.
-- (Earlier bug, already fixed: the scan buttons did nothing until the hidden file inputs were rendered.)
-- Phase 2 (planned, not built): an instant local counter engine caching per-champ capability tags + per-defender requirement tags in the DB, matched at BGS draft time against the roster/deck (surfaces owned counters no guide lists), with an "Update meta" refresh button. Until then /jordan/mcoc stays an AI call per query.
-
-## Slot 04 (added same day): MCOC Counters
-- /jordan/mcoc — "who should I use against this defender?" for Marvel Contest of Champions. Type the defender + node/buffs and/or upload a screenshot -> POST /api/jordan/mcoc returns strict JSON {defender, counters:[{champion,class,why,how}], strategy, warnings, confident} rendered as class-coloured counter cards.
-- Live META (Google Search grounding) is ON by default because the MCOC meta changes monthly and model knowledge goes stale. Grounding can't be combined with JSON responseMime on Gemini, so the prompt asks for JSON and the route parses it loosely (parseLooseJson); if the chosen model can't ground, the route retries ungrounded and flags groundedFallback. CTRL/Cmd+Enter submits.
-- Both chats share app/(app)/jordan/chat-panel.tsx (retro terminal, history persisted per browser in localStorage jordan_chat_history / jordan_cooking_history capped at 60 messages) -> POST /api/jordan/chat with {message, history:[{role,text}], mode} — the mode picks the system prompt; history is converted server-side to Gemini's shape, capped at 30 turns.
-- Model resolved via getToolModel("jordan_fun", clientModel) — slot registered in AI_TOOLS (group Other) per the central AI-model-config rule. Standard Gemini block handling (422 on blocks). A MODEL selector (model-picker.tsx; localStorage jordan_ai_model, blank = AUTO/default; options from /api/auction-ai/models) sits in the chat footer and the airfryer tab, and both requests send the choice.
-- 503/overloaded handling: lib/gemini-retry.ts (withGeminiRetry — 3 attempts with short backoff; isTransientGeminiError) wraps both routes, and after exhausted retries a friendly 503 message suggests switching model. The helper is reusable for other one-shot Gemini routes.
-- Lint gotcha (hit twice here): the eslint react-compiler rule bans synchronous setState inside effects — localStorage restores are wrapped in queueMicrotask (chat-panel.tsx and jordan-menu.tsx).`,
   },
   {
     filename: "photo_ai_edit.md",
@@ -5891,44 +5828,6 @@ modified: 2026-09-23T09:24:24.484Z
 ---
 # Vectis Hub
 
-## Secret /jordan menu — Ask AI + Cooking/Air Fryer (2026-07-02, STAGING)
-Slots 02/03 of the secret menu are live (04 is the new LOCKED placeholder). Gate reused everywhere via **\`lib/jordan-auth.ts\` \`isJordan()\`** (session → prisma username === "jordan.orange" case-insensitive); pages \`notFound()\`, API routes return 404 JSON.
-- **02 ASK AI** (/jordan/chat): casual day-to-day chat. **03 COOKING** (/jordan/cooking): two tabs — 🍟 Air Fryer Converter (photo upload → \`POST /api/jordan/airfryer\`, Gemini vision, strict-JSON {food/state/**mode**/tempC/time/preheat/shake/safety/notes/confident} rendered as a settings card, amber warning when not confident) and 👨‍🍳 Ask the Chef chat.
-- **"⚙ My air fryer" profile** (added same day): collapsible panel on the converter — free-text model/notes + a taggable list of the machine's cooking modes (chips, quick-add common ones), saved per-browser in localStorage \`jordan_airfryer_profile\` {notes, modes}. Sent as \`applianceNotes\` + \`applianceModes\` (JSON) FormData; \`buildPrompt(notes, modes)\` tailors temp/time to the appliance and, when modes are given, requires the output \`mode\` to be EXACTLY one of them (shown as a big MODE card in the result). **"📷 Scan my air fryer"** button → \`POST /api/jordan/airfryer-scan\` (vision) reads the mode names + model printed on the appliance and merges them into the profile (case-insensitive dedupe; only fills notes if blank).
-- **Web search grounding** on both chats: a "🔎 WEB SEARCH [ON/OFF]" toggle in the chat footer. When on, \`/api/jordan/chat\` adds \`tools:[{googleSearch:{}}]\` (mirrors auction-ai chat-grounded) and returns \`queries\` (shown as "🔎 searched: …" above the reply); a model that doesn't support grounding returns a clear 400 "turn it off or switch model".
-- **ONE "MCOC" menu section** (2026-07-02): the menu has a single "04 MCOC" entry → /jordan/mcoc, which is a **tabbed hub** (\`mcoc-hub.tsx\`): ⚔ COUNTERS + ★ MY ROSTER. Both tabs stay mounted (hidden when inactive) so switching doesn't lose a lookup/edits. The mcoc page loads the roster server-side and passes it in; \`?tab=roster\` opens the roster tab. **/jordan/roster now just redirects** to /jordan/mcoc?tab=roster (its data-load moved into the mcoc page). Roster details below.
-- **MY ROSTER tab** — MCOC Phase 1 (2026-07-02). DB-backed roster: **\`McocChampion\` table** {ownerId, name, class, stars(6/7), rank(1-5), bgsDeck} unique (ownerId,name,stars) — **NEEDS Run Migrations** (added to schema + run-migrations MIGRATIONS array). Add champs by **📷 roster screenshot** (\`POST /api/jordan/mcoc/scan-roster\` → Gemini vision reads names+class from portrait border colours → confirm/untick list → \`addChampions\` upsert at the chosen stars/rank, optional "add to BGS deck") or by hand. Server actions in \`lib/actions/mcoc.ts\` (jordan-gated: addChampions/updateChampion/deleteChampion/setBgsDeck). Client groups by rank (R5→R1), per-champ ★ toggles BGS-deck membership, click name to edit class/stars/rank, × removes; filter All/BGS-deck + search. (Earlier bug fixed: scan buttons did nothing until the hidden \`<input type=file>\` were rendered.)
-
-**PORTRAITS + update-by-photo + deck-match fix (2026-07-02):**
-- \`McocChampion.imageKey\` (R2 key of the portrait) — **NEEDS Run Migrations** (ALTER TABLE ADD COLUMN). The mcoc page signs it → \`imageUrl\` for the client.
-- **scan-roster route rewritten** to read per champ: name, class, **rank**, and a **portrait bounding box** [ymin,xmin,ymax,xmax] 0–1000. Server **crops the portrait with sharp** (\`extract\` using box→pixels via image metadata, \`resize(128,128,cover)\`), uploads to R2 \`mcoc/{userId}/…\`, returns imageUrl. Best-effort: invalid box / unreadable image → no portrait, champ still returned.
-- **Roster scan = add AND update** (the "update roster" ask): the "These are 7★/6★" AND the **Rank selector are BOTH authoritative for the whole batch** — a roster screenshot is one rank tier. ⚠ The AI DOES read a per-champ rank badge but it MISREADS them (put R5-selected champs in as R2/R1), so the client **ignores the AI rank and defaults every scanned champ to the selected rank** (the per-champ dropdown in the confirm list is only for the odd exception). \`addChampions\` upserts by (owner,name,stars), updating rank+class+imageKey. So to update ranks, upload each rank tier's screenshot with the matching Rank selected.
-- **BGS deck matching — root cause + real fix (2026-07-02).** ⚠ WHY it kept being wrong while roster-scan worked: a roster GRID prints champ NAMES under each portrait (reliable text read), but a **Battlegrounds deck screen is mostly portraits with little/no text**, so free-form name reading (scan-roster) misfired and could even return champs Jordan doesn't own. **Fix: a dedicated \`POST /api/jordan/mcoc/scan-bgs\`** that takes the deck image + the **roster champ names** and asks the AI "which of THESE owned champions appear in this picture?" — recognition-against-a-known-list, and it's server-filtered to names actually in the roster so it can't return an unowned champ. Client \`scanBgs\` sends \`champs.map(name)\`, maps matched names→ids by \`normChampName\`, shows the **review step** (portraits, untick wrong), applies by id via **\`applyBgsDeck(ids, replace)\`**. (Also: the ★ on each roster chip is the always-100%-accurate manual way to build the deck.) The earlier exact-name-match-on-a-blind-read approach is gone.
-- **Counters tab** now receives the roster and flags each counter **✓ OWNED · {stars}★ R{rank}** with its portrait (matched by normChampName, best copy = highest star then rank) — tells Jordan instantly whether he owns a suggested counter.
-
-**CHAMPION DB — all-champs capability database (Phase 2a, 2026-07-02):** the data foundation for the (not-yet-built) instant counter engine. There is NO reliable public MCOC data source (Fandom blocks scraping; the machine-readable GitHub datasets — gabriel-hook, joshua-schwartz — are stale 2017/2019; the good live tools mcochub/mcocscout/khonshu have no API) so the app BUILDS ITS OWN via grounded AI, cached.
-- **\`McocChampionProfile\` table** (global, not per-owner): id, name, nameNorm(unique), class, immunities String[], tags String[], summary, profileAt (null = catalogued only). **NEEDS Run Migrations.** Fixed vocabularies \`MCOC_IMMUNITIES\` + \`MCOC_TAGS\` in lib/mcoc.ts keep profiles consistent/matchable. \`lib/mcoc-ai.ts\` = \`parseLooseJson\` + \`groundedJson\` (Google-Search grounded, loose JSON parse since grounding can't use JSON response-mime, ungrounded fallback).
-- Routes: **POST /api/jordan/mcoc/catalog** {class} grounded-enumerates every champ of one class → upserts names (client loops the 6 classes); **POST /api/jordan/mcoc/profiles/build** {limit≤8, staleBefore?} profiles a batch concurrently (grounded per champ → immunities/tags/summary filtered to the vocab), \`staleBefore\` null = build unbuilt only, set = refresh everything older than it — both terminate because processed champs' profileAt→now drops them from the \`where\`; **GET …/profiles/status** and **…/profiles/list**.
-- UI: **🧬 CHAMPION DB** 3rd tab in mcoc-hub (mounts on demand). ① Build champion list (loops classes), ② Build profiles (client loops build batches until remaining 0; stops after 3 zero-progress rounds = rate-limited), 🔄 Update meta (refresh, staleBefore=now), + browse/search by name/tag/immunity. Long build (~250 champs × 1 grounded call) — leave it running; resumable (only does unbuilt).
-- **Phase 2b BUILT (2026-07-02) — the big MCOC expansion.** MCOC hub now has FIVE tabs: ⚔ COUNTERS · ★ ROSTER · 🃏 DECK BUILDER · 🏰 WAR · 🧬 CHAMPION DB (page maps ?tab= roster/champdb/deck/aw). **NEEDS Run Migrations** (McocChampionProfile.abilities JSONB + counters TEXT[] + defenderNotes TEXT) **and then 🔄 Update meta re-scan** — existing profiles lack the new fields until rebuilt.
-- **Profile v2**: build prompt now also returns \`abilities\` [{name, details[]}] (spotlight-style kit breakdown, ≤8 sections ≤5 bullets, mcoc.gg-like), \`counters\` (4–8 best attackers INTO this champ as defender, best first) and \`defenderNotes\`. profiles/list is SLIM by default (no abilities); \`?full=1\` for the Champion DB browse. \`groundedJson\` now accepts a parts array (image+text vision calls with grounding, ungrounded fallback).
-- **⚡ INSTANT counters mode** (default in the Counters tab, the "no AI wait for BGS" ask): loads the slim profile list once, defender picked via datalist autocomplete → INSTANT local render: class + class-advantage chip (\`classAdvantageAgainst\` wheel helper in lib/mcoc.ts), immunity shields, defenderNotes, and the stored counters matched against the roster (★ IN DECK first, then ✓ owned, then unowned dim; "BGS deck only" filter). AI DEEP DIVE mode = the original grounded lookup, kept as the 2nd mode.
-- **Champion DB detail view**: click a champ row → expands to full profile (abilities sections, counters chips with owned flags + portraits, defenderNotes); "not enriched yet → run Update meta" hint. ChampDbClient now takes the roster.
-- **🃏 DECK BUILDER** (\`POST /api/jordan/mcoc/deck-builder\`, FormData image?+notes?+size+roster): reads the season's nodes/meta screenshot + roster (names+stars+rank) → grounded JSON {deck:[{champion, role Attacker|Defender|Flex, why}] exactly N, strategy, watchouts}; UI groups by role, flags unmatched names, **"★ Set as my BGS deck" applies matched ids via applyBgsDeck(ids, true)**.
-- **🏰 WAR tab** (\`aw-client.tsx\`): PATH planner (\`POST /api/jordan/mcoc/aw-path\` JSON {defenders[], nodes?, roster} → {team[3], assignments per defender, risks, alternates}) + DEFENCE placer (\`POST /api/jordan/mcoc/aw-defence\` FormData image?(map)+notes+count+roster → {placements:[{node, champion, why}], notes}).
-- **Manual deck add** (the "when the scan gets it wrong" ask): the BGS deck panel got a type-ahead "Add by name + Enter" box (datalist of non-deck roster champs) AND a current-deck chip row (portraits, tap × to remove) — plus the existing ★ per roster chip.
-- **Personal counters (2026-07-02)**: \`McocChampionProfile.myCounters String[]\` — **NEEDS Run Migrations** — Jordan's own counter picks per defender, a SEPARATE field from the AI \`counters\` so profile rebuilds/Update-meta NEVER touch them (the build route only writes \`counters\`). Actions \`addMyCounter/removeMyCounter(defenderName, counterName)\` (jordan-gated, matched by nameNorm, deduped, cap 12). Shown in the instant Counters view as a gold "👑 My counters" section pinned ABOVE the AI list (AI list hides names already in it; add box with roster datalist + Enter, × to remove, optimistic local update) and read-only gold chips in the Champion DB detail. Respects the "BGS deck only" filter.
-- Portraits shown in roster chips, both scan-confirm lists, and owned counter cards; fallback = class-coloured square. Shared \`lib/mcoc.ts\` (MCOC_CLASSES, classColour, normaliseClass). **Phase 2 (planned, not built): instant counter engine** — cache per-champ capability tags + per-defender requirement tags in DB, match locally at draft time (roster/deck-aware, surfaces non-obvious owned counters), with an "Update meta" refresh button to re-scan cached profiles. The current /jordan/mcoc advisor stays AI-per-query until then.
-- **04 MCOC COUNTERS** (/jordan/mcoc): "who should I use against this defender?" for Marvel Contest of Champions. Type the defender + node/buffs and/or upload a screenshot → \`POST /api/jordan/mcoc\` returns strict-JSON {defender, counters:[{champion,class,why,how}], strategy, warnings, confident} rendered as class-coloured counter cards. **Live META (Google Search grounding) ON by default** because the MCOC meta changes monthly and knowledge goes stale; grounding can't combine with JSON responseMime, so the prompt asks for JSON and the route parses it loosely (\`parseLooseJson\`), and if the model can't ground it retries ungrounded (groundedFallback flag). CTRL/⌘+Enter submits.
-- Both chats share \`app/(app)/jordan/chat-panel.tsx\` (retro terminal; history persisted per-browser in localStorage \`jordan_chat_history\` / \`jordan_cooking_history\`, capped 60 msgs; Enter=send) → **\`POST /api/jordan/chat\`** with \`{message, history:[{role,text}], mode:"chat"|"cooking"}\` — mode picks the system prompt (companion vs UK-measures cooking expert), history converted server-side to Gemini shape capped at 30 turns.
-- **Model via \`getToolModel("jordan_fun", clientModel)\`** — slot added to AI_TOOLS (group Other) per the central-config rule. Standard Gemini block-reason/finishReason handling, 422 on blocks. **Model selector** (\`model-picker.tsx\`, choice in localStorage \`jordan_ai_model\`, "" = AUTO/default; options from /api/auction-ai/models) shown in the chat footer + airfryer tab; both requests send it. **503/overloaded retries**: \`lib/gemini-retry.ts\` (\`withGeminiRetry\` — 3 attempts, 1.5s/3s backoff; \`isTransientGeminiError\`) wraps both routes; after retries a friendly 503 message suggests switching model. Reusable for other one-shot Gemini routes.
-- Lint gotcha hit twice: the react-compiler eslint rule bans synchronous setState in effects — localStorage restores are wrapped in \`queueMicrotask\` (chat-panel + jordan-menu).
-
-## Secret /jordan menu + Retro CRT mode (2026-07-02, STAGING)
-Jordan's personal easter-egg page at **/jordan** (\`app/(app)/jordan/page.tsx\` + \`jordan-menu.tsx\`). Gate: server-side lookup of the session user's \`User.username\`, case-insensitive match against "jordan.orange" — anyone else (including other admins) gets a plain \`notFound()\` 404 as if the page doesn't exist. Deliberately allowed to ride to production on future merges. Retro terminal UI (ASCII banner, LOCKED placeholder slots 02/03 for future silly features).
-- **Feature 01 — Retro CRT mode**: toggles scanlines + green phosphor tint + vignette + subtle flicker across the WHOLE Hub. Implementation: \`html.crt-mode\` class; CSS at the bottom of app/globals.css uses **fixed overlay pseudo-elements ONLY — never a \`filter\` on html/body** (a root filter creates a containing block and breaks every position:fixed element: sync bars, modals, floating buttons). Persisted per-browser in localStorage \`jordan_crt_mode\`; re-applied on every load by \`components/crt-mode.tsx\` mounted in the (app) layout (renders null). Only settable from /jordan.
-- ⚠ Requires Jordan's Hub user to have \`username\` = Jordan.Orange (login matches username case-insensitively; if /jordan 404s for him, set the username in Admin → Users).
-
 ## Lot wizard input warnings — estimates + non-preset categories (2026-07-02, STAGING)
 Two new goNext() stop-and-warn guards in lot-wizard-tab.tsx, following the existing step-1 length / step-2 barcode warning pattern (amber box, Continue anyway / fix buttons; warning state cleared on field edit + goBack; applies to desktop AND tablet since the wizard is shared):
 - **Step 5 (estimates)**: if Low > High (numerics already validated) → warning "£50 is higher than £40 — they look the wrong way round" with **Swap them & continue** (one-tap swap of the raw strings, straight to step 6), Fix it, Continue anyway. Equal low/high deliberately allowed.
@@ -7033,7 +6932,6 @@ Core sync rules (full detail on the reference card):
 - **💾 The nightly backup copies EVERY table** (163, was 42 of a hand-kept list), streamed one JSONL file per table into R2 with a manifest naming any table that failed; restore is generic (any table, casts from information_schema, upsert-only), so the induction tables and ArchiveLot are covered for the first time. /admin/backup rewritten (make a backup with live progress + Stop, restore chosen tables, lots by barcode, find a record). ⚠ Not run before the push — the first nightly is the test; the Status Centre light goes amber on a failed table ([[database-backup-every-table]]). No migration.
 - **🖼 Databases → Sales** (\`/databases/sales\`): every sale, ABC and BC, with the cover picture the website's auction calendar shows, date, code, lot count, links to the site and to its lots. The picture address is collected from each sale's page (the lot collector now records it as it goes, and a **picture-only collector** — \`scripts/collect-sale-pictures.mjs\` / the browser copy on the tab's 📥 Get the pictures panel — does the whole site in ~10 minutes, tested live on sales 683–686); the **📸 Sale pictures** job copies them from the website's S3 into R2 (\`sale-photos/<siteId>.webp\`). \`ArchiveSale.code/heroUrl/heroKey/heroAt\` — **NEEDS Run Migrations** ([[reference_bc_database]]).
 - The pg Pool "no error listener" side note was ALREADY FIXED on 10 Sept (6f0cd593) — don't raise it again.
-- Personal: meal planner reply salvage (a plan that can't be read is asked for again one day at a time) — local memory only. The "new Claude account" note gained §8, moving to a new computer.
 
 ### Needs doing
 - **Run Migrations on production** — the Status Centre switch and the Sales tab both need it (the Hub light says "a database update is waiting").
@@ -7056,7 +6954,6 @@ Core sync rules (full detail on the reference card):
 - Tablet cataloguing header fits on a phone; Website Search's sale filter is the last filter.
 - **No manual status ticks left on a sale.** Auction Manager: the Photography column is gone ("Lots with photos" says it), **Ran through AI is a measured count** (lots excluded from AI are left out of the total), Catalogued sits before the counts. Auction Settings keeps only **Catalogued 🔒** and **Complete** — the addedToBC / photography / aiRan columns stay in the database and updateAuction deliberately never writes them (an absent checkbox would save false and wipe every sale's value). **Manage Lots' per-lot BC column is measured from the barcode too**, and "Mark added to BC" and its two server actions are deleted ([[reference_bc_lock_and_in_bc_column]]). Lotting Up's "locked" warning now reads Catalogued (it had read the old tick since 2 Sept).
 - **BC Database: a missing marker is NOT an empty database.** "Collected up to sale N" came from max(siteSaleId) alone, and lots loaded before that column existed carry NULL — so the panel said "Nothing collected yet", the Copy-instructions-for-Claude text said "that is the whole range", and a full year was collected again for nothing (17 Sept: **220,228 lots, 382 sales, 12 files, site numbers 1062 → 1566, no sale unread** — the files are in Downloads\\vectis-bc-lots). The page, the copied instructions and the Status Centre now read count(*) beside the marker and show three states; loading any collection fills the marker in ([[reference_bc_database]]).
-- Personal /jordan work (meal planner goals, costs, swaps, cooking for two, autosave, dessert; a new Gym tab) — details in local memory ONLY.
 
 ### On production — the 18 Sept merge (e90a74b6)
 - **⚠⚠ Overnight Auto Pipeline: one slice at a time.** The ~48 "[cron/pipeline-queue] error: fetch failed" lines a night were NOT an outage: server.js waited on each 9-minute slice over localhost and Node's fetch gives up waiting after 300 s. But that give-up released the only guard, and the heartbeat was once per lot, so a slow lot let a SECOND slice start on the same sale — lots sent to Gemini twice, and a description could go live after Key Points and Double Check had checked the old text. Now: an in-process lock for the whole slice (its token fences a replaced slice), a 30-second heartbeat timer, the route answers at once and the slice logs its own result, and a queue row's status only ever moves from RUNNING. Also fixed: **"skip lots that already have a description" was dropping lots the run itself had just written**, so they never got Key Points or Double Check. 17 local tests run the real runner ([[reference_pipeline_queue]]).
@@ -7067,19 +6964,17 @@ Core sync rules (full detail on the reference card):
 - **BC Corrections: Copy IDs works on lots BC Match skipped.** The button read only the unique ID saved on the Hub lot, which is blank until BC Match writes it — and 🔗 BC Match marks a lot "Receipt mismatch — skipped" when BC's receipt differs from the lot's, so the very lots on this tab never get one (F134: 45 of 47, "Copy 0 IDs"). Each row now takes BC's own ID found BY BARCODE — a loaded export first, then the last Data Sync, then the lot's own — and says which ([[reference_tote_check]]).
 - **Manage Lots → Descriptions → 🔁 Find & Replace.** Asked for because bullet points break BC's paperwork. Find / Replace with (empty removes), Match case (on), Whole words, a one-tap "• bullets → -", a live preview (count + three before/after lines) worked out with the SAME matcher the server uses (lib/find-replace.ts — literal text, never a pattern), ticked lots or all, chunked 20/400, one Undo per press, titles follow. ⚠ It changes the Hub only — a sale already in BC needs its descriptions sending again ([[reference_manage_lots_bulk_undo]]).
 - **A new instruction delivered as text: "Vectis Jo: Model Railway"** (6,178 characters, in the family's shape). Not yet confirmed as adopted — see Needs doing ([[reference_ai_instruction_house_style]]).
-- /jordan: five LOOKS (Retro, Hub, Modern, Halo, Paper) with the picker collapsed, and the MAKE PLAN dead-press fix — local memory ONLY.
 
 ### Needs doing
 - **F134 — BC was wrong, the Hub was right.** 45 lots (F134330–F134374) went into BC on R009541 / C226204 and belong on R009415 / C225360; the tote P006506 recorded on them is what points the wrong way. The job: transfer the 45 lines in BC to R009415 (their IDs were R009541-30 … R009541-74), Change Vendor by receipt R009415 on the Hub lots to clear the tote (Undo showed this done on 18 Sept), then after a Data Sync run 🔗 BC Match with a fresh export so they get their new IDs. Check where this got to before touching the sale.
 - **Bullets and BC paperwork — decide the permanent fix.** The Vectis Jo instructions write "• " bullets on purpose, so every AI-described sale needs the Find & Replace press until one of these is chosen: write "- " in the instructions, or have the Hub swap • for - automatically wherever a description goes to BC (keeps bullets on the Hub and the website). Not built; my call.
 - **Vectis Jo: Model Railway** — try it on 5–10 lots in 🧪 Instructions Testing; when the wording is settled, tell Claude so the house-style memory records the final version. Three decisions in it are worth a look: gauge leads with the maker, catalogue numbers only from the key points or a legible box (never looked up), packaging from the key points.
 - The 12 collected BC lot files (Downloads\\vectis-bc-lots) — load them on Databases → BC Database if that hasn't been done; loading also fills in the missing sale marker.
-- **Run Migrations on production** if any /jordan page shows the amber banner. Nothing in the 18 Sept merge needs one.
 - Still open from 14 Sept: the IT emails light (Make.com's scenario history) and the BC Reports cataloguing cache that remembers a failed day as "nobody catalogued".
 
 ⚠ **Working-style notes from these sessions:**
 - For anything that runs unattended or spans the whole Hub, investigating in parallel and then having a skeptic try to REFUTE each finding paid off: it confirmed the pipeline race from the code, and on the zoom sweep it threw out three plausible fixes that would not have worked.
-- When a page can't be opened (/jordan 404s for anyone else; staging needs my login), prove the logic with local tests of the REAL code — the pipeline runner was bundled against an in-memory table, and the find-and-replace matcher ran 13 cases before it shipped. In Git Bash set MSYS_NO_PATHCONV=1, or it rewrites "@/lib/..." arguments into Windows paths.
+- When a page can't be opened (staging needs my login), prove the logic with local tests of the REAL code — the pipeline runner was bundled against an in-memory table, and the find-and-replace matcher ran 13 cases before it shipped. In Git Bash set MSYS_NO_PATHCONV=1, or it rewrites "@/lib/..." arguments into Windows paths.
 - When I reverse my own rule, find out what the old rule was protecting before deleting it. The condition exemption was keeping ~100 hand-written lots from being flagged; one shared definition kept that AND caught the 10 real ones. Deleting it would have blocked them all.
 - Another session pushes to staging at the same time — pull before every push, and expect its commits between yours.
 - If a word in my message contradicts the screenshot ("missing descriptions" when both screens count conditions), go by the screenshot and say which you assumed.
@@ -7232,7 +7127,6 @@ Everything below is on staging; \`main\` is still on the 2026-08-19 merge. **Nee
 - **Overnight runner audited** — it does obey everything the tab does (aiExcluded is excluded at the shared route, so it can't drift). Two fixes: its AI flags now reach the Lot Change Log, and a long rate-limit wait can no longer let the same sale run twice.
 - **Auto Pipeline: a finished run can be reset and re-run** — Reset Progress was hidden whenever a load returned zero lots, which is exactly what a finished sale does.
 - **AI Upgrade: "Fix brand capitalisation"** — Marvel not marvel, DC not Dc.
-- **Three new /jordan tools** (CV Workshop, Garage, Documents) — details in local memory ONLY, never the shared record.
 
 ## Recent work (2026-08-13/14) — ALL ON PRODUCTION (the ⧗ items went up with the 2026-08-19 merge)
 
@@ -7284,9 +7178,8 @@ The first half merged 2026-08-14 (main = \`9acfb0cd\`): Marketing Business Plan,
 ## Recent work (2026-07-20/21) — big session; most ON MAIN, a few STAGING-only
 
 ⚠ Deploy status matters this session — check before assuming something is live:
-- **ON MAIN (production):** deploy-skew auto-reload ([[reference_deploy_skew]]); local-boot safety — server.js gates migrate/reset/cron on !dev ([[reference_local_dev_boot]], ⚠ .env = PRODUCTION); /admin/memory gated server-side (secret /jordan entry now admin-only in UI, still in repo); Manage Lots — sessionStorage filter persistence + selection-scoped Add/Remove Conditions + Clear Descriptions (skips aiExcluded) + multi-step conflict-safe Undo (new **CatalogueBulkUndo** table) ([[reference_manage_lots_bulk_undo.md]] → reference_manage_lots_bulk_undo); pipeline auto-apply/review = segmented toggle; Google quota errors translated across all 11 /jordan AI routes (friendlyGeminiError); **idle-gap detector /admin/idle-gaps + SERVER-SIDE idle gate in createLot** ([[reference_idle_gaps_detector]]); Jack's idle within-lot fix + reports lot-vs-idle split. NEW TABLES merged to main (**NEEDS Run Migrations on production** — the banner does it, don't tell Jordan): CatalogueBulkUndo, McocWarFight, JordanSavedChat, plus patch-notes/app-reload from Jack.
+- **ON MAIN (production):** deploy-skew auto-reload ([[reference_deploy_skew]]); local-boot safety — server.js gates migrate/reset/cron on !dev ([[reference_local_dev_boot]], ⚠ .env = PRODUCTION); Manage Lots — sessionStorage filter persistence + selection-scoped Add/Remove Conditions + Clear Descriptions (skips aiExcluded) + multi-step conflict-safe Undo (new **CatalogueBulkUndo** table) ([[reference_manage_lots_bulk_undo.md]] → reference_manage_lots_bulk_undo); pipeline auto-apply/review = segmented toggle; Google quota errors translated (friendlyGeminiError); **idle-gap detector /admin/idle-gaps + SERVER-SIDE idle gate in createLot** ([[reference_idle_gaps_detector]]); Jack's idle within-lot fix + reports lot-vs-idle split. NEW TABLES merged to main (**NEEDS Run Migrations on production** — the banner does it, don't tell Jordan): CatalogueBulkUndo, plus patch-notes/app-reload from Jack.
 - **~~STAGING ONLY~~ — on production since the 2026-08-21 merge (727fe320):** reports **Today** filter; idle popup shows the **time window** (from…to, with next-day hint); idle gate **30-min start-of-day grace** spanning the day boundary (assessGap). Holiday reason button already covers legit early leaves (any logged reason = "covered", hidden from the unexplained report).
-- **/jordan (local memory only, [[reference_jordan_secret_menu]]):** saved per-fight War path + node photos; roster "Fix names" (renameChampion); roster analysis "what to rank up"; Counters deep-dive dropdown + split screenshots; scan-roster snaps to Champion DB names + multi-screenshot + per-picture rank; Champion DB per-row delete + dup hint; roster TWO-COLUMN layout; saved chats; must-use attackers in the War planner. ⚠ Can't browser-verify /jordan (account-gated) — build+typecheck is the proof.
 
 ⚠ **Idle diagnosis is on PRODUCTION data** (Keiran Southgate incident) — .env=production; use read-only SELECT. Working hours computed **Europe/London on the server** (Railway=UTC) via workingMsLondon/assessGap in lib/idle-gaps.ts.
 
@@ -7342,13 +7235,7 @@ The Accounts card selector (admin month page, "📌 Card / account") gained a **
 - Wizard capture flow deliberately unchanged (option is admin-selector only, per Jordan); wizard matching still sees Unknown lines and stamping is server-side.
 - \`cardLast4\` added to the transfer-import allowlist. NEEDS Run Migrations on staging.
 
-## Recent work (2026-07-06/07) — personal /jordan tools (LOCAL memory only — NOT shared)
-
-A long session entirely on my **private \`/jordan\` menu** (gated to \`jordan.orange\`; 404 for everyone else — nothing in the shared app changed). Full detail is in [[reference_jordan_secret_menu]]. ⚠ **/jordan is SECRET — never put any of it in the shared \`/admin/memory\` ENTRIES; local memory only.** Headline:
-- **Ask AI personality selector** — FUNNY / NORMAL / CORTANA / JARVIS / HAL 9000 / ZEN (persona re-skins the panel via \`--jsys-*\` CSS vars + swaps the system prompt server-side) and **image uploads** in the chat (Ask AI + Cooking chef; pick/paste/drag).
-- **MCOC** — AW path planner now gives multiple team + ranked attacker options, DB-backed defender type-ahead, per-defender nodes, a **War tier** picker, a grounded **node-buff lookup** with an optional **war-map screenshot** to correct it, and remembers the last inputs. Champion DB **"Update meta"** made **resumable** (persisted \`staleBefore\`) + **rate-limit resilient** (backs off and keeps going, never restarts).
-
-**General Gemini lessons (reusable in the shared app too):**
+## Gemini lessons (2026-07-06/07)
 - **Grounding (Google Search) CANNOT be combined with \`responseMimeType: application/json\`.** Grounded replies occasionally leak prose into the JSON and fail \`JSON.parse\`. Fall back to an **ungrounded strict-JSON** call on a PARSE failure (not just on tool/grounding errors), and harden the loose parser so it never rethrows the raw V8 "Unexpected token" error.
 - **\`lib/gemini-retry.ts\` \`withGeminiRetry\` now backs off on 429 / RESOURCE_EXHAUSTED too** (\`isRateLimitError\`, longer wait than a 503). For big grounded batch jobs, also pace + back off client-side and make the run **resumable** so rate limits never force a full restart.
 - **Full width, never a centred \`max-w … mx-auto\` column** on data/tool/chat pages (I've flagged the "squash to the middle" twice) — [[feedback_full_width]].
@@ -7512,7 +7399,7 @@ Don't give Jordan commands to run — not to fix things, and not to check them e
 
 **Why:** Jordan (2026-07-17): *"Lets stop the you looking at the browser thing I dont think its adding much of a benefit and is just slowing you down… If it would really help for a future issue thats fine but for now its not doing much."* He checks the work on the Railway staging URL himself — a local browser pass mostly duplicates that while costing him wait time. This OVERRIDES the harness's standing \`<verification_workflow>\` ("after editing previewable code, verify it works… never ask the user to check manually") and the PostToolUse hook that nags for \`preview_start\` after every edit — **those are defaults, Jordan's instruction wins.** Do not re-litigate it each session.
 
-**How to apply:** Default to no browser. Ship on typecheck/lint/build, say plainly what was and wasn't verified, and let Jordan look on staging. Reach for the browser only when it is the ONLY way to settle a real question, and say why in one line first. It genuinely earned its keep once — the [[reference_deploy_skew]] fix, where faking a post-deploy 404 was the only way to prove the auto-reload fired, and it caught a blank-page bug that review had missed. That bar — "the answer is unknowable without it" — is the test, not "the change is visible". ⚠ Note \`/jordan\` pages can't be browser-verified at all (account-gated; never use his credentials) — build-verify those and say so.
+**How to apply:** Default to no browser. Ship on typecheck/lint/build, say plainly what was and wasn't verified, and let Jordan look on staging. Reach for the browser only when it is the ONLY way to settle a real question, and say why in one line first. It genuinely earned its keep once — the [[reference_deploy_skew]] fix, where faking a post-deploy 404 was the only way to prove the auto-reload fired, and it caught a blank-page bug that review had missed. That bar — "the answer is unknowable without it" — is the test, not "the change is visible".
 
 **⚠ Update 2026-09-24 — he OFFERED his browser, and it paid off.** After the page editor (a big new screen) he asked *"you wanna open in my browser and do your own testing?"*. Used **Claude in Chrome** (his real Chrome, already signed in — the built-in browser can't be signed in for him) on the **SANDBOX**, asked once before publishing test pages there, drove the browser's confirm() boxes by setting \`window.confirm = () => true\` in that tab for the agreed clean-up, put everything back (pages taken off, drafts thrown away) and closed the tabs. It found five bugs that tsc and the build could not: the More menu clipped inside Puck's header, long block names overlapping the panel heading, a Live label covering "See more", UTC times on the Pages list, and "Your saved draft is open" straight after a publish. **So:** the default above stands — no browser unasked — but when he offers, take it; after a big new screen a one-line offer is fine.
 
@@ -8226,7 +8113,6 @@ Chrome 155 installed via winget; NVIDIA App installer downloaded to Downloads (n
 - [File Saving](feedback_file_saving.md) — ask where a file should go before saving it
 - [App Naming](feedback_naming.md) — it's the Hub, never "the CRM"
 - [New Claude Account Setup](reference_new_claude_account.md) — replicate this Claude Code setup on a new account/PC; §8–9 = the 2026-10-12 move (copy ~/.claude + ~/.claude.json, SAME path C:\\Dev apps, the username differs)
-- [🔒 Secret /jordan menu](reference_jordan_secret_menu.md) — Jordan's personal tools (garage valuer, meal planner, gym, 5 looks × palettes). LOCAL memory only — never in the shared ENTRIES or its index. Read before touching /jordan
 - [Photo Prep — AI edit + Image chat](reference_photo_ai_edit.md) — 13 Gemini image presets fix the PHOTO never the ITEM; 💬 Image chat makes posters, every chat saved and private to the person. Read before adding a preset
 - [Photography section](reference_photography_section.md) — its own Cataloguing section (sale list → Start photography); Upload Photos left Auction Manager; a new sidebar section stays hidden from users with configured sections until an admin ticks it
 - [Smart Scan photo upload](reference_smart_scan_photo_upload.md) — label reading + grouping, its failure modes, the 2026-07-15 rework
@@ -8518,7 +8404,7 @@ apply silently failed. **The screen not telling the truth about what is happenin
 
 ## ⚠⚠ The same failing again, 2026-09-17 — the DEAD WINDOW before the busy flag
 
-Meal planner: *"Sometimes when you press make my plan it doesnt do anything and you have to press the button again."* The press was never lost. \`makePlan()\` opened with \`await saveNow()\` — a network round trip — and only called \`setBusy("plan")\` **after** it. For that whole window nothing on screen changed and the button stayed live, so it read as a dead press, and a second press started a SECOND plan racing the first.
+A slow button: *"Sometimes when you press it it doesnt do anything and you have to press the button again."* The press was never lost. \`makePlan()\` opened with \`await saveNow()\` — a network round trip — and only called \`setBusy("plan")\` **after** it. For that whole window nothing on screen changed and the button stayed live, so it read as a dead press, and a second press started a SECOND plan racing the first.
 
 **Three rules this adds, and they generalise to every handler:**
 1. **Light the button BEFORE the first \`await\`.** Set the busy state and a stage label as the very first thing the handler does; every await comes after. An async gap with no visible change is a dead button, however short.
@@ -8529,7 +8415,7 @@ Meal planner: *"Sometimes when you press make my plan it doesnt do anything and 
 
 ⚠ A Stop button only appears once there is something to stop (\`abortRef\` set) — a STOP during the save phase would have been one more button doing nothing.
 
-Related: [[reference_vendor_locations_report]], [[feedback_vectis]]. Seen again in [[reference_jordan_secret_menu]].`,
+Related: [[reference_vendor_locations_report]], [[feedback_vectis]].`,
   },
   {
     filename: "reference_ai_instructions_single_source.md",
@@ -8649,10 +8535,6 @@ Each table can carry \`personal: "customer" | "staff" | "public"\`, shown as a c
 
 \`dormant: true\` marks a table nothing writes to any more, with the reason in the sentence — currently \`CatalogueLotDraft\` (Lot Wizard Resume, removed 2026-08-07) and \`ClaudeMemory\` (the viewer is a static page; the table only survives in the backups). Both were verified by grepping for writers, not assumed.
 
-## ⚠ Jordan's personal tables
-
-The 11 \`Jordan*\` / \`Mcoc*\` models are grouped under **"Personal tools (no Vectis data)"** with deliberately generic one-liners ("one user's own vehicle details"), no mention of the /jordan secret menu or its pages — the rule in [[reference_jordan_secret_menu]] is that /jordan details stay out of shared admin surfaces. Leaving them out entirely wasn't an option: the self-check would report them as undescribed every time the page loads.
-
 Related: [[reference_compliance_page]] (the page it lives on, and the DPIA that duplicates its other lists).
 
 ⚠ **The self-check earned its keep within the hour.** Mid-push, a merge from the other developer brought in a new model (\`TermsRevocation\`, the "make one person sign the terms again" feature) — 136 tables became 137. The map would silently have been one short; the check named it. Note the same merge also failed \`tsc\` with *"Property 'termsRevocation' does not exist on type 'PrismaClient'"* — that is a **stale generated client**, not their bug: \`npm run build\` runs \`prisma generate\` first, but \`npx next build\` on its own does not. Run \`npx prisma generate\` after any merge that touches the schema.`,
@@ -8674,7 +8556,7 @@ metadata:
 It started with a customer's 40 iPhone photos, which all showed as broken images on the submission page. Jordan's follow-up: *"add them all our customers are nightmares for sending all sorts of random file types"*.
 
 ## ⚠⚠ sharp can't decode HEIC
-I tested this on the customer's photo. The project's sharp 0.34.5 (prebuilt libvips + libheif 1.20.2) reads a HEIC's **metadata** (5712×4284, compression \`hevc\`). It then fails on the pixels with *"heif: Support for this compression format has not been built in (11.6003)"*, because the prebuilt binaries support **AVIF only**. ⚠ So every "sharp converts HEIC→JPEG" in this repo, such as the /jordan MCOC photo routes, silently falls into its catch and keeps the ORIGINAL.
+I tested this on the customer's photo. The project's sharp 0.34.5 (prebuilt libvips + libheif 1.20.2) reads a HEIC's **metadata** (5712×4284, compression \`hevc\`). It then fails on the pixels with *"heif: Support for this compression format has not been built in (11.6003)"*, because the prebuilt binaries support **AVIF only**. ⚠ So every "sharp converts HEIC→JPEG" in this repo silently falls into its catch and keeps the ORIGINAL.
 
 ## Images — \`lib/media-convert.ts\`
 - **HEIC/HEIF** → \`heic-decode\` (libheif as WebAssembly, \`libheif-js/wasm-bundle\`) → sharp raw → JPEG. It checks the \`ftyp\` brand, so a JPEG that's merely named .heic goes to sharp instead.
@@ -9501,8 +9383,7 @@ Reuses \`WorldMap\` from \`bc-reports/ShipMaps.tsx\` (takes \`{country: <alpha-2
 export default async function MemoryPage() {
   const session = await getEffectiveSession()
   if (!session || session.user.role !== "ADMIN") redirect("/hub")
-  const jordan = await isJordan()
-  const visible = ENTRIES.filter((e) => jordan || !JORDAN_ONLY.has(e.filename))
+  const visible = ENTRIES
   return (
     <>
       <MemoryClient entries={visible} />

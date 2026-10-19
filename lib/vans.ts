@@ -4,8 +4,7 @@ import { getEffectiveSession } from "@/lib/impersonation"
 
 // Facilities → Vans. Three collection vans: what's due, what's been done, who has it out.
 // Deliberately small (Jordan, 2026-10-02: "we only use 3 vans so its not some massive vehicle
-// management system just something basic"). Built from the /jordan garage with the personal
-// bits (valuer, advert, watch list) left out and a sign-out added.
+// management system just something basic"), with a sign-out added.
 
 export const VAN_RECORD_KINDS = ["MOT", "SERVICE", "REPAIR", "TAX", "INSURANCE", "OTHER"] as const
 export const VAN_FILE_PREFIX = "vans/"
