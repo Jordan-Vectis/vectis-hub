@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-16, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-19, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a8318888268ed0ff90ca5d8cac71c737683673e2","author":"Jordan Orange","date":"2026-10-19T10:50:38+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"3752262cc1f42b93666ab29f276ac631f884667d","author":"Jordan Orange","date":"2026-10-19T10:50:36+01:00","subject":"Remove the personal /jordan menu, its routes, tables and notes"},
+  {"sha":"fc7227b7b4dd3c7c2714a68154217b824549f296","author":"jack-vectis","date":"2026-10-19T10:33:24+01:00","subject":"Goods In: scanner sign-in cards — scan a QR card to sign in to the handheld scanner"},
   {"sha":"b58dd4715cf8eacc513ea660cf15b2d405f80df6","author":"jack-vectis","date":"2026-10-16T15:54:52+01:00","subject":"Goods In handheld scanner: the /scan screen and the Vectis Scanner Android app"},
   {"sha":"9796646cdbe209a594091229f42bbea295613771","author":"jack-vectis","date":"2026-10-16T11:18:37+01:00","subject":"Goods In: Fees & agreement tab on the customer page, and a tidier check-in"},
   {"sha":"859ace046ee71d170b14075a509431b33da53aa9","author":"jack-vectis","date":"2026-10-16T10:40:53+01:00","subject":"Fix the Goods In agreement migration: the foreign-key step lost one $ of its $$ quoting"},
