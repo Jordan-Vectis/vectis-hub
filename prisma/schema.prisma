@@ -983,6 +983,16 @@ model AppCard {
   description String?
 }
 
+// Singleton (id = "global") — the admin-set home page layout: the sections (order, name, icon,
+// colours, hidden, added/removed) and each app card's section, icon and colours. Everything
+// here is an override of lib/app-cards.ts; the code values apply when nothing is stored.
+model HomePageLayout {
+  id        String   @id @default("global")
+  data      Json
+  updatedAt DateTime @default(now()) @updatedAt
+  updatedBy String?
+}
+
 // Singleton (id = "global") — stores idle-timer global defaults and the
 // admin-managed reasons list. Created on first GET if absent.
 model IdleTimerConfig {

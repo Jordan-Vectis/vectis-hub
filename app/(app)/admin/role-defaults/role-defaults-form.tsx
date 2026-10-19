@@ -4,7 +4,8 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { ALL_APPS, APP_SECTIONS, WAREHOUSE_ROLES } from "@/lib/apps"
 import type { AppKey, WarehouseRole } from "@/lib/apps"
-import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
+import { APP_CARD_DEFS } from "@/lib/app-cards"
+import type { PermissionGroup } from "@/lib/home-layout"
 
 // Convert a role key (e.g. "WAREHOUSE_MANAGER") to a display label
 // ("Warehouse Manager"). Keys that are already nicely formatted pass through.
@@ -21,6 +22,7 @@ interface Props {
   allRoles: string[]
   defaults: Record<string, { allowedApps: string[]; appPermissions: any } | undefined>
   users: User[]
+  homeSections: PermissionGroup[]
 }
 
 function buildPermissionsPayload(
@@ -40,11 +42,12 @@ function buildPermissionsPayload(
   return perms
 }
 
-function RolePanel({ roleKey, roleLabel, initial, users }: {
+function RolePanel({ roleKey, roleLabel, initial, users, homeSections }: {
   roleKey: string
   roleLabel: string
   initial: { allowedApps: string[]; appPermissions: any } | undefined
   users: User[]
+  homeSections: PermissionGroup[]
 }) {
   const ALL_USER_CARD_KEYS = APP_CARD_DEFS.filter(c => c.allUsers).map(c => c.key)
   // "configured" = the HUB_CARDS key exists in appPermissions, even if its
@@ -80,18 +83,20 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
   const roleUsers = users.filter(u => u.role === roleKey)
 
   // Build unified sections: app-access items + hub-card-visibility items together
+  const sectionOfCard = new Map(homeSections.flatMap(s => s.cardKeys.map(k => [k, s.key] as const)))
   const appKeyToSection: Partial<Record<string, string>> = {}
   for (const card of APP_CARD_DEFS) {
-    if (card.appKey && card.group) appKeyToSection[card.appKey] = card.group
+    const g = sectionOfCard.get(card.key)
+    if (card.appKey && g) appKeyToSection[card.appKey] = g
   }
-  const sections = SECTION_DEFS.map(s => ({
+  const sections = homeSections.map(s => ({
     ...s,
     items: [
       ...ALL_APPS
         .filter(a => appKeyToSection[a.key] === s.key)
         .map(a => ({ type: "app" as const, key: a.key, label: a.label, icon: "" })),
       ...APP_CARD_DEFS
-        .filter(c => c.allUsers && c.group === s.key)
+        .filter(c => c.allUsers && sectionOfCard.get(c.key) === s.key)
         .map(c => ({ type: "hub" as const, key: c.key, label: c.defaultLabel, icon: c.icon })),
     ],
   })).filter(s => s.items.length > 0)
@@ -323,7 +328,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
   )
 }
 
-export default function RoleDefaultsForm({ allRoles, defaults, users }: Props) {
+export default function RoleDefaultsForm({ allRoles, defaults, users, homeSections }: Props) {
   const router = useRouter()
   const [pendingRoles, setPendingRoles] = useState<string[]>([])  // locally-added rows the user hasn't saved yet
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -438,6 +443,7 @@ export default function RoleDefaultsForm({ allRoles, defaults, users }: Props) {
             roleLabel={roleLabel(roleKey)}
             initial={defaults[roleKey]}
             users={users}
+            homeSections={homeSections}
           />
         </div>
       ))}

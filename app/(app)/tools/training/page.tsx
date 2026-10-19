@@ -2,7 +2,8 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { hasAppAccess, type AppKey } from "@/lib/apps"
-import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
+import { permissionGroups } from "@/lib/home-layout"
+import { getHomeLayout } from "@/lib/home-layout-server"
 import { ensureTrainingSeed } from "@/lib/actions/training"
 import { loadTrainingModules, loadMyTrainingProgress } from "@/lib/training-data"
 import TrainingHome, { type HomeModule } from "./training-home"
@@ -36,8 +37,9 @@ export default async function TrainingPage() {
   // Which Hub section each panel sits in, so the courses are grouped the way the Hub already
   // groups the tools. Read off the card definitions rather than stored on the module — one
   // source of truth, and a card that moves section moves its course with it.
-  const sectionOf = new Map(APP_CARD_DEFS.map(c => [c.key, c.group ?? ""]))
-  const sectionLabel = new Map(SECTION_DEFS.map(sd => [sd.key as string, sd.label]))
+  const groups = permissionGroups(await getHomeLayout())
+  const sectionOf = new Map(groups.flatMap(g => g.cardKeys.map(k => [k, g.key] as const)))
+  const sectionLabel = new Map(groups.map(g => [g.key, g.label]))
   const doneBy = new Map(progress.map(p => [p.moduleId, p]))
 
   const rows: HomeModule[] = modules.map(m => {

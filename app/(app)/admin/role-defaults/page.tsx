@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import RoleDefaultsForm from "./role-defaults-form"
+import { permissionGroups } from "@/lib/home-layout"
+import { getHomeLayout } from "@/lib/home-layout-server"
 
 export default async function RoleDefaultsPage() {
   const session = await auth()
@@ -42,7 +44,7 @@ export default async function RoleDefaultsPage() {
           ADMIN is a system role with full access and cannot be edited here.
         </p>
       </div>
-      <RoleDefaultsForm allRoles={allRoles} defaults={defaultsByRole} users={users} />
+      <RoleDefaultsForm allRoles={allRoles} defaults={defaultsByRole} users={users} homeSections={permissionGroups(await getHomeLayout())} />
     </div>
   )
 }

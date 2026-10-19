@@ -1,7 +1,9 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
-import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
+import { APP_CARD_DEFS } from "@/lib/app-cards"
+import { cardSection } from "@/lib/home-layout"
+import { getHomeLayout } from "@/lib/home-layout-server"
 import { getEffectiveSession } from "@/lib/impersonation"
 
 export const sectionSlug = (key: string) => key.toLowerCase().replace(/_/g, "-")
@@ -24,15 +26,20 @@ export async function getHubCards() {
       ? null  // admins always see everything
       : (dbUser?.appPermissions as any)?.HUB_CARDS?.visible ?? null
 
-  const dbCards = await prisma.appCard.findMany()
+  const [dbCards, layout] = await Promise.all([prisma.appCard.findMany(), getHomeLayout()])
   const dbMap   = Object.fromEntries(dbCards.map(c => [c.key, c]))
 
   // Merge DB settings with static defaults
   const cards = APP_CARD_DEFS
     .map((def, i) => {
-      const db = dbMap[def.key]
+      const db    = dbMap[def.key]
+      const style = layout.cards[def.key] ?? {}
       return {
         ...def,
+        group:       cardSection(layout, def),
+        icon:        style.icon || def.icon,
+        colour:      style.colour ?? null,
+        textColour:  style.textColour ?? null,
         order:       db?.order   ?? i,
         visible:     db?.visible ?? true,
         pinned:      db?.pinned  ?? false,
@@ -59,7 +66,8 @@ export async function getHubCards() {
     })
 
   const standaloneCards = cards.filter(c => !c.group)
-  const grouped = SECTION_DEFS
+  const grouped = layout.sections
+    .filter(s => !s.hidden)
     .map(s => ({ ...s, cards: cards.filter(c => c.group === s.key) }))
     .filter(s => s.cards.length > 0)
 
@@ -72,6 +80,11 @@ export function AppCardTile({ app }: { app: HubCard }) {
   const cardClass = `relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center min-h-[320px]
     transition-all duration-200 hover:shadow-xl ${app.glow} hover:-translate-y-0.5`
 
+  // An admin-picked colour (Admin → Home Page Cards) replaces the built-in classes.
+  const colour = app.colour ? { borderColor: app.colour } : undefined
+  const btn    = app.colour ? { backgroundColor: app.colour } : undefined
+  const text   = app.textColour ? { color: app.textColour } : undefined
+
   const inner = (
     <>
       {app.pinned && (
@@ -82,16 +95,16 @@ export function AppCardTile({ app }: { app: HubCard }) {
 
       <div className={`text-5xl mb-4 ${app.iconBg}`}>{app.icon}</div>
 
-      <h2 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">{app.label}</h2>
+      <h2 className="text-lg font-bold mb-2 text-gray-900 dark:text-white" style={text}>{app.label}</h2>
 
-      <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-6 flex-1">{app.description}</p>
+      <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-6 flex-1" style={text ? { ...text, opacity: 0.8 } : undefined}>{app.description}</p>
 
       {app.comingSoon ? (
         <span className="w-full text-center text-sm font-semibold text-gray-500 bg-gray-200 dark:bg-gray-800 py-2 px-4 rounded-lg cursor-not-allowed">
           Coming Soon
         </span>
       ) : (
-        <span className={`w-full text-center text-sm font-semibold text-white py-2 px-4 rounded-lg transition-colors ${app.btnBg}`}>
+        <span className={`w-full text-center text-sm font-semibold text-white py-2 px-4 rounded-lg transition-colors ${app.colour ? "hover:brightness-110" : app.btnBg}`} style={btn}>
           Open {app.label} →
         </span>
       )}
@@ -101,8 +114,8 @@ export function AppCardTile({ app }: { app: HubCard }) {
   // The whole card is the click target (not just the button) so a click
   // anywhere on it navigates. Coming-soon cards aren't links.
   return app.comingSoon ? (
-    <div className={`${cardClass} cursor-not-allowed`}>{inner}</div>
+    <div className={`${cardClass} cursor-not-allowed`} style={colour}>{inner}</div>
   ) : (
-    <Link href={app.href} className={`${cardClass} cursor-pointer`}>{inner}</Link>
+    <Link href={app.href} className={`${cardClass} cursor-pointer`} style={colour}>{inner}</Link>
   )
 }

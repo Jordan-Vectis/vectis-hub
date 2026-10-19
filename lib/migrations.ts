@@ -2365,6 +2365,14 @@ export const MIGRATIONS = [
       EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', t);
     END LOOP;
   END $$`,
+  // Admin → Home Page Cards — the whole home page layout as one JSON document (2026-10-19).
+  `CREATE TABLE IF NOT EXISTS "HomePageLayout" (
+    "id"        TEXT NOT NULL DEFAULT 'global',
+    "data"      JSONB NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedBy" TEXT,
+    CONSTRAINT "HomePageLayout_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
