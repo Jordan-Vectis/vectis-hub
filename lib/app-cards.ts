@@ -1,14 +1,14 @@
 import type { AppKey } from "@/lib/apps"
 
 export const SECTION_DEFS = [
-  { key: "CATALOGUING_AI",   label: "Cataloguing & AI" },
-  { key: "PHOTOGRAPHY",      label: "Photography" },
-  { key: "REPORTS",          label: "Reports" },
-  { key: "BUSINESS_CENTRAL", label: "Business Central" },
-  { key: "OPERATIONS",       label: "Operations" },
-  { key: "FACILITIES",       label: "Facilities" },
-  { key: "AUCTION",          label: "Auction" },
-  { key: "IT_ADMIN",         label: "IT & Admin" },
+  { key: "CATALOGUING_AI",   label: "Cataloguing & AI", icon: "📝" },
+  { key: "PHOTOGRAPHY",      label: "Photography",      icon: "📸" },
+  { key: "REPORTS",          label: "Reports",          icon: "📊" },
+  { key: "BUSINESS_CENTRAL", label: "Business Central", icon: "🏢" },
+  { key: "OPERATIONS",       label: "Operations",       icon: "📦" },
+  { key: "FACILITIES",       label: "Facilities",       icon: "🏠" },
+  { key: "AUCTION",          label: "Auction",          icon: "🔨" },
+  { key: "IT_ADMIN",         label: "IT & Admin",       icon: "🛠️" },
 ] as const
 
 export type SectionKey = typeof SECTION_DEFS[number]["key"]
