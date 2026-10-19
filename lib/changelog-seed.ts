@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f18d8c8690c8d0013f8c33d95c6c06b2e15a6a5b","author":"Jordan Orange","date":"2026-10-19T16:03:39+01:00","subject":"Home page: every row of cards the same height"},
   {"sha":"091282f03be4df2c48a1773b3c4ec679b4bbe949","author":"Jordan Orange","date":"2026-10-19T16:01:08+01:00","subject":"Home page editor opens from a pencil in the top bar"},
   {"sha":"1208fa298dbb954d376dfd5cb6536d92eb0b9e7c","author":"Jordan Orange","date":"2026-10-19T15:54:59+01:00","subject":"Edit the home page on the home page itself"},
   {"sha":"f020646870d1f0ec5cf0ee66eedec81d4256d584","author":"Jordan Orange","date":"2026-10-19T15:38:43+01:00","subject":"Home Page Cards: sections, colours and moving apps, for everyone"},

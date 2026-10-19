@@ -1,31 +1,41 @@
 ﻿"use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState } from "react"
 
-export default function RunMigrationsButton() {
-  const [msg, setMsg] = useState<string | null>(null)
-  const [pending, start] = useTransition()
+// A tile in the Health & updates group on the Admin page. (The amber banner offers the same.)
+export default function RunMigrationsButton({ colour }: { colour: string }) {
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [pending, setPending] = useState(false)
+  const busy = useRef(false)
 
-  function run() {
+  async function run() {
+    if (busy.current) return
+    busy.current = true
+    setPending(true)
     setMsg(null)
-    start(async () => {
+    try {
       const res = await fetch("/api/admin/run-migrations", { method: "POST" })
-      const data = await res.json()
-      if (res.ok) setMsg("Done — all migrations applied.")
-      else setMsg(data.error ?? "Failed")
-    })
+      const data = await res.json().catch(() => ({}))
+      setMsg(res.ok ? { ok: true, text: "Done — all applied" } : { ok: false, text: data.error ?? `Failed (${res.status})` })
+    } catch (e: any) {
+      setMsg({ ok: false, text: e?.message ?? "Failed" })
+    } finally {
+      busy.current = false
+      setPending(false)
+    }
   }
 
   return (
-    <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 flex items-center gap-4">
-      <button
-        onClick={run}
-        disabled={pending}
-        className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400 hover:text-gray-800 dark:hover:text-gray-100 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50"
-      >
-        {pending ? "Running…" : "Run Migrations"}
-      </button>
-      {msg && <span className="text-sm text-gray-500 dark:text-gray-400">{msg}</span>}
-    </div>
+    <button onClick={run} disabled={pending}
+      className="text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 border-l-4 rounded-xl p-3 min-h-[76px] flex items-center gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-60"
+      style={{ borderLeftColor: colour }}>
+      <span className="text-2xl shrink-0">🧱</span>
+      <span className="min-w-0">
+        <span className="block font-semibold text-sm text-gray-900 dark:text-gray-100">{pending ? "Running…" : "Run Migrations"}</span>
+        <span className={`block text-xs truncate ${msg ? (msg.ok ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400") : "text-gray-500 dark:text-gray-400"}`}>
+          {msg?.text ?? "Apply waiting database updates"}
+        </span>
+      </span>
+    </button>
   )
 }
