@@ -1,15 +1,29 @@
-import { AppCardTile, CARD_GRID, getHubCards, sectionSlug } from "./hub-cards"
+import Link from "next/link"
+import { AppCardTile, CARD_GRID, EDIT_BUTTON, getEditorData, getHubCards, sectionSlug } from "./hub-cards"
 import { SectionTile } from "./section-tile"
+import HomeEditor from "./home-editor"
 
-export default async function HubPage() {
-  const { standaloneCards, grouped } = await getHubCards()
+export default async function HubPage({ searchParams }: { searchParams: Promise<{ edit?: string; section?: string }> }) {
+  const { edit, section } = await searchParams
+  const { standaloneCards, grouped, isAdmin } = await getHubCards()
+
+  // Edit mode — admins only; anyone else just gets the normal home page.
+  if (edit && isAdmin) {
+    const { cards, layout } = await getEditorData()
+    return <HomeEditor initialCards={cards} initialLayout={layout} startSection={section ?? null} />
+  }
 
   // Someone with only one section skips the extra click and sees its apps straight away.
   const onlySection = grouped.length === 1 ? grouped[0] : null
 
   return (
     <div className="relative min-h-screen bg-gray-100 dark:bg-[#111318]">
-      <div className="w-full px-6 pt-10 pb-16 space-y-5">
+      <div className="w-full px-6 pt-6 pb-16 space-y-5">
+        {isAdmin && (
+          <div className="flex justify-end">
+            <Link href="/hub?edit=1" className={EDIT_BUTTON}>✏️ Edit home page</Link>
+          </div>
+        )}
         <div className={CARD_GRID}>
           {onlySection
             ? onlySection.cards.map(app => <AppCardTile key={app.key} app={app} />)

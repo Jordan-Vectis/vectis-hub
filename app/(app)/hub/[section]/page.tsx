@@ -1,10 +1,10 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { AppCardTile, CARD_GRID, getHubCards, sectionSlug } from "../hub-cards"
+import { AppCardTile, CARD_GRID, EDIT_BUTTON, getHubCards, sectionSlug } from "../hub-cards"
 
 export default async function HubSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section: slug } = await params
-  const { grouped } = await getHubCards()
+  const { grouped, isAdmin } = await getHubCards()
   // Only sections this person has at least one app in — anything else is a 404.
   const section = grouped.find(s => sectionSlug(s.key) === slug)
   if (!section) notFound()
@@ -19,7 +19,8 @@ export default async function HubSectionPage({ params }: { params: Promise<{ sec
           >
             ← Back to Hub
           </Link>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">{section.icon} {section.label}</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white flex-1">{section.icon} {section.label}</h1>
+          {isAdmin && <Link href={`/hub?edit=1&section=${section.key}`} className={EDIT_BUTTON}>✏️ Edit this section</Link>}
         </div>
         <div className={CARD_GRID}>
           {section.cards.map(app => <AppCardTile key={app.key} app={app} />)}
