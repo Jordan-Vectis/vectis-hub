@@ -87,8 +87,8 @@ export function buzz(tone: Sound) {
   }
 }
 
-/** Beep (when sound is on) and buzz. */
-export function signal(tone: Sound, sound: boolean) {
+/** Beep (when sound is on) and buzz (when vibrate is on — Settings → Sound & alerts). */
+export function signal(tone: Sound, sound: boolean, vibrate = true) {
   if (sound) beep(tone)
-  buzz(tone)
+  if (vibrate) buzz(tone)
 }

@@ -122,6 +122,8 @@ export type Snapshot = {
   nativeAvailable: boolean | null
   takeDirect: boolean
   sound: boolean
+  /** Buzz on each scan (Settings → Sound & alerts). */
+  vibrate: boolean
   /** The Hub says someone else is signed in on this device now (another tab / the sign-in page). */
   userMismatch: string | null
   switching: SwitchState
@@ -134,6 +136,7 @@ export type Snapshot = {
 }
 
 const SOUND_KEY = "vectis-scan-sound"
+const VIBRATE_KEY = "vectis-scan-vibrate"
 const DIRECT_KEY = "vectis-scan-direct"
 const BOOT_KEY = "bootstrap"
 const BOOT_REFRESH_MS = 10 * 60_000
@@ -260,6 +263,7 @@ export class ScanController {
       nativeAvailable: null,
       takeDirect: true,
       sound: true,
+      vibrate: true,
       userMismatch: null,
       switching: "idle",
       stillYou: false,
@@ -293,6 +297,7 @@ export class ScanController {
     this.set({
       hub: hubInfo(location.hostname),
       sound: readPref(SOUND_KEY, true),
+      vibrate: readPref(VIBRATE_KEY, true),
       takeDirect: readPref(DIRECT_KEY, true),
       online: navigator.onLine !== false,
     })
@@ -582,7 +587,7 @@ export class ScanController {
     this.ended = true
     try { sessionStorage.setItem(ENDED_KEY, String(Date.now())) } catch { /* this page only */ }
     this.set({ stillYou: false, switching: "idle", banner: this.banner("error", "Signed out", `${this.me.name} isn't signed in on this scanner any more. Opening the sign-in screen…`, null) })
-    signal("error", this.s.sound)
+    signal("error", this.s.sound, this.s.vibrate)
     const gen = this.gen
     void (async () => {
       // The saved copy of the screen is this person's — and must not open again in place of the sign-in screen.
@@ -603,7 +608,14 @@ export class ScanController {
     const on = !this.s.sound
     writePref(SOUND_KEY, on)
     this.set({ sound: on })
-    if (on) signal("ok", true)
+    if (on) signal("ok", true, false)
+  }
+
+  toggleVibrate = () => {
+    const on = !this.s.vibrate
+    writePref(VIBRATE_KEY, on)
+    this.set({ vibrate: on })
+    if (on) signal("ok", false, true)
   }
 
   toggleDirect = async () => {
@@ -684,7 +696,7 @@ export class ScanController {
     this.set({ banner: this.banner(tone, title, detail, code, opts.scanId ?? null, opts.actions ?? []) })
     if (opts.quiet) return
     const sound: Sound | null = opts.sound ?? (tone === "info" ? null : tone)
-    if (sound) signal(sound, this.s.sound)
+    if (sound) signal(sound, this.s.sound, this.s.vibrate)
   }
 
   bannerAction = (id: string) => {
@@ -1069,7 +1081,7 @@ export class ScanController {
     const n = this.s.waitingMine
     if (n > 0) {
       if (!this.s.online) {
-        this.say("error", `Send the ${n} waiting ${n === 1 ? "scan" : "scans"} first`, `They were scanned by ${this.me.name}, so they must be sent before someone else signs in — and this scanner is offline. Get back on Wi-Fi, then press Send now.`, null)
+        this.say("error", `Send the ${n} waiting ${n === 1 ? "scan" : "scans"} first`, `They were scanned by ${this.me.name}, so they must be sent before someone else signs in — and this scanner is offline. Get back on Wi-Fi, then press Send now (Settings, the cog top right).`, null)
         return
       }
       this.set({ switching: "sending", banner: this.banner("info", `Sending the ${n} waiting ${n === 1 ? "scan" : "scans"} first…`, "Someone else can sign in once they've gone.", null) })
@@ -1085,7 +1097,7 @@ export class ScanController {
       }
       if (left > 0) {
         this.set({ switching: "idle" })
-        this.say("error", `Send the ${left} waiting ${left === 1 ? "scan" : "scans"} first`, `They couldn't be sent: ${this.s.sync.problem?.message ?? "the Hub didn't take them"}. Try Send now again.`, null)
+        this.say("error", `Send the ${left} waiting ${left === 1 ? "scan" : "scans"} first`, `They couldn't be sent: ${this.s.sync.problem?.message ?? "the Hub didn't take them"}. Try Send now again (Settings, the cog top right).`, null)
         return
       }
     }

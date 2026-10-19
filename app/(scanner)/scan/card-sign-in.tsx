@@ -7,7 +7,8 @@ import { signal, unlockSound, type Sound } from "@/lib/goods-in/scan-client/feed
 import { startScanner } from "@/lib/goods-in/scan-client/scanner"
 import { finishCardSignIn, signOutOfScanner } from "./session"
 import SignInPanel from "./sign-in"
-import { btn, btnTall } from "./ui"
+import { QrIcon } from "./icons"
+import { btn, btnTall, muted } from "./ui"
 
 // "Scan your sign-in card" — how someone signs in on the handheld scanner, which has no keyboard.
 // A sign-in card is a printed QR code (Goods In → Scanner cards); scanning it signs that person in to
@@ -31,13 +32,19 @@ type Status =
   | { kind: "done"; name: string }
 
 const SOUND_KEY = "vectis-scan-sound"
+const VIBRATE_KEY = "vectis-scan-vibrate"
 /** The same refused card scanned again this soon gets the same answer without asking the Hub again. */
 const SAME_REFUSAL_MS = 10_000
 
+/** Beep and buzz as Settings → Sound & alerts says (both on until someone turns them off). */
 function beepIf(tone: Sound) {
-  let on = true
-  try { on = localStorage.getItem(SOUND_KEY) !== "0" } catch { /* default: on */ }
-  signal(tone, on)
+  let sound = true
+  let vibrate = true
+  try {
+    sound = localStorage.getItem(SOUND_KEY) !== "0"
+    vibrate = localStorage.getItem(VIBRATE_KEY) !== "0"
+  } catch { /* default: on */ }
+  signal(tone, sound, vibrate)
 }
 
 export default function CardSignIn({ mode, current, eyebrow, title = "Scan your sign-in card", intro, notice, onCancel, beforeLeave, connect }: {
@@ -129,7 +136,7 @@ export default function CardSignIn({ mode, current, eyebrow, title = "Scan your 
   const Heading = mode === "screen" ? "h1" : "h2"
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-6 space-y-5">
+    <div className="mx-auto w-full max-w-md px-4 py-4 space-y-3">
       {mode === "screen" && (
         // The box keyboard-style scanners type into (as on the scanner screen): no on-screen keyboard,
         // out of the way, given the cursor back whenever nothing else is being typed in. Letters as
@@ -153,14 +160,16 @@ export default function CardSignIn({ mode, current, eyebrow, title = "Scan your 
         <>
           <SignInPanel title="Sign in with username and password" onCancel={() => setPassword(false)} beforeLeave={beforeLeave} />
           {status.kind !== "idle" && <StatusBox status={status} />}
-          <p className="text-base text-gray-600 dark:text-gray-400">Or scan your sign-in card — it works here too.</p>
+          <p className={muted}>Or scan your sign-in card — it works here too.</p>
         </>
       ) : (
         <>
           <div>
-            {eyebrow && <p className="text-sm font-bold uppercase tracking-wide text-gray-600 dark:text-gray-400">{eyebrow}</p>}
-            <Heading className="text-3xl font-extrabold leading-tight text-gray-900 dark:text-white">{title}</Heading>
-            <p className="mt-2 text-lg leading-snug text-gray-700 dark:text-gray-300">
+            {(eyebrow ?? (mode === "screen" ? "Vectis Scanner" : null)) && (
+              <p className="text-[12px] font-bold uppercase tracking-wide text-gray-600 dark:text-gray-400 break-words">{eyebrow ?? "Vectis Scanner"}</p>
+            )}
+            <Heading className="text-xl font-extrabold leading-tight text-gray-900 dark:text-white break-words">{title}</Heading>
+            <p className="mt-1 text-[15px] leading-snug text-gray-700 dark:text-gray-300">
               {intro ?? "Point the scanner at the QR code on your Vectis Scanner sign-in card."}
             </p>
           </div>
@@ -172,18 +181,18 @@ export default function CardSignIn({ mode, current, eyebrow, title = "Scan your 
       )}
 
       {(onCancel || current) && (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {onCancel && <button type="button" className={`${btnTall} w-full`} onClick={onCancel} disabled={status.kind === "checking" || status.kind === "done" || out.busy}>Cancel</button>}
           {current && (
             <button type="button" className={`${btn} w-full`} onClick={() => void signOutNow()} disabled={out.busy || status.kind === "checking" || status.kind === "done"}>
               {out.busy ? "Signing out…" : "Sign out"}
             </button>
           )}
-          {out.error && <p role="alert" className="rounded-xl bg-red-600 px-4 py-3 text-base font-semibold text-white">{out.error}</p>}
+          {out.error && <p role="alert" className="rounded-lg bg-red-600 px-3 py-2 text-[14px] font-semibold text-white break-words">{out.error}</p>}
         </div>
       )}
 
-      <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+      <p className={muted}>
         No card? Anyone in Goods In can print their own in the Hub: Goods In → Scanner cards. A card only signs in to the scanner. Lost one? Cancel it there.
       </p>
     </div>
@@ -193,33 +202,31 @@ export default function CardSignIn({ mode, current, eyebrow, title = "Scan your 
 function StatusBox({ status }: { status: Status }) {
   if (status.kind === "checking") {
     return (
-      <div role="status" className="rounded-2xl bg-indigo-600 px-5 py-6 text-white">
-        <p className="text-2xl font-extrabold leading-tight">Checking the card…</p>
+      <div role="status" className="rounded-xl bg-indigo-600 px-3 py-3 text-white">
+        <p className="text-[17px] font-extrabold leading-tight">Checking the card…</p>
       </div>
     )
   }
   if (status.kind === "done") {
     return (
-      <div role="status" className="rounded-2xl bg-emerald-600 px-5 py-6 text-white">
-        <p className="text-2xl font-extrabold leading-tight break-words">Signed in — hello, {status.name}</p>
-        <p className="mt-1 text-base font-medium">Opening the scanner…</p>
+      <div role="status" className="rounded-xl bg-emerald-600 px-3 py-3 text-white">
+        <p className="text-[17px] font-extrabold leading-tight break-words">Signed in — hello, {status.name}</p>
+        <p className="mt-0.5 text-[14px] font-medium">Opening the scanner…</p>
       </div>
     )
   }
   if (status.kind === "error") {
     return (
-      <div role="alert" className="rounded-2xl bg-red-600 px-5 py-5 text-white">
-        <p className="text-2xl font-extrabold leading-tight">{status.message}</p>
-        <p className="mt-2 text-base font-medium">Scan a card again, or sign in with your username and password.</p>
+      <div role="alert" className="rounded-xl bg-red-600 px-3 py-3 text-white">
+        <p className="text-[17px] font-extrabold leading-tight break-words">{status.message}</p>
+        <p className="mt-1 text-[14px] font-medium">Scan a card again, or sign in with your username and password.</p>
       </div>
     )
   }
   return (
-    <div role="status" className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-5 py-6">
-      <svg aria-hidden viewBox="0 0 24 24" className="h-14 w-14 shrink-0 text-gray-700 dark:text-gray-200" fill="currentColor">
-        <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-6 2h2v2h-2v-2zm4 0h2v2h-2v-2zm-2 2h2v2h-2v-2zm4 0h2v2h-2v-2z" />
-      </svg>
-      <p className="text-xl font-semibold leading-snug">Waiting for a card…</p>
+    <div role="status" className="flex items-center gap-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-3">
+      <QrIcon className="h-10 w-10 shrink-0 text-gray-700 dark:text-gray-200" />
+      <p className="min-w-0 text-[17px] font-semibold leading-snug">Waiting for a card…</p>
     </div>
   )
 }

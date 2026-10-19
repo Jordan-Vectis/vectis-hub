@@ -5,6 +5,7 @@ import { logAccessDenied, type DeniedDbSnapshot } from "@/lib/access-log"
 import type { ScanWho } from "@/lib/goods-in/scanner-pass"
 import CardSignIn from "./card-sign-in"
 import NoAccess from "./no-access"
+import { canvas, safeArea } from "./ui"
 import { scanWho } from "./who"
 
 // The handheld scanner — its own full-screen shell (no Hub top bar or sidebar), for the Newland
@@ -25,15 +26,28 @@ import { scanWho } from "./who"
 //
 // `hub-shell` gives the page canvas the Hub's dark colour (app/globals.css), so the overscroll
 // bounce never flashes white.
+//
+// The shell is one full-height column (fixed to the viewport, so it is exactly the screen's height
+// whatever 100vh means on that browser), kept clear of the status bar, notch and gesture bar by the
+// safe-area insets (viewport-fit=cover). Base text is 15px — the scanners' screens are small (as
+// little as 320 × 568); everything is sized in ui.ts. "resizes-content": the on-screen keyboard (Type
+// a code, the note, signing in) shrinks the column instead of covering half of it.
+// ⚠ No maximum-scale / user-scalable=no: RULES.md (design rule 5) forbids stopping people zooming.
 
 export const metadata: Metadata = { title: "Scanner" }
-export const viewport: Viewport = { themeColor: "#141416" }
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+  themeColor: "#141416",
+}
 export const dynamic = "force-dynamic"
 
 function Shell({ children, useCache = false }: { children: React.ReactNode; useCache?: boolean }) {
   return (
     <div
-      className="hub-shell fixed inset-0 flex flex-col overflow-hidden bg-gray-50 dark:bg-[#141416] text-gray-900 dark:text-gray-100"
+      className={`hub-shell fixed inset-0 flex flex-col overflow-hidden text-[15px] leading-snug ${canvas} ${safeArea}`}
       {...(useCache ? { "data-scan-use-cache": "1" } : {})}
     >
       {children}
@@ -61,14 +75,14 @@ export default async function ScannerLayout({ children }: { children: React.Reac
     console.error("scanner layout: couldn't read access:", readFailed)
     return (
       <Shell useCache>
-        <div className="mx-auto w-full max-w-md px-4 py-6 space-y-4">
-          <div className="rounded-2xl bg-red-600 px-5 py-4 text-white">
-            <p className="text-xl font-bold">The Hub couldn&apos;t check your access just now</p>
-            <p className="mt-1 text-base">Try again in a moment. ({readFailed ?? "no answer"})</p>
+        <div className="mx-auto min-h-0 w-full max-w-md flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          <div className="rounded-xl bg-red-600 px-3 py-2.5 text-white">
+            <p className="text-base font-bold leading-snug">The Hub couldn&apos;t check your access just now</p>
+            <p className="mt-0.5 text-[14px] leading-snug break-words">Try again in a moment. ({readFailed ?? "no answer"})</p>
           </div>
           {/* A full page load (not a client navigation), so the service worker can step in. */}
           <form method="get" action="/scan">
-            <button type="submit" className="inline-flex w-full min-h-14 items-center justify-center rounded-2xl bg-indigo-600 px-5 text-lg font-bold text-white">Try again</button>
+            <button type="submit" className="inline-flex w-full min-h-12 items-center justify-center rounded-xl bg-indigo-600 px-4 text-base font-bold text-white">Try again</button>
           </form>
         </div>
       </Shell>
@@ -80,7 +94,7 @@ export default async function ScannerLayout({ children }: { children: React.Reac
   if (who.why === "signed-out") {
     return (
       <Shell>
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <CardSignIn mode="screen" current={null} />
         </div>
       </Shell>
@@ -91,7 +105,7 @@ export default async function ScannerLayout({ children }: { children: React.Reac
     // A card session whose person no longer has Warehouse access (no Hub login on this device).
     return (
       <Shell>
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <NoAccess name={null} via="card" />
         </div>
       </Shell>
@@ -132,7 +146,7 @@ export default async function ScannerLayout({ children }: { children: React.Reac
   })
   return (
     <Shell>
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <NoAccess name={session.user.name || session.user.email || null} via="hub" />
       </div>
     </Shell>

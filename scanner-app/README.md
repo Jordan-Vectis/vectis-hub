@@ -1,7 +1,7 @@
 # Vectis Scanner — the Android app for the Newland scanners
 
 Vectis Scanner is a small Android app for the warehouse's Newland handheld scanners. It opens
-the Hub's own scanner screen (`/scan`, part of Goods In) full screen and adds three things a web
+the Hub's own scanner screen (`/scan`, part of Goods In) full screen and adds four things a web
 page in Chrome can't do on its own:
 
 - **Scans go straight to the screen.** The app takes each scan directly from the Newland scan
@@ -11,6 +11,12 @@ page in Chrome can't do on its own:
   Hub" page that says the scans are safe, and keeps trying by itself.
 - **It behaves like a scanner app.** Portrait only, the screen stays on while it's open, and Back
   steps back through the scanner screen — it only closes the app after asking.
+- **It ignores the scanner's system font size.** The app shows the scanner screen's text at the
+  size the screen was designed for, whatever Android's **Font size** setting is, so a larger system
+  font can't push the text out of its boxes and make the screen overlap. (Other apps on the scanner
+  still follow the setting. Android's **Display size** setting still makes the whole screen larger
+  or smaller, text and boxes together.) An APK built before this was added still follows the font
+  size, so install the newest one.
 
 The screens themselves live in the Hub, so a change to the scanner screen reaches every scanner as
 soon as the Hub updates. The app only needs installing again when this folder changes.
@@ -168,7 +174,7 @@ Don't run `npm run dev` for the Hub to test this — see RULES.md.
 | `web/` | The app's own pages: `offline.html` (and an `index.html` that just opens the Hub). Built into `www/` by `scripts/build-web.mjs` on every `cap sync`; `www/` isn't committed. |
 | `android/` | The Android project (Capacitor 7). Three product flavours — `production`, `staging` (`.staging`), `sandbox` (`.sandbox`). The build refuses to make a flavour whose `capacitor.config.json` points at another Hub. |
 | `android/app/src/main/java/uk/co/vectis/scanner/NewlandScannerPlugin.java` | The scanner plugin. |
-| `android/app/src/main/java/uk/co/vectis/scanner/MainActivity.java` | Registers the plugin; screen on; Back. |
+| `android/app/src/main/java/uk/co/vectis/scanner/MainActivity.java` | Registers the plugin; screen on; the WebView's text zoom fixed at 100% (`setTextZoom(100)`, so the system font size is ignored); Back. |
 | `scripts/make-signing-key.mjs` | Makes the signing key (once) and stores the GitHub secrets. |
 | `scripts/make-icons.mjs` | Draws the launcher icon (only if it should change). |
 

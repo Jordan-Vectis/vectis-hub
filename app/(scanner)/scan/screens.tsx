@@ -4,12 +4,16 @@ import { useState, type ReactNode } from "react"
 import { findTitle, type CheckExtra, type ScanController, type Snapshot } from "@/lib/goods-in/scan-client/controller"
 import type { LookupResponse, ScanHere } from "@/lib/goods-in/scan-client/types"
 import { cleanCode } from "@/lib/goods-in/scan-client/device"
-import { ProblemList, RecentList, ScanLists, TypeCode } from "./parts"
-import { bigBtn, btn, btnTall, card, field, kindWord, mono, plural, when } from "./ui"
+import { CheckListIcon, ChevronIcon, FindIcon, MoveIcon, PinIcon } from "./icons"
+import { ActionRow, ProblemList, RecentList, ScanLists, TypeCode } from "./parts"
+import { bigBtn, btn, btnTall, card, cardTitle, field, kindWord, mono, muted, plural, rowBtn, when } from "./ui"
 
-// The scanner's four screens. Each is a column of big blocks with its main buttons at the BOTTOM
-// (BottomBar), where a thumb reaches them on a scanner held in one hand.
+// The scanner's four screens, compact for a small screen: one slim row for what's going on (the
+// location that stays set, the item waiting, the location being checked), then the lists. The top
+// bar (parts.tsx) has the way back and the settings cog; the only bottom row is Check's Finish.
+// Every button calls the same ScanController method as before — layout only.
 
+/** A thumb-height row along the bottom of the screen — part of the column, never floating over it. */
 function BottomBar({ children }: { children: ReactNode }) {
   return (
     <div className="shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 py-2 flex gap-2 [&>*]:flex-1">
@@ -18,13 +22,29 @@ function BottomBar({ children }: { children: ReactNode }) {
   )
 }
 
+/** A short coloured strip: the screen needs the Wi-Fi and hasn't got it. */
+function NeedsWifi({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-xl bg-amber-400 px-3 py-2 text-black">
+      <p className="text-[15px] font-bold leading-snug">{title}</p>
+      <p className="text-[13px] leading-snug">{children}</p>
+    </section>
+  )
+}
+
 // ── Home ─────────────────────────────────────────────────────────────────────────────────────
 
-function Tile({ title, hint, onClick, tone }: { title: string; hint: string; onClick: () => void; tone: string }) {
+function Tile({ title, hint, icon, onClick, tone }: { title: string; hint: string; icon: ReactNode; onClick: () => void; tone: string }) {
   return (
-    <button type="button" onClick={onClick} className={`w-full min-h-24 rounded-2xl px-5 py-4 text-left transition-colors ${tone}`}>
-      <span className="block text-2xl font-extrabold leading-tight">{title}</span>
-      <span className="mt-1 block text-base leading-snug opacity-90">{hint}</span>
+    <button type="button" onClick={onClick} className={`flex w-full min-h-16 items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${tone}`}>
+      <span aria-hidden className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15">{icon}</span>
+      <span className="min-w-0 flex-1">
+        {/* Wrap, never cut: at 320px and 130% text the hint needs two lines (the tile is min-h-16,
+            so it grows). ⚠ No `block` beside line-clamp — it overrides the clamp's display. */}
+        <span className="block break-words text-base font-bold leading-tight">{title}</span>
+        <span className="mt-0.5 line-clamp-2 break-words text-[13px] leading-snug opacity-90">{hint}</span>
+      </span>
+      <ChevronIcon className="h-5 w-5 shrink-0 opacity-80" />
     </button>
   )
 }
@@ -32,66 +52,32 @@ function Tile({ title, hint, onClick, tone }: { title: string; hint: string; onC
 export function HomeScreen({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
   return (
     <>
-      <div className="space-y-3">
+      <nav aria-label="Jobs" className="space-y-2">
         <Tile
           title="Put away / Move"
-          hint="Scan an item, then where it's going. Or scan a location first to put a run of things there."
+          hint="Item first, then where it goes"
+          icon={<MoveIcon className="h-6 w-6" />}
           onClick={() => ctl.go("move")}
           tone="bg-indigo-600 text-white active:bg-indigo-700"
         />
         <Tile
           title="Find"
-          hint={s.online ? "Scan anything — what it is and where it is now." : "Needs the Wi-Fi — you're offline."}
+          hint={s.online ? "Where anything is now" : "Offline — needs the Wi-Fi"}
+          icon={<FindIcon className="h-6 w-6" />}
           onClick={() => ctl.go("find")}
           tone="bg-sky-700 text-white active:bg-sky-800"
         />
         <Tile
           title="Check a location"
-          hint={s.online ? "Scan a shelf or bay, then everything on it." : "Needs the Wi-Fi — you're offline."}
+          hint={s.online ? "A shelf, then what's on it" : "Offline — needs the Wi-Fi"}
+          icon={<CheckListIcon className="h-6 w-6" />}
           onClick={() => ctl.go("check")}
           tone="bg-teal-700 text-white active:bg-teal-800"
         />
-        <p className="px-1 text-sm text-gray-600 dark:text-gray-400">A scan on this screen starts Put away / Move.</p>
-      </div>
+        <p className={`${muted} px-0.5`}>A scan here starts Put away / Move.</p>
+      </nav>
       <ScanLists s={s} ctl={ctl} />
-      <Settings s={s} ctl={ctl} />
     </>
-  )
-}
-
-function Switch({ on, label, hint, onClick }: { on: boolean; label: string; hint: string; onClick: () => void }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} onClick={onClick} className="w-full flex items-center gap-4 min-h-14 px-3 py-2 text-left">
-      <span className={`relative inline-flex h-8 w-14 shrink-0 rounded-full transition-colors ${on ? "bg-indigo-600" : "bg-gray-300 dark:bg-gray-600"}`}>
-        <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${on ? "translate-x-7" : "translate-x-1"}`} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-base font-semibold">{label}</span>
-        <span className="block text-sm text-gray-600 dark:text-gray-400">{hint}</span>
-      </span>
-    </button>
-  )
-}
-
-function Settings({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
-  return (
-    <section className={`${card} divide-y divide-gray-200 dark:divide-gray-800`} aria-label="Scanner settings">
-      <Switch on={s.sound} label={`Sound: ${s.sound ? "on" : "off"}`} hint="A pip when a scan is taken, a buzz when it isn't." onClick={ctl.toggleSound} />
-      {s.nativeAvailable !== null && (
-        <Switch
-          on={s.takeDirect}
-          label="Take scans straight from the scanner"
-          hint={s.takeDirect ? "On — scans come straight to this screen, never into the wrong box." : "Off — the scanner types like a keyboard (other apps work the same way)."}
-          onClick={() => void ctl.toggleDirect()}
-        />
-      )}
-      <p className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-        {s.scannerMode === "native" ? "Reading scans from the scanner app." : "Reading scans typed by the scanner (keyboard mode)."}{" "}
-        {s.locationCount ? `${plural(s.locationCount, "location")} saved on this scanner for offline use.` : "No locations saved yet — they're saved the first time the scanner is online."}{" "}
-        {s.storeKind === "localstorage" && "Scans are kept in this browser's local storage."}
-        {s.persisted === false && s.storeKind !== "memory" && " This browser hasn't promised to keep them: if the device runs very short of space it could clear scans still waiting, so send them when you can."}
-      </p>
-    </section>
   )
 }
 
@@ -99,75 +85,59 @@ function Settings({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
 
 export function MoveScreen({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
   const [noteOpen, setNoteOpen] = useState(false)
+  const placeWords = s.pinned ? [s.pinned.kind ? kindWord(s.pinned.kind) : null, s.pinned.name].filter(Boolean).join(" · ") : ""
   return (
     <>
       {s.pinned ? (
-        <section className="rounded-2xl border-4 border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 px-4 py-4">
-          <p className="text-sm font-bold uppercase tracking-wide text-indigo-800 dark:text-indigo-200">Location stays set</p>
-          <p className={`${mono} mt-1 text-4xl font-extrabold break-all`}>{s.pinned.code}</p>
-          <p className="mt-1 text-base text-gray-700 dark:text-gray-200">
-            {[s.pinned.kind ? kindWord(s.pinned.kind) : null, s.pinned.name].filter(Boolean).join(" · ") || "Location"} · {plural(s.pinnedCount, "item")} scanned here
-          </p>
-          <p className="mt-2 text-base font-semibold">Scan each item — they all go here. Scan another location to change it.</p>
-          <button type="button" className={`${bigBtn} mt-3`} onClick={ctl.done}>Done with {s.pinned.code}</button>
+        <section className="flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-xl border-2 border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-2" aria-label="Location stays set">
+          <PinIcon className="h-5 w-5 shrink-0 text-indigo-700 dark:text-indigo-300" />
+          <div className="min-w-0 flex-1 basis-32">
+            <p className={`${mono} text-lg font-extrabold leading-tight [overflow-wrap:anywhere]`}>{s.pinned.code}</p>
+            <p className="text-[13px] leading-snug text-gray-700 dark:text-gray-200 break-words">
+              Stays set · {plural(s.pinnedCount, "item")} here{placeWords ? ` · ${placeWords}` : ""}
+            </p>
+          </div>
+          <button type="button" className={`${bigBtn} !w-auto shrink-0`} onClick={ctl.done}>Done</button>
         </section>
       ) : s.pending ? (
-        <section className="rounded-2xl border-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-4">
-          <p className="text-sm font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">Waiting for a location</p>
-          <p className={`${mono} mt-1 text-4xl font-extrabold break-all`}>{s.pending}</p>
-          <p className="mt-2 text-base font-semibold">Now scan where it&apos;s going.</p>
-          <button type="button" className={`${btnTall} mt-3 w-full`} onClick={ctl.notThisOne}>Not this one</button>
+        <section className="flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2" aria-label="Waiting for a location">
+          <div className="min-w-0 flex-1 basis-40">
+            <p className="text-[13px] font-semibold leading-snug text-emerald-800 dark:text-emerald-200">Now scan where it&apos;s going</p>
+            <p className={`${mono} text-lg font-extrabold leading-tight [overflow-wrap:anywhere]`}>{s.pending}</p>
+          </div>
+          <button type="button" className={`${btn} shrink-0`} onClick={ctl.notThisOne}>Not this one</button>
         </section>
       ) : (
-        <section className={`${card} px-4 py-4`}>
-          <p className="text-lg font-semibold">Scan a tote, pallet or lot — then where it&apos;s going.</p>
-          <p className="mt-1 text-base text-gray-700 dark:text-gray-300">Putting a lot of things in one place? Scan the location first: everything after it goes there until you press Done.</p>
-        </section>
+        <p className={`${muted} px-0.5`}>Putting several things in one place? Scan the location first — everything after it goes there until you press Done.</p>
       )}
 
       <ProblemList s={s} ctl={ctl} />
 
-      {noteOpen || s.note ? (
-        <div className={`${card} p-3 space-y-2`}>
-          <label htmlFor="scan-note" className="block text-sm font-semibold text-gray-700 dark:text-gray-200">Note for the next move</label>
-          {/* Enter (or the keyboard's Done) puts the cursor back in the scan box, so the next scan
-              isn't typed into the note (a scanner's burst into it is caught as a scan anyway). */}
-          <input
-            id="scan-note"
-            className={field}
-            value={s.note}
-            onChange={e => ctl.setNote(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur() } }}
-            placeholder="e.g. box damaged"
-            autoComplete="off"
-            enterKeyHint="done"
-          />
-          <p className="text-sm text-gray-600 dark:text-gray-400">Goes with the next move only, then clears.</p>
-          <button type="button" className={`${btn} w-full`} onClick={() => { ctl.setNote(""); setNoteOpen(false) }}>{s.note ? "Clear the note" : "Close"}</button>
-        </div>
-      ) : (
-        <button type="button" className={`${btn} w-full`} onClick={() => setNoteOpen(true)}>Add a note to the next move</button>
-      )}
-      <TypeCode ctl={ctl} />
+      <ActionRow>
+        {noteOpen || s.note ? (
+          <div className={`${card} basis-full min-w-0 p-3 space-y-2`}>
+            <label htmlFor="scan-note" className="block text-[13px] font-semibold text-gray-700 dark:text-gray-200">Note for the next move (then it clears)</label>
+            {/* Enter (or the keyboard's Done) puts the cursor back in the scan box, so the next scan
+                isn't typed into the note (a scanner's burst into it is caught as a scan anyway). */}
+            <input
+              id="scan-note"
+              className={field}
+              value={s.note}
+              onChange={e => ctl.setNote(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur() } }}
+              placeholder="e.g. box damaged"
+              autoComplete="off"
+              enterKeyHint="done"
+            />
+            <button type="button" className={`${btn} w-full`} onClick={() => { ctl.setNote(""); setNoteOpen(false) }}>{s.note ? "Clear the note" : "Close"}</button>
+          </div>
+        ) : (
+          <button type="button" className={`${btn} flex-1 basis-36`} onClick={() => setNoteOpen(true)}>Add a note</button>
+        )}
+        <TypeCode ctl={ctl} />
+      </ActionRow>
       <RecentList s={s} ctl={ctl} />
     </>
-  )
-}
-
-export function MoveBar({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
-  return (
-    <BottomBar>
-      <button type="button" className={btnTall} onClick={ctl.home}>← Home</button>
-      {s.pinned && <button type="button" className={bigBtn} onClick={ctl.done}>Done</button>}
-    </BottomBar>
-  )
-}
-
-export function HomeBar({ ctl }: { ctl: ScanController }) {
-  return (
-    <BottomBar>
-      <button type="button" className={btnTall} onClick={ctl.home}>← Home</button>
-    </BottomBar>
   )
 }
 
@@ -177,7 +147,7 @@ function Row({ k, children }: { k: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-gray-600 dark:text-gray-400">{k}</dt>
-      <dd className="font-semibold break-words">{children}</dd>
+      <dd className="min-w-0 font-semibold break-words">{children}</dd>
     </>
   )
 }
@@ -187,30 +157,37 @@ function WhereNow({ res }: { res: LookupResponse }) {
   if (!w) return <span>Not put anywhere yet</span>
   return (
     <span>
-      <span className={`${mono} text-xl font-extrabold`}>{w.code}</span>{" "}
+      <span className={`${mono} text-base font-extrabold`}>{w.code}</span>{" "}
       <span className="font-normal text-gray-700 dark:text-gray-300">
         ({w.kind ? kindWord(w.kind) : "no longer a location"}{w.name ? ` · ${w.name}` : ""}{w.kind && !w.active ? " · switched off" : ""})
       </span>
-      {(w.since || w.by) && <span className="block text-sm font-normal text-gray-600 dark:text-gray-400">Put there {when(w.since)}{w.by ? ` by ${w.by}` : ""}</span>}
+      {(w.since || w.by) && <span className={`block font-normal ${muted}`}>Put there {when(w.since)}{w.by ? ` by ${w.by}` : ""}</span>}
     </span>
   )
 }
 
+/** Totes, pallets and lots — one compact line each: the code, then what it is. */
+function GoodsList({ rows }: { rows: ScanHere[] }) {
+  return (
+    <ul className="divide-y divide-gray-200 dark:divide-gray-800">
+      {rows.map(r => (
+        <li key={`${r.type}-${r.code}`} className="py-1.5 min-w-0">
+          <span className={`${mono} text-[15px] font-bold [overflow-wrap:anywhere]`}>{r.code || "(no barcode)"}</span>{" "}
+          <span className="text-[13px] text-gray-600 dark:text-gray-400 break-words">{r.type === "lot" ? "Lot" : r.type === "pallet" ? "Pallet" : "Tote"}{r.customer ? ` · ${r.customer}` : ""}{r.what ? ` · ${r.what}` : ""}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function HereList({ rows, truncated }: { rows: ScanHere[]; truncated?: boolean }) {
-  if (!rows.length) return <p className="text-base text-gray-600 dark:text-gray-400">The Hub records nothing here.</p>
+  if (!rows.length) return <p className={muted}>The Hub records nothing here.</p>
   const shown = rows.slice(0, 40)
   return (
     <div>
-      <p className="text-base font-semibold">{plural(rows.length, "thing")}{truncated ? "+" : ""} recorded here</p>
-      <ul className="mt-1 divide-y divide-gray-200 dark:divide-gray-800">
-        {shown.map(r => (
-          <li key={`${r.type}-${r.code}`} className="py-2">
-            <span className={`${mono} text-lg font-bold`}>{r.code || "(no barcode)"}</span>{" "}
-            <span className="text-sm text-gray-600 dark:text-gray-400">{r.type === "lot" ? "Lot" : r.type === "pallet" ? "Pallet" : "Tote"}{r.customer ? ` · ${r.customer}` : ""}{r.what ? ` · ${r.what}` : ""}</span>
-          </li>
-        ))}
-      </ul>
-      {rows.length > shown.length && <p className="text-sm text-gray-600 dark:text-gray-400">…and {plural(rows.length - shown.length, "more")}. Check a location lists them all.</p>}
+      <p className="text-[14px] font-semibold">{plural(rows.length, "thing")}{truncated ? "+" : ""} recorded here</p>
+      <GoodsList rows={shown} />
+      {rows.length > shown.length && <p className={muted}>…and {plural(rows.length - shown.length, "more")}. Check a location lists them all.</p>}
     </div>
   )
 }
@@ -219,20 +196,21 @@ function FindResult({ res, ctl }: { res: LookupResponse; ctl: ScanController }) 
   const h = res.hit
   if (!h) {
     return (
-      <section className={`${card} p-4`}>
-        <p className="text-xl font-bold">Nothing found for <span className={mono}>{res.code}</span></p>
-        <p className="mt-1 text-base text-gray-700 dark:text-gray-300">It isn&apos;t a tote, pallet, lot, receipt or location the Hub knows. Check the label and scan again.</p>
+      <section className={`${card} px-3 py-2.5`}>
+        <p className="text-base font-bold leading-snug break-words">Nothing found for <span className={mono}>{res.code}</span></p>
+        <p className={`mt-0.5 ${muted}`}>It isn&apos;t a tote, pallet, lot, receipt or location the Hub knows. Check the label and scan again.</p>
       </section>
     )
   }
   // The banner already says findTitle(res); the card names the thing and gives the detail.
   const heading = h.type === "container" ? `${h.kind === "pallet" ? "Pallet" : "Tote"} ${h.id}` : h.type === "lot" ? `Lot ${h.barcode}` : h.type === "location" ? `Location ${h.code}` : h.type === "receipt" ? `Receipt ${h.id}` : `Vendor number ${h.vendorNo ?? res.code}`
+  const dl = "grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[14px] leading-snug"
   return (
-    <section className={`${card} p-4 space-y-3`} aria-label={findTitle(res)}>
-      <p className={`${mono} text-2xl font-extrabold break-words`}>{heading}</p>
+    <section className={`${card} p-3 space-y-2.5`} aria-label={findTitle(res)}>
+      <p className={`${mono} text-lg font-extrabold leading-tight [overflow-wrap:anywhere]`}>{heading}</p>
       {h.type === "container" && (
         <>
-          <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-base">
+          <dl className={dl}>
             <Row k="Now at"><WhereNow res={res} /></Row>
             <Row k="Customer">{h.customer}</Row>
             <Row k="Receipt"><span className={mono}>{h.receiptId}</span></Row>
@@ -244,7 +222,7 @@ function FindResult({ res, ctl }: { res: LookupResponse; ctl: ScanController }) 
       )}
       {h.type === "lot" && (
         <>
-          <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-base">
+          <dl className={dl}>
             <Row k="Shelf now"><WhereNow res={res} /></Row>
             <Row k="Title">{h.title}</Row>
             {h.auction && <Row k="Sale"><span className={mono}>{h.auction}</span></Row>}
@@ -256,7 +234,7 @@ function FindResult({ res, ctl }: { res: LookupResponse; ctl: ScanController }) 
       )}
       {h.type === "location" && (
         <>
-          <p className="text-base text-gray-700 dark:text-gray-300">{[kindWord(h.kind), h.name].filter(Boolean).join(" · ")}</p>
+          <p className="text-[14px] text-gray-700 dark:text-gray-300 break-words">{[kindWord(h.kind), h.name].filter(Boolean).join(" · ")}</p>
           <HereList rows={res.here ?? []} truncated={res.hereTruncated} />
           <div className="grid gap-2">
             <button type="button" className={bigBtn} onClick={ctl.checkFromFind}>Check this location</button>
@@ -267,22 +245,22 @@ function FindResult({ res, ctl }: { res: LookupResponse; ctl: ScanController }) 
       {h.type === "receipt" && (
         <>
           {/* No customer name when signed in with a card (the lookup route leaves it out). */}
-          <p className="text-base">{[h.customer, plural(h.containers, "tote or pallet", "totes and pallets")].filter(Boolean).join(" · ")}</p>
+          <p className="text-[14px] break-words">{[h.customer, plural(h.containers, "tote or pallet", "totes and pallets")].filter(Boolean).join(" · ")}</p>
           {res.containers && res.containers.length > 0 && (
             <ul className="divide-y divide-gray-200 dark:divide-gray-800">
               {res.containers.map(c => (
-                <li key={c.id} className="py-2 flex items-center gap-2">
-                  <span className={`${mono} text-lg font-bold`}>{c.id}</span>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">{c.kind === "pallet" ? "Pallet" : "Tote"}</span>
-                  <span className={`${mono} ml-auto font-semibold`}>{c.locationCode ?? "not put away"}</span>
+                <li key={c.id} className="py-1.5 flex items-center gap-2 min-w-0">
+                  <span className={`${mono} text-[15px] font-bold`}>{c.id}</span>
+                  <span className="text-[13px] text-gray-600 dark:text-gray-400">{c.kind === "pallet" ? "Pallet" : "Tote"}</span>
+                  <span className={`${mono} ml-auto min-w-0 truncate text-[14px] font-semibold`}>{c.locationCode ?? "not put away"}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="text-sm text-gray-600 dark:text-gray-400">A receipt isn&apos;t moved — scan the label on each tote or pallet.</p>
+          <p className={muted}>A receipt isn&apos;t moved — scan the label on each tote or pallet.</p>
         </>
       )}
-      {h.type === "customer" && <p className="text-base">{h.name ? `${h.name} — a` : "A"} customer&apos;s vendor number. Scan the tote, pallet or lot label instead.</p>}
+      {h.type === "customer" && <p className="text-[14px] break-words">{h.name ? `${h.name} — a` : "A"} customer&apos;s vendor number. Scan the tote, pallet or lot label instead.</p>}
     </section>
   )
 }
@@ -292,30 +270,24 @@ export function FindScreen({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
   return (
     <>
       {!s.online && (
-        <section className="rounded-2xl bg-amber-400 px-4 py-4 text-black">
-          <p className="text-xl font-bold">Find needs the Wi-Fi</p>
-          <p className="mt-1 text-base">This scanner is offline. Put away / Move still works — moves are saved and sent when the Wi-Fi is back.</p>
-        </section>
+        <NeedsWifi title="Find needs the Wi-Fi">This scanner is offline. Put away / Move still works — moves are saved and sent when the Wi-Fi is back.</NeedsWifi>
       )}
       {f.status === "idle" && s.online && (
-        <section className={`${card} px-4 py-4`}>
-          <p className="text-lg font-semibold">Scan anything — a tote, pallet, lot, location or receipt.</p>
-          <p className="mt-1 text-base text-gray-700 dark:text-gray-300">You&apos;ll see what it is and where the Hub has it now.</p>
-        </section>
+        <p className={`${muted} px-0.5`}>A tote, pallet, lot, location or receipt — you&apos;ll see what it is and where the Hub has it now.</p>
       )}
       {f.status === "looking" && (
-        <section className={`${card} px-4 py-6`} role="status">
-          <p className="text-xl font-semibold">Looking up <span className={mono}>{f.code}</span>…</p>
+        <section className={`${card} px-3 py-3`} role="status">
+          <p className="text-base font-semibold break-words">Looking up <span className={mono}>{f.code}</span>…</p>
         </section>
       )}
       {f.status === "failed" && (
-        <section className={`${card} px-4 py-4`}>
-          <p className="text-xl font-bold">Couldn&apos;t look up <span className={mono}>{f.code}</span></p>
-          <p className="mt-1 text-base">{f.message}</p>
+        <section className={`${card} px-3 py-2.5`}>
+          <p className="text-base font-bold break-words">Couldn&apos;t look up <span className={mono}>{f.code}</span></p>
+          <p className="mt-0.5 text-[14px] break-words">{f.message}</p>
         </section>
       )}
       {f.status === "done" && <FindResult res={f.res} ctl={ctl} />}
-      <TypeCode ctl={ctl} />
+      <ActionRow><TypeCode ctl={ctl} /></ActionRow>
       <ProblemList s={s} ctl={ctl} />
     </>
   )
@@ -340,32 +312,26 @@ export function CheckScreen({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
     return (
       <>
         {!s.online && (
-          <section className="rounded-2xl bg-amber-400 px-4 py-4 text-black">
-            <p className="text-xl font-bold">Checking needs the Wi-Fi</p>
-            <p className="mt-1 text-base">The Hub has to say what should be there. Put away / Move still works offline.</p>
-          </section>
+          <NeedsWifi title="Checking needs the Wi-Fi">The Hub has to say what should be there. Put away / Move still works offline.</NeedsWifi>
         )}
-        <section className={`${card} px-4 py-4`}>
-          <p className="text-lg font-semibold">Scan the label of the location you&apos;re checking.</p>
-          <p className="mt-1 text-base text-gray-700 dark:text-gray-300">Then scan everything you can see on it. You&apos;ll see what&apos;s missing, what&apos;s recorded somewhere else (one tap moves it here), and anything the Hub doesn&apos;t know.</p>
-        </section>
-        <TypeCode ctl={ctl} placeholder="e.g. A10A1" />
+        <p className={`${muted} px-0.5`}>Then scan everything you can see on it: you&apos;ll see what&apos;s missing, what&apos;s recorded somewhere else (one tap moves it here), and anything the Hub doesn&apos;t know.</p>
+        <ActionRow><TypeCode ctl={ctl} placeholder="e.g. A10A1" /></ActionRow>
         <ProblemList s={s} ctl={ctl} />
       </>
     )
   }
   if (c.status === "loading") {
-    return <section className={`${card} px-4 py-6`} role="status"><p className="text-xl font-semibold">Reading what&apos;s at <span className={mono}>{c.place.code}</span>…</p></section>
+    return <section className={`${card} px-3 py-3`} role="status"><p className="text-base font-semibold break-words">Reading what&apos;s at <span className={mono}>{c.place.code}</span>…</p></section>
   }
   if (c.status === "failed") {
     return (
       <>
-        <section className={`${card} px-4 py-4`}>
-          <p className="text-xl font-bold">Can&apos;t check <span className={mono}>{c.place.code}</span></p>
-          <p className="mt-1 text-base">{c.error}</p>
-          <p className="mt-2 text-base font-semibold">Scan the location again to try once more.</p>
+        <section className={`${card} px-3 py-2.5`}>
+          <p className="text-base font-bold break-words">Can&apos;t check <span className={mono}>{c.place.code}</span></p>
+          <p className="mt-0.5 text-[14px] break-words">{c.error}</p>
+          <p className="mt-1 text-[14px] font-semibold">Scan the location again to try once more.</p>
         </section>
-        <TypeCode ctl={ctl} placeholder="e.g. A10A1" />
+        <ActionRow><TypeCode ctl={ctl} placeholder="e.g. A10A1" /></ActionRow>
         <ProblemList s={s} ctl={ctl} />
       </>
     )
@@ -378,24 +344,26 @@ export function CheckScreen({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
   const movedHere = c.extras.filter(x => x.state === "moved").length
   return (
     <>
-      <section className="rounded-2xl border-4 border-teal-500 bg-teal-50 dark:bg-teal-950/40 px-4 py-4">
-        <p className="text-sm font-bold uppercase tracking-wide text-teal-800 dark:text-teal-200">Checking</p>
-        <p className={`${mono} mt-1 text-4xl font-extrabold break-all`}>{c.place.code}</p>
-        <p className="mt-2 text-lg font-semibold">
+      <section className="rounded-xl border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 px-3 py-2" aria-label={`Checking ${c.place.code}`}>
+        <div className="flex items-baseline gap-2 min-w-0">
+          <p className={`${mono} min-w-0 text-xl font-extrabold leading-tight [overflow-wrap:anywhere]`}>{c.place.code}</p>
+          <p className="ml-auto shrink-0 text-base font-bold tabular-nums">{c.found.length}/{c.expected.length}{c.truncated ? "+" : ""}</p>
+        </div>
+        <p className="text-[13px] leading-snug text-gray-700 dark:text-gray-200">
           {c.found.length} of {c.expected.length}{c.truncated ? "+" : ""} found · {missing.length} not scanned yet{movedHere ? ` · ${movedHere} moved here` : ""}
         </p>
       </section>
 
       {elsewhere.length > 0 && (
-        <section className={`${card} p-3`} aria-label="Scanned here, recorded somewhere else">
-          <h2 className="text-lg font-bold">Here, but recorded somewhere else ({elsewhere.length})</h2>
-          <ul className="mt-1 divide-y divide-gray-200 dark:divide-gray-800">
+        <section className={`${card} px-3 py-2.5`} aria-label="Scanned here, recorded somewhere else">
+          <h2 className={cardTitle}>Here, but recorded somewhere else ({elsewhere.length})</h2>
+          <ul className="divide-y divide-gray-200 dark:divide-gray-800">
             {elsewhere.map(x => (
-              <li key={x.code} className="py-3">
-                <p><span className={`${mono} text-xl font-extrabold`}>{x.code}</span> <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{EXTRA_WORDS[x.state]}</span></p>
-                {(x.what || x.where) && <p className="text-sm text-gray-600 dark:text-gray-400 break-words">{x.what}{x.where ? ` · recorded at ${x.where}` : ""}</p>}
+              <li key={x.code} className="py-2 min-w-0">
+                <p className="break-words"><span className={`${mono} text-base font-extrabold`}>{x.code}</span> <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-300">{EXTRA_WORDS[x.state]}</span></p>
+                {(x.what || x.where) && <p className={`${muted} break-words`}>{x.what}{x.where ? ` · recorded at ${x.where}` : ""}</p>}
                 {(x.state === "elsewhere" || x.state === "offline") && (
-                  <button type="button" className={`${bigBtn} mt-2`} onClick={() => ctl.moveHere(x.code)}>Move it here ({c.place.code})</button>
+                  <button type="button" className={`${rowBtn} mt-1.5`} onClick={() => ctl.moveHere(x.code)}>Move it here ({c.place.code})</button>
                 )}
               </li>
             ))}
@@ -403,31 +371,24 @@ export function CheckScreen({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
         </section>
       )}
 
-      <section className={`${card} p-3`} aria-label="Recorded here but not scanned">
-        <h2 className="text-lg font-bold">Recorded here, not scanned yet ({missing.length})</h2>
+      <section className={`${card} px-3 py-2.5`} aria-label="Recorded here but not scanned">
+        <h2 className={cardTitle}>Recorded here, not scanned yet ({missing.length})</h2>
         {missing.length === 0 ? (
-          <p className="py-2 text-base text-emerald-700 dark:text-emerald-300 font-semibold">{c.expected.length ? "Everything the Hub records here has been scanned." : "The Hub records nothing here."}</p>
+          <p className="pt-1 text-[14px] font-semibold text-emerald-700 dark:text-emerald-300">{c.expected.length ? "Everything the Hub records here has been scanned." : "The Hub records nothing here."}</p>
         ) : (
-          <ul className="mt-1 divide-y divide-gray-200 dark:divide-gray-800">
-            {missing.map(e => (
-              <li key={`${e.type}-${e.code}`} className="py-2">
-                <span className={`${mono} text-lg font-bold`}>{e.code || "(no barcode)"}</span>{" "}
-                <span className="text-sm text-gray-600 dark:text-gray-400">{e.type === "lot" ? "Lot" : e.type === "pallet" ? "Pallet" : "Tote"}{e.customer ? ` · ${e.customer}` : ""}{e.what ? ` · ${e.what}` : ""}</span>
-              </li>
-            ))}
-          </ul>
+          <GoodsList rows={missing} />
         )}
-        {c.truncated && <p className="text-sm text-gray-600 dark:text-gray-400">This location holds more than the scanner can list; anything else scanned is checked with the Hub.</p>}
+        {c.truncated && <p className={muted}>This location holds more than the scanner can list; anything else scanned is checked with the Hub.</p>}
       </section>
 
       {strange.length > 0 && (
-        <section className={`${card} p-3`} aria-label="Codes the Hub doesn't know">
-          <h2 className="text-lg font-bold">Not goods the Hub knows ({strange.length})</h2>
-          <ul className="mt-1 divide-y divide-gray-200 dark:divide-gray-800">
+        <section className={`${card} px-3 py-2.5`} aria-label="Codes the Hub doesn't know">
+          <h2 className={cardTitle}>Not goods the Hub knows ({strange.length})</h2>
+          <ul className="divide-y divide-gray-200 dark:divide-gray-800">
             {strange.map(x => (
-              <li key={x.code} className="py-2">
-                <span className={`${mono} text-lg font-bold`}>{x.code}</span>{" "}
-                <span className="text-sm text-gray-600 dark:text-gray-400">{x.what ?? EXTRA_WORDS[x.state]}</span>
+              <li key={x.code} className="py-1.5 min-w-0">
+                <span className={`${mono} text-[15px] font-bold [overflow-wrap:anywhere]`}>{x.code}</span>{" "}
+                <span className="text-[13px] text-gray-600 dark:text-gray-400 break-words">{x.what ?? EXTRA_WORDS[x.state]}</span>
               </li>
             ))}
           </ul>
@@ -435,25 +396,26 @@ export function CheckScreen({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
       )}
 
       {ticked.length > 0 && (
-        <details className={`${card} p-3`}>
-          <summary className="min-h-12 flex items-center text-lg font-bold cursor-pointer">Found ({ticked.length})</summary>
-          <ul className="mt-1 divide-y divide-gray-200 dark:divide-gray-800">
-            {ticked.map(e => <li key={`${e.type}-${e.code}`} className={`${mono} py-2 text-lg font-bold`}>{e.code} ✓</li>)}
+        <details className={`${card} px-3`}>
+          <summary className={`${cardTitle} min-h-11 flex items-center cursor-pointer`}>Found ({ticked.length})</summary>
+          <ul className="divide-y divide-gray-200 dark:divide-gray-800 pb-1">
+            {ticked.map(e => <li key={`${e.type}-${e.code}`} className={`${mono} py-1.5 text-[15px] font-bold [overflow-wrap:anywhere]`}>{e.code} ✓</li>)}
           </ul>
         </details>
       )}
-      <TypeCode ctl={ctl} />
+      <ActionRow><TypeCode ctl={ctl} /></ActionRow>
       <button type="button" className={`${btn} w-full`} onClick={ctl.restartCheck}>Start this check again</button>
       <ProblemList s={s} ctl={ctl} />
     </>
   )
 }
 
+/** Check's bottom row: Finish, once a location is being checked. */
 export function CheckBar({ s, ctl }: { s: Snapshot; ctl: ScanController }) {
+  if (!s.check) return null
   return (
     <BottomBar>
-      <button type="button" className={btnTall} onClick={ctl.home}>← Home</button>
-      {s.check && <button type="button" className={bigBtn} onClick={ctl.finishCheck}>Finish</button>}
+      <button type="button" className={bigBtn} onClick={ctl.finishCheck}>Finish</button>
     </BottomBar>
   )
 }

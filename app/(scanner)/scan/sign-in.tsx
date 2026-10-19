@@ -54,10 +54,10 @@ export default function SignInPanel({ title, intro, onCancel, beforeLeave }: {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4" aria-labelledby="scan-signin-title">
+    <form onSubmit={submit} className="space-y-3" aria-labelledby="scan-signin-title">
       <div>
-        <h2 id="scan-signin-title" className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h2>
-        {intro && <p className="mt-1 text-base text-gray-700 dark:text-gray-300 leading-relaxed">{intro}</p>}
+        <h2 id="scan-signin-title" className="text-lg font-bold leading-tight text-gray-900 dark:text-white break-words">{title}</h2>
+        {intro && <p className="mt-1 text-[15px] leading-snug text-gray-700 dark:text-gray-300">{intro}</p>}
       </div>
       <div>
         <label htmlFor="scan-signin-user" className={label}>Username or email</label>
@@ -86,7 +86,7 @@ export default function SignInPanel({ title, intro, onCancel, beforeLeave }: {
           enterKeyHint="go"
         />
       </div>
-      {error && <p role="alert" className="rounded-xl bg-red-600 px-4 py-3 text-base font-semibold text-white">{error}</p>}
+      {error && <p role="alert" className="rounded-lg bg-red-600 px-3 py-2 text-[14px] font-semibold text-white break-words">{error}</p>}
       <button type="submit" className={bigBtn} disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       {onCancel && <button type="button" className={`${btn} w-full`} onClick={onCancel} disabled={busy}>Back to scanning a card</button>}
     </form>

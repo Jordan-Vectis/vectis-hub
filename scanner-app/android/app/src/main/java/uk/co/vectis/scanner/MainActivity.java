@@ -8,6 +8,7 @@ import android.webkit.WebBackForwardList;
 import android.webkit.WebHistoryItem;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
@@ -19,6 +20,7 @@ import com.getcapacitor.BridgeWebViewClient;
  * Vectis Scanner: the Hub's /scan screen in a WebView (Capacitor), plus
  *  - the NewlandScanner plugin, which hands hardware scans to the page;
  *  - the screen kept on while the app is open;
+ *  - the page's text kept at the page's own size, whatever the system font size is set to;
  *  - the Back button: first offered to the page, then back through earlier /scan pages, and
  *    only ever closes the app after asking;
  *  - the Hub's landing pages (where signing in ends up: /hub, /submissions, /) sent back to /scan,
@@ -50,6 +52,7 @@ public class MainActivity extends BridgeActivity {
         Bridge b = getBridge();
         if (b != null) {
             b.setWebViewClient(new ScannerWebViewClient(b));
+            keepTextAtPageSize(b.getWebView());
         }
 
         getOnBackPressedDispatcher()
@@ -62,6 +65,29 @@ public class MainActivity extends BridgeActivity {
                     }
                 }
             );
+    }
+
+    /**
+     * The page sets its own text sizes. Left alone, Android's WebView scales every font by the
+     * system's Font size setting (WebSettings textZoom, e.g. 130%) while the boxes round the text
+     * stay the same size, so on a scanner with a larger font the text outgrows its boxes and the
+     * screen overlaps. 100 = exactly the sizes the page asks for. (Display size is different: it
+     * scales the whole page evenly, text and boxes together, so it is left alone.)
+     *
+     * Set here, once: by now super.onCreate has built the Bridge and its WebView (BridgeActivity
+     * onCreate → load() → Bridge.Builder.create()), and Capacitor never sets textZoom itself. Changing
+     * the font size while the app is open recreates this activity (fontScale isn't in the manifest's
+     * configChanges), so it comes through here again with a new WebView. ⚠ If fontScale is ever added
+     * to configChanges, call this from onConfigurationChanged too.
+     */
+    private static void keepTextAtPageSize(WebView webView) {
+        if (webView == null) {
+            return;
+        }
+        WebSettings settings = webView.getSettings();
+        if (settings != null) {
+            settings.setTextZoom(100);
+        }
     }
 
     @Override

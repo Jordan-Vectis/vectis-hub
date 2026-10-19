@@ -17,5 +17,7 @@ export default async function ScanPage() {
     user = null // the layout says what went wrong
   }
   if (!user) return null
-  return <ScanApp me={{ id: user.id, name: user.name || "Unknown", tier: user.tier, via: user.via }} />
+  // Which build of the Hub this screen is, for Settings → About (Railway sets it; blank elsewhere).
+  const build = (process.env.RAILWAY_GIT_COMMIT_SHA ?? "").trim().slice(0, 7) || null
+  return <ScanApp me={{ id: user.id, name: user.name || "Unknown", tier: user.tier, via: user.via }} build={build} />
 }
