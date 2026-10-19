@@ -8,7 +8,8 @@ import {
   MAX_SCAN_AGE_DAYS, MAX_SCAN_EVENTS, MAX_SCAN_NOTE, SCANNED_BY_SOMEONE_ELSE, SCANNER_NOT_SET_UP,
   type ScanResult, type SyncResponse,
 } from "@/lib/goods-in/scan-contract"
-import { errorJson, failure, gate, isMissingTable } from "../../_lib/shared"
+import { errorJson, failure, isMissingTable } from "../../_lib/shared"
+import { scanGate } from "../_lib/scan-gate"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,8 +19,8 @@ export const maxDuration = 60
 //
 // The handheld scanner's queue arriving — scans made on /scan (in a browser or the Vectis Scanner
 // app), possibly offline and hours ago. The contract is lib/goods-in/scan-contract.ts. Anyone with
-// Warehouse access, checked here (proxy.ts leaves /api out of the login gate). Nothing here reads
-// or writes Business Central.
+// Warehouse access, checked here (proxy.ts leaves /api out of the login gate) — the Hub session, or
+// a scanner sign-in card (scanGate). Nothing here reads or writes Business Central.
 //
 // ⚠⚠ The rules of a move are moveItem (lib/goods-in/move-core.ts) — exactly moveTo's. This route
 // only adds the queue's own rules around it:
@@ -30,7 +31,7 @@ export const maxDuration = 60
 //   • In order, one transaction per event, so a later scan of the same tote sees the earlier one.
 //   • STALE: a scan whose item has a recorded move newer than its scannedAt (someone moved it since)
 //     isn't applied — the message says who, where and when.
-//   • scannedBy must be the signed-in user. That refusal is NOT recorded, so signing in as them and
+//   • scannedBy must be the signed-in user (the ScanUser's id — the Hub login or the card's person). That refusal is NOT recorded, so signing in as them and
 //     sending it again still works. (The screen blocks Switch user while scans are waiting.)
 //   • scannedAt: a future time is taken as now; older than MAX_SCAN_AGE_DAYS is refused as too old.
 //     The move is stamped with the time it was SCANNED, not the time it arrived.
@@ -195,9 +196,9 @@ async function one(me: Mover, deviceId: string | null, raw: unknown, known: Map<
 
 export async function POST(req: NextRequest) {
   try {
-    const g = await gate("warehouse")
+    const g = await scanGate()
     if (g.res) return g.res
-    const me: Mover = { id: g.me.id, name: g.me.name }
+    const me: Mover = { id: g.me.id, name: g.me.name || null }
 
     const body = (await req.json().catch(() => null)) as { deviceId?: unknown; events?: unknown } | null
     if (!body || typeof body !== "object" || !Array.isArray(body.events)) {

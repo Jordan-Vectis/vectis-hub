@@ -35,6 +35,8 @@ const NAV: NavItem[] = [
   { href: "/tools/warehouse/find", label: "Find", icon: <Icon><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" /></Icon> },
   { href: "/tools/warehouse/locations", label: "Locations", icon: <Icon><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></Icon> },
   { href: "/tools/warehouse/history", label: "History", icon: <Icon><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Icon> },
+  // Sign-in cards for the handheld scanner (QR) — anyone in Goods In prints their own.
+  { href: "/tools/warehouse/scanner-cards", label: "Scanner cards", icon: <Icon><rect x="3" y="5" width="18" height="14" rx="2" /><rect x="6" y="9" width="5" height="5" rx="0.5" /><path d="M14 10h4M14 13h3" /></Icon> },
   { href: "/tools/warehouse/settings", label: "Settings", adminOnly: true, icon: <Icon><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></Icon> },
 ]
 

@@ -62,9 +62,18 @@ export function hubInfo(host: string, said?: string | null): HubInfo {
   return pick("other")
 }
 
+/**
+ * Strip what a scanner may add around a code (control characters, spaces) — but keep its case. What
+ * scanner.ts hands over: a sign-in card's code (card.ts) is case-sensitive, so it must not be
+ * upper-cased on the way in.
+ */
+export function tidyCode(raw: string): string {
+  return raw.replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, "")
+}
+
 /** Strip what a scanner may add around a code (control characters, spaces) and upper-case it, as the Hub does. */
 export function cleanCode(raw: string): string {
-  return raw.replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, "").toUpperCase()
+  return tidyCode(raw).toUpperCase()
 }
 
 /** Tote, pallet and lot barcode shapes: T027657, P000001, F066001, R000016-413. Anything else is checked against the locations. */

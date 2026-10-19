@@ -266,7 +266,8 @@ function FindResult({ res, ctl }: { res: LookupResponse; ctl: ScanController }) 
       )}
       {h.type === "receipt" && (
         <>
-          <p className="text-base">{h.customer} · {plural(h.containers, "tote or pallet", "totes and pallets")}</p>
+          {/* No customer name when signed in with a card (the lookup route leaves it out). */}
+          <p className="text-base">{[h.customer, plural(h.containers, "tote or pallet", "totes and pallets")].filter(Boolean).join(" · ")}</p>
           {res.containers && res.containers.length > 0 && (
             <ul className="divide-y divide-gray-200 dark:divide-gray-800">
               {res.containers.map(c => (
@@ -281,7 +282,7 @@ function FindResult({ res, ctl }: { res: LookupResponse; ctl: ScanController }) 
           <p className="text-sm text-gray-600 dark:text-gray-400">A receipt isn&apos;t moved — scan the label on each tote or pallet.</p>
         </>
       )}
-      {h.type === "customer" && <p className="text-base">{h.name} — a customer&apos;s vendor number. Scan the tote, pallet or lot label instead.</p>}
+      {h.type === "customer" && <p className="text-base">{h.name ? `${h.name} — a` : "A"} customer&apos;s vendor number. Scan the tote, pallet or lot label instead.</p>}
     </section>
   )
 }

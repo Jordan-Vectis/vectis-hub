@@ -178,6 +178,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "GoodsInMovement", personal: "staff", what: "Every move of a tote, pallet or single lot to a location, with who moved it and when." },
       { model: "GoodsInCounter", what: "The next receipt, tote, pallet and vendor number Goods In will hand out, and who last set it." },
       { model: "GoodsInMailAuth", personal: "staff", what: "The sign-in that lets Goods In email receipts from the Vectis mailbox: the mailbox, the access tokens and who connected it." },
+      { model: "GoodsInScannerPass", personal: "staff", what: "Scanner sign-in cards: whose card it is, a one-way hash of its code (never the code itself), who made it and when, when it was last used, and whether it has been cancelled." },
       { model: "GoodsInScanEvent", personal: "staff", what: "Every scan the warehouse handheld scanner app sent in: who scanned what at which location, on which scanner, when it was scanned and when the Hub got it, and what happened." },
     ],
   },

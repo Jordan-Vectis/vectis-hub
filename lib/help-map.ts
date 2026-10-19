@@ -235,6 +235,17 @@ export const DESTINATIONS: Destination[] = [
       "switch user on the scanner", "scanner switch user", "stale scan",
     ],
   },
+  // Scanner sign-in cards (2026-10-16). Every keyword names the scanner or the card — never bare
+  // "sign in", "qr code" or "card", which other parts of the Hub (and their users) ask about.
+  {
+    name: "Goods In → Scanner sign-in cards", href: "/tools/warehouse/scanner-cards", app: "WAREHOUSE",
+    what: "Print a sign-in card for the handheld scanner: scanning its QR code on the scanner signs you in with no typing, and on a shared scanner the next person scans theirs to switch. A card holds no password and signs in to the scanner only, never the rest of the Hub. A Warehouse manager can print one for anyone with Warehouse access. Lost one? Cancel it here and it stops working at once. Until an admin has pressed Run Migrations for it, sign in with your username and password.",
+    also: [
+      "scanner sign in card", "scanner sign in cards", "scanner card", "scanner cards", "scanner login card",
+      "print my scanner card", "print a scanner card", "lost my scanner card", "cancel a scanner card",
+      "qr code for the scanner", "scanner qr code", "sign in to the scanner", "log in to the scanner",
+    ],
+  },
   {
     name: "Goods In → Benches", href: "/tools/warehouse/bench", app: "WAREHOUSE",
     what: "What is at each cataloguing bench right now — the totes and pallets waiting to be made into lots, and whose they are.",
