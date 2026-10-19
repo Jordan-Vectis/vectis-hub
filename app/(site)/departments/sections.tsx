@@ -1,54 +1,46 @@
 import Link from "next/link"
-import { format } from "date-fns"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/app/generated/prisma/client"
 import { getSignedImageUrl } from "@/lib/r2"
 import { SITE_IMAGES } from "@/lib/archive-site"
-import { articlePicture, gbDate, StoryCard, type Article } from "../news-stories/news/shared"
+import { articlePicture, StoryCard, type Article } from "../news-stories/news/shared"
+import { dateShort, saleDateLine } from "../site-dates"
 import { getDepartment, highlightPicture, listDepartments, ourLotLinks } from "./data"
 
 // The department pages' sections, each a server component that fetches its own data — used by the
 // built-in /departments pages AND by the page editor's live blocks (page-editor/live.tsx), so there
-// is one copy of each (2026-09-24). Moved here unchanged from the pages.
+// is one copy of each (2026-09-24). Restyled to the house look (site.css) on 2026-10-14 to match
+// vectis.co.uk's department pages. A live block renders bare, so every section carries its own
+// vs-section + vs-container, exactly as home-sections.tsx does.
 
 type NewsRow = Pick<Article, "id" | "alias" | "title" | "category" | "tags" | "featured" | "publishedAt" | "imagePath" | "imageKey" | "introText" | "fullText">
 type SaleRow = { siteId: number; title: string; saleDate: Date | null; lots: number; heroUrl: string | null; heroKey: string | null }
 
-const fmtSale = (d: Date | null) => (d ? format(d, "EEEE d MMMM yyyy") : "")
-
-/** The departments index: a header, then one tile per department. */
-export async function DepartmentsIndex({ kicker = "Specialist teams", heading = "Departments", intro = "" }: { kicker?: string; heading?: string; intro?: string }) {
+/** The departments index as vectis.co.uk lays it out: the centred title and intro, then one tile per department. */
+export async function DepartmentsIndex({ kicker = "", heading = "Departments", intro = "" }: { kicker?: string; heading?: string; intro?: string }) {
   const departments = await listDepartments()
   return (
-    <div>
-      <div className="bg-white border-b border-gray-200">
-        <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 py-8">
-          {kicker && <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">{kicker}</p>}
-          <h1 className="text-3xl font-black text-[#32348A] uppercase tracking-tight">{heading}</h1>
-          {intro && <p className="text-gray-500 text-sm mt-1 max-w-3xl">{intro}</p>}
+    <div className="vs-page bg-white">
+      <div className="vs-container">
+        {/* py-3 -my-3 on the text links: a 44px touch target (the iPads) without moving the text. */}
+        <Link href="/" className="vs-link vs-link-back vs-link-sm py-3 -my-3">Back to home</Link>
+        <div className="text-center max-w-[860px] mx-auto mt-6 mb-10">
+          {kicker && <p className="vs-kicker mb-2">{kicker}</p>}
+          <h1 className="vs-h1">{heading}</h1>
+          {intro && <p className="vs-lead text-[var(--vs-muted)] mt-4">{intro}</p>}
         </div>
-      </div>
 
-      <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 py-10">
         {departments.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-gray-400 text-lg">The departments aren&apos;t available here yet.</p>
-          </div>
+          <p className="text-center py-16 text-[var(--vs-muted)]">The departments aren&apos;t available here yet.</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {departments.map(d => (
-              <Link key={d.slug} href={`/departments/${d.slug}`} className="group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col">
-                <div className="relative bg-gray-100 aspect-[16/11] overflow-hidden">
-                  {d.tile ? (
-                    <img src={d.tile} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  ) : (
-                    <div className="absolute inset-0 bg-gradient-to-br from-[#2AB4A6] to-[#32348A]" />
-                  )}
-                </div>
-                <div className="p-4 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-black text-[#32348A] uppercase tracking-wider leading-snug">{d.name}</h2>
-                  <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[#DB0606]">Explore <span aria-hidden="true">→</span></span>
-                </div>
+              <Link key={d.slug} href={`/departments/${d.slug}`} className="vs-tile">
+                {d.tile && <img src={d.tile} alt="" loading="lazy" />}
+                <span className="vs-tile-label">
+                  <span className="vs-tile-name">{d.name}</span>
+                  <span className="vs-tile-cta">Explore</span>
+                </span>
               </Link>
             ))}
           </div>
@@ -58,8 +50,8 @@ export async function DepartmentsIndex({ kicker = "Specialist teams", heading = 
   )
 }
 
-/** A department's hand-picked past lots, linked to our own results pages where we hold them. */
-export async function DeptHighlights({ slug, kicker = "From the archive", heading = "Highlighted lots" }: { slug: string; kicker?: string; heading?: string }) {
+/** A department's hand-picked past lots — square cards with the title and hammer price — linked to our own results pages where we hold them. */
+export async function DeptHighlights({ slug, kicker = "", heading = "Highlighted Lots" }: { slug: string; kicker?: string; heading?: string }) {
   const d = slug ? await getDepartment(slug).catch(() => null) : null
   const highlights = d?.highlights ?? []
   if (!d || highlights.length === 0) return <div className="hidden" />
@@ -67,49 +59,54 @@ export async function DeptHighlights({ slug, kicker = "From the archive", headin
     Promise.all(highlights.map(h => highlightPicture(h, d.highlightKeys ?? []))),
     ourLotLinks(highlights),
   ])
+  // Six across only when there are six to show — four otherwise, so a short row never sits in a gap.
+  const wide = highlights.length >= 6 ? "xl:grid-cols-6" : ""
   return (
-    <section className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 pb-10">
-      <div className="mb-5">
-        {kicker && <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">{kicker}</p>}
-        <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">{heading}</h2>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-5">
-        {highlights.map((h, i) => {
-          const siteLotId = Number((h.link ?? "").match(/[?&]el=(\d+)/)?.[1])
-          const ours = lotLinks.get(siteLotId)
-          const body = (
-            <>
-              <div className="relative bg-gray-100 aspect-square overflow-hidden">
-                {pictures[i]
-                  ? <img src={pictures[i]!} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  : <div className="absolute inset-0 bg-[#32348A]/5" />}
-              </div>
-              <div className="p-3 flex flex-col flex-1">
-                <p className="text-sm font-bold text-gray-800 leading-snug line-clamp-2 mb-2 group-hover:text-[#32348A]">{h.title}</p>
-                {h.hammer && <p className="text-lg font-black text-[#32348A] leading-none mb-2">Hammer {h.hammer}</p>}
-                {h.meta && <p className="text-[11px] text-gray-500 leading-snug line-clamp-3">{h.meta}</p>}
-                <span className="mt-auto pt-3 text-[10px] font-black uppercase tracking-widest text-[#32348A]">{ours ? "View lot →" : "On vectis.co.uk ↗"}</span>
-              </div>
-            </>
-          )
-          const cls = "group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col"
-          return ours
-            ? <Link key={i} href={ours} className={cls}>{body}</Link>
-            : h.link
-              ? <a key={i} href={h.link} target="_blank" rel="noreferrer" className={cls}>{body}</a>
-              : <div key={i} className={cls}>{body}</div>
-        })}
+    <section className="vs-section bg-white border-t border-[var(--vs-line)]">
+      <div className="vs-container">
+        <div className="text-center mb-8">
+          {kicker && <p className="vs-kicker mb-2">{kicker}</p>}
+          <h2 className="vs-h2">{heading}</h2>
+        </div>
+        <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${wide} gap-4 lg:gap-6`}>
+          {highlights.map((h, i) => {
+            const siteLotId = Number((h.link ?? "").match(/[?&]el=(\d+)/)?.[1])
+            const ours = lotLinks.get(siteLotId)
+            const body = (
+              <>
+                <div className="bg-white aspect-square overflow-hidden border-b border-[var(--vs-line)]">
+                  {pictures[i]
+                    ? <img src={pictures[i]!} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500" />
+                    : <div className="w-full h-full bg-[var(--vs-bg)]" />}
+                </div>
+                <div className="p-3 sm:p-4 flex flex-col flex-1">
+                  <h3 className="text-base font-medium leading-snug line-clamp-2 group-hover:underline">{h.title}</h3>
+                  {/* The collector stores the hammer with its pound sign ("£1,200"). */}
+                  {h.hammer && <p className="vs-price mt-2">Hammer Price: {h.hammer}</p>}
+                  {h.meta && <p className="text-sm text-[var(--vs-muted)] mt-1 line-clamp-2">{h.meta}</p>}
+                  {(ours || h.link) && <span className="vs-link vs-link-sm mt-auto pt-3">{ours ? "View lot" : "View on vectis.co.uk"}</span>}
+                </div>
+              </>
+            )
+            const cls = "vs-card-flat group flex flex-col"
+            return ours
+              ? <Link key={i} href={ours} className={cls}>{body}</Link>
+              : h.link
+                ? <a key={i} href={h.link} target="_blank" rel="noreferrer" className={cls}>{body}</a>
+                : <div key={i} className={cls}>{body}</div>
+          })}
+        </div>
       </div>
     </section>
   )
 }
 
-/** A department's finished sales — the ones its page on the website listed, plus any whose title carries one of its keywords. */
-export async function DeptPastAuctions({ slug, kicker = "Results", heading = "Past auctions", count = 8 }: { slug: string; kicker?: string; heading?: string; count?: number }) {
+/** A department's finished sales — the ones its page on the website listed, plus any whose title carries one of its keywords — as the home page shows past auctions. */
+export async function DeptPastAuctions({ slug, kicker = "", heading = "Past Auctions", count = 4 }: { slug: string; kicker?: string; heading?: string; count?: number }) {
   const d = slug ? await getDepartment(slug).catch(() => null) : null
   if (!d) return <div className="hidden" />
   const patterns = (d.saleKeywords ?? []).map(k => `%${k}%`)
-  const limit = Math.max(1, Math.min(24, Number(count) || 8))
+  const limit = Math.max(1, Math.min(24, Number(count) || 4))
   let sales: (SaleRow & { photo: string | null })[] = []
   try {
     const ids = d.siteSaleIds ?? []
@@ -128,27 +125,27 @@ export async function DeptPastAuctions({ slug, kicker = "Results", heading = "Pa
   } catch { sales = [] }
   if (sales.length === 0) return <div className="hidden" />
   return (
-    <section className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10 pb-14">
-      <div className="flex flex-wrap items-end justify-between gap-2 mb-5">
-        <div>
-          {kicker && <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">{kicker}</p>}
-          <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">{heading}</h2>
+    <section className="vs-section bg-white border-t border-[var(--vs-line)]">
+      <div className="vs-container">
+        <div className="text-center mb-8">
+          {kicker && <p className="vs-kicker mb-2">{kicker}</p>}
+          <h2 className="vs-h2 mb-2">{heading}</h2>
+          <Link href="/auctions?tab=past" className="vs-link py-3 -my-3">See full calendar</Link>
         </div>
-        <Link href="/auctions?tab=past" className="text-[11px] font-bold uppercase tracking-wider text-[#32348A] hover:underline">See the full calendar →</Link>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {sales.map(s => (
-          <Link key={s.siteId} href={`/auctions/results/${s.siteId}`} className="group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col">
-            <div className="relative bg-gray-100 aspect-[16/10] overflow-hidden">
-              {s.photo && <img src={s.photo} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-contain" />}
-            </div>
-            <div className="p-3">
-              <p className="text-sm font-black text-[#32348A] leading-snug line-clamp-2 group-hover:underline">{s.title}</p>
-              <p className="text-[11px] text-gray-400 uppercase tracking-wide mt-1">{fmtSale(s.saleDate)}</p>
-              <span className="block mt-2 text-[10px] font-black uppercase tracking-widest text-[#32348A]">View results →</span>
-            </div>
-          </Link>
-        ))}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
+          {sales.map(s => (
+            <Link key={s.siteId} href={`/auctions/results/${s.siteId}`} className="group block">
+              {/* The site's cover files are square — shown whole on white, as the home page's Past Auctions shows them. */}
+              <div className="bg-white aspect-square overflow-hidden border border-[var(--vs-line)]">
+                {s.photo
+                  ? <img src={s.photo} alt="" loading="lazy" className="w-full h-full object-contain group-hover:scale-[1.03] transition-transform duration-500" />
+                  : <div className="w-full h-full bg-[var(--vs-bg)]" />}
+              </div>
+              <h3 className="vs-h4 mt-3 leading-snug group-hover:underline">{s.title}</h3>
+              {s.saleDate && <p className="text-sm text-[var(--vs-muted)] mt-1">{saleDateLine(s.saleDate)}</p>}
+            </Link>
+          ))}
+        </div>
       </div>
     </section>
   )
@@ -156,8 +153,8 @@ export async function DeptPastAuctions({ slug, kicker = "Results", heading = "Pa
 
 /**
  * The newest News & Stories — all of them, one category's (a tag — the site's categories are its
- * tags), or a department's (its news category, else its keywords against the titles). As a compact
- * list in a white box (the department pages' look) or as cards.
+ * tags), or a department's (its news category, else its keywords against the titles). As a band of
+ * story cards (the department pages' look) or as a compact list in a white box for a side column.
  */
 export async function NewsList({ department = "", category = "", heading = "Latest news", count = 3, layout = "list" }: { department?: string; category?: string; heading?: string; count?: number; layout?: string }) {
   const limit = Math.max(1, Math.min(24, Number(count) || 3))
@@ -186,34 +183,36 @@ export async function NewsList({ department = "", category = "", heading = "Late
 
   if (layout === "cards") {
     return (
-      <div>
-        <div className="flex items-baseline justify-between gap-2 mb-4">
-          <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">{heading}</h2>
-          <Link href={moreHref} className="text-[11px] font-bold uppercase tracking-wider text-[#32348A] hover:underline">See more →</Link>
+      <section className="vs-section vs-band">
+        <div className="vs-container">
+          <div className="text-center mb-8">
+            <h2 className="vs-h2 mb-2">{heading}</h2>
+            <Link href={moreHref} className="vs-link py-3 -my-3">See more</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {news.map(a => <StoryCard key={a.id} a={a as Article & { photo: string | null }} />)}
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {news.map(a => <StoryCard key={a.id} a={a as Article & { photo: string | null }} />)}
-        </div>
-      </div>
+      </section>
     )
   }
 
   return (
-    <div className="bg-white border border-gray-200 p-5">
-      <div className="flex items-baseline justify-between gap-2 mb-3">
-        <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#DB0606]">{heading}</h3>
-        <Link href={moreHref} className="text-[11px] font-bold uppercase tracking-wider text-[#32348A] hover:underline">See more →</Link>
+    <div className="vs-card-flat p-5 sm:p-6">
+      <div className="flex items-baseline justify-between gap-3 mb-2">
+        <h3 className="vs-h4">{heading}</h3>
+        <Link href={moreHref} className="vs-link vs-link-sm shrink-0 py-3 -my-3">See more</Link>
       </div>
-      <ul className="divide-y divide-gray-100">
+      <ul className="divide-y divide-[var(--vs-line)]">
         {news.map(a => (
           <li key={a.id}>
-            <Link href={`/news-stories/news/${encodeURIComponent(a.alias)}`} className="group flex gap-3 py-3">
-              <div className="w-24 aspect-[16/10] shrink-0 bg-gray-100 overflow-hidden">
+            <Link href={`/news-stories/news/${encodeURIComponent(a.alias)}`} className="group flex items-center gap-4 py-3 min-h-[44px]">
+              <div className="w-24 aspect-[16/10] shrink-0 bg-[var(--vs-bg)] overflow-hidden">
                 {a.photo && <img src={a.photo} alt="" loading="lazy" className="w-full h-full object-cover" />}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-black text-[#32348A] leading-snug line-clamp-2 group-hover:underline">{a.title}</p>
-                {a.publishedAt && <p className="text-[11px] text-gray-400 uppercase tracking-wide mt-1">{gbDate(a.publishedAt)}</p>}
+                {a.publishedAt && <p className="vs-kicker mb-1">{dateShort(a.publishedAt)}</p>}
+                <p className="font-medium leading-snug line-clamp-2 group-hover:underline">{a.title}</p>
               </div>
             </Link>
           </li>

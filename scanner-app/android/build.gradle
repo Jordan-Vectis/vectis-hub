@@ -1,0 +1,31 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // 8.10.1 rather than the Capacitor 7 template's 8.7.2: compiling against API 36 needs 8.9.1+.
+        // It runs on the template's Gradle 8.11.1 (gradle/wrapper/gradle-wrapper.properties).
+        classpath 'com.android.tools.build:gradle:8.10.1'
+        classpath 'com.google.gms:google-services:4.4.2'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

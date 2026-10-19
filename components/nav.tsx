@@ -22,7 +22,7 @@ const toolItems = [
   { href: "/tools/auction-ai", label: "Auction AI", roles: ["ADMIN", "CATALOGUER", "COLLECTIONS"] },
   { href: "/tools/barcode-sorter", label: "Barcode Sorter", roles: ["ADMIN", "CATALOGUER", "COLLECTIONS"] },
   { href: "/tools/bc-reports", label: "BC Reports", roles: ["ADMIN", "COLLECTIONS"] },
-  { href: "/tools/warehouse", label: "Warehouse", roles: ["ADMIN", "COLLECTIONS"] },
+  { href: "/tools/warehouse", label: "Goods In", roles: ["ADMIN", "COLLECTIONS"] },
   { href: "/tools/packing", label: "Packing", roles: ["ADMIN", "COLLECTIONS"] },
   { href: "/tools/saleroom-trainer", label: "Saleroom Trainer", roles: ["ADMIN", "CATALOGUER", "COLLECTIONS"] },
 ]

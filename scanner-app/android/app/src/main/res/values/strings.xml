@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <!-- app_name and title_activity_main are set per build (production / staging / sandbox) in app/build.gradle. -->
+    <string name="package_name">uk.co.vectis.scanner</string>
+    <string name="custom_url_scheme">uk.co.vectis.scanner</string>
+
+    <!-- Back button with nowhere left to go back to -->
+    <string name="exit_title">Close Vectis Scanner?</string>
+    <string name="exit_message">Any scans waiting to send stay safe on this scanner and send next time the app is open with Wi-Fi.</string>
+    <string name="exit_stay">Stay</string>
+    <string name="exit_close">Close</string>
+
+    <!-- A scan arrived while the scan screen was still opening, so nothing was there to take it -->
+    <string name="scan_not_ready">Scan not taken — the scan screen isn\'t ready yet. Scan it again.</string>
+</resources>

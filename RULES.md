@@ -54,6 +54,11 @@ the staff **Hub login**, same as the internal Hub. A logged-out visitor to any o
   stays behind the login **by his choice** (it shows the customer's name and photos). The page checks
   its code server-side (404 for a wrong one) and uploads through `/api/public`, which was already
   public. ⚠ Never widen it to a `startsWith("/submit")` prefix, and don't open `/value` without asking.
+- ⚠ **Exception — the handheld scanner screen `/scan` and its worker `/scan/sw` (Jack, 2026-10-16).**
+  Exact paths in `publicExact`, like `/first-aid`, so a warehouse worker can sign in by scanning a
+  scanner sign-in card on a device with no keyboard. The page does its own sign-in check and shows
+  nothing but "Scan your sign-in card" to nobody. See Goods In → handheld scanner → "Scanner sign-in
+  cards" for the rules that keep it safe.
 
 ## Public First Aid page — a deliberate exception (2026-08-11)
 
@@ -331,14 +336,12 @@ local memory looks out of date, then ask whether to refresh it from the shared r
 continuing.** Do not silently proceed on stale memory.
 
 ⚠ **`app/(app)/admin/memory/page.tsx` is a SERVER component — keep it that way.** It holds the
-`ENTRIES` array, filters it per-request against the viewer's session, and passes only the
-permitted entries to the client half (`memory-client.tsx`). Some entries are gated to a single
-user (`JORDAN_ONLY`). **Never add `"use client"` back to `page.tsx`** (or import `ENTRIES` into
-`memory-client.tsx`) "to simplify it": that compiles every entry into the JS bundle, where a
-gated entry is readable by anyone in view-source and the filter proves nothing. The route must
-also stay dynamic (`auth()` keeps it so) — a cached payload would serve one user's entries to
-another. Verify a change here by rebuilding and grepping `.next/static` for a gated entry's text:
-it must return **nothing**.
+`ENTRIES` array, checks the viewer is an admin, and passes the entries to the client half
+(`memory-client.tsx`). **Never add `"use client"` back to `page.tsx`** (or import `ENTRIES` into
+`memory-client.tsx`) "to simplify it": that compiles every entry into the JS bundle, where anyone
+can read them in view-source and the admin check proves nothing. The route must also stay dynamic
+(`getEffectiveSession()` keeps it so). Verify a change here by rebuilding and grepping
+`.next/static` for an entry's text: it must return **nothing**.
 
 Rules for the refresh:
 - Refresh only **project** and **reference** facts (shared project knowledge). Do **NOT** pull another
@@ -1663,3 +1666,587 @@ by the upload script, and the files are `craft-apps/<app>/<version>/<file>` besi
   buttons for both platforms"* — platforms here meaning the two kinds, not Windows/macOS (only
   Windows x64 is built or kept).
 - A missing manifest (nothing uploaded yet) is an **empty list, not an error**.
+
+---
+## 📦 Goods In — the Hub's own check-in (2026-10-15)
+
+Jack rebuilt the Warehouse section (`/tools/warehouse`, app key `WAREHOUSE`, tiers warehouse < manager
+< admin) as **Goods In**, replacing the abandoned April prototype. The Hub card is now called "Goods
+In" (key, href and app key unchanged). The flow, in the words staff see:
+
+1. Find the customer in the customer database (the CRM `Contact`), or add them at the counter.
+2. **Check in** their goods onto a **receipt** (R010244) — three steps: Customer · What they've
+   brought · Check & book in.
+3. Group the goods **by category, not item**, into **totes** (T027657) and **pallets** (P…) —
+   "5x boxes of comics" is one tote. Each gets its number the moment its row is added, and its
+   barcode label (100 × 50 mm) can be printed right there on the goods step.
+4. **Book in**, then print and/or email the receipt.
+5. Put the totes away at a **storage** location; later move them to a **bench** to be catalogued.
+6. Cataloguers make lots from a tote in the Add Lot wizard exactly as now — each lot keeps the tote,
+   receipt and vendor number, so its barcode still ties back to the receipt.
+7. Move each finished lot to a **shelf** until it sells.
+
+Every write is a server action in `lib/actions/goods-in.ts` (Check in's own in
+`lib/actions/goods-in-checkin.ts`) returning `{ ok, error }`; the shared words and shapes are in
+`lib/goods-in/model.ts`; who may do what is `lib/goods-in/access.ts` (read fresh from the database,
+judged on the effective session). Managers void receipts and edit locations; only a Warehouse admin
+sets the number series. ⚠ A `"use server"` file may only export async functions (and types), so the
+customer helpers both action files share (`customerRow`, `CUSTOMER_INCLUDE`, `snapshot`) live in the
+plain module `lib/goods-in/customer-row.ts` — put any other shared non-async helper in a plain module
+the same way, never as an export of an actions file.
+
+- ⚠⚠ **Goods In never touches Business Central** (Jack: *"don't do anything with BC"*). No BC API call,
+  no BC sync table written, and End of Day, Tote Check, Locking Check, BC Match, Change Vendor,
+  `lib/bc.ts` and `lib/tote-check.ts` are unchanged. What that means, and it is **not solved**:
+  - A lot made from a Goods In tote shows **"Tote not in the BC data"** on Tote Check and **"Tote not
+    found in BC"** on Locking Check, because BC has never heard of the tote.
+  - End of Day flags its receipt **"Receipt doesn't exist in BC"** — the lot stays on the sheet, but
+    the overnight import fails on it. So **a lot from a Goods In tote cannot get into BC** today.
+  - ⚠ **A decision for Jack and Jordan before real stock is booked in this way.** Don't quieten those
+    flags by teaching the checks about Goods In without that decision — they are telling the truth.
+- **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken
+  with a single `UPDATE … RETURNING` inside the transaction that needs it, so two clerks at once can
+  never be handed the same number (the prototype's read-the-highest-and-add-one could). At check-in
+  the numbers are taken **as the rows are added**, not at Book in (next rule). A number that already
+  exists in Goods In is skipped, never reused. The series **carry on from BC's** — an admin sets the
+  next receipt, tote and pallet number in Goods In → Settings on the day BC stops, and until a series
+  is set, check-in refuses with a plain message rather than guessing.
+  - ⚠ **Numbers are never reused, so there are GAPS, and that is accepted.** A row removed at
+    check-in, a tote switched to a pallet (it takes a new pallet number), and a thrown-away check-in
+    all give their numbers up for good — the counter has already moved past them. Don't "fill" gaps
+    and don't set a series back to reuse them: a printed label may still be out there carrying one.
+  - ⚠ **The vendor series is deliberately optional.** BC still hands out C-numbers for website
+    sign-ups, so the Hub carrying the C-series on could give two customers the same number. With no
+    vendor series set, a customer without a vendor number simply gets a receipt without one. Don't
+    make it compulsory without asking.
+- **Check in saves as it goes: a receipt is a DRAFT until Book in** (2026-10-16 — Jack, on the goods
+  step: *"this needs to show the tote number and also needs to be able to print the tote labels etc
+  from this"*). `GoodsInReceipt.status = "draft"` means **not booked in yet** — a free-text column, so
+  no schema change. The actions are in `lib/actions/goods-in-checkin.ts`:
+  - `saveCheckIn` saves the check-in so far. The first save (on reaching the goods step) takes the
+    receipt number and makes the draft; every save numbers each row that has no number yet, in screen
+    order, so the number shows on the row straight away. Labels print from the goods step through
+    `GET /api/goods-in/labels?containers=…`, which records `labelPrintedAt`. ⚠ `saveCheckIn` does
+    **not** `revalidatePath` — it runs on every add, remove and pause in typing, and the check-in page
+    must not re-render under the clerk.
+  - `bookInCheckIn` books it in: the same row save, then (one transaction) the terms, a vendor number
+    exactly as `createReceipt` gives one (only when the customer has none AND the vendor series is
+    set), the customer's details copied afresh, `status` draft → `"open"`, `createdAt` = the booking
+    time and `createdById/Name` = whoever pressed Book in. A double tap books once (the second waits
+    on the lock, finds it open, and gets the receipt back, not an error). Check in no longer uses
+    `createReceipt`.
+  - ⚠⚠ **Nothing about a draft counts as booked in.** Every count, figure and "booked in" list leaves
+    drafts out (a customer's receipt count too — `CUSTOMER_INCLUDE`); the Add Lot wizard and Lotting
+    Up fallback leave them out exactly like voided receipts; the receipt PDF and email refuse one (409);
+    `addContainers`, `updateReceipt`, `updateContainer` and `markReceiptSent` refuse one ("carry on
+    with it in Check in") — its totes can be moved, but not edited, catalogued or returned from
+    elsewhere, because the check-in's next save would write over them. Its **labels can** be printed
+    — that is the point of it. A draft is shown as "Not booked in yet" with a Carry on link wherever
+    it appears.
+  - ⚠ **Locks.** Every check-in write locks the receipt row first (`SELECT … FOR UPDATE`), then its
+    totes and pallets in id order, so two tabs on one check-in queue instead of interleaving, and a
+    Scan to move or label print of one of its totes waits for the save (or the save sees it).
+  - ⚠⚠ **Anything that has moved is never deleted or re-numbered** — a tote or pallet with any
+    `GoodsInMovement` (or a location recorded on it) can't be removed from a check-in or switched
+    between tote and pallet; the save is refused, naming it, and nothing is changed. Its history must
+    still read.
+  - ⚠⚠ **A printed label is never lost without trace.** Taking a tote or pallet off a check-in after
+    its label was printed (removed, or switched between tote and pallet) adds a line to the receipt's
+    notes — *"Taken off this check-in after its label was printed: T…, T… (date, by …)"*
+    (`LABEL_GIVEN_UP_NOTE`, read back by `labelsGivenUp`). The Hub keeps those lines itself: the
+    check-in screen is sent only what was typed in Notes, and every save puts them back after it. And
+    each save says which numbers the screen took off (`removed`), so a labelled tote the screen never
+    had — another tab added it, or the screen is an older copy — is **refused**, naming it ("open the
+    check-in again"), instead of being taken off unseen.
+  - **Throwing a check-in away** (`discardCheckIn`) **deletes** the draft (its totes and pallets with
+    it) when no label was printed — for a tote still on it, or one taken off after printing — and
+    nothing moved; otherwise it **voids** it with a note — *"Thrown away at check-in before booking in
+    — labels had been printed for T…, T…"* — so a stray labelled tote can be traced. That void is
+    final: it was never booked in, so `updateReceipt` refuses to reopen it, even for a manager, and
+    its notes can be added to but never have that record taken out (it is also what tells it apart
+    from a booked receipt a manager voided). Carrying on (`loadCheckIn`, `?receipt=R…` on Check in),
+    printing and throwing away are **anyone in Goods In**; voiding a BOOKED receipt is still a
+    manager's. Unfinished check-ins are offered to carry on from Check in (the person's own only —
+    and, once a customer is picked, a quiet line if that customer already has one waiting, anyone's),
+    the Receipts list, the Goods In dashboard ("Check-ins not finished", the first three) and the
+    customer's page. A check-in with nothing written, ticked or printed on it is thrown away without
+    asking when the clerk moves on to another one.
+  - Check in takes `?receipt=` / `?customer=` off the address once it has opened (replaceState):
+    Book in and Throw it away refresh the page on the server, and with `?receipt=` still there that
+    refresh would redirect off the Done panel to the receipt page.
+  - Known limits, accepted for now: each save sends every row on the screen and the server makes the
+    receipt match, so a second, out-of-date tab on the same check-in takes off rows it never saw —
+    refused if they had moved or had a label printed; an unlabelled one becomes a gap. A save that
+    hasn't answered in 30 seconds is treated as not answered (Retry), so the screen never waits for
+    ever. And if the answer to the very FIRST save is lost, the retry makes a second draft — the
+    first then waits in "Check-ins not finished" to be thrown away.
+- **Check in never asks about fees** (Jack, 2026-10-16: *"it's more the checking in asking for fees
+  part you have done is annoying"*). There is **no Terms step** — the steps are Customer · What
+  they've brought · Check & book in. Every receipt takes the customer's usual terms automatically —
+  their **Fees & agreement** tab (next rule): commission and lotting / photography / unsold fees from
+  their `GoodsInCustomer`, their usual reserve from `GoodsInAgreement`, and `DEFAULT_TERMS` for any
+  that is blank (`usualTermsFrom` in `lib/goods-in/model.ts` is the one way it is worked out — the
+  server's check-in actions and `createReceipt` use it, and so do the screens). Check & book in
+  shows them as one plain line with a small "Change for this receipt" link that opens the terms fields
+  (closed by default); that changes THIS receipt only, and its hint links (a full-size link, new
+  tab) to the customer's Fees & agreement tab, where their usual terms are changed — not at the
+  counter. An unusual value never blocks or nags — only an impossible one (a negative fee, more than
+  100%) is refused, and Book in refuses it on the server too. ⚠ Don't bring back a Terms step or a
+  "check the fees" question without asking Jack.
+  - **How Check in reads the agreement.** `getAgreement` whenever the customer changes and whenever
+    the browser tab comes back into view (so a change made on their tab in another browser tab shows
+    when the clerk returns); terms still at their usual values follow it, terms changed for this
+    receipt are left alone, and nothing changes during a booking. The special arrangement shows under
+    the terms line as a small indigo note, and one quiet grey *"Vendor terms not signed yet — they'll
+    sign the receipt."* only once the agreement has been read and is `ready` — never a guess, a nag or
+    a block.
+  - ⚠ **A read that fails is never shown as their usual terms** (design rule 7). Book in waits for
+    the FIRST read for the customer on screen ("Reading their fees…", 6 seconds at most); a read that
+    fails is tried once more after 3 seconds, and meanwhile Check & book in labels the line *"The fees
+    on their record"* with one amber line — *"Their Fees & agreement couldn't be read — the reserve
+    shown is the standard one"* — and Try again. Booking is then still allowed. A failed RE-read keeps
+    what was read before.
+- **A customer's Fees & agreement tab** (2026-10-16 — Jack: *"need a tab for fees and agreement and
+  stuff"*, and asked where: *"Tab on the customer's page"*). `/tools/warehouse/customers/<id>?tab=fees`,
+  beside Overview: their fees and usual reserve (each blank = standard, shown as the placeholder), the
+  day they **signed Vectis's vendor terms** and who recorded it (the terms themselves fold out from
+  `VENDOR_TERMS`), and a **special arrangement** in plain words ("15% on any single lot over £5,000 —
+  agreed with Jordan, March 2026"). Set once there; Check in just uses it and has no fees tab at all —
+  it shows the arrangement as a small note and, if the terms aren't signed, one quiet line (never a
+  block or a nag). The customer form has no fees any more: new customers start on the standard terms.
+  - **Where it is kept.** The fees stay on `GoodsInCustomer`; the reserve, the signed date + who
+    recorded it, the special arrangement (≤ 1,000 characters, `SPECIAL_ARRANGEMENT_MAX`) and who
+    changed any of it last are ONE new table, **`GoodsInAgreement`** (one row per contact, cascade —
+    **NEEDS Run Migrations**). Nothing was added to `Contact` or `GoodsInCustomer`. The signed day is
+    stored at 12:00 UTC on that London day, so it reads as that day.
+  - **Editing** is `getAgreement` / `saveAgreement` in `lib/actions/goods-in-agreement.ts` — anyone
+    in Goods In (as with the rest of a customer), `{ ok, error }`, every value checked before
+    anything is written and then written in one transaction; null puts a field back to standard /
+    not signed / none. ⚠ `saveCustomer` now leaves a fee it isn't sent ALONE (it used to write a
+    missing fee as null — with the fees gone from the form, every address edit would have put the
+    customer back on the standard fees).
+  - ⚠⚠ **Every read of `GoodsInAgreement` is tolerant** — `readAgreement` / `readAgreements` in
+    `lib/goods-in/agreement.ts` (never throw; a missing table → nulls, `ready: false`). Its OWN query
+    in try/catch: **never `include` it** in a contact or customer query (`CUSTOMER_INCLUDE` or any
+    other a screen depends on) — between the deploy and Run Migrations that would break the
+    customer screens and Check in. And **never read it inside a transaction**: a failed query aborts
+    the whole Postgres transaction, so a missing table would take a booking down with it — the
+    check-in actions and `createReceipt` read it first, then open the transaction. Until Run
+    Migrations the tab still shows and saves the FEES and says the rest needs Run Migrations;
+    `saveAgreement` refuses anything that would put something in the table (clearing is fine), before
+    writing anything; Check in falls back to the standard reserve and no arrangement.
+  - ⚠ **The one strict read is BOOK IN.** `bookInCheckIn` and `createReceipt` use `findAgreement`
+    (still before the transaction): a missing table is `ready: false` as above, but any other fault
+    refuses the booking — nothing booked, `AGREEMENT_UNREAD`, "press Book in again" — rather than
+    copy "no special arrangement" onto a receipt nobody could check. (A second press of a check-in
+    that DID book still gets its receipt back.) The autosave, `saveCheckIn`, stays tolerant: Book in
+    copies the arrangement afresh anyway. On the customer page a failed read says so too — the
+    Overview summary says "couldn't read their agreement just now" instead of the standard reserve,
+    and the tab's cards say "couldn't be read", not "needs Run Migrations".
+  - **The special arrangement is COPIED onto the receipt** at booking, inside the customer snapshot
+    (`GoodsInReceipt.customer.specialArrangement` — JSON, no schema change), and the receipt PDF
+    prints it on page 1 under the terms as "Special arrangement: …" from that copy, never from the
+    customer's current agreement: a reprint shows what applied on the day, and changing the agreement
+    changes future receipts only. It is fitted so the signature lines never leave page 1 — the PDF
+    measures the rest of page 1 with the same drawing code (`dry`) before sizing it: the largest size
+    down to 7pt as written, then with its line breaks joined by " / " (a list takes a line per item),
+    and only when even that won't fit does page 1 end it "... (continued overleaf)" and page 2 print
+    the WHOLE arrangement above the tote table. ⚠ Nothing agreed is ever cut off without trace — don't
+    go back to simply truncating it. `safe()` keeps € and • (WinAnsi has both) and turns a tab into a
+    space (`saveAgreement` stores tabs as spaces, so what's kept is what's printed). The labels'
+    layout is unchanged.
+  - The arrangement is **indigo** wherever it shows (the tab, the Overview summary, Check in) — amber
+    means a warning everywhere else in Goods In, and an arrangement isn't one.
+  - ⚠ Never put bank details in a special arrangement or anywhere else (rule below) — the box says so
+    to the staff typing in it, as it's printed on their receipts.
+- ⚠⚠ **A customer's bank details are never stored or shown.** The bank form on the printed receipt
+  is blank by design and the customer fills it in by hand — nothing in the Hub is locked down enough
+  to hold them. Don't add fields for them.
+- **Emailing a receipt** goes from the receipts mailbox (`RECEIPTS_MAILBOX`, default
+  admin@vectis.co.uk) through Microsoft Graph, signed in **delegated with `Mail.Send.Shared`** — the IT
+  mailbox's pattern, no tenant-wide permission. ⚠ It waits on **IT's consent** (the permission and
+  the redirect URI on the app registration); until then the screens say so plainly, and a receipt can
+  still be printed, or downloaded and emailed by hand. A copy is kept in the mailbox's Sent Items.
+  Microsoft 365 is listed as a processor on Data & Compliance and the DPIA for this.
+- **New tables only**: `GoodsInCustomer`, `GoodsInReceipt`, `GoodsInContainer`, `GoodsInLocation`,
+  `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth`, and (2026-10-16) `GoodsInAgreement` and
+  `GoodsInScanEvent` (the handheld scanner's record, below) and `GoodsInScannerPass` (its sign-in
+  cards) (**NEEDS Run Migrations**). ⚠ **Nothing was
+  added to `Contact`, `CatalogueLot` or `User`** — a shipped-but-unmigrated column there breaks every
+  contact or lot save, or login, between the deploy and Run Migrations. Keep it that way. Until the
+  tables exist every Goods In screen says it isn't set up yet rather than crashing.
+  - A Goods In customer **is** a CRM contact; `GoodsInCustomer` holds only the Goods In half (vendor
+    number, mobile, town, county, country, VAT number and fees), one row per contact; their reserve,
+    signed vendor terms and special arrangement are `GoodsInAgreement` (above).
+  - A receipt **copies** the customer's details when it is booked (`GoodsInReceipt.customer`, with
+    their special arrangement as it was then), so a reprint next year says what it said on the day.
+    Editing the customer, or their agreement, changes future receipts only.
+- **A lot's shelf is its latest `GoodsInMovement` with that `lotId`** — never a column on the lot. A
+  tote's current location is kept on `GoodsInContainer` as well, so lists don't have to work it out;
+  a move writes both in one transaction.
+- **The Add Lot wizard and Lotting Up fall back to Goods In ONLY after BC's copy finds nothing**
+  (`/api/warehouse/vendor-lookup` and `/api/warehouse/tote-search`). Every tote and receipt BC knows —
+  a shell tote and one with no vendor included — answers byte-for-byte as before; Goods In is asked
+  only when BC has **no row at all** for the number, and answers in the same shape with
+  `source: "goods-in"`. ⚠ `catalogued` is always null there (the wizard words a true value as BC's
+  tick on a re-used tote, which a Goods In tote never is), totes on a **voided** receipt — or on a
+  **draft** one, not booked in yet — are not offered, and a missing table simply means nothing from
+  Goods In.
+  - ⚠ The wizard still says "BC" in places ("Type the BC tote number…", "Typed by hand, not taken from
+    BC"), and a Goods In receipt with no vendor number cannot fill the wizard's required Vendor box —
+    the cataloguer types it. Wording on those screens is a cataloguing change, not a Goods In one.
+    For such a tote the wizard now shows the customer and receipt in its banner, fills the receipt,
+    and says "Booked in through Goods In with no vendor number … type it in".
+- **Switching the vendor series off**: an admin can press "Stop giving vendor numbers" on the vendor
+  card in Goods In → Settings (`clearCounter("vendor")`, which refuses every other series).
+- **Voiding and un-voiding a receipt both need a manager.** `updateReceipt` reads the current status
+  and changes it in one step, so two people changing it at once can't both win; a void reason is
+  added to the notes on the server (`appendNote`), never overwriting them.
+- **A half-finished check-in is kept on the server** as its draft receipt (above). The browser tab's
+  `sessionStorage` (v2) also keeps the receipt number, customer id and name, rows, terms and ticks only
+  (every access in try/catch), offered back only to the same user; carrying on from it loads the draft
+  from the server (`loadCheckIn`), and a v1 copy (no receipt number) still restores as before. It is
+  cleared on Book in. Never put anything more personal in it.
+- Check in opens with a customer already chosen from `/tools/warehouse/check-in?customer=<contact id>`
+  (the Customers list and customer page use it), or carries on a draft from
+  `/tools/warehouse/check-in?receipt=<receipt number>` (a receipt that isn't a draft opens its receipt
+  page instead).
+- Registered in `lib/help-map.ts` (Book in · Receipt list · Scan to move · Benches · Code lookup ·
+  Locations & labels · Number series & email · Movement record · Fees & agreement · Handheld scanner ·
+  Scanner sign-in cards). ⚠ Those names and their keywords avoid everyday words
+  ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that
+  matches a tool the asker can't open, and a cataloguer asking "where do I find…" must never be told
+  Goods In isn't part of their Hub.
+- **Locations** (2026-10-15 — Jack: *"I need to be able to filter on this, remove locations etc — this
+  is missing a lot of functions"*). The list is `/tools/warehouse/locations`, each location has its own
+  page at `/tools/warehouse/locations/<code>`, the many-at-once actions are in
+  `lib/actions/goods-in-locations.ts`, and reading and making codes (aisle/bay/shelf, ranges, pasted
+  lists, CSV cells) is `lib/goods-in/location-codes.ts` — use those helpers, don't write another parser.
+  - ⚠⚠ **Remove only DELETES a location that was never used and is empty.** One with goods there now
+    (a tote or pallet that isn't returned, or a lot whose latest move is to it) is **refused** — move
+    them out first. One that was ever used (any move into or out of it, or any tote or pallet, even a
+    returned one, recorded there) is **switched off** instead, so its history still reads:
+    `GoodsInMovement` keeps codes as text with no foreign key, and deleting a used code would leave
+    moves pointing at a place that no longer exists. The checks and the delete run in one transaction
+    with the locations locked, and the DELETE re-checks "never used" itself. Don't simplify it into a
+    plain delete.
+  - **Adding, changing, switching off and removing locations — one or many — is manager+**, checked
+    on the server in every action, not just hidden on the screen. Viewing, labels, exporting and moving
+    goods are anyone in Goods In. A bulk action takes at most `MAX_BULK_LOCATIONS` (2,000).
+  - **Adding in bulk never changes an existing location** (`createLocations`, behind Add a range and
+    Paste a list) — a code that's already there is reported as already there and left exactly as it
+    is. Every way in (single edit, bulk add, the warehouse's list) checks codes with
+    `LOCATION_CODE_RULE`.
+  - **Move everything** (`moveEverything`) empties a location into another: every tote and pallet
+    there (not returned) and every lot whose latest move is there, one movement each noted "Moved
+    everything from …", all in one transaction. Status follows `moveTo`'s rule (catalogued and returned
+    keep theirs), and a lot's move carries its barcode as it is NOW (as `moveTo` does). The target must
+    exist and be switched on; the source may be switched off, or no longer a location at all — the
+    "no such location" page offers it for goods stranded at a removed code.
+  - ⚠⚠ **Locks.** `moveEverything` reads its target `FOR SHARE`, so a remove or switch-off of that
+    location waits for the move (then sees the goods) or the move waits for it (then finds it gone or
+    off) — goods can't land at a location being deleted. Every many-at-once UPDATE locks its rows in
+    CODE ORDER first (`… FROM (SELECT … ORDER BY "code" FOR UPDATE)`), the same order `removeLocations`
+    uses, so two managers' overlapping changes queue instead of deadlocking; a deadlock that still
+    happens is reported as "someone else was changing the same locations — nothing was changed".
+    `moveTo` takes the same FOR SHARE lock on its target since 2026-10-16 (its rules moved into the
+    shared `moveItem` in `lib/goods-in/move-core.ts` for the handheld scanner — see below), so a single
+    Scan to move racing a remove of its target is covered too.
+  - **The Locations screens never re-create or overwrite a location from a stale screen.** Add uses
+    `createLocations` (reports "added by someone else a moment ago"), Edit and Change name or kind use
+    `updateLocation` (writes only the fields that changed, and reports a location removed meanwhile
+    instead of bringing it back), Switch on/off uses `setLocationsActive`. `saveLocation` (an upsert)
+    is no longer used by them — don't wire it back in.
+  - Changing a location's kind (one or many) doesn't touch the totes already there — they keep their
+    status and recorded kind until they're next moved, the same as the single edit form.
+  - **Bulk "Move everything to…"** (anyone in Goods In) is driven by the BROWSER, one location per
+    `moveEverything` call, with a moving count, a Stop, and a closing summary in numbers (design rule
+    7b); it stops by itself when the same error comes back three times in a row (the target, or the
+    connection). Bulk **Names…** (`setLocationsName`, manager+) gives the usual name or clears it; named
+    areas have no usual name and are left alone. **Export what's there** (`goodsAtLocations`, read-only,
+    anyone in Goods In) lists every tote, pallet and lot at the ticked locations, or at one location.
+  - **Check what's here** on a location's page is a shelf check: scan what is really there, see what
+    the Hub records but nobody scanned, and what was scanned but is recorded elsewhere. It stores
+    NOTHING — only its "Move it here" button writes, through `moveTo`. **Replace with a new code**
+    (manager+) is `createLocations` → `moveEverything` → `removeLocations`, reported step by step and
+    stopping at the first failure with what was done so far.
+  - **The list's filters live in the URL** (`window.history.replaceState`), so Back, a refresh and a
+    shared link keep them. Don't move them into localStorage. A choice is written at once; typing in
+    the search box a quarter-second after the last key. Picking an area clears aisle/bay/shelf/cabinet,
+    an aisle clears bay and shelf, a bay clears the shelf — and `computeFacets` counts each choice with
+    exactly those cleared, so the number beside a choice is what picking it shows (the picked one shows
+    the list's own count). ⚠ Change one and you must change the other.
+  - Conveniences in sessionStorage (all in try/catch): the ticked codes, read through
+    `useSyncExternalStore` so the server's first render (nothing ticked) still matches — never in a
+    `useState` initialiser, which mismatches on hydration; and the list's query, so deleting a location
+    from its page returns to the same filtered list (`?removed=CODE` is said only if CODE is really gone).
+  - A `<select>` picked with the MOUSE lets go of focus (`select-focus.ts`), or the next scanned label
+    types into it instead of the search box. Paste a list reads spreadsheet quoting, so the Locations
+    export pastes straight back in.
+  - **No new tables or columns.** Area, aisle, bay and shelf are worked out from the code
+    (`parseLocationCode`); "last used" and "ever used" from `GoodsInMovement`. Removing is confirmed
+    in the page (Confirm / Cancel), never with `window.confirm`.
+
+### 📱 Goods In → the handheld scanner: `/scan` and the Vectis Scanner app (2026-10-16)
+
+Jack: *"Right now we use scanners to locate things — they're Newland scanners. I need to make a hand
+scanner app."* He chose a real Android app — *"its not linked to pc purely for the Hub warehouse we
+have made"* — that **saves scans offline and sends them when it reconnects**, and **takes scans straight
+from the scanner** so a scan can't land in the wrong box, as a **thin wrapper around a scanner screen in
+the Hub**, not a separate build.
+
+- **Three parts, one set of rules.**
+  - **The screen** — `/scan` (`app/(scanner)/scan/`): its own full-screen, phone-sized, one-handed
+    layout with no Hub nav. It does its own sign-in check (`scanWho` → `resolveScanUser`): nobody
+    signed in → only the full-screen **"Scan your sign-in card"** screen (`card-sign-in.tsx`, with
+    "Sign in with username and password instead"); no Goods In access → a plain message with the card
+    sign-in underneath (a Hub login's refusal is written to the Access Log first). Put away / Move,
+    Find, Check a location. Works in any browser with a scanner set to keyboard output. Its queue,
+    sync and scanner input are `lib/goods-in/scan-client/`.
+  - **The app** — `scanner-app/`: a Capacitor 7 Android app whose WebView loads the Hub's `/scan`
+    (`server.url`), so it signs in with the Hub's own login and cookies. A small native plugin
+    (`NewlandScanner`) receives Newland scans by broadcast and hands them to the page; other brands and
+    plain browsers use keyboard output. Production, staging and sandbox builds install side by side.
+    It is its own project (own package.json) — not part of the Hub's dependencies, tsconfig, eslint or
+    Next build.
+  - **The server** — `app/api/goods-in/scan/{sync,bootstrap,lookup}`. The contract (types, limits, the
+    not-set-up message) is `lib/goods-in/scan-contract.ts`; change both sides together.
+- ⚠⚠ **A move from the scanner is exactly a move from Scan to move.** The rules — a tote or pallet by
+  its number, else the newest lot with that barcode; the target must exist and be switched on;
+  catalogued and returned keep their status, otherwise `STATUS_FOR_KIND`; one `GoodsInMovement` with
+  `fromCode`, note and who; a tote on a not-booked-in-yet check-in can still be moved — live ONCE, in
+  `moveItem` (`lib/goods-in/move-core.ts`), which `moveTo` and the sync both call, with the same
+  messages. Change them there; never fork them into the route or the screen. It locks the target
+  `FOR SHARE` (as `moveEverything` does), a tote or pallet `FOR UPDATE`, and a lot by a
+  transaction-scoped advisory lock on its id (`hashtext('goods-in-lot:' || id)`).
+  - `moveEverything` (`lib/actions/goods-in-locations.ts`) takes the same per-lot advisory lock for
+    every lot it moves, in lot-id order, then re-reads the lots' latest moves, so a lot a scanner
+    moved away while it waited drops out instead of being moved back. Any new code that moves lots
+    must take that lock too (with `$executeRaw` — the lock returns void, which `$queryRaw` can't read).
+- ⚠ **Nothing touches Business Central.** Since the scanner sign-in cards (below), `/scan` and
+  `/scan/sw` — those two EXACT paths, nothing under them — are let through the login gate
+  (`publicExact` in `auth.config.ts`), and the /scan layout does its own sign-in check through
+  `getScanUser()`. The scanner's API routes check the person and Goods In access themselves
+  (`scanGate()` in `app/api/goods-in/scan/_lib/scan-gate.ts` — the Hub session, else a card; fresh from
+  the database, effective session), as every `/api` route must. ⚠ Never put `/scan` in the PREFIX list
+  (`publicPaths`), and never open another path for the scanner — anything it needs goes behind
+  `/api/goods-in/scan/*`.
+  - ⚠⚠ **The service worker must stay an extensionless ROUTE — `app/(scanner)/scan/sw` (URL
+    `/scan/sw`) — never a `.js` file in `/public`.** `/scan/sw` is public ON PURPOSE (its exact path
+    is in `publicExact`, so the sign-in screen works with nobody signed in); that is safe because the
+    script holds no data or secrets. It stays a route so that this one exact path is all that is
+    opened: `proxy.ts`'s matcher lets EVERY `*.js` path through without a login, so a
+    `public/scan-sw.js` would sit outside the gate with no list entry saying so. The route sends
+    `Service-Worker-Allowed: /scan` and is registered with scope `/scan`, only from the /scan page.
+  - ⚠ **Signing in from a plain browser lands on `/hub`, not back on `/scan`** — `loginAction`
+    (`app/login/actions.ts`) always redirects to `/hub` and ignores `callbackUrl`. The app works round
+    it (below) and Switch user signs in on the screen itself; the fix is for login to honour a safe
+    same-origin relative `callbackUrl`.
+- **The offline queue.** Every scan is queued on the device (IndexedDB, localStorage as a fallback)
+  with its own uuid and the time it was scanned, and sent in scan order, at most 200 a call, to
+  `POST /api/goods-in/scan/sync` whenever the device is online. Nothing is dropped silently: an event
+  the server didn't answer stays queued. A service worker scoped to `/scan` lets the screen open with
+  no Wi-Fi, and the bootstrap (`GET …/bootstrap` — who is signed in, which Hub, every location) is kept
+  so location codes are still recognised offline. Find (`GET …/lookup`) is online only and says so
+  (it does say what THIS scanner last did with the item, from its own queue).
+  - **What the service worker does** (`app/(scanner)/scan/sw/source.ts`): the /scan page is network
+    first with a 4-second fallback to the saved copy (a Wi-Fi dead spot doesn't leave it hanging); only
+    a page carrying `data-scan-ready` is saved — never the sign-in page, a redirect or the no-access
+    message. ⚠ A page that ISN'T the one loading its own files (the slow answer that arrives after the
+    copy was shown, or the copy fetched on a first visit) is saved only once every `/_next/static/`
+    file it names is in the cache; otherwise the old copy is kept. A new build saved without its chunks
+    would open offline looking normal and never take a scan. Next's static files are
+    stale-while-revalidate; the bootstrap falls back to a saved copy marked `X-Scan-From-Cache: 1`. It
+    never handles a POST, a lookup or any other route. Signing out or switching user deletes the saved
+    page and bootstrap (they are one person's).
+  - The queue asks the browser to keep its storage (`navigator.storage.persist()`); a plain browser
+    that won't promise it is named in the screen's settings.
+- ⚠⚠ **Idempotent by event id — `GoodsInScanEvent`.** Each event's row is inserted FIRST, in the SAME
+  transaction as its move (on conflict do nothing), then given its outcome. A retry after a lost answer,
+  or two sync calls racing, waits for the first, finds the row and answers **already** — a scan is
+  applied once or not at all. One transaction per event, in order. Outcomes: **applied** · **already**
+  · **refused** (in plain words — unknown item or location, switched off, already there, too old; it is
+  RECORDED, so it isn't retried for ever, and a replay answers the same) · **stale**.
+- ⚠ **The stale rule.** A scan whose item has a recorded move NEWER than the scan (its latest
+  `GoodsInMovement`, or the tote's `movedAt`) — someone moved it since — is NOT applied; the message
+  says who moved it, where and when. An applied move is stamped with the time it was SCANNED, not when
+  it arrived, so History reads in the order things really happened. A `scannedAt` in the future is
+  taken as now; older than 7 days is refused as too old. ⚠ The rule compares the scanner's clock with
+  the Hub's, so a scanner whose clock is wrong can be told "stale" wrongly — keep the devices on
+  automatic time. The screen corrects its own stamps with the Hub's clock (from every answer, and saved
+  for a reload with no Wi-Fi) and shows a red strip when the device is more than 5 minutes out.
+- **Shared devices.** Every scan carries `scannedBy` — the person signed in when it was made — and the
+  sync refuses one sent by anyone else ("Scanned by someone else — sign in as them to send it"). That
+  refusal alone is NOT recorded, so signing in as them still sends it. The screen blocks Switch user
+  while scans are waiting (sending them first when online). Moves are recorded under the effective
+  user, as `moveTo` does. After 20 minutes with no scan or tap the next scan asks **"Still (their name)?"**
+  (that scan isn't used), so the next person to pick a scanner up doesn't scan under the last one's
+  name; and a location that stays set is let go after 10 minutes with no scan.
+- **The screen's feedback.** The banner answering each scan sits OUTSIDE the scrolling part, so it is
+  on screen however far down the lists someone has scrolled — keep it there. Every answer to a scan
+  beeps and buzzes; "Location set" and "Checking …" have their own two rising pips, because from then
+  on every item goes to that place. Refused and stale scans stay in "Need a look" on every screen until
+  dismissed, with a red button to them in the status bar. In keyboard mode a scanner's burst typed
+  into one of the screen's own boxes (the note, Type a code) is caught as a scan and taken back out
+  of the box (`lib/goods-in/scan-client/scanner.ts`), so it is never lost or sent as a note.
+- ⚠⚠ **Run Migrations.** `GoodsInScanEvent` is a new table (one row per scan: who, which device, item,
+  location, when scanned and when received, outcome, message — in `lib/data-map.ts` as staff data).
+  Until it exists the sync answers **503 "Goods In scanner isn't set up — an admin needs to press Run
+  Migrations."** before touching anything, the scanner keeps its queue, and the bootstrap says
+  `ready: false`. Nothing was added to `Contact`, `CatalogueLot` or `User`.
+- **A call that can't finish.** The sync stops starting new events after about 25 seconds, and stops at
+  any unexpected error (a lock, a timeout, the connection, a fault in the Hub's own code): the events
+  already done are answered, the rest get no result (`unsent`, with `error` saying why) and stay queued.
+  ⚠ Only a fault in one scan's own DATA (a value the database won't store) is recorded as a refusal,
+  so one bad scan can't hold up the queue behind it. Don't widen that to "any error": a bug would then
+  turn every scanner's backlog into refusals that have to be redone by hand.
+  - ⚠ **The timings fit together**: 25 s, plus one event's worst case (5 s waiting for a connection, 10 s
+    running), stays inside the screen's 50-second wait for an answer (`postSync`). An answer that
+    arrives later is lost on the screen and read as "no Wi-Fi". Change them together.
+  - A `scannedAt` before 2020 (a scanner's clock reset after a battery pull, or a value Postgres can't
+    store) is treated as no time and refused — recorded — rather than failing the call on every retry.
+- **The build.** GitHub builds the APKs (`.github/workflows/scanner-app.yml` — a push to `staging` or
+  `main` that touches `scanner-app/**`, or run by hand); nothing is built on anyone's PC. Release builds
+  are signed with a key held ONLY as GitHub secrets (`SCANNER_KEYSTORE_BASE64`,
+  `SCANNER_KEYSTORE_PASSWORD`, `SCANNER_KEY_ALIAS`, `SCANNER_KEY_PASSWORD`), made once by
+  `scanner-app/scripts/make-signing-key.mjs`, which saves the keystore and its passwords to
+  `Documents\Vectis Scanner signing key\` on the PC that ran it — never the repo — and never prints a
+  secret. ⚠⚠ **Keep that key safe**: an update installs over the old app only when it is signed with the
+  SAME key. Lose it and every scanner has to uninstall the app (losing any scans still queued on it)
+  and install afresh. Without the secrets the workflow still builds, debug-signed, and says so loudly;
+  ⚠ with the secrets present but not fitting together (wrong password or alias, cut-short base64) it
+  builds NOTHING, so a wrongly signed app can't go out. "Run workflow" only appears once the workflow
+  file is on `main` (the default branch); until then a push under `scanner-app/` or "Re-run all jobs"
+  builds. ⚠ Check every `run:` block with `bash -n` before pushing — an apostrophe inside a
+  `${var:-word}` in double quotes broke the summary step once, which turns every run red.
+  The install guide for the Newland scanners is `scanner-app/README.md`.
+- **App facts** (`scanner-app/`):
+  - **JDK 21, not 17** — Capacitor 7's Android code is compiled for Java 21. **targetSdk 36** (Play's
+    level since 31 Aug 2026), which needs Android build plugin **8.10.1**; Gradle 8.11.1; minSdk 24.
+  - The NewlandScanner plugin takes scans by broadcast (`nlscan.action.SCANNER_RESULT` /
+    `SCAN_BARCODE1`, the older `com.android.server.scannerservice.broadcast` / `scannerdata`, and one
+    custom broadcast for other makes) and, while the app is on screen, sets the scan service to API
+    output (`ACTION_BAR_SCANCFG`, `EXTRA_SCAN_MODE` 3). ⚠ When the app leaves the screen it sets
+    `plugins.NewlandScanner.keyboardOutputMode` in `capacitor.config.ts` — **2 "Simulate keystroke"
+    by default**, 1 = Fill in EditText, 3 = API output, 0 = send nothing. Newland gives no way to read
+    the setting from before, so it is a device-wide change: check what else scans on those devices
+    (another app may need 3) before the first rollout.
+  - A scan that arrives while the page has no plugin listener is offered as a cancelable
+    `vectis-scan` window event; the page takes it with `preventDefault()`, and one nobody takes shows
+    "Scan not taken — scan it again". Back is offered to the page first as a cancelable `vectis:back`
+    event (the screen uses it to cancel signing in, put down a waiting item, or let go of a location
+    that stays set), then steps back through `/scan` pages, and only closes the app after asking.
+  - The Hub's login always lands on `/hub`, so inside the app arriving at `/hub`, `/submissions` or
+    `/` goes straight back to `/scan`.
+  - The offline page (`server.errorPath`) is for the Hub being unreachable or answering 5xx only; a
+    Hub 404 or 403 shows the Hub's own page (`ScannerWebViewClient`). Keep
+    `android.resolveServiceWorkerRequests` on, or the page the service worker serves offline has no
+    native bridge and scans taken straight from the scanner are lost.
+  - Scanners need **Android System WebView 111 or newer** (Next 16 / Tailwind v4):
+    `android.minWebViewVersion: 111` opens the offline page instead on an older one, which says so and
+    doesn't retry by itself.
+- **Scanner sign-in cards** (2026-10-16 — Jack: *"Can you give me a QR code to auto sign in please,
+  as there's no keyboard"*). Each worker prints a card (Goods In → **Scanner cards**,
+  `/tools/warehouse/scanner-cards`) with a QR code; scanning it on `/scan` signs them in, and on a
+  shared scanner the next person scans theirs to switch. The rules are `lib/goods-in/scanner-pass.ts`.
+  - ⚠⚠ **A card never holds a password.** Its QR is `VSC1-` + 32 random bytes (`crypto.randomBytes`,
+    base64url). The Hub stores only the code's **SHA-256** (`GoodsInScannerPass.tokenHash`) and finds
+    a card by that hash. The code exists in ONE place outside the scanner: the PDF answered once by
+    `POST /api/goods-in/scanner-cards` when the card is made (`lib/goods-in/scanner-card-pdf.ts`, built
+    in memory, never saved). Never log it, store it, return it anywhere else, or reprint it — a lost
+    card is cancelled and a new one made. Never put a password in a QR code.
+  - ⚠⚠ **A card signs in to the SCANNER ONLY** — `/scan` and `/api/goods-in/scan/*`, never the rest
+    of the Hub, so a lost or photographed card can't open customers, receipts or anything else. Its
+    session is the **`vectis-scan` cookie** (httpOnly, Secure in production, SameSite=Lax, 14 hours),
+    `v1.<pass>.<user>.<expiry>` signed with HMAC-SHA256 under a key derived from `AUTH_SECRET` (or
+    `NEXTAUTH_SECRET`) and checked with `timingSafeEqual`. It is read ONLY by `getScanUser()` /
+    `resolveScanUser()`, and those are used ONLY by the /scan screen and `scanGate()` (the scanner's
+    API routes). ⚠ No other page, action or route may accept it — every other Goods In check stays
+    `getGoodsInUser` / `requireGoodsIn` / `gate()`, which read the Hub session alone. A card session
+    never makes cards. With no auth secret set, no card is issued and no card session counts.
+  - **Checked on every request**, fresh from the database: signature and expiry, the card exists and
+    isn't cancelled, it is the cookie's person's, and that person still has Warehouse access. A Hub
+    session on the same device always wins (so signing in with a card there needs a sign-out of the
+    Hub login too). `lastUsedAt` is written at most once an hour.
+  - **A Hub login ends an older card session.** When `scanGate()` lets a Hub login in, it clears any
+    `vectis-scan` cookie on the device older than two minutes (`dropCardUnderHubLogin` — a younger one
+    is a card being signed in with while the Hub login is still being signed out), so the last card's
+    person can't come back on /scan once that Hub login signs out. Signing in at `/login` also ends
+    any card session on the device first (`endScanSession()` at the top of `loginAction` in
+    `app/login/actions.ts`), so a card can't outlast the next person's own Hub login. Never clear it
+    from `auth.config.ts` (the proxy's edge config).
+  - **Signing in**: `POST /api/goods-in/scan/pass { code }` — 401 with ONE message for a card that
+    doesn't exist and one that has been cancelled ("That card has been cancelled or isn't a Vectis
+    card."), 403 when its person has no Warehouse access, 503 before Run Migrations or with no secret.
+    `DELETE` on the same route signs the scanner out (always 200). Scans carry the card person's id as
+    `scannedBy`, exactly as a Hub login's.
+    - ⚠ **Only this Hub's own pages** may sign in (`fromThisHub`: `Sec-Fetch-Site` same-origin — or,
+      with none, an `Origin` naming this Hub; "same-site" and no sign at all are refused), and only
+      with a **JSON** body (415 otherwise), so another site can't post a form that signs someone's
+      scanner in to ITS card. Don't add a form branch back. The card-making route uses the same check.
+    - ⚠ **The limiter is ADVISORY** — a 256-bit code can't be guessed, so it isn't what keeps cards
+      safe. The card is looked up FIRST and a **good card always signs in**: every scanner in the
+      warehouse shares one public address, and people scanning an old cancelled card must never lock
+      everyone's valid card out. Only bad cards count: after 20 in 5 minutes from one address (the
+      LAST `X-Forwarded-For` entry — the one Railway's proxy added; the first ones are whatever the
+      client sent) a bad card gets 429 "wait five minutes". In memory, per server. The sign-in screen
+      also answers the same refused card scanned again within 10 seconds itself, without asking.
+  - **Who may make and cancel**: anyone in Goods In makes one for themselves (Hub login required) and
+    sees and cancels their own; a Warehouse manager or admin makes one for anyone with Warehouse access
+    **at or below their own tier** (a manager can't make an admin's — a card signs in AS its person)
+    and sees and cancels everyone's (`lib/actions/goods-in-scanner-cards.ts` — no codes or hashes in
+    it). Old cards keep working until cancelled; cancelling stops a card at once, on every scanner.
+    - ⚠ **No card is made while an admin is VIEWING AS someone** (the route refuses and the page says
+      so): it would be that person's sign-in, recorded as made by them. Cancelling while viewing as
+      someone is allowed and records `"<admin> (viewing as <name>)"`.
+    - **Printing**: the page opens a NEW tab inside the tap (iPad Safari) and posts a hidden form into
+      it, so that tab loads the PDF itself — the labels screens' way, nothing depending on the Hub tab
+      running in the background. ⚠ A tab of its own for EVERY print (never one reused name): a manager
+      printing several people's cards in a row must never lose one under the next — it can't be shown
+      again. Errors show in that tab as plain text, and nothing is made then. The list catches up when
+      the Hub tab is looked at again.
+  - **Find on the scanner** reads `lib/goods-in/lookup-core.ts` (Code lookup's own reads), not the
+    server actions, because those take the Hub session alone. `lookupCode` (`lib/actions/goods-in.ts`)
+    and `goodsAtLocations` (`lib/actions/goods-in-locations.ts`) call `findCode` / `goodsHere` after
+    their own access check, so there is ONE copy of the reading — change it in lookup-core and Code
+    lookup, Export what's there and the scanner all follow.
+    - ⚠ **With a CARD session** the lookup leaves the customer out where the scanner doesn't need it:
+      a vendor number answers only that it IS one (no name, no contact id) and a receipt carries no
+      customer name; and one card may look up at most 600 codes in 10 minutes (429 after). A lost or
+      photographed card must not become a way to walk vendor or receipt numbers to customer names.
+      Totes, lots and locations answer as for a Hub login (whose goods they are is the scanner's job).
+  - **On the scanner screen** (`app/(scanner)/scan/`, `lib/goods-in/scan-client/`):
+    - ⚠⚠ **Card codes keep their case.** `scanner.ts` hands codes over with `tidyCode` (control
+      characters and spaces out, case kept); the controller upper-cases ITEMS itself (`cleanCode`).
+      Never "tidy" `scanner.ts` back to upper-casing — every card would stop working. The hidden scan
+      boxes are `autoCapitalize="none"` for the same reason; a card that arrives all in capitals (a
+      scanner set to send capitals) gets its own plain message.
+    - ⚠ The client's `CARD_PREFIX` / `CARD_RE` (`lib/goods-in/scan-client/card.ts`) must match
+      `lib/goods-in/scanner-pass.ts` — change both together.
+    - A card scanned on the main screen is **never an item**: not queued, looked up or shown —
+      "That's a sign-in card — press Switch user to sign in as them." Scanned while "Still …?" is up,
+      it goes straight to Switch user (after sending the waiting scans), where it's scanned again.
+      Its code is never logged, shown or kept; it is sent once, in the body of the sign-in call.
+    - **Accepting a card ends any Hub login on the device** (`signOut`, no redirect) before /scan
+      reloads, because a Hub login counts first; if that sign-out fails while a Hub login was there,
+      the screen says so rather than open as the wrong person. **A password sign-in clears the card
+      session** — once the password has been accepted, so a mistyped one signs nobody out.
+    - **Sign out** clears the card session and any Hub login, then goes back to /scan's own sign-in
+      screen — never `/login` or `/hub`. Either way the last person's saved offline copy is forgotten.
+    - **Signed out while the screen is open** (card cancelled or expired, Hub login ended, access
+      removed): whichever call hears 401/403 first — a send, the bootstrap or a lookup — stops taking
+      scans and reloads /scan (`sessionEnded`), so the card screen appears instead of the last
+      person's name. The queue is untouched: the same person signing in again sends their scans;
+      anyone else sees "N scans by … still waiting". It stays put with Switch user open instead when
+      the scans live only in the page's memory, or when it already reloaded for this in the last 30
+      seconds (never a loop). Switch user with scans the Hub won't take from this person any more
+      opens the sign-in straight away rather than asking for a send that can never work.
+    - **Opened from the saved copy** (no Wi-Fi, so nobody could check who is signed in), the first
+      scan or tap asks "Still …?" before anything is recorded against the last person.
+  - ⚠⚠ **Run Migrations**: `GoodsInScannerPass` is a new table (in `lib/data-map.ts`). Until it exists
+    the card routes answer "Scanner sign-in cards need Run Migrations" and username-and-password
+    sign-in on the scanner still works. Nothing was added to `Contact`, `CatalogueLot` or `User`.
+  - Registered in `lib/help-map.ts` as **"Goods In → Scanner sign-in cards"**; its keywords all name
+    the scanner or the card, never bare "sign in" or "qr code".
+- Registered in `lib/help-map.ts` as **"Goods In → Handheld scanner"** — never plain "Scanner", which
+  would refuse a cataloguer whose tablet "scanner isn't working" with Goods In.

@@ -3,24 +3,42 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/app/generated/prisma/client"
 import { getSignedImageUrl } from "@/lib/r2"
-import { articlePicture, gbDate, StoryCard, SITE, cleanHtml, type Article } from "../shared"
+import { londonYmd } from "../../../site-dates"
+import { articlePicture, StoryCard, SITE, cleanHtml, teaser, type Article } from "../shared"
 
-// One News & Stories article on the test website. The text is the article PAGE's own HTML as the
-// collector cleaned it (paragraphs, emojis, the pictures inside it — the feed's copy is flattened),
-// with each picture served from our R2 copy once uploaded, else from the website. Older loads that
-// only have the feed's text get it split back into paragraphs. Its own design, not the live site's.
+// One News & Stories article on the test website, laid out as vectis.co.uk lays out an article
+// (2026-10-14): BACK TO ALL NEWS, the title centred, "Published on:", the copy at reading width,
+// then three more stories. The text is the article PAGE's own HTML as the collector cleaned it
+// (paragraphs, emojis, the pictures inside it — the feed's copy is flattened), with each picture
+// served from our R2 copy once uploaded, else from the website. Older loads that only have the
+// feed's text get it split back into paragraphs.
 
 export const dynamic = "force-dynamic"
 
-const COLS = Prisma.sql`a."id", a."alias", a."title", a."category", a."tags", a."featured", a."publishedAt", a."introText", a."fullText", a."imagePath", a."imageKey", a."bodyHtml", a."bodyImages", a."bodyImageKeys"`
+const COLS_BASIC = Prisma.sql`a."id", a."alias", a."title", a."category", a."tags", a."featured", a."publishedAt", a."introText", a."fullText", a."imagePath", a."imageKey"`
+// The page's own HTML and its pictures arrived with Run Migrations (2026-09-23); until an
+// environment has those columns the article is read without them and shows the feed's text.
+const COLS = Prisma.sql`${COLS_BASIC}, a."bodyHtml", a."bodyImages", a."bodyImageKeys"`
+const missingColumns = (e: unknown) => /bodyHtml|bodyImages|bodyImageKeys/i.test(String((e as { message?: string })?.message ?? ""))
 
 async function loadArticle(alias: string): Promise<Article | null> {
   // The alias is unique on the site in practice (Joomla only enforces it per category) — newest wins.
-  const rows = await prisma.$queryRaw<Article[]>`SELECT ${COLS} FROM "SiteNewsArticle" a WHERE a."alias" = ${alias} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 1`
+  const run = (cols: Prisma.Sql) => prisma.$queryRaw<Article[]>`SELECT ${cols} FROM "SiteNewsArticle" a WHERE a."alias" = ${alias} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 1`
+  let rows: Article[]
+  try { rows = await run(COLS) }
+  catch (e) { if (!missingColumns(e)) throw e; rows = await run(COLS_BASIC) }
   return rows[0] ?? null
 }
 
+// The address segment as typed: a stray "%" in a hand-typed one must be a 404, not a crash.
+function safeDecode(s: string): string {
+  try { return decodeURIComponent(s) } catch { return s }
+}
+
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+// "13/10/2026" — the live site's "Published on:" line, in Europe/London (the server runs in UTC).
+const publishedOn = (d: Date) => londonYmd(d).split("-").reverse().join("/")
 
 // The article's own pictures: our copy when it has been uploaded (news-photos/<file>), else the
 // website's file. Substituted BEFORE the general clean, while the paths are still as stored.
@@ -65,15 +83,35 @@ function paragraphs(text: string): string {
     .join("\n")
 }
 
+// "Keep reading": three more stories — this one's category first (its first tag; the site's
+// categories are its tags), the newest others making the three up. Never a throw: the story
+// still reads without the row.
+async function moreStories(a: Article): Promise<(Article & { photo: string | null })[]> {
+  try {
+    const rows: Article[] = a.category
+      ? await prisma.$queryRaw<Article[]>`SELECT ${COLS_BASIC} FROM "SiteNewsArticle" a WHERE a."id" <> ${a.id} AND ${a.category} = ANY(a."tags") ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 3`
+      : []
+    if (rows.length < 3) {
+      const seen = [a.id, ...rows.map(r => r.id)]
+      const fill = await prisma.$queryRaw<Article[]>`SELECT ${COLS_BASIC} FROM "SiteNewsArticle" a WHERE a."id" NOT IN (${Prisma.join(seen)}) ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT ${3 - rows.length}`
+      rows.push(...fill)
+    }
+    return await Promise.all(rows.map(async m => ({ ...m, photo: await articlePicture(m) })))
+  } catch {
+    return []
+  }
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ alias: string }> }) {
   const { alias } = await params
-  const a = await loadArticle(decodeURIComponent(alias)).catch(() => null)
-  return { title: a ? `${a.title} — News & Stories` : "News & Stories" }
+  const a = await loadArticle(safeDecode(alias)).catch(() => null)
+  if (!a) return { title: "News & Stories" }
+  return { title: `${a.title} — News & Stories`, description: teaser(a, 160) || undefined }
 }
 
 export default async function ArticlePage({ params }: { params: Promise<{ alias: string }> }) {
   const { alias } = await params
-  const a = await loadArticle(decodeURIComponent(alias))
+  const a = await loadArticle(safeDecode(alias))
   if (!a) notFound()
 
   const body = a.bodyHtml
@@ -82,63 +120,56 @@ export default async function ArticlePage({ params }: { params: Promise<{ alias:
   // The article's own picture is in the body when the page was collected; the cover only stands in when it isn't.
   const bodyHasPicture = /<img\b/i.test(body)
   const cover = bodyHasPicture ? null : await articlePicture(a)
-
-  // Three more stories — sharing this one's category (its first tag; the site's categories are its tags).
-  const sameCategory = a.category ? Prisma.sql`AND ${a.category} = ANY(a."tags")` : Prisma.empty
-  const moreRows = await prisma.$queryRaw<Article[]>`SELECT ${COLS} FROM "SiteNewsArticle" a WHERE a."id" <> ${a.id} ${sameCategory} ORDER BY a."publishedAt" DESC NULLS LAST, a."id" DESC LIMIT 3`
-  const more = await Promise.all(moreRows.map(async m => ({ ...m, photo: await articlePicture(m) })))
+  const more = await moreStories(a)
   const listHref = a.category ? `/news-stories/news?category=${encodeURIComponent(a.category)}` : "/news-stories/news"
 
   return (
-    <div className="bg-gray-50 min-h-screen">
-      {/* ── Top bar ── */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Link href="/news-stories/news" className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-[#32348A] hover:text-[#DB0606] transition-colors">
-            <span aria-hidden="true">←</span> All news
-          </Link>
-          {a.category && (
-            <>
-              <span className="hidden sm:inline text-gray-300">|</span>
-              <Link href={listHref} className="text-xs font-black uppercase tracking-[0.2em] text-[#2AB4A6] hover:underline">{a.category}</Link>
-            </>
-          )}
-          {a.publishedAt && <span className="ml-auto text-[11px] text-gray-400 uppercase tracking-wide">{gbDate(a.publishedAt)}</span>}
+    <div className="bg-white">
+      <div className="vs-page">
+        <div className="vs-container">
+          <p className="mb-6"><Link href="/news-stories/news" className="vs-link vs-link-back vs-link-sm">Back to all news</Link></p>
+
+          {/* The copy sits at reading width (760px), as on the live site; wide pictures inside it fit that width. */}
+          <article className="max-w-[760px] mx-auto">
+            <header className="text-center mb-8">
+              {a.category && (
+                <p className="mb-3"><Link href={listHref} className="vs-kicker vs-kicker-navy hover:underline">{a.category}</Link></p>
+              )}
+              <h1 className="vs-h2 mb-3">{a.title}</h1>
+              {a.publishedAt && <p className="text-sm text-[var(--vs-muted)]">Published on: {publishedOn(a.publishedAt)}</p>}
+            </header>
+
+            {/* The cover is the first thing on the page, so it loads eagerly, unlike the cards' pictures. */}
+            {cover && <img src={cover} alt="" className="block w-full h-auto mb-8" />}
+
+            {body
+              /* overflow-x-auto: a wide table or embed in a collected article scrolls inside the copy rather than widening a phone's page. */
+              ? <div className="news-body overflow-x-auto" dangerouslySetInnerHTML={{ __html: body }} />
+              : <p className="text-[var(--vs-muted)]">No text is held for this story.</p>}
+
+            {a.tags.length > 0 && (
+              <footer className="mt-10 pt-6 border-t border-[var(--vs-line)] flex flex-wrap items-center gap-2">
+                <span className="vs-caps text-[var(--vs-muted)] mr-2">Tagged</span>
+                {/* A tag is one of the site's categories, so it opens the listing filtered to it. */}
+                {a.tags.map(t => (
+                  <Link key={t} href={`/news-stories/news?category=${encodeURIComponent(t)}`} className="vs-btn vs-btn-outline min-h-11">{t}</Link>
+                ))}
+              </footer>
+            )}
+          </article>
         </div>
       </div>
 
-      <article className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        <h1 className="text-3xl sm:text-4xl font-black text-[#32348A] leading-tight mb-5">{a.title}</h1>
-
-        {cover && (
-          <div className="bg-white border border-gray-200 p-3 mb-8">
-            <img src={cover} alt="" className="w-full max-h-[560px] object-contain bg-gray-100" />
-          </div>
-        )}
-
-        <div className="bg-white border border-gray-200 p-6 sm:p-8">
-          {body
-            ? <div className="news-body" dangerouslySetInnerHTML={{ __html: body }} />
-            : <p className="text-gray-400">No text is held for this story.</p>}
-          {a.tags.length > 0 && (
-            <div className="mt-8 pt-5 border-t border-gray-200 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 mr-1">Tagged</span>
-              {a.tags.map(t => (
-                <Link key={t} href={`/news-stories/news?search=${encodeURIComponent(t)}`} className="text-[11px] font-bold uppercase tracking-wider text-[#32348A] border border-[#32348A]/30 px-2 py-1 hover:bg-[#32348A] hover:text-white transition-colors">{t}</Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </article>
-
       {more.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-14">
-          <div className="mb-5">
-            <p className="text-[#DB0606] text-xs font-black tracking-[0.25em] uppercase mb-1">Keep reading</p>
-            <h2 className="text-2xl font-black text-[#32348A] uppercase tracking-tight">{a.category ? `More from ${a.category}` : "More stories"}</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {more.map(m => <StoryCard key={m.id} a={m} />)}
+        <section className="vs-section vs-band" aria-labelledby="keep-reading">
+          <div className="vs-container">
+            <h2 id="keep-reading" className="vs-h2 text-center mb-8">Keep reading</h2>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {more.map(m => <StoryCard key={m.id} a={m} />)}
+            </div>
+            <p className="text-center mt-10">
+              <Link href={listHref} className="vs-link">{a.category ? `More from ${a.category}` : "All news"}</Link>
+            </p>
           </div>
         </section>
       )}

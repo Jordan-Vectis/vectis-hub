@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { HeroSection, SpecialismsSection, StatsSection, UpcomingSection } from "../home-sections"
+import { HeroSection, IntroSection, LatestNewsSection, PastAuctionsSection, SellAtAuctionSection, SpecialismsSection, StatsSection, UpcomingSection } from "../home-sections"
 import AuctionCalendar, { type CalendarParams } from "../auctions/calendar"
 import { DepartmentsIndex, DeptHighlights, DeptPastAuctions, NewsList } from "../departments/sections"
 import NewsIndex, { type NewsParams } from "../news-stories/news/index-view"
@@ -19,7 +19,11 @@ const sp = (p: Props) => (p.puck?.metadata?.searchParams ?? {}) as Record<string
 
 export const LIVE_RENDERS: Record<LiveType, (p: Props) => ReactNode> = {
   LiveHero: () => <HeroSection />,
+  LiveIntro: () => <IntroSection />,
   LiveUpcoming: p => <UpcomingSection kicker={p.kicker} heading={p.heading} count={p.count} />,
+  LiveSellAtAuction: () => <SellAtAuctionSection />,
+  LiveRecentResults: p => <PastAuctionsSection heading={p.heading} count={p.count} />,
+  LiveLatestNews: p => <LatestNewsSection heading={p.heading} count={p.count} />,
   LiveCalendar: p => <AuctionCalendar sp={sp(p) as CalendarParams} title={p.title} />,
   LiveStats: () => <StatsSection />,
   LiveSpecialisms: p => <SpecialismsSection kicker={p.kicker} heading={p.heading} />,

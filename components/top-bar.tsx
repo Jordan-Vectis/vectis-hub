@@ -19,12 +19,20 @@ interface TopBarProps {
   /** Hub feedback surveys (popup + the "📝 Feedback to finish" button). Off while the iPad policy
    *  still needs signing — that comes first, and two stacked modals would be a mess. */
   feedbackEnabled?: boolean
+  /** An admin (as seen, so not while viewing as someone else) — the ✏️ on the home page. */
+  canEditHome?: boolean
 }
 
-export default function TopBar({ userName, isAdmin, hasDashboard, feedbackEnabled }: TopBarProps) {
+export default function TopBar({ userName, isAdmin, hasDashboard, feedbackEnabled, canEditHome }: TopBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const onDashboard = pathname.startsWith("/tools/manager-portal")
+  // On the home page or a section of it, the pencil opens the editor there (a section's slug is
+  // its key in lower case with hyphens).
+  const onHome = pathname === "/hub" || pathname.startsWith("/hub/")
+  const editHref = pathname.startsWith("/hub/")
+    ? `/hub?edit=1&section=${pathname.slice(5).toUpperCase().replace(/-/g, "_")}`
+    : "/hub?edit=1"
 
   return (
     // ⚠⚠ ON A PHONE THIS BAR USED TO WIDEN THE WHOLE PAGE (2026-09-18). One row that couldn't wrap:
@@ -90,6 +98,14 @@ export default function TopBar({ userName, isAdmin, hasDashboard, feedbackEnable
         <EnvSelector />
         <ThemeToggle />
         <BcStatusButton />
+        {canEditHome && onHome && (
+          <Link href={editHref} title="Edit the home page" aria-label="Edit the home page" className="text-gray-400 hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </Link>
+        )}
         {isAdmin && <NotificationBell />}
         {isAdmin && (
           <Link href="/admin" title="Admin settings" className="text-gray-400 hover:text-white transition-colors">

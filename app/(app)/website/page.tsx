@@ -3,9 +3,19 @@
 import { useState } from "react"
 import Link from "next/link"
 
+// Every page the test site has, so each can be opened in the preview with one click.
 const SITE_PAGES = [
   { label: "Home",              path: "/" },
-  { label: "Auctions",          path: "/auctions" },
+  { label: "Calendar",          path: "/auctions" },
+  { label: "Results",           path: "/auctions?tab=past" },
+  { label: "Departments",       path: "/departments" },
+  { label: "How to bid",        path: "/how-to-bid" },
+  { label: "Sell",              path: "/sell-with-us" },
+  { label: "News",              path: "/news-stories/news" },
+  { label: "Careers",           path: "/careers" },
+  { label: "Contact",           path: "/contact" },
+  { label: "FAQ",               path: "/faq" },
+  { label: "Search",            path: "/search?q=corgi" },
   { label: "Login",             path: "/portal/login" },
   { label: "Register",          path: "/portal/register" },
   { label: "My Account",        path: "/account" },

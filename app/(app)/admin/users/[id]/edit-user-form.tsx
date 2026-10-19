@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 import { updateUser, changePassword, setUserDepartments } from "@/lib/actions/admin"
 import { ALL_APPS, WAREHOUSE_ROLES, APP_SECTIONS } from "@/lib/apps"
 import type { AppKey, WarehouseRole } from "@/lib/apps"
-import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
+import { APP_CARD_DEFS } from "@/lib/app-cards"
+import type { PermissionGroup } from "@/lib/home-layout"
 
 interface Props {
   userId: string
@@ -23,13 +24,14 @@ interface Props {
   departments: { id: string; name: string }[]
   roles:       string[]
   isSelf: boolean
+  homeSections: PermissionGroup[]
 }
 
 function roleLabel(key: string): string {
   return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentIds, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, showLotTimer: initialShowLotTimer, manualDescriptions: initialManualDescriptions, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
+export default function EditUserForm({ userId, name, email, username, role, departmentIds, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, showLotTimer: initialShowLotTimer, manualDescriptions: initialManualDescriptions, timerRedMins: initialRed, departments, roles, isSelf, homeSections }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   // Departments are saved on their own — a person can be in more than one, and
@@ -105,18 +107,20 @@ export default function EditUserForm({ userId, name, email, username, role, depa
   const [showPwd, setShowPwd] = useState(false)
 
   // Build unified sections: each section contains both app-access items and hub-card-visibility items
+  const sectionOfCard = new Map(homeSections.flatMap(s => s.cardKeys.map(k => [k, s.key] as const)))
   const appKeyToSection: Partial<Record<string, string>> = {}
   for (const card of APP_CARD_DEFS) {
-    if (card.appKey && card.group) appKeyToSection[card.appKey] = card.group
+    const g = sectionOfCard.get(card.key)
+    if (card.appKey && g) appKeyToSection[card.appKey] = g
   }
-  const sections = SECTION_DEFS.map(s => ({
+  const sections = homeSections.map(s => ({
     ...s,
     items: [
       ...ALL_APPS
         .filter(a => appKeyToSection[a.key] === s.key)
         .map(a => ({ type: "app" as const, key: a.key, label: a.label, icon: "" })),
       ...APP_CARD_DEFS
-        .filter(c => c.allUsers && c.group === s.key)
+        .filter(c => c.allUsers && sectionOfCard.get(c.key) === s.key)
         .map(c => ({ type: "hub" as const, key: c.key, label: c.defaultLabel, icon: c.icon })),
     ],
   })).filter(s => s.items.length > 0)

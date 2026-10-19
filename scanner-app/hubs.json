@@ -1,0 +1,14 @@
+{
+  "production": {
+    "url": "https://vectis-production.up.railway.app",
+    "appName": "Vectis Scanner"
+  },
+  "staging": {
+    "url": "https://vectis-staging.up.railway.app",
+    "appName": "Vectis Scanner (Staging)"
+  },
+  "sandbox": {
+    "url": "https://vectis-hub-sandbox.up.railway.app",
+    "appName": "Vectis Scanner (Sandbox)"
+  }
+}

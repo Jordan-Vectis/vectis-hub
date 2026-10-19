@@ -1,0 +1,166 @@
+import groovy.json.JsonSlurper
+
+apply plugin: 'com.android.application'
+
+// ---------------------------------------------------------------------------------------------
+// Vectis Scanner. Three builds that install side by side, one per Hub, all from this project:
+//
+//   production  uk.co.vectis.scanner          "Vectis Scanner"
+//   staging     uk.co.vectis.scanner.staging  "Vectis Scanner (Staging)"
+//   sandbox     uk.co.vectis.scanner.sandbox  "Vectis Scanner (Sandbox)"
+//
+// The Hub each one opens is NOT set here: `HUB_URL=… npx cap sync android` writes it into
+// src/main/assets/capacitor.config.json. Every build checks that file names its own Hub
+// (scanner-app/hubs.json) and refuses to build otherwise, so a staging APK can never open
+// production by mistake. The GitHub workflow syncs before each flavour.
+// ---------------------------------------------------------------------------------------------
+
+def hubsFile = rootProject.file('../hubs.json')
+def hubs = new JsonSlurper().parse(hubsFile)
+
+// Release signing comes from the GitHub secrets (see .github/workflows/scanner-app.yml). Without
+// all four, release builds are signed with the runner's throwaway debug key and the workflow
+// says so in its summary — fine for trying the app, not for installing updates over it.
+def releaseStorePath = System.getenv('SCANNER_KEYSTORE_PATH')
+def releaseStorePassword = System.getenv('SCANNER_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('SCANNER_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('SCANNER_KEY_PASSWORD')
+def hasReleaseKey = releaseStorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword &&
+    new File(releaseStorePath).isFile()
+
+// Every GitHub run gets a higher version code, so a new APK always installs over the old one.
+def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+
+android {
+    namespace "uk.co.vectis.scanner"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "uk.co.vectis.scanner"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+
+    buildFeatures {
+        resValues true
+    }
+
+    flavorDimensions "hub"
+    productFlavors {
+        production {
+            dimension "hub"
+            resValue "string", "app_name", hubs.production.appName
+            resValue "string", "title_activity_main", hubs.production.appName
+        }
+        staging {
+            dimension "hub"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+            resValue "string", "app_name", hubs.staging.appName
+            resValue "string", "title_activity_main", hubs.staging.appName
+        }
+        sandbox {
+            dimension "hub"
+            applicationIdSuffix ".sandbox"
+            versionNameSuffix "-sandbox"
+            resValue "string", "app_name", hubs.sandbox.appName
+            resValue "string", "title_activity_main", hubs.sandbox.appName
+        }
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                storeType "pkcs12"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig(hasReleaseKey ? signingConfigs.release : signingConfigs.debug)
+        }
+    }
+
+    lint {
+        // Lint can't run anywhere but GitHub here, and a lint opinion must never stop the scanners
+        // getting a build. The compiler still checks every line.
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.core:core:$androidxCoreVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// Refuse to build an APK whose capacitor.config.json points at a different Hub from its flavour.
+def capacitorConfigFile = file('src/main/assets/capacitor.config.json')
+def originOf = { String url ->
+    if (url == null) return null
+    try {
+        def u = new URI(url.trim())
+        return u.scheme && u.host ? "${u.scheme.toLowerCase()}://${u.host.toLowerCase()}${u.port > 0 ? ':' + u.port : ''}".toString() : null
+    } catch (Exception ignored) {
+        return null
+    }
+}
+android.applicationVariants.all { variant ->
+    def flavor = variant.flavorName
+    variant.preBuildProvider.configure {
+        doFirst {
+            def hub = hubs[flavor]
+            if (hub == null) {
+                throw new GradleException("Vectis Scanner: no Hub for the '${flavor}' build in scanner-app/hubs.json.")
+            }
+            if (!capacitorConfigFile.isFile()) {
+                throw new GradleException("Vectis Scanner: ${capacitorConfigFile} is missing — run `HUB_URL=${hub.url} npx cap sync android` in scanner-app first.")
+            }
+            def config = new JsonSlurper().parse(capacitorConfigFile)
+            def actual = originOf(config?.server?.url as String)
+            def expected = originOf(hub.url as String)
+            if (actual == null || actual != expected) {
+                throw new GradleException("Vectis Scanner: the '${flavor}' build must open ${hub.url}, but the last `cap sync` set ${config?.server?.url}. Run `HUB_URL=${hub.url} npx cap sync android` in scanner-app, then build again.")
+            }
+        }
+    }
+}
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

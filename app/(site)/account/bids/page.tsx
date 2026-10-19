@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma"
 import BidsClient from "./bids-client"
 
 export const dynamic = "force-dynamic"
-export const metadata = { title: "My Bids — Vectis" }
+// The site layout's title template adds " | Vectis Auctions" itself.
+export const metadata = { title: "My bids" }
 
 export default async function MyBidsPage() {
   const session = await getCustomerSession()
@@ -52,11 +53,12 @@ export default async function MyBidsPage() {
   })
   const topBidMap = Object.fromEntries(topBids.map(t => [t.lotId, t._max.maxBid]))
 
-  // Check for active live auction
+  // Check for active live auction — the banner is a nicety, so a table that isn't there yet
+  // must not take the bids with it.
   const liveAuction = await prisma.liveAuction.findFirst({
     where: { status: { in: ["ACTIVE", "PAUSED"] } },
     include: { auction: true },
-  })
+  }).catch(() => null)
 
   // Group bids by auction (preserve most-recent-auction-first order)
   const auctionMap = new Map<string, {
@@ -104,27 +106,18 @@ export default async function MyBidsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">My Bids</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Your commission bids and bidding history — grouped by sale.
-      </p>
+      <h1 className="vs-h2 vs-rule mb-3">My bids</h1>
+      <p className="text-[var(--vs-muted)] mb-8">Your commission bids and results, sale by sale.</p>
 
-      {/* Live auction alert */}
+      {/* A sale running right now — the way into the live room. */}
       {liveAuction && (
-        <div className="mb-6 bg-red-50 border border-red-300 p-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse shrink-0" />
-            <div>
-              <p className="font-bold text-red-800 text-sm">Auction Live Now: {liveAuction.auction.name}</p>
-              <p className="text-red-600 text-xs mt-0.5">Join the live bidding room to bid in real time</p>
-            </div>
+        <div className="vs-card-flat !border-[var(--vs-red)] p-5 sm:p-6 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="vs-kicker mb-1">Live now</p>
+            <p className="vs-h4">{liveAuction.auction.name}</p>
+            <p className="text-sm text-[var(--vs-muted)] mt-1">Join the live room to bid in real time.</p>
           </div>
-          <Link
-            href={`/auctions/${liveAuction.auction.code}/live`}
-            className="shrink-0 bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest px-5 py-2.5 transition-colors"
-          >
-            BID LIVE →
-          </Link>
+          <Link href={`/auctions/${liveAuction.auction.code}/live`} className="vs-btn vs-btn-red self-start sm:self-auto">Bid live</Link>
         </div>
       )}
 
@@ -132,15 +125,17 @@ export default async function MyBidsPage() {
       <BidsClient groups={groups} />
 
       {/* How bidding works */}
-      <div className="bg-gray-50 border border-gray-200 p-5 text-sm text-gray-600">
-        <p className="font-bold text-gray-800 mb-2">How commission bids work</p>
-        <p className="text-xs leading-relaxed text-gray-500">
-          Your maximum bid is kept confidential. During the live auction, bids are placed on your behalf up to your
-          maximum. A buyer&apos;s premium of <strong>22% + VAT</strong> applies to all winning bids. To update or
-          cancel a bid before the sale date, please{" "}
-          <Link href="/auctions" className="text-[#32348A] underline">contact us</Link>.
-        </p>
-      </div>
+      <section className="vs-band p-5 sm:p-8 mt-8" aria-labelledby="bids-how">
+        <h2 id="bids-how" className="vs-h4 mb-3">How commission bids work</h2>
+        <div className="vs-prose">
+          <p>
+            Your maximum bid is kept confidential. During the sale, bids are placed on your behalf up to your
+            maximum, only as far as needed to beat the other bidders. A buyer&apos;s premium of <strong>22% + VAT</strong>{" "}
+            applies to every winning bid. To change or cancel a bid before the sale, please{" "}
+            <Link href="/contact">contact us</Link>.
+          </p>
+        </div>
+      </section>
     </div>
   )
 }

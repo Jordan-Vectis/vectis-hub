@@ -2,6 +2,88 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { resolveTote, resolveReceipt, dedupeByToteAndReceipt } from "@/lib/receipt-totes"
+import { normaliseCode, type CustomerSnapshot } from "@/lib/goods-in/model"
+
+// ── Goods In fallback (2026-10-15) ───────────────────────────────────────────────────────────
+// A tote or receipt booked in through the Hub's own Goods In (/tools/warehouse) is not in our copy
+// of BC — Goods In never touches Business Central — so without this the wizard said "This tote is
+// not in our copy of BC" for every one of them. These two reads answer from Goods In instead, in
+// EXACTLY the shape a BC hit already has, with `source: "goods-in"` (a value the wizard treats as
+// a solid answer: it only ambers "item", and only special-cases "tote-shell").
+//
+// ⚠⚠ ONLY when BC's copy has NO row of any kind for the number. Every tote and receipt BC knows —
+// including a shell tote and one with no vendor yet — answers exactly as it did before; Goods In
+// is consulted after BC has said nothing, never instead of it.
+// ⚠ `catalogued` is always null here: the wizard words a true value as "BC has already ticked this
+// tote catalogued … this is the previous customer", which is false for a Goods In tote (each one
+// is a new number on one receipt). `syncedAt` is null because nothing was synced.
+// ⚠ A tote on a VOIDED receipt is not offered — the booking was cancelled, and filling its customer
+// in would start a batch under a receipt that no longer stands. Nor is one on a check-in that hasn't
+// been booked in yet (a DRAFT receipt): its numbers are taken (so its labels can be printed at the
+// counter) but nothing is booked in until Book in is pressed, and the check-in may still be thrown
+// away — so it is left out exactly like a void. (Hub tables only; no BC change.)
+// ⚠ Migration-safe: the Goods In tables only exist after Run Migrations, so any failure reading
+// them is "Goods In has nothing" and the reply is exactly what it was before this was added.
+
+type GoodsInWho = { vendorNo: string | null; vendorName: string | null }
+
+const RECEIPT_SELECT = {
+  id: true, vendorNo: true, customer: true, status: true,
+  contact: { select: { name: true, goodsInCustomer: { select: { vendorNo: true } } } },
+} as const
+
+/** Vendor number and name for a Goods In receipt: the receipt's own copy first (what was printed on
+ *  it), then the customer's current vendor number for a receipt booked before they were given one. */
+function goodsInWho(r: {
+  vendorNo: string | null
+  customer: unknown
+  contact: { name: string; goodsInCustomer: { vendorNo: string | null } | null }
+}): GoodsInWho {
+  const snap = r.customer && typeof r.customer === "object" ? (r.customer as Partial<CustomerSnapshot>) : null
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null)
+  return {
+    vendorNo:   text(r.vendorNo) ?? text(snap?.vendorNo) ?? text(r.contact.goodsInCustomer?.vendorNo),
+    vendorName: text(snap?.name) ?? text(r.contact.name),
+  }
+}
+
+/** "Comics – 5x boxes of Marvel" — category and description, whichever were filled in. */
+function goodsInContents(category: string | null, description: string | null): string | null {
+  const parts = [category, description].map(s => (s ?? "").trim()).filter(Boolean)
+  return parts.length ? parts.join(" – ") : null
+}
+
+async function goodsInTote(raw: string) {
+  const id = normaliseCode(raw)
+  if (!id) return null
+  try {
+    const c = await prisma.goodsInContainer.findUnique({
+      where:  { id },
+      select: { id: true, category: true, description: true, locationCode: true, receipt: { select: RECEIPT_SELECT } },
+    })
+    if (!c || c.receipt.status === "void" || c.receipt.status === "draft") return null   // not booked in (see above)
+    return {
+      ...goodsInWho(c.receipt),
+      receiptNo: c.receipt.id,
+      location:  c.locationCode ?? null,
+      contents:  goodsInContents(c.category, c.description),
+    }
+  } catch {
+    return null   // tables not migrated yet, or unreadable — Goods In simply has nothing to add
+  }
+}
+
+async function goodsInReceipt(raw: string) {
+  const id = normaliseCode(raw)
+  if (!id) return null
+  try {
+    const r = await prisma.goodsInReceipt.findUnique({ where: { id }, select: RECEIPT_SELECT })
+    if (!r || r.status === "void" || r.status === "draft") return null   // not booked in (see above)
+    return { ...goodsInWho(r), receiptNo: r.id }
+  } catch {
+    return null
+  }
+}
 
 // GET /api/warehouse/vendor-lookup?receipt=R007523
 // GET /api/warehouse/vendor-lookup?tote=T024801
@@ -9,6 +91,7 @@ import { resolveTote, resolveReceipt, dedupeByToteAndReceipt } from "@/lib/recei
 // For tote lookups: checks WarehouseTote first (BC-synced, has vendorNo directly),
 // then falls back to WarehouseItem (in case only item-level data is present).
 // For receipt lookups: checks WarehouseTote.receiptNo, then WarehouseItem.receiptNo.
+// Last of all, and only when BC's copy has no row for the number, Goods In (see above).
 //
 // ⚠⚠ THE ANSWER CARRIES ITS OWN PROVENANCE (2026-09-08). This route used to return vendorNo /
 // vendorName / receiptNo and nothing else, so the lot wizard could not tell:
@@ -141,6 +224,25 @@ export async function GET(req: NextRequest) {
           catalogued: null, syncedAt: null, source: "item",
         })
       }
+      // Goods In — only when BC has no row for this tote at all (no receipt-tote row, no
+      // WarehouseTote row — that branch returned above — and no WarehouseItem row). See the top.
+      if (!rt && !wi) {
+        const gi = await goodsInTote(tote)
+        if (gi) {
+          return NextResponse.json({
+            ...empty,
+            location:   gi.location,
+            contents:   gi.contents,
+            vendorNo:   gi.vendorNo,
+            vendorName: gi.vendorName,
+            receiptNo:  gi.receiptNo,
+            catalogued: null,
+            syncedAt:   null,
+            source:     "goods-in",
+            ambiguous:  false,
+          })
+        }
+      }
       return NextResponse.json({ ...empty, ...extra })
     }
 
@@ -187,6 +289,21 @@ export async function GET(req: NextRequest) {
           vendorNo: wi.vendorNo, vendorName: wi.vendorName ?? null, receiptNo: receipt,
           catalogued: null, syncedAt: null, source: "item",
         })
+      }
+      // Goods In — only when BC has no row for this receipt at all. See the top.
+      if (!rr && !wt && !wi) {
+        const gi = await goodsInReceipt(receipt)
+        if (gi) {
+          return NextResponse.json({
+            vendorNo:   gi.vendorNo,
+            vendorName: gi.vendorName,
+            receiptNo:  gi.receiptNo,
+            catalogued: null,
+            syncedAt:   null,
+            source:     "goods-in",
+            ambiguous:  false,
+          })
+        }
       }
       return NextResponse.json(empty)
     }

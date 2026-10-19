@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vectis Scanner</title>
+<!--
+  Not normally shown: the app opens the Hub's /scan screen directly (capacitor.config.ts
+  server.url + appStartPath). Kept so the web folder is a complete site; it just goes to the Hub.
+  The HUB placeholder in the script is filled in by scripts/build-web.mjs.
+-->
+<style>
+  html, body { margin: 0; background: #030712; color: #f9fafb; font: 18px/1.45 system-ui, sans-serif; }
+  p { padding: 24px 16px; }
+  a { color: #a5b4fc; }
+</style>
+</head>
+<body>
+<p>Opening the Hub&hellip; <a id="go" href="#">Open it</a></p>
+<script>
+  (function () {
+    var HUB = __HUB__;
+    var target = HUB.url.replace(/\/+$/, "") + "/scan";
+    document.getElementById("go").setAttribute("href", target);
+    window.location.replace(target);
+  })();
+</script>
+</body>
+</html>

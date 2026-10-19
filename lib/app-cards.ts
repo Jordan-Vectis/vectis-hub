@@ -1,14 +1,15 @@
 import type { AppKey } from "@/lib/apps"
 
 export const SECTION_DEFS = [
-  { key: "CATALOGUING_AI",   label: "Cataloguing & AI" },
-  { key: "PHOTOGRAPHY",      label: "Photography" },
-  { key: "REPORTS",          label: "Reports" },
-  { key: "BUSINESS_CENTRAL", label: "Business Central" },
-  { key: "OPERATIONS",       label: "Operations" },
-  { key: "FACILITIES",       label: "Facilities" },
-  { key: "AUCTION",          label: "Auction" },
-  { key: "IT_ADMIN",         label: "IT & Admin" },
+  // The built-in sections. Admin → Home Page Cards can rename, recolour, reorder, hide or remove
+  // them and add new ones (lib/home-layout.ts) — these are only the starting values.
+  { key: "CATALOGUING_AI",   label: "Cataloguing & AI", icon: "📝", colour: "#3b82f6" },
+  { key: "MARKETING",        label: "Marketing",        icon: "📣", colour: "#ec4899" },
+  { key: "BUSINESS_CENTRAL", label: "Business Central", icon: "🏢", colour: "#06b6d4" },
+  { key: "OPERATIONS",       label: "Admin & Operations", icon: "📦", colour: "#22c55e" },
+  { key: "FACILITIES",       label: "Facilities",       icon: "🏠", colour: "#14b8a6" },
+  { key: "AUCTION",          label: "Auction",          icon: "🔨", colour: "#f97316" },
+  { key: "IT_ADMIN",         label: "IT & Admin",       icon: "🛠️", colour: "#8b5cf6" },
 ] as const
 
 export type SectionKey = typeof SECTION_DEFS[number]["key"]
@@ -120,7 +121,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-fuchsia-400",
     btnBg:              "bg-fuchsia-600 hover:bg-fuchsia-500",
     glow:               "hover:shadow-fuchsia-900/40",
-    group:              "PHOTOGRAPHY",
+    group:              "CATALOGUING_AI",
     appKey:             "PHOTO_PREP",
   },
   {
@@ -133,7 +134,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-purple-400",
     btnBg:              "bg-purple-600 hover:bg-purple-500",
     glow:               "hover:shadow-purple-900/40",
-    group:              "REPORTS",
+    group:              "CATALOGUING_AI",
     appKey:             "REPORTS",
   },
   {
@@ -146,7 +147,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-pink-400",
     btnBg:              "bg-pink-600 hover:bg-pink-500",
     glow:               "hover:shadow-pink-900/40",
-    group:              "REPORTS",
+    group:              "MARKETING",
     appKey:             "MARKETING_REPORTS",
   },
   {
@@ -194,8 +195,8 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   {
     key:                "WAREHOUSE",
     href:               "/tools/warehouse",
-    defaultLabel:       "Warehouse",
-    defaultDescription: "Track containers, totes and warehouse locations.",
+    defaultLabel:       "Goods In",
+    defaultDescription: "Book customers' goods in, print and email receipts and tote labels, and track every tote from storage to bench to shelf.",
     icon:               "🏭",
     border:             "border-cyan-500",
     iconBg:             "text-cyan-400",
@@ -227,7 +228,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-red-400",
     btnBg:              "bg-red-600 hover:bg-red-500",
     glow:               "hover:shadow-red-900/40",
-    group:              "CATALOGUING_AI",
+    group:              "OPERATIONS",
     // Searches any customer's lots by receipt / tote / vendor across the Hub and
     // BC, so it stays off by default — admins always have it, a non-admin needs
     // the ADMIN_CENTRE app granted (Admin → Users & Permissions). Page + API
@@ -453,14 +454,14 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   {
     key:                "BC_MARKETING",
     href:               "/tools/bc-marketing",
-    defaultLabel:       "BC Marketing",
+    defaultLabel:       "Marketing Tools",
     defaultDescription: "AI-powered marketing tools — generate SEO news articles from auction results.",
     icon:               "📰",
     border:             "border-pink-500",
     iconBg:             "text-pink-400",
     btnBg:              "bg-pink-600 hover:bg-pink-500",
     glow:               "hover:shadow-pink-900/40",
-    group:              "BUSINESS_CENTRAL",
+    group:              "MARKETING",
     appKey:             "BC_MARKETING",
   },
   {
@@ -512,7 +513,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-orange-400",
     btnBg:              "bg-orange-600 hover:bg-orange-500",
     glow:               "hover:shadow-orange-900/40",
-    group:              "FACILITIES",
+    group:              "OPERATIONS",
     appKey:             "VANS",
   },
 ]

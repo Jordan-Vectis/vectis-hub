@@ -1,0 +1,6 @@
+# The Gradle wrapper script runs on GitHub's Linux runners: keep it LF whatever the PC's settings.
+android/gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.png binary
+*.webp binary

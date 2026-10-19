@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Hub's dark scan screen (Tailwind gray-950) and Goods In's indigo. -->
+    <color name="scanner_background">#030712</color>
+    <color name="scanner_accent">#4F46E5</color>
+</resources>

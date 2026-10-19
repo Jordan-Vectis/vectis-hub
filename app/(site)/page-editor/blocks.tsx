@@ -2,8 +2,9 @@ import type { CSSProperties, ReactNode } from "react"
 import Link from "next/link"
 import type { ComponentConfig, Slot } from "@puckeditor/core"
 import { ColourFieldUI, PictureFieldUI } from "./fields-ui"
+import { barlow } from "../site-font"
 import {
-  ALIGN_OPTIONS, FLEX_JUSTIFY, PADDING_ALL, PADDING_OPTIONS, PADDING_Y, SELF_ALIGN, TEXT_ALIGN, TONE_VARS,
+  ALIGN_OPTIONS, BRAND, FLEX_JUSTIFY, PADDING_ALL, PADDING_OPTIONS, PADDING_Y, SELF_ALIGN, TEXT_ALIGN, TONE_VARS,
   WIDTH_CLASS, WIDTH_OPTIONS, YES_NO, colourOr, isDark, linkKind, lines, pictureSrc, safeHtml, videoEmbed,
 } from "./look"
 
@@ -16,6 +17,8 @@ import {
 // components. Anything interactive is plain HTML (the accordion is <details>). Colours the author
 // picks are inline styles; every class is written out in full so Tailwind can find it.
 //
+// The blocks draw in the site's own vocabulary (site.css: vs-h1…vs-h4, vs-btn, vs-card-flat,
+// vs-kicker…) so a page built here sits beside the built-in pages without a join showing.
 // Words take their colours from CSS variables (TONE_VARS in look.ts): a Section or Box on a dark
 // background sets the light set, so a heading dropped into it turns white on its own. A colour
 // picked on the block itself always wins.
@@ -38,10 +41,16 @@ function Anchor({ href, className, style, newTab, children }: { href: string; cl
 const toneStyle = (dark: boolean) => (dark ? TONE_VARS.dark : TONE_VARS.light) as unknown as CSSProperties
 const anchorId = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "")
 
+// The short bar under a title (site.css's vs-rule, 30 × 3) — drawn as its own element so it can
+// sit under a centred or right-aligned heading and turn white on a dark background.
+const Rule = ({ align, red }: { align: string; red?: boolean }) => (
+  <div aria-hidden="true" className={`h-[3px] w-[30px] mt-[14px] ${SELF_ALIGN[align] ?? ""}`} style={{ background: red ? "var(--pe-kicker)" : "var(--pe-rule)" }} />
+)
+
 // Placeholders are shown in the editor only — an empty block on the site shows nothing.
 function Empty({ editing, children }: { editing: boolean; children: ReactNode }) {
   return editing
-    ? <div className="w-full rounded border-2 border-dashed border-gray-300 bg-gray-50 py-8 px-4 text-center text-sm text-gray-400">{children}</div>
+    ? <div className="w-full border-2 border-dashed py-8 px-4 text-center text-sm" style={{ borderColor: "var(--pe-line)", color: "var(--pe-muted)", background: "rgba(0,0,0,0.03)" }}>{children}</div>
     : <div className="hidden" />
 }
 
@@ -88,7 +97,7 @@ export const Section: ComponentConfig<SectionProps> = {
     const vars = tone === "auto" && !bg && !src ? {} : toneStyle(dark)
     return (
       <section id={anchorId(anchor) || undefined} className="relative overflow-hidden scroll-mt-24" style={{ backgroundColor: bg || undefined, ...vars }}>
-        {src && <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+        {src && <img src={src} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />}
         {src && shade > 0 && <div className="absolute inset-0 bg-black" style={{ opacity: shade / 100 }} />}
         <Content className={`relative flex flex-col gap-6 ${WIDTH_CLASS[width] ?? WIDTH_CLASS.standard} ${PADDING_Y[paddingY] ?? PADDING_Y.medium}`} />
       </section>
@@ -132,7 +141,8 @@ export const Columns: ComponentConfig<ColumnsProps> = {
   },
 }
 
-const BORDERS: Record<string, string> = { none: "", light: "border border-gray-200", strong: "border-2 border-[#32348A]", left: "border-l-4 border-[#DB0606]" }
+// ⚠ The keys are what saved pages hold — only the look behind them changes.
+const BORDERS: Record<string, string> = { none: "", light: "border border-[var(--vs-line)]", strong: "border-2 border-[var(--vs-navy)]", left: "border-l-4 border-[var(--vs-red)]" }
 
 export type BoxProps = { background: string; border: string; padding: string; tone: "auto" | "light" | "dark"; shadow: boolean; anchor: string; content: Slot }
 export const Box: ComponentConfig<BoxProps> = {
@@ -140,7 +150,7 @@ export const Box: ComponentConfig<BoxProps> = {
   fields: {
     content: { type: "slot" },
     background: colour("Background colour"),
-    border: { type: "select", label: "Border", options: [{ label: "None", value: "none" }, { label: "Light", value: "light" }, { label: "Strong blue", value: "strong" }, { label: "Red bar on the left", value: "left" }] },
+    border: { type: "select", label: "Border", options: [{ label: "None", value: "none" }, { label: "Light", value: "light" }, { label: "Strong navy", value: "strong" }, { label: "Red bar on the left", value: "left" }] },
     padding: { type: "select", label: "Space inside", options: PADDING_OPTIONS },
     tone: { type: "radio", label: "Words", options: [{ label: "Automatic", value: "auto" }, { label: "Dark words", value: "light" }, { label: "Light words", value: "dark" }] },
     shadow: { type: "radio", label: "Shadow", options: YES_NO },
@@ -150,8 +160,11 @@ export const Box: ComponentConfig<BoxProps> = {
   render: ({ background, border, padding, tone, shadow, anchor, content: Content }) => {
     const bg = colourOr(background)
     const dark = tone === "dark" || (tone === "auto" && isDark(bg))
+    // "Automatic" with no background of its own keeps the colours of whatever it sits in — a
+    // see-through box in a navy section must not turn its words dark (as the Section rule above).
+    const vars = tone === "auto" && !bg ? {} : toneStyle(dark)
     return (
-      <div id={anchorId(anchor) || undefined} className={`scroll-mt-24 ${BORDERS[border] ?? ""} ${PADDING_ALL[padding] ?? PADDING_ALL.medium} ${shadow ? "shadow-md" : ""}`} style={{ backgroundColor: bg || undefined, ...toneStyle(dark) }}>
+      <div id={anchorId(anchor) || undefined} className={`scroll-mt-24 ${BORDERS[border] ?? ""} ${PADDING_ALL[padding] ?? PADDING_ALL.medium} ${shadow ? "shadow-[var(--vs-shadow)]" : ""}`} style={{ backgroundColor: bg || undefined, ...vars }}>
         <Content className="flex flex-col gap-4" />
       </div>
     )
@@ -169,21 +182,33 @@ export const Spacer: ComponentConfig<{ size: string }> = {
 export const Divider: ComponentConfig<{ style: string; align: string }> = {
   label: "Line",
   fields: {
-    style: { type: "select", label: "Kind", options: [{ label: "Short red bar", value: "red" }, { label: "Short blue bar", value: "blue" }, { label: "Thin line across", value: "line" }] },
+    style: { type: "select", label: "Kind", options: [{ label: "Short red bar", value: "red" }, { label: "Short navy bar", value: "blue" }, { label: "Thin line across", value: "line" }] },
     align: { type: "radio", label: "Position", options: ALIGN_OPTIONS },
   },
   defaultProps: { style: "line", align: "left" },
   render: ({ style, align }) =>
     style === "line"
       ? <hr className="w-full border-0 h-px" style={{ background: "var(--pe-line)" }} />
-      : <div aria-hidden="true" className={`h-1 w-12 ${SELF_ALIGN[align] ?? ""}`} style={{ background: style === "blue" ? "var(--pe-heading)" : "var(--pe-kicker)" }} />,
+      : <div aria-hidden="true" className={`h-[3px] w-[30px] ${SELF_ALIGN[align] ?? ""}`} style={{ background: style === "blue" ? "var(--pe-rule)" : "var(--pe-kicker)" }} />,
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Words and pictures
 // ═════════════════════════════════════════════════════════════════════════════
 
-const HEADING_SIZE: Record<string, string> = { xs: "text-xs tracking-wider", s: "text-lg", m: "text-2xl", l: "text-3xl", xl: "text-4xl sm:text-5xl" }
+// The level gives the heading its site class (vs-h1…vs-h4) and its meaning; the size can then
+// override it, in the site's own steps: xl = page title (vs-h1), l = section title (vs-h2),
+// m = vs-h3, s = vs-h4, xs = the small sub-heading of a text page ("BID ONLINE"). The level's own
+// size needs no override, so a plain H2 is exactly the site's vs-h2.
+const HEADING_CLASS: Record<string, string> = { h1: "vs-h1", h2: "vs-h2", h3: "vs-h3", h4: "vs-h4" }
+const HEADING_NATURAL: Record<string, string> = { h1: "xl", h2: "l", h3: "m", h4: "s" }
+const HEADING_SIZE: Record<string, string> = {
+  xs: "!text-base !font-semibold !leading-snug",
+  s: "!text-xl !font-medium !leading-tight",
+  m: "!text-2xl !font-normal !leading-tight",
+  l: "!text-[clamp(28px,3.2vw,36px)] !font-semibold !leading-[1.15]",
+  xl: "!text-[clamp(32px,4.2vw,48px)] !font-normal !leading-[1.05]",
+}
 
 export type HeadingProps = { kicker: string; text: string; level: string; size: string; colour: string; align: string; uppercase: boolean; rule: string }
 export const Heading: ComponentConfig<HeadingProps> = {
@@ -196,16 +221,17 @@ export const Heading: ComponentConfig<HeadingProps> = {
     uppercase: { type: "radio", label: "Capitals", options: YES_NO },
     colour: colour("Colour"),
     align: { type: "radio", label: "Position", options: ALIGN_OPTIONS },
-    rule: { type: "select", label: "Bar underneath", options: [{ label: "None", value: "none" }, { label: "Red", value: "red" }, { label: "Blue", value: "blue" }] },
+    rule: { type: "select", label: "Bar underneath", options: [{ label: "None", value: "none" }, { label: "Red", value: "red" }, { label: "Navy", value: "blue" }] },
   },
   defaultProps: { kicker: "", text: "A heading", level: "h2", size: "l", colour: "", align: "left", uppercase: false, rule: "none" },
   render: ({ kicker, text, level, size, colour: c, align, uppercase, rule }) => {
     const Tag = (["h1", "h2", "h3", "h4"].includes(level) ? level : "h2") as "h1" | "h2" | "h3" | "h4"
+    const sized = size && size !== HEADING_NATURAL[Tag] ? HEADING_SIZE[size] ?? "" : ""
     return (
       <div className={TEXT_ALIGN[align] ?? ""}>
-        {kicker && <p className="text-xs font-black tracking-[0.25em] uppercase mb-2" style={{ color: "var(--pe-kicker)" }}>{kicker}</p>}
-        <Tag className={`${HEADING_SIZE[size] ?? HEADING_SIZE.l} font-black leading-tight ${uppercase ? (size === "xs" ? "uppercase tracking-widest" : "uppercase tracking-tight") : ""}`} style={{ color: colourOr(c) || "var(--pe-heading)" }}>{text}</Tag>
-        {rule !== "none" && <div aria-hidden="true" className={`h-1 w-10 mt-3 ${SELF_ALIGN[align] ?? ""}`} style={{ background: rule === "blue" ? "var(--pe-heading)" : "var(--pe-kicker)" }} />}
+        {kicker && <p className="vs-kicker mb-2" style={{ color: "var(--pe-kicker)" }}>{kicker}</p>}
+        <Tag className={`${HEADING_CLASS[Tag]} ${sized} ${uppercase ? "uppercase tracking-[1px]" : ""}`} style={{ color: colourOr(c) || "var(--pe-heading)" }}>{text}</Tag>
+        {rule !== "none" && <Rule align={align} red={rule === "red"} />}
       </div>
     )
   },
@@ -225,7 +251,7 @@ export const Text: ComponentConfig<TextProps> = {
   },
   defaultProps: { text: "<p>Write something here.</p>", size: "m", colour: "", align: "left", width: "full" },
   render: ({ text, size, colour: c, align, width }) => (
-    <div className={`pe-text ${TEXT_SIZE[size] ?? TEXT_SIZE.m} ${TEXT_ALIGN[align] ?? ""} ${width === "reading" ? `max-w-3xl ${SELF_ALIGN[align] ?? ""}` : ""}`} style={{ color: colourOr(c) || "var(--pe-text)" }}>
+    <div className={`pe-text ${TEXT_SIZE[size] ?? TEXT_SIZE.m} ${TEXT_ALIGN[align] ?? ""} ${width === "reading" ? `w-full max-w-[760px] ${SELF_ALIGN[align] ?? ""}` : ""}`} style={{ color: colourOr(c) || "var(--pe-text)" }}>
       {text}
     </div>
   ),
@@ -254,7 +280,7 @@ export const Picture: ComponentConfig<PictureProps> = {
     if (!s) return <Empty editing={puck.isEditing}>Choose a picture</Empty>
     const box = ASPECT[aspect] ?? ""
     const img = box ? (
-      <div className={`relative w-full ${box} overflow-hidden bg-gray-100`}>
+      <div className={`relative w-full ${box} overflow-hidden bg-black/[0.04]`}>
         <img src={s} alt={alt} loading="lazy" className={`absolute inset-0 w-full h-full ${fit === "contain" ? "object-contain" : "object-cover"}`} />
       </div>
     ) : (
@@ -262,25 +288,26 @@ export const Picture: ComponentConfig<PictureProps> = {
     )
     return (
       <figure className={`w-full ${MAX_W[width] ?? ""} ${SELF_ALIGN[align] ?? ""}`}>
-        <div className={frame ? "border border-gray-200 p-1 bg-white" : ""}>
+        <div className={frame ? "border p-1 bg-white" : ""} style={frame ? { borderColor: "var(--pe-line)" } : undefined}>
           {link ? <Anchor href={link}>{img}</Anchor> : img}
         </div>
-        {caption && <figcaption className="text-xs mt-2" style={{ color: "var(--pe-muted)" }}>{caption}</figcaption>}
+        {caption && <figcaption className="text-sm mt-2" style={{ color: "var(--pe-muted)" }}>{caption}</figcaption>}
       </figure>
     )
   },
 }
 
+// ⚠ The keys are what saved pages hold ("blue" is the navy button, "chip" the small one).
 const BUTTON_STYLE: Record<string, string> = {
-  red: "bg-[#DB0606] hover:bg-[#b00505] text-white",
-  blue: "bg-[#32348A] hover:bg-[#28296e] text-white",
-  white: "bg-white text-[#32348A] hover:bg-[#2AB4A6] hover:text-white",
-  outline: "border-2 border-[#32348A] text-[#32348A] hover:bg-[#32348A] hover:text-white",
-  outlineLight: "border-2 border-white/40 text-white hover:border-white",
-  chip: "border border-[#1e1f5e] text-[#1e1f5e] hover:bg-[#1e1f5e] hover:text-white",
-  link: "underline underline-offset-4",
+  red: "vs-btn vs-btn-red",
+  blue: "vs-btn",
+  white: "vs-btn vs-btn-white",
+  outline: "vs-btn vs-btn-outline",
+  outlineLight: "vs-btn vs-btn-white",
+  chip: "vs-btn vs-btn-sm",
+  link: "vs-link",
 }
-const BUTTON_SIZE: Record<string, string> = { s: "px-4 py-2 text-[11px]", m: "px-6 py-3 text-xs", l: "px-9 py-4 text-sm" }
+const BUTTON_SIZE: Record<string, string> = { s: "vs-btn-sm", m: "", l: "vs-btn-lg" }
 
 export type ButtonsProps = { buttons: { label: string; link: string; style: string; newTab: boolean }[]; align: string; size: string }
 export const Buttons: ComponentConfig<ButtonsProps> = {
@@ -292,29 +319,33 @@ export const Buttons: ComponentConfig<ButtonsProps> = {
       arrayFields: {
         label: { type: "text", label: "Words" },
         link: { type: "text", label: "Goes to (/page, #name, https://…, mailto: or tel:)" },
-        style: { type: "select", label: "Look", options: [{ label: "Red", value: "red" }, { label: "Blue", value: "blue" }, { label: "White", value: "white" }, { label: "Blue outline", value: "outline" }, { label: "White outline (on dark)", value: "outlineLight" }, { label: "Small tag (like a filter)", value: "chip" }, { label: "Plain link", value: "link" }] },
+        style: { type: "select", label: "Look", options: [{ label: "Red", value: "red" }, { label: "Navy", value: "blue" }, { label: "White", value: "white" }, { label: "Navy outline", value: "outline" }, { label: "White (on dark)", value: "outlineLight" }, { label: "Small tag (like a filter)", value: "chip" }, { label: "Plain link with a chevron", value: "link" }] },
         newTab: { type: "radio", label: "Other websites open in a new tab", options: YES_NO },
       },
-      defaultItemProps: { label: "Find out more", link: "/", style: "red", newTab: true },
+      defaultItemProps: { label: "Find out more", link: "/", style: "blue", newTab: true },
       getItemSummary: item => item.label || "Button",
     },
     align: { type: "radio", label: "Position", options: ALIGN_OPTIONS },
     size: { type: "radio", label: "Size", options: [{ label: "S", value: "s" }, { label: "M", value: "m" }, { label: "L", value: "l" }] },
   },
-  defaultProps: { buttons: [{ label: "Find out more", link: "/", style: "red", newTab: true }], align: "left", size: "m" },
+  defaultProps: { buttons: [{ label: "Find out more", link: "/", style: "blue", newTab: true }], align: "left", size: "m" },
   render: ({ buttons, align, size }) => (
-    <div className={`flex flex-wrap gap-3 ${FLEX_JUSTIFY[align] ?? ""}`}>
-      {(buttons ?? []).map((b, i) => (
-        <Anchor
-          key={i}
-          href={b.link}
-          newTab={b.newTab}
-          className={`inline-flex items-center gap-2 font-black uppercase tracking-widest transition-colors ${BUTTON_STYLE[b.style] ?? BUTTON_STYLE.red} ${b.style === "link" ? "text-xs" : BUTTON_SIZE[size] ?? BUTTON_SIZE.m}`}
-          style={b.style === "link" ? { color: "var(--pe-link)" } : undefined}
-        >
-          {b.label}
-        </Anchor>
-      ))}
+    <div className={`flex flex-wrap items-center gap-3 ${FLEX_JUSTIFY[align] ?? ""}`}>
+      {(buttons ?? []).map((b, i) => {
+        const link = b.style === "link"
+        return (
+          <Anchor
+            key={i}
+            href={b.link}
+            newTab={b.newTab}
+            className={`${BUTTON_STYLE[b.style] ?? BUTTON_STYLE.blue} ${link ? (size === "s" ? "vs-link-sm" : "") : b.style === "chip" ? "" : BUTTON_SIZE[size] ?? ""}`}
+            // A plain link follows the words around it (navy on white, white on navy); buttons carry their own colours.
+            style={link ? { color: "var(--pe-link)" } : undefined}
+          >
+            {b.label}
+          </Anchor>
+        )
+      })}
     </div>
   ),
 }
@@ -339,12 +370,14 @@ export const Video: ComponentConfig<{ url: string; caption: string; width: strin
             ? <iframe src={v.src} title={caption || "Video"} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen loading="lazy" style={pe} />
             : <video src={v.src} controls className="absolute inset-0 w-full h-full" style={pe} />}
         </div>
-        {caption && <figcaption className="text-xs mt-2" style={{ color: "var(--pe-muted)" }}>{caption}</figcaption>}
+        {caption && <figcaption className="text-sm mt-2" style={{ color: "var(--pe-muted)" }}>{caption}</figcaption>}
       </figure>
     )
   },
 }
 
+// A fold-out exactly as the FAQ page draws one: a navy 18px question, a chevron that turns when it
+// opens, the answer underneath — native <details>, so it works with no JavaScript.
 export type AccordionProps = { items: { title: string; body: string }[]; style: string; openFirst: boolean }
 export const Accordion: ComponentConfig<AccordionProps> = {
   label: "Fold-outs",
@@ -363,24 +396,27 @@ export const Accordion: ComponentConfig<AccordionProps> = {
     openFirst: { type: "radio", label: "First one open", options: YES_NO },
   },
   defaultProps: { items: [{ title: "A question", body: "<p>The answer.</p>" }], style: "lines", openFirst: false },
-  render: ({ items, style, openFirst }) => (
-    <div className={style === "boxes" ? "flex flex-col gap-2" : "border-t"} style={style === "boxes" ? undefined : { borderColor: "var(--pe-line)" }}>
-      {(items ?? []).map((it, i) => (
-        <details
-          key={i}
-          open={openFirst && i === 0 ? true : undefined}
-          className={`group ${style === "boxes" ? "border px-4" : "border-b"}`}
-          style={{ borderColor: "var(--pe-line)" }}
-        >
-          <summary className="flex items-center justify-between gap-4 cursor-pointer list-none py-4 text-sm font-semibold" style={{ color: "var(--pe-heading)" }}>
-            <span>{it.title}</span>
-            <svg className="w-5 h-5 shrink-0 transition-transform group-open:rotate-180" style={{ color: "var(--pe-muted)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-          </summary>
-          <div className="pe-text text-sm pb-5 pr-8" style={{ color: "var(--pe-text)" }}>{it.body}</div>
-        </details>
-      ))}
-    </div>
-  ),
+  render: ({ items, style, openFirst }) => {
+    const boxes = style === "boxes"
+    return (
+      <div className={boxes ? "flex flex-col gap-3" : "border-t"} style={boxes ? undefined : { borderColor: "var(--pe-line)" }}>
+        {(items ?? []).map((it, i) => (
+          <details
+            key={i}
+            open={openFirst && i === 0 ? true : undefined}
+            className={`group ${boxes ? "border px-5" : "border-b"}`}
+            style={{ borderColor: "var(--pe-line)" }}
+          >
+            <summary className="flex items-center justify-between gap-4 cursor-pointer list-none py-4 text-lg font-medium leading-snug" style={{ color: "var(--pe-link)" }}>
+              <span>{it.title}</span>
+              <svg className="w-5 h-5 shrink-0 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </summary>
+            <div className="pe-text text-base pb-5 pr-0 sm:pr-9" style={{ color: "var(--pe-text)" }}>{it.body}</div>
+          </details>
+        ))}
+      </div>
+    )
+  },
 }
 
 export type TableProps = { rows: string; header: boolean; style: string; lastRight: boolean }
@@ -397,21 +433,25 @@ export const Table: ComponentConfig<TableProps> = {
     const data = lines(rows).map(r => r.split("|").map(c => c.trim()))
     const head = header ? data[0] : null
     const body = header ? data.slice(1) : data
-    const cellCls = (j: number, n: number) => `px-4 py-2 ${lastRight && j === n - 1 ? "text-right" : "text-left"}`
+    // "Lined" and "Striped" are the site's running-copy table (every cell a hairline box, the heading
+    // row shaded); "Plain" keeps only the row lines.
+    const boxed = style !== "plain"
+    const cellCls = (j: number, n: number) => `px-3 py-2 align-top ${boxed ? "border" : ""} ${lastRight && j === n - 1 ? "text-right" : "text-left"}`
+    const line = { borderColor: "var(--pe-line)" }
     return (
-      <div className={`w-full overflow-x-auto ${style === "plain" ? "" : "border"}`} style={{ borderColor: "var(--pe-line)" }}>
-        <table className="w-full text-sm" style={{ color: "var(--pe-text)" }}>
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-base border-collapse" style={{ color: "var(--pe-text)" }}>
           {head && (
             <thead>
-              <tr className={style === "plain" ? "" : "border-b"} style={{ borderColor: "var(--pe-line)" }}>
-                {head.map((c, j) => <th key={j} scope="col" className={`${cellCls(j, head.length)} font-black`} style={{ color: "var(--pe-heading)" }}>{c}</th>)}
+              <tr className={boxed ? "bg-black/[0.04]" : "border-b-2"} style={line}>
+                {head.map((c, j) => <th key={j} scope="col" className={`${cellCls(j, head.length)} font-bold`} style={{ ...line, color: "var(--pe-heading)" }}>{c}</th>)}
               </tr>
             </thead>
           )}
           <tbody>
             {body.map((r, i) => (
-              <tr key={i} className={`${style === "lined" ? "border-b last:border-0" : ""} ${style === "striped" && i % 2 === 1 ? "bg-black/[0.03]" : ""}`} style={{ borderColor: "var(--pe-line)" }}>
-                {r.map((c, j) => <td key={j} className={cellCls(j, r.length)}>{c}</td>)}
+              <tr key={i} className={`${boxed ? "" : "border-b last:border-0"} ${style === "striped" && i % 2 === 1 ? "bg-black/[0.025]" : ""}`} style={line}>
+                {r.map((c, j) => <td key={j} className={cellCls(j, r.length)} style={line}>{c}</td>)}
               </tr>
             ))}
           </tbody>
@@ -450,26 +490,32 @@ export const Cards: ComponentConfig<CardsProps> = {
     align: { type: "radio", label: "Words", options: [{ label: "Left", value: "left" }, { label: "Centre", value: "center" }] },
     caps: { type: "radio", label: "Titles in capitals", options: YES_NO },
   },
-  defaultProps: { items: [], columns: "3", style: "plain", align: "center", caps: true },
+  defaultProps: { items: [], columns: "3", style: "plain", align: "center", caps: false },
   render: ({ items, columns, style, align, caps }) => (
     <div className={`grid grid-cols-1 ${CARD_COLS[columns] ?? CARD_COLS["3"]} gap-6`}>
       {(items ?? []).map((it, i) => {
+        // A bordered card is the site's white vs-card-flat, so its words are always the dark set
+        // whatever the card sits on; the other two looks follow the section around them.
+        const bordered = style === "bordered"
         const card = (
-          <div className={`h-full ${align === "center" ? "text-center" : "text-left"} ${style === "bordered" ? "border p-5 bg-white" : style === "shaded" ? "p-5 bg-black/[0.04]" : ""}`} style={style === "bordered" ? { borderColor: "var(--pe-line)" } : undefined}>
+          <div
+            className={`h-full ${align === "center" ? "text-center" : "text-left"} ${bordered ? "vs-card-flat p-6" : style === "shaded" ? "p-6 bg-black/[0.04]" : ""}`}
+            style={bordered ? toneStyle(false) : undefined}
+          >
             {(it.icon || it.emoji) && (
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-5 ${align === "center" ? "mx-auto" : ""}`} style={{ background: "rgba(50,52,138,0.06)", color: "var(--pe-heading)" }}>
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-5 ${align === "center" ? "mx-auto" : ""}`} style={{ background: "rgba(0,0,0,0.05)", color: "var(--pe-link)" }}>
                 {it.icon && ICONS[it.icon]
-                  ? <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={ICONS[it.icon]} /></svg>
+                  ? <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={ICONS[it.icon]} /></svg>
                   : <span className="text-3xl leading-none">{it.emoji}</span>}
               </div>
             )}
-            {it.kicker && <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: "var(--pe-kicker)" }}>{it.kicker}</p>}
-            {it.title && <h3 className={`font-black text-lg mb-2 break-words ${caps ? "uppercase tracking-tight" : ""}`} style={{ color: "var(--pe-heading)" }}>{it.title}</h3>}
+            {it.kicker && <p className="vs-kicker mb-2" style={{ color: "var(--pe-kicker)" }}>{it.kicker}</p>}
+            {it.title && <h3 className={`vs-h4 mb-2 break-words ${caps ? "uppercase tracking-[1px] !text-base !font-semibold" : ""}`} style={{ color: "var(--pe-heading)" }}>{it.title}</h3>}
             {it.text && <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: "var(--pe-muted)" }}>{it.text}</p>}
-            {it.link && it.linkLabel && <span className="inline-block mt-3 text-[11px] font-black uppercase tracking-widest" style={{ color: "var(--pe-link)" }}>{it.linkLabel} →</span>}
+            {it.link && it.linkLabel && <span className="vs-link vs-link-sm mt-4" style={{ color: "var(--pe-link)" }}>{it.linkLabel}</span>}
           </div>
         )
-        return it.link ? <Anchor key={i} href={it.link} className="block group hover:opacity-90">{card}</Anchor> : <div key={i}>{card}</div>
+        return it.link ? <Anchor key={i} href={it.link} className="block h-full group">{card}</Anchor> : <div key={i}>{card}</div>
       })}
     </div>
   ),
@@ -483,9 +529,9 @@ export const Quote: ComponentConfig<{ text: string; by: string }> = {
   },
   defaultProps: { text: "A quotation.", by: "" },
   render: ({ text, by }) => (
-    <blockquote className="border-l-4 pl-6" style={{ borderColor: "var(--pe-kicker)" }}>
-      <p className="text-xl italic font-medium leading-relaxed" style={{ color: "var(--pe-text)" }}>&ldquo;{text}&rdquo;</p>
-      {by && <footer className="text-sm mt-2" style={{ color: "var(--pe-muted)" }}>— {by}</footer>}
+    <blockquote className="border-l-[3px] pl-6 py-1" style={{ borderColor: "var(--pe-rule)" }}>
+      <p className="vs-h3" style={{ color: "var(--pe-heading)" }}>&ldquo;{text}&rdquo;</p>
+      {by && <footer className="vs-caps mt-3" style={{ color: "var(--pe-muted)" }}>— {by}</footer>}
     </blockquote>
   ),
 }
@@ -510,48 +556,50 @@ export const Job: ComponentConfig<JobProps> = {
   },
   defaultProps: { title: "Job title", salary: "", type: "Permanent, Full-time", hours: "", description: "", responsibilities: "", essential: "", desirable: "", benefits: "", applyEmail: "admin@vectis.co.uk" },
   render: p => {
-    const list = (items: string[], mark: string, markColour: string) => (
-      <ul className="space-y-1.5">
-        {items.map((r, j) => <li key={j} className="flex items-start gap-2 text-sm text-gray-600"><span className="mt-0.5 shrink-0" style={{ color: markColour }}>{mark}</span>{r}</li>)}
-      </ul>
+    // A white vs-card-flat whatever it sits on, so it keeps the dark words and the site's own vars.
+    const part = (heading: string, items: string[]) => items.length > 0 && (
+      <div>
+        <h4 className="vs-caps mb-2">{heading}</h4>
+        <ul className="list-disc ml-5 space-y-1 text-[15px] leading-relaxed text-[var(--vs-ink)]">
+          {items.map((r, j) => <li key={j}>{r}</li>)}
+        </ul>
+      </div>
     )
-    const h4 = "text-xs font-black uppercase tracking-widest text-gray-400 mb-2"
     const resp = lines(p.responsibilities), ess = lines(p.essential), des = lines(p.desirable), ben = lines(p.benefits)
+    const facts = [p.type, p.hours].filter(Boolean).join(" · ")
     return (
-      <div className="border border-gray-200 overflow-hidden bg-white">
-        <div className="bg-gray-50 border-b border-gray-200 px-6 py-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-black text-[#1e1f5e]">{p.title}</h3>
-            <div className="flex flex-wrap gap-3 mt-2">
-              {p.type && <span className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-2.5 py-1">{p.type}</span>}
-              {p.hours && <span className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-2.5 py-1">{p.hours}</span>}
-            </div>
+      <article className="vs-card-flat" style={toneStyle(false)}>
+        <div className="px-6 py-5 border-b border-[var(--vs-line)] flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+          <div className="min-w-0">
+            <h3 className="vs-h4">{p.title}</h3>
+            {facts && <p className="vs-caps text-xs text-[var(--vs-muted)] mt-2">{facts}</p>}
           </div>
-          {p.salary && <p className="text-[#1e1f5e] font-black text-base text-right">{p.salary}</p>}
+          {p.salary && <p className="vs-price sm:text-right">{p.salary}</p>}
         </div>
         <div className="px-6 py-6 grid sm:grid-cols-2 gap-6">
-          <div>
-            {p.description && <p className="text-gray-600 text-sm leading-relaxed mb-5">{p.description}</p>}
-            {resp.length > 0 && <><h4 className={h4}>Key Responsibilities</h4>{list(resp, "•", "#DB0606")}</>}
+          <div className="space-y-5">
+            {p.description && <p className="text-base leading-relaxed text-[var(--vs-ink)]">{p.description}</p>}
+            {part("Key responsibilities", resp)}
           </div>
           <div className="space-y-5">
-            {ess.length > 0 && <div><h4 className={h4}>Essential Requirements</h4>{list(ess, "✓", "#16a34a")}</div>}
-            {des.length > 0 && <div><h4 className={h4}>Desirable</h4>{list(des, "+", "#60a5fa")}</div>}
-            {ben.length > 0 && <div><h4 className={h4}>Benefits</h4><ul className="space-y-1">{ben.map((b, j) => <li key={j} className="text-sm text-gray-600">{b}</li>)}</ul></div>}
+            {part("Essential", ess)}
+            {part("Desirable", des)}
+            {part("Benefits", ben)}
           </div>
         </div>
         {p.applyEmail && (
-          <div className="border-t border-gray-100 px-6 py-4 bg-gray-50">
-            <a href={`mailto:${p.applyEmail}?subject=${encodeURIComponent(`Job Application — ${p.title}`)}`} className="inline-block bg-[#1e1f5e] hover:bg-[#28296e] text-white text-xs font-black uppercase tracking-widest px-6 py-2.5 transition-colors">Apply for This Role</a>
-            <span className="text-xs text-gray-400 ml-4">Send your CV to {p.applyEmail}</span>
+          <div className="border-t border-[var(--vs-line)] px-6 py-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+            <a href={`mailto:${p.applyEmail}?subject=${encodeURIComponent(`Job Application — ${p.title}`)}`} className="vs-btn">Apply</a>
+            <span className="text-sm text-[var(--vs-muted)]">Send your CV to {p.applyEmail}</span>
           </div>
         )}
-      </div>
+      </article>
     )
   },
 }
 
-const HEADER_HEIGHT: Record<string, string> = { auto: "py-16", small: "min-h-[220px] pt-10 pb-8", medium: "min-h-[300px] pt-12 pb-8", large: "min-h-[420px] pt-16 pb-10" }
+// "Medium" is the department page's banner on vectis.co.uk (260px, the title over a dark fade).
+const HEADER_HEIGHT: Record<string, string> = { auto: "py-12 lg:py-16", small: "min-h-[220px] pt-10 pb-8", medium: "min-h-[260px] pt-12 pb-8", large: "min-h-[420px] pt-16 pb-10" }
 
 export type PageHeaderProps = {
   kicker: string; heading: string; intro: string; background: string; picture: string; darken: number
@@ -577,31 +625,34 @@ export const PageHeader: ComponentConfig<PageHeaderProps> = {
       getItemSummary: item => item.label || "Step",
     },
   },
-  defaultProps: { kicker: "", heading: "Page title", intro: "", background: "#1e1f5e", picture: "", darken: 40, height: "auto", align: "left", width: "text", crumbs: [] },
+  defaultProps: { kicker: "", heading: "Page title", intro: "", background: BRAND.navy, picture: "", darken: 40, height: "auto", align: "left", width: "text", crumbs: [] },
   render: ({ kicker, heading, intro, background, picture: pic, darken, height, align, width, crumbs }) => {
     const bg = colourOr(background)
     const src = pictureSrc(pic)
     const shade = Math.min(90, Math.max(0, Number(darken) || 0))
     const dark = (!!src && shade >= 25) || isDark(bg) || (!bg && !!src)
     const fixed = height !== "auto"
+    const centred = align === "center"
     return (
       <section className="relative overflow-hidden" style={{ backgroundColor: bg || undefined, ...toneStyle(dark) }}>
         {src && <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />}
-        {src && shade > 0 && <div className="absolute inset-0 bg-gradient-to-r from-black to-black/40" style={{ opacity: shade / 100 }} />}
-        <div className={`relative flex flex-col ${fixed ? "justify-end" : ""} ${HEADER_HEIGHT[height] ?? HEADER_HEIGHT.auto} ${WIDTH_CLASS[width] ?? WIDTH_CLASS.text} ${align === "center" ? "items-center text-center" : ""}`}>
+        {/* The fade sits at the foot, where the title is, so the words read over any picture. */}
+        {src && shade > 0 && <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/25" style={{ opacity: shade / 100 }} />}
+        <div className={`relative flex flex-col ${fixed ? "justify-end" : ""} ${HEADER_HEIGHT[height] ?? HEADER_HEIGHT.auto} ${WIDTH_CLASS[width] ?? WIDTH_CLASS.text} ${centred ? "items-center text-center" : ""}`}>
           {(crumbs ?? []).length > 0 && (
-            <nav className="flex flex-wrap items-center gap-2 text-xs mb-3 uppercase tracking-wider font-semibold" style={{ color: "var(--pe-muted)" }}>
+            <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 vs-caps text-xs mb-4" style={{ color: "var(--pe-muted)" }}>
               {crumbs.map((c, i) => (
                 <span key={i} className="flex items-center gap-2">
-                  {i > 0 && <span aria-hidden="true">/</span>}
-                  {c.link ? <Anchor href={c.link} className="hover:underline">{c.label}</Anchor> : <span style={{ color: "var(--pe-heading)" }}>{c.label}</span>}
+                  {i > 0 && <span aria-hidden="true">›</span>}
+                  {c.link ? <Anchor href={c.link} className="hover:underline underline-offset-4">{c.label}</Anchor> : <span aria-current="page" style={{ color: "var(--pe-heading)" }}>{c.label}</span>}
                 </span>
               ))}
             </nav>
           )}
-          {kicker && <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: "var(--pe-kicker)" }}>{kicker}</p>}
-          <h1 className="text-3xl sm:text-4xl font-black leading-tight" style={{ color: "var(--pe-heading)" }}>{heading}</h1>
-          {intro && <p className={`text-lg mt-4 max-w-2xl whitespace-pre-line ${align === "center" ? "mx-auto" : ""}`} style={{ color: "var(--pe-muted)" }}>{intro}</p>}
+          {/* Red caption on white, as the site's kickers; orange ("FEATURED") on navy or a picture. */}
+          {kicker && <p className={`vs-kicker mb-3 ${dark ? "vs-kicker-orange" : ""}`}>{kicker}</p>}
+          <h1 className="vs-h1" style={{ color: "var(--pe-heading)" }}>{heading}</h1>
+          {intro && <p className={`vs-lead mt-4 max-w-2xl whitespace-pre-line ${centred ? "mx-auto" : ""}`} style={{ color: "var(--pe-text)" }}>{intro}</p>}
         </div>
       </section>
     )
@@ -632,9 +683,11 @@ export const ROOT_FIELDS = {
 }
 export const ROOT_DEFAULTS: RootProps = { title: "", seoTitle: "", seoDescription: "", background: "#ffffff" }
 
+// The site's font variable rides on the root too: on the site it is already on the layout's
+// wrapper, but inside the editor's canvas (an iframe) this is the outermost site element.
 export function PageRoot({ background, children }: { background?: string; children: ReactNode }) {
   return (
-    <div className="vectis-site pe-page" style={{ backgroundColor: colourOr(background, "#ffffff"), ...toneStyle(false) }}>
+    <div className={`vectis-site ${barlow.variable} pe-page`} style={{ backgroundColor: colourOr(background, "#ffffff"), ...toneStyle(false) }}>
       {children}
     </div>
   )

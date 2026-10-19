@@ -1,10 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import Link from "next/link"
-import Image from "next/image"
-import { format } from "date-fns"
 import { lotPhotoUrl } from "@/lib/photo-url"
+import { dateShort } from "../../site-dates"
+
+// The customer's commission bids: one fold-out per sale (the newest open), each lot a hairline
+// row — picture, title, lot number and estimate, the figures, and a chip for where it stands.
+// Dates are formatted in Europe/London here too: the server renders this first, in UTC, so a
+// bare toLocaleString would print one time there and another once the browser took over.
 
 type LotBid = {
   bidId: string
@@ -31,203 +35,149 @@ type AuctionGroup = {
   bids: LotBid[]
 }
 
-interface Props {
-  groups: AuctionGroup[]
+const gbp = (n: number) => `£${n.toLocaleString("en-GB")}`
+
+/** "5 Oct 2026, 14:32" in London time. */
+const whenLondon = (iso: string) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso))
+
+type ChipTone = "navy" | "red" | "grey"
+
+/** A status chip: won = navy badge, active = red badge, over = a grey outline. */
+function Chip({ tone, children }: { tone: ChipTone; children: ReactNode }) {
+  if (tone === "grey") {
+    return <span className="inline-block vs-caps !text-xs px-3 py-1 border border-[var(--vs-line)] bg-white text-[var(--vs-muted)] whitespace-nowrap">{children}</span>
+  }
+  return <span className={`vs-badge !text-xs !px-3 !py-1 whitespace-nowrap${tone === "red" ? " vs-badge-red" : ""}`}>{children}</span>
 }
 
-export default function BidsClient({ groups }: Props) {
-  // Start with the first (most-recent) group open, rest closed
-  const [open, setOpen] = useState<Set<string>>(
-    () => new Set(groups.length > 0 ? [groups[0].auctionId] : [])
-  )
+export default function BidsClient({ groups }: { groups: AuctionGroup[] }) {
+  // The newest sale starts open, the rest folded.
+  const [open, setOpen] = useState<Set<string>>(() => new Set(groups.length > 0 ? [groups[0].auctionId] : []))
 
-  function toggle(id: string) {
+  const toggle = (id: string) => {
     setOpen(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
 
   if (groups.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 p-8 text-center mb-6">
-        <div className="w-16 h-16 bg-[#32348A]/5 flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-[#32348A]/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </div>
-        <p className="text-gray-700 font-semibold text-lg mb-2">No bids placed yet</p>
-        <p className="text-sm text-gray-400 max-w-md mx-auto mb-6">
-          Browse our upcoming auctions and place commission bids on the lots you want.
+      <div className="vs-card-flat p-8 sm:p-10 text-center">
+        <p className="vs-h4 mb-2">No bids placed yet</p>
+        <p className="text-[var(--vs-muted)] max-w-md mx-auto mb-6">
+          Browse the upcoming auctions and leave a commission bid on the lots you would like.
         </p>
-        <Link
-          href="/auctions"
-          className="inline-block bg-[#32348A] hover:bg-[#28296e] text-white text-xs font-black uppercase tracking-widest px-6 py-3 transition-colors"
-        >
-          Browse Auctions
-        </Link>
+        <Link href="/auctions" className="vs-btn">Browse auctions</Link>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-3 mb-6">
+    <div className="space-y-4">
       {groups.map(group => {
         const isOpen = open.has(group.auctionId)
+        const panelId = `bids-${group.auctionId}`
         const totalBid = group.bids.reduce((s, b) => s + b.maxBid, 0)
         const wonCount = group.bids.filter(b => b.lotStatus === "SOLD" && b.hammerPrice !== null).length
         const activeBids = group.bids.filter(b => b.lotStatus !== "SOLD").length
 
         return (
-          <div key={group.auctionId} className="border border-gray-200 bg-white overflow-hidden">
-            {/* Auction header — click to collapse */}
-            <button
-              onClick={() => toggle(group.auctionId)}
-              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left"
-            >
-              <div className="flex items-center gap-4 min-w-0">
-                {/* Chevron */}
+          <section key={group.auctionId} className="vs-card-flat">
+            <h2 className="m-0">
+              <button
+                type="button"
+                onClick={() => toggle(group.auctionId)}
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                className="w-full flex items-center gap-4 px-4 sm:px-5 py-4 text-left hover:bg-[var(--vs-bg)] transition-colors"
+              >
                 <svg
-                  className={`w-4 h-4 shrink-0 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  className={`w-4 h-4 shrink-0 text-[var(--vs-navy)] transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                 </svg>
-
-                <div className="min-w-0">
-                  <p className="font-black text-[#32348A] text-sm leading-tight truncate">{group.auctionName}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {group.auctionDate
-                      ? format(new Date(group.auctionDate), "d MMMM yyyy")
-                      : "Date TBC"}
+                <span className="min-w-0 flex-1">
+                  <span className="block vs-h4 leading-tight">{group.auctionName}</span>
+                  <span className="block text-sm text-[var(--vs-muted)] mt-1">
+                    {group.auctionDate ? dateShort(new Date(group.auctionDate)) : "Date to be confirmed"}
                     {" · "}{group.bids.length} {group.bids.length === 1 ? "lot" : "lots"}
-                  </p>
-                </div>
-              </div>
+                  </span>
+                </span>
+                <span className="hidden sm:flex items-center gap-3 shrink-0">
+                  {wonCount > 0 && <Chip tone="navy">{wonCount} won</Chip>}
+                  {activeBids > 0 && !group.isFinished && <Chip tone="red">{activeBids} active</Chip>}
+                  {group.isFinished && wonCount === 0 && <Chip tone="grey">Ended</Chip>}
+                  <span className="text-right ml-2">
+                    <span className="block vs-price-label">Total bid</span>
+                    <span className="block vs-price">{gbp(totalBid)}</span>
+                  </span>
+                </span>
+              </button>
+            </h2>
 
-              {/* Right-side summary */}
-              <div className="flex items-center gap-4 shrink-0 ml-4">
-                {wonCount > 0 && (
-                  <span className="text-[10px] font-black uppercase tracking-widest text-green-700 bg-green-50 border border-green-200 px-2 py-0.5">
-                    {wonCount} WON
-                  </span>
-                )}
-                {activeBids > 0 && !group.isFinished && (
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#2AB4A6] bg-[#2AB4A6]/10 border border-[#2AB4A6]/30 px-2 py-0.5">
-                    {activeBids} ACTIVE
-                  </span>
-                )}
-                {group.isFinished && wonCount === 0 && (
-                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5">
-                    ENDED
-                  </span>
-                )}
-                <div className="text-right hidden sm:block">
-                  <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Total Bid</p>
-                  <p className="text-sm font-black text-[#32348A]">£{totalBid.toLocaleString("en-GB")}</p>
-                </div>
-              </div>
-            </button>
-
-            {/* Collapsible lot rows */}
             {isOpen && (
-              <div className="border-t border-gray-200">
+              <ul id={panelId} className="border-t border-[var(--vs-line)]">
                 {group.bids.map(bid => {
-                  const img = bid.imageUrl ? lotPhotoUrl(bid.imageUrl, true) : null
+                  const img = lotPhotoUrl(bid.imageUrl, true)
+                  const href = `/auctions/${group.auctionCode}/lot/${bid.lotId}`
                   const sold = bid.lotStatus === "SOLD"
                   const won = sold && bid.hammerPrice !== null
+                  const current = bid.currentBid
+                  const showCurrent = current !== null && current > 0 && !won
+                  const atLimit = current !== null && current >= bid.maxBid
 
                   return (
-                    <div
-                      key={bid.bidId}
-                      className="flex items-stretch border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
-                    >
-                      {/* Thumbnail */}
-                      <Link
-                        href={`/auctions/${group.auctionCode}/lot/${bid.lotId}`}
-                        className="relative shrink-0 bg-gray-100 overflow-hidden"
-                        style={{ width: "72px", minHeight: "72px" }}
-                      >
-                        {img ? (
-                          <Image src={img} alt={bid.lotTitle} fill className="object-cover" sizes="72px" />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                        )}
-                      </Link>
-
-                      {/* Lot info */}
-                      <div className="flex-1 px-4 py-3 flex flex-col justify-center min-w-0">
-                        <Link href={`/auctions/${group.auctionCode}/lot/${bid.lotId}`} className="hover:underline">
-                          <p className="text-sm font-bold text-[#32348A] truncate">{bid.lotTitle}</p>
+                    <li key={bid.bidId} className="border-b border-[var(--vs-line)] last:border-b-0 px-4 sm:px-5 py-4">
+                      <div className="grid grid-cols-[64px_minmax(0,1fr)] sm:grid-cols-[72px_minmax(0,1fr)_auto] gap-x-4 gap-y-3 items-center">
+                        <Link href={href} tabIndex={-1} aria-hidden="true" className="block w-16 h-16 sm:w-[72px] sm:h-[72px] bg-[var(--vs-bg)] border border-[var(--vs-line)] overflow-hidden">
+                          {img && <img src={img} alt="" loading="lazy" className="w-full h-full object-cover" />}
                         </Link>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {bid.lotBarcode ? `Lot ${bid.lotBarcode}` : "—"}
-                          {bid.estimateLow && bid.estimateHigh && (
-                            <> · Est. £{bid.estimateLow.toLocaleString("en-GB")}–£{bid.estimateHigh.toLocaleString("en-GB")}</>
-                          )}
-                        </p>
-                        <p className="text-[10px] text-gray-300 mt-0.5">
-                          Bid placed {format(new Date(bid.placedAt), "d MMM yyyy HH:mm")}
-                          {bid.updatedAt !== bid.placedAt && (
-                            <> · Updated {format(new Date(bid.updatedAt), "d MMM HH:mm")}</>
-                          )}
-                        </p>
-                      </div>
 
-                      {/* Bid figures */}
-                      <div className="shrink-0 border-l border-gray-100 flex items-center">
-                        {/* Current bid — only show when a bid has been placed on the lot */}
-                        {bid.currentBid && bid.currentBid > 0 && !won ? (
-                          <div className="px-4 py-3 flex flex-col items-end justify-center border-r border-gray-100 min-w-[100px]">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Current Bid</p>
-                            <p className={`text-base font-black ${bid.currentBid >= bid.maxBid ? "text-[#DB0606]" : "text-gray-700"}`}>
-                              £{bid.currentBid.toLocaleString("en-GB")}
-                            </p>
-                            {bid.currentBid >= bid.maxBid && (
-                              <p className="text-[9px] text-[#DB0606] font-bold uppercase tracking-wider mt-0.5">At limit</p>
+                        <div className="min-w-0">
+                          <Link href={href} className="font-medium text-black hover:underline line-clamp-2">{bid.lotTitle}</Link>
+                          <p className="text-sm text-[var(--vs-muted)] mt-0.5">
+                            {bid.lotBarcode ? `Lot ${bid.lotBarcode}` : "Lot number to follow"}
+                            {bid.estimateLow !== null && bid.estimateHigh !== null && (
+                              <> · Estimate {gbp(bid.estimateLow)} – {gbp(bid.estimateHigh)}</>
                             )}
-                          </div>
-                        ) : null}
+                          </p>
+                          <p className="text-xs text-[var(--vs-muted)] mt-0.5">
+                            Bid placed {whenLondon(bid.placedAt)}
+                            {bid.updatedAt !== bid.placedAt && <> · Updated {whenLondon(bid.updatedAt)}</>}
+                          </p>
+                        </div>
 
-                        {/* Max / hammer */}
-                        <div className="px-4 py-3 flex flex-col items-end justify-center min-w-[90px]">
-                          {won ? (
-                            <>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-green-600">Hammer</p>
-                              <p className="text-base font-black text-green-700">£{bid.hammerPrice!.toLocaleString("en-GB")}</p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Max Bid</p>
-                              <p className="text-base font-black text-[#32348A]">£{bid.maxBid.toLocaleString("en-GB")}</p>
-                            </>
+                        <div className="col-span-2 sm:col-span-1 flex flex-wrap items-center justify-between sm:justify-end gap-x-6 gap-y-2 sm:text-right">
+                          {showCurrent && (
+                            <div>
+                              <p className="vs-price-label">Current bid</p>
+                              <p className={`vs-price${atLimit ? " !text-[var(--vs-red)]" : ""}`}>{gbp(current)}</p>
+                              {atLimit && <p className="vs-kicker !text-xs">At your limit</p>}
+                            </div>
                           )}
+                          <div>
+                            <p className="vs-price-label">{won ? "Hammer price" : "Your max bid"}</p>
+                            <p className="vs-price">{gbp(won && bid.hammerPrice !== null ? bid.hammerPrice : bid.maxBid)}</p>
+                          </div>
+                          <div className="sm:min-w-[88px] sm:text-right">
+                            {won ? <Chip tone="navy">Won</Chip>
+                              : sold ? <Chip tone="grey">Not won</Chip>
+                              : group.isFinished ? <Chip tone="grey">Ended</Chip>
+                              : <Chip tone="red">Active</Chip>}
+                          </div>
                         </div>
                       </div>
-
-                      {/* Status */}
-                      <div className="shrink-0 w-24 border-l border-gray-100 flex items-center justify-center px-2">
-                        {won ? (
-                          <span className="text-[10px] font-black uppercase tracking-widest text-green-700 bg-green-50 border border-green-200 px-2 py-0.5">WON</span>
-                        ) : sold ? (
-                          <span className="text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50 border border-red-200 px-2 py-0.5">NOT WON</span>
-                        ) : group.isFinished ? (
-                          <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5">ENDED</span>
-                        ) : (
-                          <span className="text-[10px] font-black uppercase tracking-widest text-[#2AB4A6] bg-[#2AB4A6]/10 border border-[#2AB4A6]/30 px-2 py-0.5">ACTIVE</span>
-                        )}
-                      </div>
-                    </div>
+                    </li>
                   )
                 })}
-              </div>
+              </ul>
             )}
-          </div>
+          </section>
         )
       })}
     </div>

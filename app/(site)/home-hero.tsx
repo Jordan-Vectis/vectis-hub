@@ -1,31 +1,30 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { io, Socket } from "socket.io-client"
 import SlideView, { type SlideData } from "./hero-slide-view"
 import { DEFAULT_STYLE } from "./hero-style"
 
-// The slides shown until the Banner Manager holds at least one; they have no picture and the default look.
+// The home page banner, laid out as vectis.co.uk's (2026-10-15): inside the page's margins, the
+// slides on the left (one per upcoming sale, rotating, with the caption card bottom-left and the
+// dots along the bottom) and two picture boxes on the right — "Sell with us" and "Buy with us",
+// each a photo with a white card on it. When a Hub sale is live the right column shows the live
+// lot and its bids instead.
+
+// The slides shown until there is a sale to feature or a Banner Manager slide; no picture, the default look.
 const DEFAULT_SLIDES: SlideData[] = [
   {
-    title: "World's No.1 Diecast Specialist",
-    subtitle: "Tens of thousands of lots sold every year to collectors worldwide. Join our next auction.",
-    cta: "VIEW UPCOMING AUCTIONS",
+    title: "The world's leading toy and collectables auction house",
+    subtitle: "Over 70,000 lots a year",
+    cta: "View auctions",
     ctaHref: "/auctions",
   },
   {
-    title: "Sell Your Collection",
-    subtitle: "Free valuations from our specialist team. No fees, no fuss — just the best price for your collection.",
-    cta: "GET A FREE VALUATION",
-    ctaHref: "/submit",
-  },
-  {
-    title: "Bid Live & Online",
-    subtitle: "Register once and bid in real-time from anywhere in the world across 100+ auctions a year.",
-    cta: "REGISTER TO BID",
-    ctaHref: "/portal/register",
+    title: "Sell your collection with us",
+    subtitle: "Free valuations, one commission",
+    cta: "Get started",
+    ctaHref: "/sell-with-us",
   },
 ]
 
@@ -60,8 +59,11 @@ interface AuctionState {
   lots: LiveLot[]
 }
 
-/** A slide from the Banner Manager, with its picture already signed by the page and its look already parsed. */
+/** A slide (a featured sale, or one from the Banner Manager), with its picture already signed by the page and its look already parsed. */
 export type DbSlide = SlideData & { id: string }
+
+/** The pictures behind the two boxes beside the slider (signed by the page), or null for a plain band. */
+export type SidePictures = { sell: string | null; buy: string | null }
 
 interface Props {
   initialLive: {
@@ -73,20 +75,22 @@ interface Props {
     lots: LiveLot[]
   } | null
   dbSlides: DbSlide[]
+  sidePictures: SidePictures
   isLoggedIn: boolean
 }
 
-export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
+export default function HomeHero({ initialLive, dbSlides, sidePictures, isLoggedIn }: Props) {
   const SLIDES: SlideData[] = dbSlides.length > 0 ? dbSlides : DEFAULT_SLIDES
   const [slide, setSlide] = useState(0)
   const [live, setLive] = useState(initialLive)
   const [auctionState, setAuctionState] = useState<AuctionState | null>(null)
-  const socketRef  = useRef<Socket | null>(null)  // kept for cleanup
+  const socketRef = useRef<Socket | null>(null)  // kept for cleanup
 
   const isLive = !!live && ["ACTIVE", "PAUSED"].includes(live.status)
 
-  // Auto-slide: each slide stays for its own number of seconds (set in the Banner Manager). Pauses
-  // while a live auction is showing; nothing to rotate with a single slide.
+  // Auto-slide: each slide stays for its own number of seconds (set in the Banner Manager; the
+  // featured sales use the default). Pauses while a live auction is showing; nothing to rotate
+  // with a single slide.
   useEffect(() => {
     if (isLive || SLIDES.length < 2) return
     const seconds = (SLIDES[slide]?.style ?? DEFAULT_STYLE).seconds
@@ -129,120 +133,111 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
     : null
 
   return (
-    <div className="relative overflow-hidden" style={{ height: "520px" }}>
-      {/* ── Hero slides (shrinks left when live) ── */}
-      <div
-        className="absolute top-0 left-0 h-full transition-all duration-700 ease-in-out"
-        style={{ width: isLive ? "58%" : "100%" }}
-      >
-        {/* One rendering of a slide (hero-slide-view.tsx) — the Banner Manager's preview uses the same one. */}
-        {SLIDES.map((s, i) => (
-          <div
-            key={i}
-            className={`absolute inset-0 transition-opacity duration-1000 ${i === slide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-          >
-            <SlideView slide={s} isLoggedIn={isLoggedIn} eager={i === 0} />
-          </div>
-        ))}
-
-        {/* Slide dots — one per slide, none at all for a single slide (a lone red dash under the
-            buttons read as a stray mark). Each dot sits in a finger-sized button. */}
-        {!isLive && SLIDES.length > 1 && (
-          <div className="absolute bottom-3 left-9 flex">
+    <section className="bg-white pt-3 lg:pt-5">
+      <div className="vs-container-wide">
+        <div className={`grid grid-cols-1 gap-3 ${isLive ? "lg:grid-cols-[1fr_420px]" : "lg:grid-cols-[2fr_1fr]"}`}>
+          {/* ── The slides ── */}
+          <div className="vs-hero overflow-hidden">
+            {/* One rendering of a slide (hero-slide-view.tsx) — the Banner Manager's preview uses the same one. */}
             {SLIDES.map((s, i) => (
-              <button
+              <div
                 key={i}
-                type="button"
-                onClick={() => setSlide(i)}
-                aria-label={`Slide ${i + 1}: ${s.title}`}
-                aria-current={i === slide}
-                className="p-3 group"
+                className={`absolute inset-0 transition-opacity duration-700 ${i === slide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+                aria-hidden={i !== slide}
               >
-                <span className={`block h-2.5 w-2.5 rounded-full transition-colors ${i === slide ? "bg-[#DB0606]" : "bg-white/40 group-hover:bg-white/80"}`} />
-              </button>
+                <SlideView slide={s} isLoggedIn={isLoggedIn} eager={i === 0} />
+              </div>
             ))}
-          </div>
-        )}
 
-        {/* Live indicator overlay on hero */}
-        {isLive && (
-          <div className="absolute top-6 left-6 flex items-center gap-2 bg-red-600 text-white text-xs font-black uppercase tracking-widest px-3 py-1.5">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            AUCTION IN PROGRESS
-          </div>
-        )}
-      </div>
-
-      {/* ── Live auction panel (slides in from right) ── */}
-      <div
-        className="absolute top-0 right-0 h-full bg-[#12134a] transition-all duration-700 ease-in-out overflow-hidden"
-        style={{ width: isLive ? "42%" : "0%" }}
-      >
-        {isLive && live && currentLot && (
-          <div className="h-full flex flex-col">
-            {/* Header */}
-            <div className="bg-red-600 px-5 py-3 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
-                <span className="text-white text-xs font-black uppercase tracking-widest">LIVE AUCTION</span>
+            {/* Slide dots along the bottom, as on vectis.co.uk — one per slide, none for a single slide. Each sits in a finger-sized button. */}
+            {!isLive && SLIDES.length > 1 && (
+              <div className="absolute bottom-2 inset-x-0 flex flex-wrap justify-center px-4" role="tablist" aria-label="Banner slides">
+                {SLIDES.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    role="tab"
+                    onClick={() => setSlide(i)}
+                    aria-label={`Slide ${i + 1}: ${s.title}`}
+                    aria-selected={i === slide}
+                    className="p-[7px]"
+                  >
+                    <span className="vs-hero-dot block" aria-current={i === slide ? "true" : undefined} />
+                  </button>
+                ))}
               </div>
-              <Link
-                href={`/auctions/${live.auctionCode}/live`}
-                className="text-white text-[10px] font-bold uppercase tracking-wider hover:underline"
-              >
-                ENTER BIDDING ROOM →
-              </Link>
-            </div>
+            )}
 
-            {/* Lot image */}
-            <div className="relative flex-1 bg-black min-h-0">
-              {lotImg ? (
-                <Image src={lotImg} alt={currentLot.title} fill className="object-contain p-4" unoptimized />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700">
-                  <svg className="w-20 h-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              )}
-            </div>
+            {/* Live indicator overlay on hero */}
+            {isLive && (
+              <div className="absolute top-5 left-5 flex items-center gap-2 bg-[var(--vs-red)] text-white vs-caps px-3 py-1.5">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                Auction in progress
+              </div>
+            )}
+          </div>
 
-            {/* Lot info */}
-            <div className="shrink-0 px-5 py-4 bg-[#12134a] border-t border-white/10">
-              <p className="text-[#2AB4A6] text-[10px] font-black uppercase tracking-widest mb-1">
-                LOT {currentLot.barcode || "—"}
-              </p>
-              <p className="text-white font-bold text-sm leading-snug line-clamp-2 mb-3">
-                {currentLot.title}
-              </p>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-black/40 px-3 py-2">
-                  <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-0.5">Current Bid</p>
-                  <p className="text-white font-black text-lg">
-                    {currentBid ? `£${currentBid.toLocaleString("en-GB")}` : "—"}
-                  </p>
+          {/* ── Right-hand column: the two picture boxes — or the live sale when one is running ── */}
+          {isLive && live && currentLot ? (
+            <aside className="bg-[var(--vs-navy)] text-white flex flex-col lg:h-[600px]" aria-label="Live auction">
+              <div className="bg-[var(--vs-red)] px-5 py-3 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+                  <span className="vs-caps">Live auction</span>
                 </div>
-                <div className="bg-[#2AB4A6]/20 px-3 py-2 border border-[#2AB4A6]/40">
-                  <p className="text-[#2AB4A6] text-[9px] uppercase tracking-widest mb-0.5">Asking</p>
-                  <p className="text-[#2AB4A6] font-black text-lg">
-                    {askingBid ? `£${askingBid.toLocaleString("en-GB")}` : (
-                      currentLot.estimateLow
-                        ? `£${currentLot.estimateLow.toLocaleString("en-GB")}`
-                        : "TBC"
-                    )}
-                  </p>
+                <Link href={`/auctions/${live.auctionCode}/live`} className="vs-caps text-xs hover:underline">
+                  Enter bidding room ›
+                </Link>
+              </div>
+              <div className="relative flex-1 bg-black min-h-[220px]">
+                {lotImg ? (
+                  <img src={lotImg} alt={currentLot.title} className="absolute inset-0 w-full h-full object-contain p-4" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-white/30">
+                    <img src="/vectis-logo.svg" alt="" width={140} height={56} className="opacity-40" />
+                  </div>
+                )}
+              </div>
+              <div className="shrink-0 px-5 py-4 border-t border-white/10">
+                <p className="vs-caps text-white/70 text-xs mb-1">Lot {currentLot.barcode || "—"}</p>
+                <p className="font-medium text-base leading-snug line-clamp-2 mb-3">{currentLot.title}</p>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-black/30 px-3 py-2">
+                    <p className="text-white/60 text-xs uppercase tracking-wider mb-0.5">Current bid</p>
+                    <p className="font-semibold text-lg">{currentBid ? `£${currentBid.toLocaleString("en-GB")}` : "—"}</p>
+                  </div>
+                  <div className="bg-white/10 px-3 py-2 border border-white/30">
+                    <p className="text-white/60 text-xs uppercase tracking-wider mb-0.5">Asking</p>
+                    <p className="font-semibold text-lg">
+                      {askingBid ? `£${askingBid.toLocaleString("en-GB")}` : currentLot.estimateLow ? `£${currentLot.estimateLow.toLocaleString("en-GB")}` : "TBC"}
+                    </p>
+                  </div>
+                </div>
+                <Link href={`/auctions/${live.auctionCode}/live`} className="vs-btn vs-btn-red vs-btn-block">Bid live now</Link>
+              </div>
+            </aside>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3 lg:h-[600px]">
+              <div className="vs-hero-box">
+                {sidePictures.sell && <img src={sidePictures.sell} alt="" loading="lazy" />}
+                <div className="vs-hero-box-card">
+                  <h3 className="vs-h3 font-medium mb-3">Sell with us</h3>
+                  <p className="text-sm leading-relaxed mb-4">We buy or auction your collection here at Vectis Auctions, the world&apos;s largest collectable toy specialist.</p>
+                  <Link href="/sell-with-us" className="vs-link">Get started</Link>
                 </div>
               </div>
-              <Link
-                href={`/auctions/${live.auctionCode}/live`}
-                className="block w-full text-center bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest py-3 transition-colors"
-              >
-                BID LIVE NOW →
-              </Link>
+              <div className="vs-hero-box">
+                {sidePictures.buy && <img src={sidePictures.buy} alt="" loading="lazy" />}
+                <div className="vs-hero-box-card">
+                  <h3 className="vs-h3 font-medium mb-3">Buy with us</h3>
+                  <p className="text-sm leading-relaxed mb-4">Vectis holds more collectable toy auctions than any other auction house.</p>
+                  <Link href="/how-to-bid" className="vs-link">Find out more</Link>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   )
 }

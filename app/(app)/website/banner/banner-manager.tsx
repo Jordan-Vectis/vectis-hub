@@ -9,6 +9,9 @@ import {
 } from "@/lib/actions/hero-slides"
 import SlideView, { focusPosition } from "@/app/(site)/hero-slide-view"
 import { BRAND_COLOURS, DEFAULT_STYLE, HEX_COLOUR, type SlideStyle } from "@/app/(site)/hero-style"
+import { barlow } from "@/app/(site)/site-font"
+// The site's stylesheet, so the preview's slide is drawn with the site's own classes and font.
+import "@/app/(site)/site.css"
 
 // The Banner Manager — every slide of the website's hero, with an editor for its words, picture
 // and look. The editor's preview is the site's own slide rendering (hero-slide-view.tsx) at the
@@ -517,9 +520,10 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
 
 const INPUT = "w-full border border-gray-200 rounded px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-[#32348A] placeholder:text-gray-300 bg-white"
 
-// The site's hero is 520px tall on a wide screen; the preview renders it at 1400×520 and scales
-// that down to the panel's width, so the words, sizes and gaps are the site's own.
-const PREVIEW_W = 1400, PREVIEW_H = 520
+// The site's slider is 600px tall on a wide screen (2026-10-15, vectis.co.uk's height) and about
+// 1,130px wide beside the two picture boxes; the preview renders it at that size and scales it
+// down to the panel's width, so the words, sizes and gaps are the site's own.
+const PREVIEW_W = 1130, PREVIEW_H = 600
 function ScaledPreview({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const [k, setK] = useState(0.5)
@@ -534,7 +538,8 @@ function ScaledPreview({ children }: { children: React.ReactNode }) {
   }, [])
   return (
     <div ref={ref} className="w-full overflow-hidden rounded-lg border border-gray-200" style={{ height: PREVIEW_H * k }}>
-      <div className="relative overflow-hidden" style={{ width: PREVIEW_W, height: PREVIEW_H, transform: `scale(${k})`, transformOrigin: "top left" }}>
+      {/* The site's wrapper class, so the slide gets the site's font and classes — the Hub's own styles stay outside. */}
+      <div className={`vectis-site ${barlow.variable} relative overflow-hidden`} style={{ width: PREVIEW_W, height: PREVIEW_H, transform: `scale(${k})`, transformOrigin: "top left" }}>
         {children}
       </div>
     </div>

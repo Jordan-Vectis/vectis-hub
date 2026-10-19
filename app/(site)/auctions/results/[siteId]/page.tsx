@@ -1,20 +1,23 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { format } from "date-fns"
-import { getResultSale, getResultLots, getResultSummary, type ResultLot } from "../data"
+import { getResultSale, getResultLots, getResultSummary, saleHasHappened, LOTS_PAGE, type ResultLot } from "../data"
+import { saleDateLong } from "../../../site-dates"
 
-// One past sale's results on the test website: its lots in lot order with photo, description,
-// estimate and hammer price, read from the Hub's sale databases (see ../data.ts). The site id in the
-// address is the website's own sale number — the one id every sale has, old system or BC.
+// One sale on the test website — its lots in lot order with photo, description, estimate and
+// (once the sale has happened) the hammer price, read from the Hub's sale databases (see
+// ../data.ts). The site id in the address is the website's own sale number — the one id every
+// sale has, old system or BC. The home page and the calendar link UPCOMING sales here too, so the
+// page wears two faces: "LIVE AUCTIONS" with estimates and LOGIN TO BID before the day, "AUCTION
+// ARCHIVE" with the results after it. Laid out as vectis.co.uk lays out a sale (2026-10-14).
 
 export const dynamic = "force-dynamic"
 
 const gbp = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 2 })
 
 function estimateText(low: number | null, high: number | null): string | null {
-  if (low && high) return `£${gbp(low)} – £${gbp(high)}`
+  if (low && high) return `£${gbp(low)} - £${gbp(high)}`
   if (low) return `£${gbp(low)}+`
-  if (high) return `–£${gbp(high)}`
+  if (high) return `up to £${gbp(high)}`
   return null
 }
 
@@ -26,7 +29,8 @@ export async function generateMetadata({ params }: { params: Promise<{ siteId: s
   const { siteId } = await params
   const id = parseSiteId(siteId)
   const sale = id != null ? await getResultSale(id).catch(() => null) : null
-  return { title: sale ? `${sale.title} — Results` : "Auction Results" }
+  if (!sale) return { title: "Auction" }
+  return { title: `${sale.title} — ${saleHasHappened(sale) ? "Results" : "Lots"}` }
 }
 
 export default async function SaleResultsPage({
@@ -44,11 +48,17 @@ export default async function SaleResultsPage({
   const sale = await getResultSale(siteId)
   if (!sale) notFound()
 
+  // Before the day there is no result to show — only the estimate, and a way to log in and bid.
+  const happened = saleHasHappened(sale)
   const currentPage = Math.max(1, parseInt(page ?? "1", 10) || 1)
   const [lots, summary] = await Promise.all([
     getResultLots(sale, { search, page: currentPage }),
-    getResultSummary(sale),
+    happened ? getResultSummary(sale) : Promise.resolve(null),
   ])
+
+  // A sale can have happened without its hammer prices being in yet (the BC sync and the website
+  // collection run after the day) — then nothing is "unsold", the result is simply to follow.
+  const resultsIn = !happened || (!!summary && summary.sold > 0)
 
   const base = `/auctions/results/${sale.siteId}`
   const pageHref = (p: number) => {
@@ -58,106 +68,97 @@ export default async function SaleResultsPage({
     const qs = sp.toString()
     return qs ? `${base}?${qs}` : base
   }
+  const from = lots.total === 0 ? 0 : (lots.page - 1) * LOTS_PAGE + 1
+  const to = Math.min(lots.page * LOTS_PAGE, lots.total)
+  const pageNumbers = Array.from({ length: lots.pages }, (_, i) => i + 1)
+    .filter(p => Math.abs(p - currentPage) <= 2 || p === 1 || p === lots.pages)
 
   return (
-    <div>
-      {/* ── Sale banner ── */}
-      <div className="relative bg-[#32348A] overflow-hidden" style={{ height: "300px" }}>
-        {sale.photo ? (
-          <img src={sale.photo} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[#32348A] to-[#4446a8]" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
-        <div className="relative h-full max-w-7xl mx-auto px-4 sm:px-6 flex flex-col justify-end pb-8">
-          <div className="flex items-center gap-2 text-xs text-gray-300 mb-3">
-            <Link href="/auctions" className="hover:text-white transition-colors uppercase tracking-wider font-semibold">Auction Calendar</Link>
-            <span>/</span>
-            <Link href="/auctions?tab=past" className="hover:text-white transition-colors uppercase tracking-wider font-semibold">Results</Link>
-            <span>/</span>
-            <span className="text-white uppercase tracking-wider font-semibold truncate">{sale.title}</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-white mb-1">{sale.title}</h1>
-          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-200 mb-4">
-            {sale.saleDate && <span>{format(new Date(sale.saleDate), "EEEE do MMMM yyyy")}</span>}
-            {sale.code && <span className="text-[#2AB4A6] font-semibold">Sale {sale.code}</span>}
-            <span className="text-amber-300 font-semibold uppercase tracking-wider text-xs">Auction ended</span>
-          </div>
-          {summary && summary.lots > 0 && (
-            <div className="flex flex-wrap gap-6 text-white">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Lots</p>
-                <p className="text-2xl font-black leading-tight">{summary.lots.toLocaleString("en-GB")}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Sold</p>
-                <p className="text-2xl font-black leading-tight">
-                  {summary.sold.toLocaleString("en-GB")}
-                  <span className="text-sm font-semibold text-gray-300 ml-1">({Math.round((summary.sold / summary.lots) * 100)}%)</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Hammer total</p>
-                <p className="text-2xl font-black leading-tight">£{gbp(summary.hammerTotal)}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="vs-page">
+      <div className="vs-container">
+        <Link href={happened ? "/auctions?tab=past" : "/auctions"} className="vs-link vs-link-back vs-link-sm">Back to auction calendar</Link>
 
-      {/* ── Filter bar ── */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <form method="GET" action={base} className="flex flex-wrap items-center gap-3 py-3">
-            <div className="flex items-center border border-gray-300 overflow-hidden">
-              <span className="px-2 text-gray-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                </svg>
-              </span>
-              <input
-                name="search"
-                defaultValue={search ?? ""}
-                placeholder="Lot number or words…"
-                className="py-2 pr-3 text-sm focus:outline-none w-56"
-              />
+        {/* ── The sale: kicker, title, date, with its cover picture on the right ── */}
+        <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_300px] lg:gap-12 items-start">
+          <div className="min-w-0">
+            <p className={`vs-kicker mb-3 ${happened ? "vs-kicker-navy" : ""}`}>
+              {happened ? "Auction archive" : lots.total > 0 ? "Live auctions" : "Coming soon"}
+            </p>
+            <h1 className="vs-h1 mb-4">{sale.title}</h1>
+            {sale.saleDate && <p className="vs-caps mb-2">{saleDateLong(sale.saleDate)}</p>}
+            <p className="text-sm text-[var(--vs-muted)]">
+              {sale.code && <span className="mr-4">Sale {sale.code}</span>}
+              {happened
+                ? resultsIn
+                  ? "This auction has ended — the hammer prices are shown against each lot."
+                  : "This auction has ended — the results will appear here once they are in."
+                : lots.total > 0
+                  ? `${lots.total.toLocaleString("en-GB")} lots. Log in to leave a commission bid or to bid live on the day.`
+                  : "The catalogue for this sale is not online yet. Check back soon."}
+            </p>
+          </div>
+
+          <div className="w-full max-w-[300px]">
+            {/* The site's cover files are square — shown whole on white, as vectis.co.uk's calendar shows them. */}
+            <div className="vs-card-flat aspect-square overflow-hidden">
+              {sale.photo
+                ? <img src={sale.photo} alt="" loading="lazy" className="w-full h-full object-contain" />
+                : <div className="w-full h-full bg-[var(--vs-bg)] flex items-center justify-center"><img src="/vectis-logo.svg" alt="" width={120} height={48} className="opacity-30" /></div>}
             </div>
-            <button
-              type="submit"
-              className="bg-[#32348A] text-white text-sm font-semibold px-5 py-2 hover:bg-[#28296e] transition-colors uppercase tracking-wider"
-            >
-              Search
-            </button>
-            {search && (
-              <Link href={base} className="text-sm text-gray-400 hover:text-[#32348A] underline">Clear</Link>
+            {!happened && lots.total > 0 && (
+              <Link href="/portal/login" className="vs-btn vs-btn-block mt-4">Login to bid</Link>
             )}
-            <span className="ml-auto text-sm text-gray-500">
-              {lots.total.toLocaleString("en-GB")} lots {search ? "found" : "in this sale"}
-            </span>
-          </form>
-        </div>
-      </div>
-
-      {/* ── Lots grid ── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        {lots.rows.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            {search ? "No lots match your search." : "The results for this sale aren't in yet."}
           </div>
+        </div>
+
+        {/* ── The result in numbers — only once the sale has happened ── */}
+        {happened && resultsIn && summary && summary.lots > 0 && (
+          <div className="vs-band mt-10 grid grid-cols-3 divide-x divide-[var(--vs-line)] text-center">
+            <Figure label="Lots" value={summary.lots.toLocaleString("en-GB")} />
+            <Figure label="Sold" value={`${Math.round((summary.sold / summary.lots) * 100)}%`} sub={`${summary.sold.toLocaleString("en-GB")} lots`} />
+            <Figure label="Hammer total" value={`£${gbp(summary.hammerTotal)}`} />
+          </div>
+        )}
+
+        {/* ── Toolbar: search, and where the page is in the list ── */}
+        {(lots.total > 0 || search) && (
+          <form method="GET" action={base} className="mt-10 pt-6 border-t border-[var(--vs-line)] flex flex-wrap items-center gap-3">
+            <label htmlFor="lot-search" className="sr-only">Search the lots</label>
+            <input id="lot-search" name="search" defaultValue={search ?? ""} placeholder="Lot number or words" className="vs-input sm:!w-72" />
+            <button type="submit" className="vs-btn">Search</button>
+            {search && <Link href={base} className="vs-link vs-link-sm vs-link-plain">Clear</Link>}
+            <p className="w-full sm:w-auto sm:ml-auto text-sm text-[var(--vs-muted)]">
+              {lots.total === 0
+                ? "No lots found"
+                : `Showing ${from.toLocaleString("en-GB")} - ${to.toLocaleString("en-GB")} of ${lots.total.toLocaleString("en-GB")} lots${search ? ` for "${search}"` : ""}`}
+            </p>
+          </form>
+        )}
+
+        {/* ── The lots ── */}
+        {lots.rows.length === 0 ? (
+          <p className="text-center py-20 text-[var(--vs-muted)]">
+            {search
+              ? "No lots match your search."
+              : happened ? "The results for this sale are not held." : "The lots for this sale will appear here once the catalogue is online."}
+          </p>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-              {lots.rows.map(lot => <ResultLotCard key={lot.id} lot={lot} saleHref={base} />)}
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
+              {lots.rows.map(lot => <ResultLotCard key={lot.id} lot={lot} saleHref={base} happened={happened} resultsIn={resultsIn} />)}
             </div>
 
             {lots.pages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-10 flex-wrap">
-                {currentPage > 1 && <PageLink href={pageHref(currentPage - 1)} label="← Prev" />}
-                {Array.from({ length: lots.pages }, (_, i) => i + 1)
-                  .filter(p => Math.abs(p - currentPage) <= 2 || p === 1 || p === lots.pages)
-                  .map(p => <PageLink key={p} href={pageHref(p)} label={String(p)} active={p === currentPage} />)}
-                {currentPage < lots.pages && <PageLink href={pageHref(currentPage + 1)} label="Next →" />}
-              </div>
+              <nav className="vs-pages mt-12" aria-label="Pages of lots">
+                {currentPage > 1 && <Link href={pageHref(currentPage - 1)} className="vs-page-link">Previous</Link>}
+                {pageNumbers.map((p, i) => (
+                  <span key={p} className="contents">
+                    {i > 0 && pageNumbers[i - 1] !== p - 1 && <span className="px-1 text-[var(--vs-muted)]">…</span>}
+                    <Link href={pageHref(p)} className="vs-page-link" aria-current={p === currentPage ? "page" : undefined}>{p}</Link>
+                  </span>
+                ))}
+                {currentPage < lots.pages && <Link href={pageHref(currentPage + 1)} className="vs-page-link">Next</Link>}
+              </nav>
             )}
           </>
         )}
@@ -166,65 +167,49 @@ export default async function SaleResultsPage({
   )
 }
 
-// The whole card is one link to the lot's page (the zoom viewer lives there, not on the grid — a
-// zoom button inside a link would be a button inside an anchor, and the two clicks would fight).
-function ResultLotCard({ lot, saleHref }: { lot: ResultLot; saleHref: string }) {
-  const estimate = estimateText(lot.estimateLow, lot.estimateHigh)
+function Figure({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <Link
-      href={`${saleHref}/lot/${encodeURIComponent(lot.id)}`}
-      className="group bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-[#32348A]/40 transition-all flex flex-col"
-    >
-      <div className="relative bg-gray-100 aspect-square overflow-hidden">
-        {lot.photo ? (
-          <img src={lot.photo} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-200">
-            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-        )}
-        {lot.hammer == null && (
-          <span className="absolute top-2 left-2 bg-gray-800/80 text-white text-[10px] font-black uppercase tracking-widest px-2 py-0.5 pointer-events-none">
-            Unsold
-          </span>
-        )}
-      </div>
-
-      <div className="p-3 flex flex-col flex-1">
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <span className="text-xs font-bold text-[#DB0606] tracking-wide">LOT {lot.lot ?? "—"}</span>
-          {estimate && <span className="text-[11px] text-gray-500 truncate">Est. {estimate}</span>}
-        </div>
-        <p className="text-sm text-gray-800 leading-snug line-clamp-4 mb-3" title={lot.description}>
-          {lot.description || <span className="text-gray-400">No description held</span>}
-        </p>
-        <div className="mt-auto">
-          {lot.hammer != null ? (
-            <div className="w-full bg-[#32348A] text-white text-xs font-black uppercase tracking-widest py-2 text-center">
-              Hammer £{gbp(lot.hammer)}
-            </div>
-          ) : (
-            <div className="w-full bg-gray-100 text-gray-500 text-xs font-black uppercase tracking-widest py-2 text-center">
-              Unsold
-            </div>
-          )}
-        </div>
-      </div>
-    </Link>
+    <div className="py-6 px-2">
+      <p className="text-[28px] sm:text-[36px] leading-none font-semibold text-[var(--vs-navy)]">{value}</p>
+      <p className="vs-caps text-xs mt-2">{label}</p>
+      {sub && <p className="text-xs text-[var(--vs-muted)] mt-1">{sub}</p>}
+    </div>
   )
 }
 
-function PageLink({ href, label, active }: { href: string; label: string; active?: boolean }) {
+// The picture and the description open the lot's page (the zoom viewer lives there, not on the
+// grid). The button is its own link, beside them rather than inside them — a link inside a link
+// is not allowed, and the two clicks would fight.
+function ResultLotCard({ lot, saleHref, happened, resultsIn }: { lot: ResultLot; saleHref: string; happened: boolean; resultsIn: boolean }) {
+  const estimate = estimateText(lot.estimateLow, lot.estimateHigh)
+  const href = `${saleHref}/lot/${encodeURIComponent(lot.id)}`
   return (
-    <Link
-      href={href}
-      className={`min-w-[2.5rem] text-center px-3 py-2 text-sm font-semibold border transition-colors ${
-        active ? "bg-[#32348A] text-white border-[#32348A]" : "bg-white text-[#32348A] border-gray-300 hover:border-[#32348A]"
-      }`}
-    >
-      {label}
-    </Link>
+    <article className="vs-card-flat flex flex-col">
+      <Link href={href} className="block bg-white aspect-square overflow-hidden border-b border-[var(--vs-line)]" aria-label={`Lot ${lot.lot ?? ""}`}>
+        {lot.photo
+          ? <img src={lot.photo} alt="" loading="lazy" className="w-full h-full object-contain" />
+          : <div className="w-full h-full bg-[var(--vs-bg)]" />}
+      </Link>
+      <div className="p-3 sm:p-4 flex flex-col flex-1">
+        <div className="flex items-baseline justify-between gap-2 mb-2">
+          <span className="vs-caps text-[var(--vs-navy)] shrink-0">Lot {lot.lot ?? "—"}</span>
+          {estimate && <span className="text-sm text-[var(--vs-muted)] text-right truncate">Estimate: {estimate}</span>}
+        </div>
+        <p className="text-sm leading-snug line-clamp-3 mb-4" title={lot.description}>
+          <Link href={href} className="hover:underline">
+            {lot.description || <span className="text-[var(--vs-muted)]">No description held</span>}
+          </Link>
+        </p>
+        <div className="mt-auto">
+          {happened ? (
+            lot.hammer != null
+              ? <p><span className="vs-price-label">Hammer price: </span><span className="vs-price">£{gbp(lot.hammer)}</span></p>
+              : <p className="vs-price-label">{resultsIn ? "Unsold" : "Result to follow"}</p>
+          ) : (
+            <Link href="/portal/login" className="vs-btn vs-btn-sm">Login to bid</Link>
+          )}
+        </div>
+      </div>
+    </article>
   )
 }

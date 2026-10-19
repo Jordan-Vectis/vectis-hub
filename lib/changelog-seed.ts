@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-13, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-19, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,30 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f18d8c8690c8d0013f8c33d95c6c06b2e15a6a5b","author":"Jordan Orange","date":"2026-10-19T16:03:39+01:00","subject":"Home page: every row of cards the same height"},
+  {"sha":"091282f03be4df2c48a1773b3c4ec679b4bbe949","author":"Jordan Orange","date":"2026-10-19T16:01:08+01:00","subject":"Home page editor opens from a pencil in the top bar"},
+  {"sha":"1208fa298dbb954d376dfd5cb6536d92eb0b9e7c","author":"Jordan Orange","date":"2026-10-19T15:54:59+01:00","subject":"Edit the home page on the home page itself"},
+  {"sha":"f020646870d1f0ec5cf0ee66eedec81d4256d584","author":"Jordan Orange","date":"2026-10-19T15:38:43+01:00","subject":"Home Page Cards: sections, colours and moving apps, for everyone"},
+  {"sha":"bca80b3cc11ebbc05cf0bcb4bc8e7d39bd672936","author":"Jordan Orange","date":"2026-10-19T15:25:25+01:00","subject":"Home page sections tidied: Marketing section, Admin & Operations"},
+  {"sha":"70bbda911c80fe1610522a1e83ef90e995d1393f","author":"Jordan Orange","date":"2026-10-19T14:58:20+01:00","subject":"Home page: each section card gets its own colour"},
+  {"sha":"1c950a0188b406bd9530f2b29c4fec38c17d1da6","author":"Jordan Orange","date":"2026-10-19T14:42:42+01:00","subject":"Home page: sections become cards that open their own page"},
+  {"sha":"6fc53a3d7293e17c57c98344a56938b507eb92c9","author":"Jordan Orange","date":"2026-10-19T12:54:24+01:00","subject":"Run Migrations drops the retired personal tables"},
+  {"sha":"8c7628d6f884dbacc34a4031b0510c6730c98769","author":"jack-vectis","date":"2026-10-19T11:58:32+01:00","subject":"Handheld scanner: compact screens for the small Newland display, settings behind a cog"},
+  {"sha":"934c572bbc131219de6b498a14a7c4091e13d4d4","author":"Jordan Orange","date":"2026-10-19T10:54:27+01:00","subject":"Memory page: drop the last mention of the old personal menu"},
+  {"sha":"a8318888268ed0ff90ca5d8cac71c737683673e2","author":"Jordan Orange","date":"2026-10-19T10:50:38+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"3752262cc1f42b93666ab29f276ac631f884667d","author":"Jordan Orange","date":"2026-10-19T10:50:36+01:00","subject":"Remove the personal /jordan menu, its routes, tables and notes"},
+  {"sha":"fc7227b7b4dd3c7c2714a68154217b824549f296","author":"jack-vectis","date":"2026-10-19T10:33:24+01:00","subject":"Goods In: scanner sign-in cards — scan a QR card to sign in to the handheld scanner"},
+  {"sha":"b58dd4715cf8eacc513ea660cf15b2d405f80df6","author":"jack-vectis","date":"2026-10-16T15:54:52+01:00","subject":"Goods In handheld scanner: the /scan screen and the Vectis Scanner Android app"},
+  {"sha":"9796646cdbe209a594091229f42bbea295613771","author":"jack-vectis","date":"2026-10-16T11:18:37+01:00","subject":"Goods In: Fees & agreement tab on the customer page, and a tidier check-in"},
+  {"sha":"859ace046ee71d170b14075a509431b33da53aa9","author":"jack-vectis","date":"2026-10-16T10:40:53+01:00","subject":"Fix the Goods In agreement migration: the foreign-key step lost one $ of its $$ quoting"},
+  {"sha":"be4f95257def318bbf3a29e5d70960100bf92321","author":"jack-vectis","date":"2026-10-16T10:31:22+01:00","subject":"Goods In check-in: tote numbers and labels on the goods step, no fees step"},
+  {"sha":"d8ba0de73de923f8af8a95a8e9d465d95168d0fe","author":"jack-vectis","date":"2026-10-16T09:07:17+01:00","subject":"Goods In Locations: filters, remove, bulk changes and a page per location"},
+  {"sha":"6a589c71519b2fc7062a1fa132e1cf18deb150ad","author":"jack-vectis","date":"2026-10-15T15:51:52+01:00","subject":"Goods In: the Hub's own check-in replaces the Warehouse prototype"},
+  {"sha":"de21416ab69aa70ab3b94ac27e35f4c0ed6d78d1","author":"jack-vectis","date":"2026-10-15T14:40:18+01:00","subject":"Add CONTRIBUTORS.md naming the Hub's developers"},
+  {"sha":"2878e5c0af270205a6682fc12f2c323b13f3dbd5","author":"Jack Collings","date":"2026-10-15T09:53:12+01:00","subject":"Test website: the banner's side boxes use the vivid department tile pictures, not the pale banners"},
+  {"sha":"e8a3b88b6173c38dc12ef165ede3830b22e26cb8","author":"Jack Collings","date":"2026-10-15T09:47:00+01:00","subject":"Test website: the banner rotates the upcoming sales, with the two picture boxes beside it"},
+  {"sha":"872fad2f60e1f0fdaf9814b1ed0a5fb9d70128ac","author":"Jack Collings","date":"2026-10-15T09:27:43+01:00","subject":"Test website: restyled to match vectis.co.uk, with working upcoming sales and search"},
+  {"sha":"fa3013abc09da8504ddb44e53cd3ca91d7d45278","author":"Jordan Orange","date":"2026-10-13T16:59:02+01:00","subject":"Memory: the 13 Oct merge to main in the opening message (Craft Apps is on production)"},
   {"sha":"4f6cfdce7d1a1ace1673c799e6893ab7b4dd7650","author":"Jordan Orange","date":"2026-10-13T14:56:49+01:00","subject":"Memory: 2026-10-13 in the opening message (Craft Apps tab, the rule on complete instructions) + reference_craft_apps entry"},
   {"sha":"d2e086a209b9d3f9ea18884985c165ed0d845eb1","author":"Jordan Orange","date":"2026-10-13T12:57:03+01:00","subject":"Office PC trial: a reply with blank lines is not a leaked search"},
   {"sha":"a4b05d231affa9143ab1800f542ac550ba52a3ba","author":"Jordan Orange","date":"2026-10-13T12:19:28+01:00","subject":"Craft Apps: \"Download all\" buttons for the Vectis builds and the official releases"},

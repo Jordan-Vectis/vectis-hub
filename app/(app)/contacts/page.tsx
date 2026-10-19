@@ -387,6 +387,17 @@ export default function ContactsPage() {
 
               {overlayTab === "seller" && (
                 <div>
+                  {/* Goods In (the Hub's own check-in, 2026-10-15) keeps its receipts on the customer's
+                      Goods In page. The list below is the old April prototype's receipts. */}
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Goods booked in through <b>Goods In</b> — receipts, totes and where they are — are on this customer&apos;s Goods In page.</p>
+                    <button
+                      className="inline-flex items-center min-h-11 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                      onClick={() => router.push(`/tools/warehouse/customers/${encodeURIComponent(overlay.id)}`)}
+                    >
+                      Open in Goods In →
+                    </button>
+                  </div>
                   {detailLoading ? (
                     <p className="text-sm text-gray-400">Loading…</p>
                   ) : receipts.length === 0 ? (
@@ -408,7 +419,8 @@ export default function ContactsPage() {
                             <td className="py-2 text-gray-500">{new Date(r.created_at).toLocaleDateString("en-GB")}</td>
                             <td className="py-2 text-gray-500">{r.containers?.length ?? 0}</td>
                             <td className="py-2 text-right">
-                              <button className="text-blue-600 hover:underline text-xs" onClick={() => router.push(`/tools/warehouse/receipts?id=${r.id}`)}>View →</button>
+                              {/* The prototype's receipts have no page of their own any more — the customer's Goods In page is where their goods are now. */}
+                              <button className="text-blue-600 hover:underline text-xs" onClick={() => router.push(`/tools/warehouse/customers/${encodeURIComponent(overlay.id)}`)}>View →</button>
                             </td>
                           </tr>
                         ))}

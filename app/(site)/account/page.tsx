@@ -2,7 +2,8 @@ import { redirect } from "next/navigation"
 import { getCustomerSession } from "@/lib/customer-auth"
 import DetailsForm from "./details-form"
 
-export const metadata = { title: "My Details — Vectis" }
+// The site layout's title template adds " | Vectis Auctions" itself.
+export const metadata = { title: "My details" }
 
 export default async function MyAccountPage() {
   const session = await getCustomerSession()
@@ -10,7 +11,7 @@ export default async function MyAccountPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">My Details</h1>
+      <h1 className="vs-h2 vs-rule mb-8">My details</h1>
       <DetailsForm account={session} />
     </div>
   )

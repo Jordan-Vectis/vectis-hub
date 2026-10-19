@@ -1,6 +1,7 @@
 import { Render, type Data } from "@puckeditor/core"
 import { siteConfig } from "../(site)/page-editor/site-config"
 import { LIVE_DEFS, LIVE_TYPES, type LiveType } from "../(site)/page-editor/live-defs"
+import { barlow } from "../(site)/site-font"
 
 // /site-block?type=LiveUpcoming&p={"heading":"…"} — one LIVE block of the page editor, drawn exactly
 // as the site draws it, for the editor's canvas to show in a frame (the live blocks read the
@@ -20,7 +21,7 @@ export default async function SiteBlockPage({ searchParams }: { searchParams: Pr
     content: [{ type, props: { ...LIVE_DEFS[type as LiveType].defaultProps, ...props, id: "preview" } }],
   }
   return (
-    <div id="site-block-root" className="vectis-site bg-white">
+    <div id="site-block-root" className={`vectis-site ${barlow.variable} bg-white`}>
       <Render config={siteConfig} data={data} metadata={{ searchParams: {} }} />
     </div>
   )

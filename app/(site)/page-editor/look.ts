@@ -1,28 +1,41 @@
 // Shared look-and-feel for the page editor's blocks — the site's colours, the size and width
 // choices, and the small helpers every block uses. Pure: safe on the server and in the editor.
+//
+// The colours are the ones site.css measures off vectis.co.uk (2026-10-14): navy for everything
+// interactive, red only for the small caption lines, magenta only for the banner button, warm grey
+// bands between white sections. Blocks reach them through the --pe-* variables below, so the same
+// block reads on a light and a dark background.
 
 export const BRAND = {
-  blue: "#32348a",
-  navy: "#1e1f5e",
-  deep: "#12134a",
-  red: "#db0606",
-  teal: "#2ab4a6",
+  navy: "#2e328e",
+  navyDark: "#22256f",
+  red: "#ff0300",
+  magenta: "#f102f2",
+  orange: "#c27608",
+  ink: "#212529",
+  muted: "#6c757d",
+  band: "#f6f4f4",
+  line: "#e6e6e6",
+  // The old names, kept as aliases of the new palette so a saved page or an import that still
+  // uses them draws in the current colours rather than the retired ones.
+  blue: "#2e328e",
+  deep: "#22256f",
+  teal: "#2e328e",
 } as const
 
 // The swatches every colour field offers first; any other colour can be picked or typed.
 export const SWATCHES: { hex: string; name: string }[] = [
   { hex: "#ffffff", name: "White" },
-  { hex: "#f9fafb", name: "Off-white" },
-  { hex: "#f3f4f6", name: "Light grey" },
-  { hex: "#6b7280", name: "Grey" },
-  { hex: "#1f2937", name: "Charcoal" },
+  { hex: BRAND.band, name: "Light grey (band)" },
+  { hex: BRAND.line, name: "Hairline grey" },
+  { hex: BRAND.muted, name: "Grey" },
+  { hex: BRAND.ink, name: "Ink" },
   { hex: "#000000", name: "Black" },
-  { hex: BRAND.blue, name: "Vectis blue" },
-  { hex: BRAND.navy, name: "Navy" },
-  { hex: BRAND.deep, name: "Deep blue" },
+  { hex: BRAND.navy, name: "Vectis navy" },
+  { hex: BRAND.navyDark, name: "Dark navy" },
   { hex: BRAND.red, name: "Vectis red" },
-  { hex: BRAND.teal, name: "Teal" },
-  { hex: "#f5c518", name: "Gold" },
+  { hex: BRAND.magenta, name: "Magenta" },
+  { hex: BRAND.orange, name: "Orange" },
 ]
 
 export const HEX = /^#[0-9a-f]{6}$/i
@@ -40,9 +53,10 @@ export function isDark(hex: string): boolean {
 
 // Words on a light or a dark background. Blocks read these CSS variables for their default
 // colours, so a heading dropped into a navy section turns white without anyone choosing it.
+// --pe-rule is the short bar under a title and the quote's bar: navy on white, white on navy.
 export const TONE_VARS = {
-  light: { "--pe-heading": BRAND.blue, "--pe-text": "#1f2937", "--pe-muted": "#6b7280", "--pe-kicker": BRAND.red, "--pe-link": BRAND.blue, "--pe-line": "#e5e7eb" },
-  dark: { "--pe-heading": "#ffffff", "--pe-text": "#e5e7eb", "--pe-muted": "#d1d5db", "--pe-kicker": "#ff4d4d", "--pe-link": "#ffffff", "--pe-line": "rgba(255,255,255,0.18)" },
+  light: { "--pe-heading": "#000000", "--pe-text": BRAND.ink, "--pe-muted": BRAND.muted, "--pe-kicker": BRAND.red, "--pe-link": BRAND.navy, "--pe-line": BRAND.line, "--pe-rule": BRAND.navy },
+  dark: { "--pe-heading": "#ffffff", "--pe-text": "#e5e7eb", "--pe-muted": "#d1d5db", "--pe-kicker": "#ffb3b2", "--pe-link": "#ffffff", "--pe-line": "rgba(255,255,255,0.18)", "--pe-rule": "#ffffff" },
 } as const
 
 // ── Choices shared by several blocks (Tailwind needs every class written out in full) ──
@@ -54,12 +68,15 @@ export const WIDTH_OPTIONS = [
   { label: "Text (easy reading)", value: "text" },
   { label: "Narrow", value: "narrow" },
 ]
+// The same measures as site.css's vs-container (1320px) and vs-container-wide (1600px), with the
+// site's 20px / 32px gutters — written out rather than using the classes, because those set
+// padding as a shorthand and would wipe the block's own vertical padding.
 export const WIDTH_CLASS: Record<string, string> = {
-  full: "w-full px-4 sm:px-6",
-  wide: "w-full max-w-[1800px] mx-auto px-4 sm:px-6 xl:px-10",
-  standard: "w-full max-w-7xl mx-auto px-4 sm:px-6",
-  text: "w-full max-w-4xl mx-auto px-4 sm:px-6",
-  narrow: "w-full max-w-2xl mx-auto px-4 sm:px-6",
+  full: "w-full px-5 sm:px-8",
+  wide: "w-full max-w-[1600px] mx-auto px-5 sm:px-8",
+  standard: "w-full max-w-[1320px] mx-auto px-5 sm:px-8",
+  text: "w-full max-w-[900px] mx-auto px-5 sm:px-8",
+  narrow: "w-full max-w-[680px] mx-auto px-5 sm:px-8",
 }
 
 export const PADDING_OPTIONS = [
@@ -69,7 +86,8 @@ export const PADDING_OPTIONS = [
   { label: "Large", value: "large" },
   { label: "Extra large", value: "xl" },
 ]
-export const PADDING_Y: Record<string, string> = { none: "py-0", small: "py-6", medium: "py-10", large: "py-16", xl: "py-24" }
+// "Medium" is the site's own section rhythm (vs-section: 48px, 64px from lg).
+export const PADDING_Y: Record<string, string> = { none: "py-0", small: "py-6", medium: "py-12 lg:py-16", large: "py-16 lg:py-24", xl: "py-24 lg:py-32" }
 export const PADDING_ALL: Record<string, string> = { none: "p-0", small: "p-4", medium: "p-6 sm:p-8", large: "p-8 sm:p-10", xl: "p-10 sm:p-14" }
 
 export const ALIGN_OPTIONS = [

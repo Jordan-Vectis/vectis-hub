@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import Link from "next/link"
 import EditUserForm from "./edit-user-form"
+import { permissionGroups } from "@/lib/home-layout"
+import { getHomeLayout } from "@/lib/home-layout-server"
 import DeleteUserButton from "../delete-button"
 
 export default async function EditUserPage({
@@ -82,6 +84,7 @@ export default async function EditUserPage({
         departments={departments}
         roles={roles}
         isSelf={session.user.id === user.id}
+        homeSections={permissionGroups(await getHomeLayout())}
       />
     </div>
   )

@@ -75,16 +75,6 @@ export const AI_TOOLS: AiTool[] = [
   { slot: "patch_notes_draft",      group: "Other",        label: "Patch notes draft (summarise a deploy)", default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "changes_summary",        group: "Other",        label: "Patches & Changes — report for managers", default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "feedback_questions",     group: "Other",        label: "Feedback surveys — suggest questions",  default: "gemini-3-flash-preview", claudeOk: true },
-  { slot: "jordan_fun",             group: "Other",        label: "Jordan's secret menu (chat, cooking, air fryer)", default: "gemini-3-flash-preview" },
-  // Reading an uploaded CV and writing tailored applications. Its own slot because it is a
-  // long-document job — quite unlike the short chat the fun slot serves — so the model can be
-  // moved without disturbing the rest of the secret menu. claudeOk: writing is what Claude is
-  // for, and the CV workshop is the one place here where prose quality is the whole point.
-  { slot: "jordan_cv",              group: "Other",        label: "Jordan's secret menu (CV workshop)", default: "gemini-3-flash-preview", claudeOk: true },
-  // Writing a week of recipes to hit calorie and macro targets, then the shopping list. Its own
-  // slot so it can be moved to a stronger model without disturbing the chat.
-  { slot: "jordan_meals",           group: "Other",        label: "Jordan's secret menu (meal planner)", default: "gemini-3-flash-preview", claudeOk: true },
-  { slot: "jordan_gym",             group: "Other",        label: "Jordan's secret menu (gym programmes)", default: "gemini-3-flash-preview", claudeOk: true },
 ]
 
 const SLOT_DEFAULT: Record<string, string> = Object.fromEntries(AI_TOOLS.map((t) => [t.slot, t.default]))

@@ -169,9 +169,127 @@ export const DESTINATIONS: Destination[] = [
     also: ["reports from bc", "packing report", "shipping"],
   },
   {
-    name: "BC Marketing", href: "/tools/bc-marketing", app: "BC_MARKETING",
+    name: "Marketing Tools", href: "/tools/bc-marketing", app: "BC_MARKETING",
     what: "Write marketing content from sale data — social posts, web descriptions, email lists, images.",
     also: ["social media", "marketing content", "newsletter"],
+  },
+
+  // ── Goods In ────────────────────────────────────────────────────────────────
+  // The Hub's own check-in (2026-10-15). Gated on WAREHOUSE, the same as its Hub card. Within it,
+  // some things are for managers or admins only; the help box can only gate on the app, so each
+  // `what` line says who can change what, and the pages themselves refuse the rest.
+  // ⚠⚠ No bare everyday words in these names or `also` lists — "find", "move", "receipts",
+  // "bench", "settings", "tote", "vendor numbers". `blockedDestination()` refuses any question that
+  // matches a tool the asker cannot open better than anything they can, and a name part counts the
+  // moment it appears as a word: "Goods In → Find" would have told a cataloguer asking "where do I
+  // find the photos?" that Goods In isn't part of their Hub. Every phrase here is one only someone
+  // asking about Goods In would type. Lotting Up talks about "a bench of items", BC Warehouse
+  // answers "tote" and "where is a lot", and Packing (open to everyone) owns "labels" and parcels —
+  // don't steal those. Write keywords without hyphens: matchScore reads "check-in" in a question as
+  // "check in", so a hyphenated keyword never matches.
+  {
+    ask: "How do I book a customer's goods in?",
+    name: "Goods In → Book in", href: "/tools/warehouse/check-in", app: "WAREHOUSE",
+    what: "Book a customer's goods in at the counter, in three steps — Customer, What they've brought, Check & book in. Find the customer in the customer database (or add them), then list their goods as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote. Each tote and pallet gets its number as soon as its row is added, so its barcode label can be printed right there on the goods step (Print labels prints every one not printed yet; each row has its own Print / Reprint). The customer's usual commission, fees and reserve are used automatically, and any special arrangement agreed with them is shown on the last step; change the terms for one receipt there, or for good on the customer's Fees & agreement tab. Press Book in, then print or email the receipt. A check-in left part-way is kept as \"not booked in yet\" — carry on with it from Check in, the Receipts list, the Goods In dashboard or the customer's page, or throw it away.",
+    also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "customer bringing in", "print tote labels at check in", "tote number at check in", "unfinished check in", "carry on checking in", "check in not booked in", "not booked in yet", "throw away a check in"],
+  },
+  {
+    ask: "How do I reprint or email a receipt?",
+    name: "Goods In → Receipt list", href: "/tools/warehouse/receipts", app: "WAREHOUSE",
+    what: "Every Goods In receipt, newest first. Open one to reprint it, email it to the customer, print its tote and pallet labels again, or add another tote or pallet to it. Only a manager can void one. A check-in that hasn't been booked in yet is marked \"Not booked in yet\" — open it to carry on checking in or throw it away; its labels can be printed, but the receipt itself can't be printed or emailed until it is booked in.",
+    also: ["reprint a receipt", "reprint the receipt", "print a receipt", "email a receipt", "email the receipt", "send the receipt", "lost their receipt", "reprint tote labels", "void a receipt", "add a tote to a receipt"],
+  },
+  // A customer's Fees & agreement tab (2026-10-16). ⚠ Named "Fees & agreement", never "Customers" or
+  // "Customer page": a CRM user without Goods In asking "where are the customers?" must not be
+  // refused with Goods In. No `ask`, so the Goods In suggestions stay as they were. The single fee
+  // names ("lotting fee", "photography fee") are left out on purpose — Lotting Up and Photography
+  // would lose a cataloguer's question to this. Every keyword is about a Goods In customer's terms;
+  // apostrophes become spaces in matchScore, hence "customer s".
+  {
+    name: "Goods In → Fees & agreement", href: "/tools/warehouse/customers", app: "WAREHOUSE",
+    what: "Each Goods In customer's page has a Fees & agreement tab — open Goods In → Customers, pick the customer, then Fees & agreement. Set their usual commission, lotting, photography and unsold fees and their usual reserve (leave one blank for the standard one); record the day they signed Vectis's vendor terms (the terms themselves can be read there too); and write down any special arrangement agreed with them, in plain words. Set it once: Check in uses it automatically and never asks, the special arrangement is shown at check-in and printed on their receipts (a receipt keeps the arrangement as it was when it was booked). Anyone in Goods In can change it, and the tab says who changed it last.",
+    also: [
+      "fees and agreement", "customer commission", "customer s commission", "commission for a customer", "change their commission",
+      "vendor commission", "usual commission", "customer fees", "customer s fees", "vendor fees", "standard fees", "usual fees",
+      "usual reserve", "reserve percentage", "vendor terms", "signed the vendor terms", "signed vendor terms", "terms signed",
+      "special arrangement", "special arrangements", "special agreement", "customer agreement", "vendor agreement",
+    ],
+  },
+  {
+    ask: "How do I move a tote to a new location?",
+    name: "Goods In → Scan to move", href: "/tools/warehouse/move", app: "WAREHOUSE",
+    what: "Scan a tote, pallet or lot barcode, then the label of the location it is going to, and the move is recorded with your name and the time. Moving a tote to a bench marks it as being catalogued; a finished lot is moved onto its shelf the same way.",
+    also: ["put away", "putting away", "move a tote", "move a pallet", "move a lot to a shelf", "put a lot on a shelf", "shelve a lot", "take a tote to a bench", "scan a location"],
+  },
+  // The handheld scanner screen and the Vectis Scanner app (2026-10-16). ⚠ Named "Handheld scanner",
+  // never plain "Scanner": a name part scores the moment it appears as a word, so "Goods In →
+  // Scanner" would refuse a cataloguer whose tablet "scanner isn't working" with Goods In. Every
+  // keyword names the handheld or its app. No `ask`, so the Goods In suggestions stay as they were.
+  {
+    name: "Goods In → Handheld scanner", href: "/scan", app: "WAREHOUSE",
+    what: "A phone-sized Goods In screen for the warehouse's handheld scanners, at /scan — in any browser with a scanner set to keyboard output, or in the Vectis Scanner app on the Newland scanners, which opens the same screen and takes each scan straight from the scanner. Put away / Move (scan the tote, pallet or lot, then the location; or scan a location first and everything scanned after goes there until Done), Find (what a code is and where it is now — needs Wi-Fi) and Check a location. Scans made with no Wi-Fi are kept on the scanner and sent in order when it reconnects: each is applied once even if it is sent twice, stamped with the time it was scanned, and one whose item someone else has moved since isn't applied — it says who moved it, where and when. The top of the screen shows who is signed in; on a shared scanner use Switch user (the waiting scans are sent first). Until an admin has pressed Run Migrations for it, scans wait on the scanner rather than being sent. The app is built by GitHub and its install file comes from there.",
+    also: [
+      "handheld scanner", "handheld scanners", "the handheld", "scanner app", "vectis scanner", "vectis scanner app",
+      "newland scanner app", "install the scanner app", "update the scanner app", "scanner apk", "goods in scanner",
+      "scan offline", "scanning offline", "scans waiting to send", "scans not sent", "send the waiting scans",
+      "switch user on the scanner", "scanner switch user", "stale scan",
+    ],
+  },
+  // Scanner sign-in cards (2026-10-16). Every keyword names the scanner or the card — never bare
+  // "sign in", "qr code" or "card", which other parts of the Hub (and their users) ask about.
+  {
+    name: "Goods In → Scanner sign-in cards", href: "/tools/warehouse/scanner-cards", app: "WAREHOUSE",
+    what: "Print a sign-in card for the handheld scanner: scanning its QR code on the scanner signs you in with no typing, and on a shared scanner the next person scans theirs to switch. A card holds no password and signs in to the scanner only, never the rest of the Hub. A Warehouse manager can print one for anyone with Warehouse access. Lost one? Cancel it here and it stops working at once. Until an admin has pressed Run Migrations for it, sign in with your username and password.",
+    also: [
+      "scanner sign in card", "scanner sign in cards", "scanner card", "scanner cards", "scanner login card",
+      "print my scanner card", "print a scanner card", "lost my scanner card", "cancel a scanner card",
+      "qr code for the scanner", "scanner qr code", "sign in to the scanner", "log in to the scanner",
+    ],
+  },
+  {
+    name: "Goods In → Benches", href: "/tools/warehouse/bench", app: "WAREHOUSE",
+    what: "What is at each cataloguing bench right now — the totes and pallets waiting to be made into lots, and whose they are.",
+    also: ["at the benches", "on the benches", "waiting to be catalogued", "totes waiting", "bench list"],
+  },
+  // ⚠ Code lookup carries BC Warehouse's own four words ("tote", "location", "where is a lot",
+  // "find an item") and Admin Centre's "look up a receipt" ON PURPOSE, so it scores the same as
+  // them on those. A tie never blocks (blockedDestination needs strictly more), so a Goods In clerk
+  // asking "where is tote T030001?" isn't refused with "BC Warehouse isn't part of your Hub", and a
+  // BC Warehouse or Admin Centre user asking the same isn't refused with Goods In. Someone with
+  // neither is still refused naming BC Warehouse / Admin Centre (they come first), as before. Its
+  // name avoids "find", "look", "receipt" and "tote" as words, any one of which would tip a tie.
+  {
+    ask: "How do I find where a tote is?",
+    name: "Goods In → Code lookup", href: "/tools/warehouse/find", app: "WAREHOUSE",
+    what: "Scan or type any Goods In code — a tote, pallet, lot barcode, receipt, location or vendor number — to see what it is, whose it is and where it is now, with every move it has made. For a tote it lists the lots made from it and the shelf each one is on.",
+    also: ["tote", "location", "where is a lot", "find an item", "look up a receipt", "goods in tote", "goods in pallet", "goods in receipt", "goods in lot", "lots made from a tote", "lots from this tote", "scan any code"],
+  },
+  {
+    name: "Goods In → Locations & labels", href: "/tools/warehouse/locations", app: "WAREHOUSE",
+    what: "Every storage location, cataloguing bench and shelf Goods In can put things in. Filter the list by kind, aisle, bay, shelf, what is there now and when each was last used (or not used); sort by last used or date added; see how many totes, pallets and lots are at each; export the list, or everything at the ticked locations, to a spreadsheet; and print barcode labels. Tick locations (shift-click for a run, or scan their labels) and move everything at them to one other location in one go. Open a location to see what is there and its recent moves, move everything at it elsewhere, export what is there, or check the shelf by scanning what is really on it. Managers add one location, a whole range (an aisle's bays and shelves, benches, cabinet shelves) or a pasted list (a saved CSV works), switch locations off or on, change their kind or give them their usual names many at a time, replace a location's code with a new one, and remove them — a location that was never used is deleted, one used before is switched off so its history stays, and one with goods still there is refused until they are moved out.",
+    also: [
+      "location labels", "location label", "add a location", "new location", "shelf labels", "bench labels",
+      "remove a location", "delete a location", "remove locations", "delete locations", "switch off a location",
+      "switch a location off", "add a range of locations", "add a whole aisle", "paste a list of locations",
+      "move everything out of a location", "empty a location", "goods in locations",
+      // matchScore turns punctuation into spaces, so these are written without apostrophes.
+      "check a location", "stock check a location", "check what is at a location", "empty an aisle", "clear an aisle",
+      "export what is at a location", "replace a location code", "change a location code", "rename locations",
+    ],
+  },
+  {
+    name: "Goods In → Number series & email", href: "/tools/warehouse/settings", app: "WAREHOUSE",
+    what: "Where the receipt, tote, pallet and (optional) vendor number series carry on from, and the connection to the mailbox receipts are emailed from. Only a Warehouse admin can change them.",
+    also: ["number series", "starting number", "next receipt number", "receipt numbering", "tote numbering", "vendor numbering", "connect the mailbox", "email setup", "receipt emails"],
+  },
+  // ⚠ Named "Movement record", not "History" / "Movement history": BC Warehouse has a Location
+  // History tab, and a BC Warehouse user asking for a tote's "movement history" must not be refused
+  // with Goods In. The keywords all say "goods in" for the same reason; the `what` line is what lets
+  // the answer point a Goods In user here for "who moved tote T030001?".
+  {
+    name: "Goods In → Movement record", href: "/tools/warehouse/history", app: "WAREHOUSE",
+    what: "Every move of a Goods In tote, pallet or lot — from where to where, who moved it and when — filterable by item, location and day. The page is called History in the Goods In menu.",
+    also: ["goods in history", "goods in moves", "goods in movements", "goods in movement history", "moved in goods in"],
   },
 
   // ── Reports & people ────────────────────────────────────────────────────────
@@ -308,7 +426,7 @@ export type HelpContext = {
 export function allowedHelpContext(
   role: string,
   allowedApps: string[],
-  appPermissions: Record<string, any> | null | undefined,
+  appPermissions: Parameters<typeof getAllowedSections>[1],
 ): HelpContext {
   const canOpen = (app?: AppKey, section?: string): boolean => {
     if (!app) return true

@@ -4,6 +4,10 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import RegisterToBidModal from "./register-to-bid-modal"
 
+// The bid button on a calendar row or a sale page, labelled as vectis.co.uk labels it: "LOGIN TO
+// BID" for a visitor, who is sent to the login page; "REGISTER TO BID" for an account, which
+// opens the terms and registers it for the sale — after which the button reads "Registered to bid".
+
 interface Props {
   auctionId: string
   auctionName: string
@@ -26,22 +30,20 @@ export default function RegisterToBidButton({ auctionId, auctionName, isLoggedIn
 
   if (done) {
     return (
-      <span className="inline-flex items-center gap-1.5 border border-green-600 text-green-700 bg-green-50 text-xs font-black uppercase tracking-widest px-4 py-2">
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+      // Sized like the buttons it stands beside.
+      <span className="vs-badge !py-[9px] border border-[var(--vs-navy)]" role="status">
+        <svg className="inline-block -mt-0.5 mr-2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
-        REGISTERED TO BID
+        Registered to bid
       </span>
     )
   }
 
   return (
     <>
-      <button
-        onClick={handleClick}
-        className="border border-gray-300 text-gray-500 hover:border-[#32348A] hover:text-[#32348A] text-xs font-bold uppercase tracking-widest px-4 py-2 transition-colors"
-      >
-        REGISTER TO BID
+      <button type="button" onClick={handleClick} className="vs-btn">
+        {isLoggedIn ? "Register to bid" : "Login to bid"}
       </button>
 
       {open && (
