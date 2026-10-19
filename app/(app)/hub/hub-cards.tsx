@@ -7,8 +7,6 @@ import { getEffectiveSession } from "@/lib/impersonation"
 
 export const sectionSlug = (key: string) => key.toLowerCase().replace(/_/g, "-")
 
-export const EDIT_BUTTON = "inline-flex items-center min-h-[44px] px-4 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-[#1c1f27] border border-gray-300 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5"
-
 export const CARD_GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5"
 
 // The cards this person may see, with the admin's Home Page settings applied,

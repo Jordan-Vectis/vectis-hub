@@ -1,5 +1,4 @@
-import Link from "next/link"
-import { AppCardTile, CARD_GRID, EDIT_BUTTON, getEditorData, getHubCards, sectionSlug } from "./hub-cards"
+import { AppCardTile, CARD_GRID, getEditorData, getHubCards, sectionSlug } from "./hub-cards"
 import { SectionTile } from "./section-tile"
 import HomeEditor from "./home-editor"
 
@@ -18,12 +17,7 @@ export default async function HubPage({ searchParams }: { searchParams: Promise<
 
   return (
     <div className="relative min-h-screen bg-gray-100 dark:bg-[#111318]">
-      <div className="w-full px-6 pt-6 pb-16 space-y-5">
-        {isAdmin && (
-          <div className="flex justify-end">
-            <Link href="/hub?edit=1" className={EDIT_BUTTON}>✏️ Edit home page</Link>
-          </div>
-        )}
+      <div className="w-full px-6 pt-10 pb-16 space-y-5">
         <div className={CARD_GRID}>
           {onlySection
             ? onlySection.cards.map(app => <AppCardTile key={app.key} app={app} />)

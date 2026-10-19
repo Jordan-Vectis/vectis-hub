@@ -75,6 +75,7 @@ export default async function AppLayout({
       <TopBar
         userName={effective?.user.name ?? session.user.name}
         isAdmin={session.user.role === "ADMIN"}
+        canEditHome={effective?.user.role === "ADMIN"}
         hasDashboard={hasDashboard}
         feedbackEnabled={!needsTerms}
       />
