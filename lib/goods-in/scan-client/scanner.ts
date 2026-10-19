@@ -1,4 +1,4 @@
-import { cleanCode } from "./device"
+import { tidyCode } from "./device"
 import { callPlugin, hasPlugin, listenPlugin } from "./native"
 
 // The handheld scanner — where scans come from. ONE module for every way a code arrives:
@@ -18,6 +18,10 @@ import { callPlugin, hasPlugin, listenPlugin } from "./native"
 //     EXCEPT a scanner's burst: BURST_MIN or more keys each under BURST_GAP_MS apart, ended by Enter
 //     or Tab, is a scan whatever box it landed in (the cursor was left in the note, say). It is cut
 //     back out of that box and handled as a scan, so it is never lost and never sent as a note.
+//
+// Codes are handed over TIDIED (control characters and spaces stripped) but NOT upper-cased: a
+// scanner sign-in card's code (card.ts) is case-sensitive. Whoever takes a scan upper-cases it for
+// items and locations (ScanController.scan → cleanCode).
 //
 // Browser only. Every path is wrapped so a missing plugin or a refused focus can never stop a scan.
 
@@ -50,10 +54,10 @@ function isTextField(el: Element | null, own: HTMLInputElement | null): boolean 
 
 /** The code inside whatever the native side sent. */
 function codeFrom(data: unknown): string {
-  if (typeof data === "string") return cleanCode(data)
+  if (typeof data === "string") return tidyCode(data)
   if (data && typeof data === "object") {
     const d = data as Record<string, unknown>
-    for (const k of ["code", "barcode", "data", "value"]) if (typeof d[k] === "string") return cleanCode(d[k] as string)
+    for (const k of ["code", "barcode", "data", "value"]) if (typeof d[k] === "string") return tidyCode(d[k] as string)
   }
   return ""
 }
@@ -112,7 +116,7 @@ export function startScanner(o: ScannerOptions): () => void {
   const finish = () => {
     if (idle) { clearTimeout(idle); idle = null }
     if (!input) return
-    const code = cleanCode(input.value)
+    const code = tidyCode(input.value)
     input.value = ""
     if (code) emit(code, "keyboard")
   }
@@ -162,7 +166,7 @@ export function startScanner(o: ScannerOptions): () => void {
         try { (el as HTMLElement).blur() } catch { /* ignore */ }
         soon()
       }
-      const code = cleanCode(run)
+      const code = tidyCode(run)
       if (code) emit(code, "keyboard")
       return
     }

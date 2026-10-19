@@ -1293,6 +1293,26 @@ model GoodsInScanEvent {
   @@index([deviceId, receivedAt])
 }
 
+/// A scanner sign-in card: a QR code a warehouse worker scans to sign in to the handheld scanner
+/// (/scan) — the devices are shared and have no keyboard to speak of. Only a SHA-256 of the card's
+/// random code is kept. A card signs in to the scanner screen ONLY, never the rest of the Hub, and can
+/// be cancelled at any time. No link to User on purpose (never add to User).
+model GoodsInScannerPass {
+  id            String    @id
+  userId        String
+  userName      String?
+  tokenHash     String    @unique
+  label         String?
+  createdAt     DateTime  @default(now())
+  createdById   String?
+  createdByName String?
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+  revokedByName String?
+
+  @@index([userId])
+}
+
 model Parcel {
   id        String @id @default(cuid())
   reference String @unique @default(cuid())

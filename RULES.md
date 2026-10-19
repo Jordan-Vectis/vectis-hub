@@ -54,6 +54,11 @@ the staff **Hub login**, same as the internal Hub. A logged-out visitor to any o
   stays behind the login **by his choice** (it shows the customer's name and photos). The page checks
   its code server-side (404 for a wrong one) and uploads through `/api/public`, which was already
   public. ⚠ Never widen it to a `startsWith("/submit")` prefix, and don't open `/value` without asking.
+- ⚠ **Exception — the handheld scanner screen `/scan` and its worker `/scan/sw` (Jack, 2026-10-16).**
+  Exact paths in `publicExact`, like `/first-aid`, so a warehouse worker can sign in by scanning a
+  scanner sign-in card on a device with no keyboard. The page does its own sign-in check and shows
+  nothing but "Scan your sign-in card" to nobody. See Goods In → handheld scanner → "Scanner sign-in
+  cards" for the rules that keep it safe.
 
 ## Public First Aid page — a deliberate exception (2026-08-11)
 
@@ -1865,7 +1870,8 @@ the same way, never as an export of an actions file.
   Microsoft 365 is listed as a processor on Data & Compliance and the DPIA for this.
 - **New tables only**: `GoodsInCustomer`, `GoodsInReceipt`, `GoodsInContainer`, `GoodsInLocation`,
   `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth`, and (2026-10-16) `GoodsInAgreement` and
-  `GoodsInScanEvent` (the handheld scanner's record, below) (**NEEDS Run Migrations**). ⚠ **Nothing was
+  `GoodsInScanEvent` (the handheld scanner's record, below) and `GoodsInScannerPass` (its sign-in
+  cards) (**NEEDS Run Migrations**). ⚠ **Nothing was
   added to `Contact`, `CatalogueLot` or `User`** — a shipped-but-unmigrated column there breaks every
   contact or lot save, or login, between the deploy and Run Migrations. Keep it that way. Until the
   tables exist every Goods In screen says it isn't set up yet rather than crashing.
@@ -1906,7 +1912,8 @@ the same way, never as an export of an actions file.
   `/tools/warehouse/check-in?receipt=<receipt number>` (a receipt that isn't a draft opens its receipt
   page instead).
 - Registered in `lib/help-map.ts` (Book in · Receipt list · Scan to move · Benches · Code lookup ·
-  Locations & labels · Number series & email · Movement record · Fees & agreement · Handheld scanner). ⚠ Those names and their keywords avoid everyday words
+  Locations & labels · Number series & email · Movement record · Fees & agreement · Handheld scanner ·
+  Scanner sign-in cards). ⚠ Those names and their keywords avoid everyday words
   ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that
   matches a tool the asker can't open, and a cataloguer asking "where do I find…" must never be told
   Goods In isn't part of their Hub.
@@ -1990,9 +1997,12 @@ the Hub**, not a separate build.
 
 - **Three parts, one set of rules.**
   - **The screen** — `/scan` (`app/(scanner)/scan/`): its own full-screen, phone-sized, one-handed
-    layout with no Hub nav, gated like the warehouse pages (no Goods In access → a plain message and
-    sign in / sign out). Put away / Move, Find, Check a location. Works in any browser with a scanner
-    set to keyboard output. Its queue, sync and scanner input are `lib/goods-in/scan-client/`.
+    layout with no Hub nav. It does its own sign-in check (`scanWho` → `resolveScanUser`): nobody
+    signed in → only the full-screen **"Scan your sign-in card"** screen (`card-sign-in.tsx`, with
+    "Sign in with username and password instead"); no Goods In access → a plain message with the card
+    sign-in underneath (a Hub login's refusal is written to the Access Log first). Put away / Move,
+    Find, Check a location. Works in any browser with a scanner set to keyboard output. Its queue,
+    sync and scanner input are `lib/goods-in/scan-client/`.
   - **The app** — `scanner-app/`: a Capacitor 7 Android app whose WebView loads the Hub's `/scan`
     (`server.url`), so it signs in with the Hub's own login and cookies. A small native plugin
     (`NewlandScanner`) receives Newland scans by broadcast and hands them to the page; other brands and
@@ -2013,15 +2023,21 @@ the Hub**, not a separate build.
     every lot it moves, in lot-id order, then re-reads the lots' latest moves, so a lot a scanner
     moved away while it waited drops out instead of being moved back. Any new code that moves lots
     must take that lock too (with `$executeRaw` — the lock returns void, which `$queryRaw` can't read).
-- ⚠ **Nothing touches Business Central, and the login gate is unchanged.** `/scan` is behind the Hub
-  login like every Hub page (its service worker registers while signed in); the three API routes check
-  the session and Goods In access themselves (`gate()` — fresh from the database, effective session),
-  as every `/api` route must. Don't add `/scan` or its worker to `publicPaths`.
+- ⚠ **Nothing touches Business Central.** Since the scanner sign-in cards (below), `/scan` and
+  `/scan/sw` — those two EXACT paths, nothing under them — are let through the login gate
+  (`publicExact` in `auth.config.ts`), and the /scan layout does its own sign-in check through
+  `getScanUser()`. The scanner's API routes check the person and Goods In access themselves
+  (`scanGate()` in `app/api/goods-in/scan/_lib/scan-gate.ts` — the Hub session, else a card; fresh from
+  the database, effective session), as every `/api` route must. ⚠ Never put `/scan` in the PREFIX list
+  (`publicPaths`), and never open another path for the scanner — anything it needs goes behind
+  `/api/goods-in/scan/*`.
   - ⚠⚠ **The service worker must stay an extensionless ROUTE — `app/(scanner)/scan/sw` (URL
-    `/scan/sw`) — never a `.js` file in `/public`.** `proxy.ts`'s matcher lets every `*.js` path
-    through without a login, so moving it to `public/scan-sw.js` would put it outside the login gate
-    without anyone touching `publicPaths`. The route sends `Service-Worker-Allowed: /scan` and is
-    registered with scope `/scan`, only from the /scan page.
+    `/scan/sw`) — never a `.js` file in `/public`.** `/scan/sw` is public ON PURPOSE (its exact path
+    is in `publicExact`, so the sign-in screen works with nobody signed in); that is safe because the
+    script holds no data or secrets. It stays a route so that this one exact path is all that is
+    opened: `proxy.ts`'s matcher lets EVERY `*.js` path through without a login, so a
+    `public/scan-sw.js` would sit outside the gate with no list entry saying so. The route sends
+    `Service-Worker-Allowed: /scan` and is registered with scope `/scan`, only from the /scan page.
   - ⚠ **Signing in from a plain browser lands on `/hub`, not back on `/scan`** — `loginAction`
     (`app/login/actions.ts`) always redirects to `/hub` and ignores `callbackUrl`. The app works round
     it (below) and Switch user signs in on the screen itself; the fix is for login to honour a safe
@@ -2129,5 +2145,108 @@ the Hub**, not a separate build.
   - Scanners need **Android System WebView 111 or newer** (Next 16 / Tailwind v4):
     `android.minWebViewVersion: 111` opens the offline page instead on an older one, which says so and
     doesn't retry by itself.
+- **Scanner sign-in cards** (2026-10-16 — Jack: *"Can you give me a QR code to auto sign in please,
+  as there's no keyboard"*). Each worker prints a card (Goods In → **Scanner cards**,
+  `/tools/warehouse/scanner-cards`) with a QR code; scanning it on `/scan` signs them in, and on a
+  shared scanner the next person scans theirs to switch. The rules are `lib/goods-in/scanner-pass.ts`.
+  - ⚠⚠ **A card never holds a password.** Its QR is `VSC1-` + 32 random bytes (`crypto.randomBytes`,
+    base64url). The Hub stores only the code's **SHA-256** (`GoodsInScannerPass.tokenHash`) and finds
+    a card by that hash. The code exists in ONE place outside the scanner: the PDF answered once by
+    `POST /api/goods-in/scanner-cards` when the card is made (`lib/goods-in/scanner-card-pdf.ts`, built
+    in memory, never saved). Never log it, store it, return it anywhere else, or reprint it — a lost
+    card is cancelled and a new one made. Never put a password in a QR code.
+  - ⚠⚠ **A card signs in to the SCANNER ONLY** — `/scan` and `/api/goods-in/scan/*`, never the rest
+    of the Hub, so a lost or photographed card can't open customers, receipts or anything else. Its
+    session is the **`vectis-scan` cookie** (httpOnly, Secure in production, SameSite=Lax, 14 hours),
+    `v1.<pass>.<user>.<expiry>` signed with HMAC-SHA256 under a key derived from `AUTH_SECRET` (or
+    `NEXTAUTH_SECRET`) and checked with `timingSafeEqual`. It is read ONLY by `getScanUser()` /
+    `resolveScanUser()`, and those are used ONLY by the /scan screen and `scanGate()` (the scanner's
+    API routes). ⚠ No other page, action or route may accept it — every other Goods In check stays
+    `getGoodsInUser` / `requireGoodsIn` / `gate()`, which read the Hub session alone. A card session
+    never makes cards. With no auth secret set, no card is issued and no card session counts.
+  - **Checked on every request**, fresh from the database: signature and expiry, the card exists and
+    isn't cancelled, it is the cookie's person's, and that person still has Warehouse access. A Hub
+    session on the same device always wins (so signing in with a card there needs a sign-out of the
+    Hub login too). `lastUsedAt` is written at most once an hour.
+  - **A Hub login ends an older card session.** When `scanGate()` lets a Hub login in, it clears any
+    `vectis-scan` cookie on the device older than two minutes (`dropCardUnderHubLogin` — a younger one
+    is a card being signed in with while the Hub login is still being signed out), so the last card's
+    person can't come back on /scan once that Hub login signs out. Signing in at `/login` also ends
+    any card session on the device first (`endScanSession()` at the top of `loginAction` in
+    `app/login/actions.ts`), so a card can't outlast the next person's own Hub login. Never clear it
+    from `auth.config.ts` (the proxy's edge config).
+  - **Signing in**: `POST /api/goods-in/scan/pass { code }` — 401 with ONE message for a card that
+    doesn't exist and one that has been cancelled ("That card has been cancelled or isn't a Vectis
+    card."), 403 when its person has no Warehouse access, 503 before Run Migrations or with no secret.
+    `DELETE` on the same route signs the scanner out (always 200). Scans carry the card person's id as
+    `scannedBy`, exactly as a Hub login's.
+    - ⚠ **Only this Hub's own pages** may sign in (`fromThisHub`: `Sec-Fetch-Site` same-origin — or,
+      with none, an `Origin` naming this Hub; "same-site" and no sign at all are refused), and only
+      with a **JSON** body (415 otherwise), so another site can't post a form that signs someone's
+      scanner in to ITS card. Don't add a form branch back. The card-making route uses the same check.
+    - ⚠ **The limiter is ADVISORY** — a 256-bit code can't be guessed, so it isn't what keeps cards
+      safe. The card is looked up FIRST and a **good card always signs in**: every scanner in the
+      warehouse shares one public address, and people scanning an old cancelled card must never lock
+      everyone's valid card out. Only bad cards count: after 20 in 5 minutes from one address (the
+      LAST `X-Forwarded-For` entry — the one Railway's proxy added; the first ones are whatever the
+      client sent) a bad card gets 429 "wait five minutes". In memory, per server. The sign-in screen
+      also answers the same refused card scanned again within 10 seconds itself, without asking.
+  - **Who may make and cancel**: anyone in Goods In makes one for themselves (Hub login required) and
+    sees and cancels their own; a Warehouse manager or admin makes one for anyone with Warehouse access
+    **at or below their own tier** (a manager can't make an admin's — a card signs in AS its person)
+    and sees and cancels everyone's (`lib/actions/goods-in-scanner-cards.ts` — no codes or hashes in
+    it). Old cards keep working until cancelled; cancelling stops a card at once, on every scanner.
+    - ⚠ **No card is made while an admin is VIEWING AS someone** (the route refuses and the page says
+      so): it would be that person's sign-in, recorded as made by them. Cancelling while viewing as
+      someone is allowed and records `"<admin> (viewing as <name>)"`.
+    - **Printing**: the page opens a NEW tab inside the tap (iPad Safari) and posts a hidden form into
+      it, so that tab loads the PDF itself — the labels screens' way, nothing depending on the Hub tab
+      running in the background. ⚠ A tab of its own for EVERY print (never one reused name): a manager
+      printing several people's cards in a row must never lose one under the next — it can't be shown
+      again. Errors show in that tab as plain text, and nothing is made then. The list catches up when
+      the Hub tab is looked at again.
+  - **Find on the scanner** reads `lib/goods-in/lookup-core.ts` (Code lookup's own reads), not the
+    server actions, because those take the Hub session alone. `lookupCode` (`lib/actions/goods-in.ts`)
+    and `goodsAtLocations` (`lib/actions/goods-in-locations.ts`) call `findCode` / `goodsHere` after
+    their own access check, so there is ONE copy of the reading — change it in lookup-core and Code
+    lookup, Export what's there and the scanner all follow.
+    - ⚠ **With a CARD session** the lookup leaves the customer out where the scanner doesn't need it:
+      a vendor number answers only that it IS one (no name, no contact id) and a receipt carries no
+      customer name; and one card may look up at most 600 codes in 10 minutes (429 after). A lost or
+      photographed card must not become a way to walk vendor or receipt numbers to customer names.
+      Totes, lots and locations answer as for a Hub login (whose goods they are is the scanner's job).
+  - **On the scanner screen** (`app/(scanner)/scan/`, `lib/goods-in/scan-client/`):
+    - ⚠⚠ **Card codes keep their case.** `scanner.ts` hands codes over with `tidyCode` (control
+      characters and spaces out, case kept); the controller upper-cases ITEMS itself (`cleanCode`).
+      Never "tidy" `scanner.ts` back to upper-casing — every card would stop working. The hidden scan
+      boxes are `autoCapitalize="none"` for the same reason; a card that arrives all in capitals (a
+      scanner set to send capitals) gets its own plain message.
+    - ⚠ The client's `CARD_PREFIX` / `CARD_RE` (`lib/goods-in/scan-client/card.ts`) must match
+      `lib/goods-in/scanner-pass.ts` — change both together.
+    - A card scanned on the main screen is **never an item**: not queued, looked up or shown —
+      "That's a sign-in card — press Switch user to sign in as them." Scanned while "Still …?" is up,
+      it goes straight to Switch user (after sending the waiting scans), where it's scanned again.
+      Its code is never logged, shown or kept; it is sent once, in the body of the sign-in call.
+    - **Accepting a card ends any Hub login on the device** (`signOut`, no redirect) before /scan
+      reloads, because a Hub login counts first; if that sign-out fails while a Hub login was there,
+      the screen says so rather than open as the wrong person. **A password sign-in clears the card
+      session** — once the password has been accepted, so a mistyped one signs nobody out.
+    - **Sign out** clears the card session and any Hub login, then goes back to /scan's own sign-in
+      screen — never `/login` or `/hub`. Either way the last person's saved offline copy is forgotten.
+    - **Signed out while the screen is open** (card cancelled or expired, Hub login ended, access
+      removed): whichever call hears 401/403 first — a send, the bootstrap or a lookup — stops taking
+      scans and reloads /scan (`sessionEnded`), so the card screen appears instead of the last
+      person's name. The queue is untouched: the same person signing in again sends their scans;
+      anyone else sees "N scans by … still waiting". It stays put with Switch user open instead when
+      the scans live only in the page's memory, or when it already reloaded for this in the last 30
+      seconds (never a loop). Switch user with scans the Hub won't take from this person any more
+      opens the sign-in straight away rather than asking for a send that can never work.
+    - **Opened from the saved copy** (no Wi-Fi, so nobody could check who is signed in), the first
+      scan or tap asks "Still …?" before anything is recorded against the last person.
+  - ⚠⚠ **Run Migrations**: `GoodsInScannerPass` is a new table (in `lib/data-map.ts`). Until it exists
+    the card routes answer "Scanner sign-in cards need Run Migrations" and username-and-password
+    sign-in on the scanner still works. Nothing was added to `Contact`, `CatalogueLot` or `User`.
+  - Registered in `lib/help-map.ts` as **"Goods In → Scanner sign-in cards"**; its keywords all name
+    the scanner or the card, never bare "sign in" or "qr code".
 - Registered in `lib/help-map.ts` as **"Goods In → Handheld scanner"** — never plain "Scanner", which
   would refuse a cataloguer whose tablet "scanner isn't working" with Goods In.

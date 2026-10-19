@@ -14,6 +14,7 @@ import { LOCATION_CODE_HELP, LOCATION_CODE_RULE } from "@/lib/goods-in/location-
 import { CUSTOMER_INCLUDE, customerRow, snapshot } from "@/lib/goods-in/customer-row"
 import { AGREEMENT_UNREAD, findAgreement } from "@/lib/goods-in/agreement"
 import { moveItem } from "@/lib/goods-in/move-core"
+import { findCode } from "@/lib/goods-in/lookup-core"
 
 // Goods In — every write, and the reads the screens share. SERVER ONLY (server actions).
 //
@@ -404,28 +405,12 @@ export type ScanHit =
   | { type: "customer"; id: string; name: string; vendorNo: string | null }
 
 /** What a scanned or typed code is — a tote/pallet, a lot barcode, a receipt, a location or a vendor number. */
+// The reading itself lives in lib/goods-in/lookup-core.ts (findCode), shared with the handheld
+// scanner's Find — change the rules there, so Code lookup and the scanner always agree.
 export async function lookupCode(raw: string): Promise<Result<ScanHit | null>> {
   try {
     await who()
-    const code = normaliseCode(raw)
-    if (!code) return { ok: true, data: null }
-    const [container, receipt, location, customer, lot] = await Promise.all([
-      prisma.goodsInContainer.findUnique({ where: { id: code }, include: { receipt: { select: { contact: { select: { name: true } } } } } }),
-      prisma.goodsInReceipt.findUnique({ where: { id: code }, include: { contact: { select: { name: true } }, _count: { select: { containers: true } } } }),
-      prisma.goodsInLocation.findUnique({ where: { code } }),
-      prisma.goodsInCustomer.findUnique({ where: { vendorNo: code }, include: { contact: { select: { name: true } } } }),
-      // A barcode can be on more than one lot (a re-entered item): the newest is the one in hand, as Find lists it first.
-      prisma.catalogueLot.findFirst({ where: { barcode: { equals: code, mode: "insensitive" } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, barcode: true, title: true, tote: true, receipt: true, auction: { select: { code: true } } } }),
-    ])
-    if (container) return { ok: true, data: { type: "container", id: container.id, kind: container.kind as ContainerKind, receiptId: container.receiptId, customer: container.receipt.contact.name, category: container.category, description: container.description, status: container.status, locationCode: container.locationCode } }
-    if (lot) {
-      const last = await prisma.goodsInMovement.findFirst({ where: { lotId: lot.id }, orderBy: { movedAt: "desc" }, select: { locationCode: true } })
-      return { ok: true, data: { type: "lot", lotId: lot.id, barcode: lot.barcode ?? code, title: lot.title, auction: lot.auction?.code ?? null, tote: lot.tote, receipt: lot.receipt, locationCode: last?.locationCode ?? null } }
-    }
-    if (receipt) return { ok: true, data: { type: "receipt", id: receipt.id, customer: receipt.contact.name, containers: receipt._count.containers, createdAt: receipt.createdAt } }
-    if (location) return { ok: true, data: { type: "location", code: location.code, name: location.name, kind: (location.kind as LocationKind) ?? "storage" } }
-    if (customer) return { ok: true, data: { type: "customer", id: customer.contactId, name: customer.contact.name, vendorNo: customer.vendorNo } }
-    return { ok: true, data: null }
+    return { ok: true, data: await findCode(raw) }
   } catch (e) { return fail(e) }
 }
 

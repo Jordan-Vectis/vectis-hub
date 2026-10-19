@@ -1,6 +1,7 @@
 import type { LocationKind } from "@/lib/goods-in/model"
 import { getBootstrap, lookup, ScanApiError } from "./api"
 import { cleanCode, deviceId, hubInfo, looksLikeItem, newId, type HubInfo } from "./device"
+import { looksLikeCard } from "./card"
 import { signal, unlockSound, type Sound, type Tone } from "./feedback"
 import { isNativeApp } from "./native"
 import { forgetOfflineCopy, startOffline } from "./offline"
@@ -32,15 +33,28 @@ import { RECENT_SHOWN, SCANNER_NOT_SET_UP, type BootstrapResponse, type LookupRe
 //     records there, and says what's recorded elsewhere (one tap queues "Move it here") and what
 //     the Hub doesn't know.
 //
+// A scanner sign-in card (card.ts) scanned here is never an item: it is turned away before it is
+// queued or looked up ("That's a sign-in card — press Switch user…"); signing in with one happens in
+// the Switch user panel, which takes the scans while it is open (app/(scanner)/scan/scan-app.tsx).
+//
 // Two guards for a shared device left lying about: a location that stays set is let go after
 // PIN_IDLE_MS without a scan (the next item waits for a location instead of going there), and after
 // IDLE_ASK_MS without a scan or a tap the next one asks "Still <name>?" before anything is recorded
-// against them. The app's Back button is offered here first ("vectis:back"): it cancels signing in,
-// puts down a waiting item, or lets go of a location that stays set, before it leaves a screen.
+// against them — and so does the first scan on a screen opened from the saved copy (no Wi-Fi, so
+// nobody could check who is signed in). The app's Back button is offered here first ("vectis:back"):
+// it cancels signing in, puts down a waiting item, or lets go of a location that stays set, before it
+// leaves a screen.
+//
+// SIGNED OUT while the screen is open (the card was cancelled or its 14 hours ran out, the Hub login
+// ended, or the person lost Goods In access): whichever call hears it first — a send, the bootstrap or
+// a lookup — calls sessionEnded(), which stops taking scans and reloads /scan, where the layout shows
+// "Scan your sign-in card" (or the no-access message). The queue on the device is left as it is: the
+// same person signing in again sends their scans; anyone else sees "N scans by … still waiting".
 //
 // Browser only. Nothing here touches Business Central.
 
-export type Me = { id: string; name: string; tier: string }
+/** Who is scanning — `via` says how they signed in: their Hub login, or a scanner sign-in card (card.ts). */
+export type Me = { id: string; name: string; tier: string; via: "hub" | "card" }
 export type Screen = "home" | "move" | "find" | "check"
 export type BannerTone = Tone | "info"
 export type Banner = {
@@ -137,6 +151,9 @@ const CLOCK_KEEP_MS = 7 * 86_400_000
 const PIN_IDLE_MS = 10 * 60_000
 /** After this long without a scan or a tap, the next scan asks "Still <name>?" first. */
 const IDLE_ASK_MS = 20 * 60_000
+/** When this page last reloaded because the Hub said its person was signed out (sessionStorage) — so it can never loop. */
+const ENDED_KEY = "vectis-scan-ended-at"
+const ENDED_AGAIN_MS = 30_000
 
 const EMPTY_SYNC: SyncState = { sending: false, problem: null, lastOkAt: null, nextTryAt: null }
 const NO_IDS: ReadonlySet<string> = new Set()
@@ -207,6 +224,8 @@ export class ScanController {
   private netFailAt = 0
   private bootAt = 0
   private timers: ReturnType<typeof setInterval>[] = []
+  /** The Hub has said this person is signed out here, and the page is going back to the sign-in screen. */
+  private ended = false
   private channel: BroadcastChannel | null = null
   private cleanup: (() => void)[] = []
   private s: Snapshot
@@ -375,7 +394,12 @@ export class ScanController {
       void this.refreshBoot()
       void startOffline(fromCache => {
         // Only while the Hub hasn't answered since this page opened.
-        if (gen === this.gen && fromCache && !this.bootAt) this.set({ fromCache: true })
+        if (gen === this.gen && fromCache && !this.bootAt) {
+          // Opened from the saved copy: nobody could check who is signed in (their card may have been
+          // cancelled or run out overnight), so the first scan or tap asks "Still <name>?" first.
+          this.lastActivityAt = 0
+          this.set({ fromCache: true })
+        }
       })
       void this.checkNative()
     })()
@@ -521,7 +545,10 @@ export class ScanController {
     } catch (e) {
       if (gen !== this.gen) return
       if (e instanceof ScanApiError && e.kind === "offline") this.netFail()
-      else this.netOk()
+      else {
+        this.netOk()
+        if (e instanceof ScanApiError && (e.kind === "signed-out" || e.kind === "no-access")) this.sessionEnded()
+      }
     }
   }
 
@@ -531,6 +558,37 @@ export class ScanController {
     if (st.lastOkAt && st.lastOkAt !== prev.lastOkAt) this.netOk()
     else if (st.problem?.kind === "offline" && st.problem !== prev.problem) this.netFail()
     this.set({ sync: st })
+    if ((st.problem?.kind === "signed-out" || st.problem?.kind === "no-access") && st.problem !== prev.problem) this.sessionEnded()
+  }
+
+  /**
+   * The Hub no longer takes this person here (signed out, or no Goods In access any more). Stop taking
+   * scans and reload /scan — the layout then shows "Scan your sign-in card" (or the no-access message).
+   * The queue is untouched. Two cases stay on this page instead, with Switch user open:
+   *   · the scans live only in this page's memory (storeKind "memory") — a reload would lose them;
+   *   · it already reloaded for this a moment ago (the Hub and the saved copy disagreeing) — never a loop.
+   */
+  private sessionEnded() {
+    // Already signing someone in (Switch user open): leave them to it — that reloads the page anyway.
+    if (this.ended || this.s.switching === "open") return
+    let lastAt = 0
+    try { lastAt = Number(sessionStorage.getItem(ENDED_KEY)) || 0 } catch { /* this page only */ }
+    const memoryOnly = this.s.storeKind === "memory" && this.s.waitingMine > 0
+    if (memoryOnly || Math.abs(Date.now() - lastAt) < ENDED_AGAIN_MS) {
+      // ("sending" = Switch user is sending first; it opens the sign-in itself when that fails.)
+      if (this.s.switching === "idle") this.set({ switching: "open", stillYou: false, banner: null })
+      return
+    }
+    this.ended = true
+    try { sessionStorage.setItem(ENDED_KEY, String(Date.now())) } catch { /* this page only */ }
+    this.set({ stillYou: false, switching: "idle", banner: this.banner("error", "Signed out", `${this.me.name} isn't signed in on this scanner any more. Opening the sign-in screen…`, null) })
+    signal("error", this.s.sound)
+    const gen = this.gen
+    void (async () => {
+      // The saved copy of the screen is this person's — and must not open again in place of the sign-in screen.
+      try { await forgetOfflineCopy() } catch { /* nothing saved */ }
+      if (gen === this.gen) window.location.replace("/scan")
+    })()
   }
 
   private async checkNative() {
@@ -621,6 +679,8 @@ export class ScanController {
    * silent unless given a sound; `quiet` silences any.
    */
   private say(tone: BannerTone, title: string, detail: string | null, code: string | null, opts: { scanId?: string | null; actions?: [string, () => void | Promise<void>][]; quiet?: boolean; sound?: Sound } = {}) {
+    // Signed out: "Signed out — opening the sign-in screen" stays up until the page goes.
+    if (this.ended) return
     this.set({ banner: this.banner(tone, title, detail, code, opts.scanId ?? null, opts.actions ?? []) })
     if (opts.quiet) return
     const sound: Sound | null = opts.sound ?? (tone === "info" ? null : tone)
@@ -644,14 +704,42 @@ export class ScanController {
   // ── Every scan comes in here ───────────────────────────────────────────────────────────────
 
   scan = (raw: string, source: ScanSource | "typed" = "scanner") => {
+    // Signed out (sessionEnded): the sign-in screen is on its way; nothing more is taken as this person's.
+    if (this.ended) return
+    // A sign-in card is never an item or a location: it isn't queued, looked up or shown — its code
+    // is a secret (card.ts). Signing in with it is Switch user's job.
+    if (looksLikeCard(raw)) {
+      this.chain = this.chain.then(() => this.cardScanned()).catch(e => this.oops(e))
+      return
+    }
     const code = cleanCode(raw)
     if (!code) return
     if (source !== "scanner") unlockSound()
     this.chain = this.chain.then(() => this.route(code)).catch(e => this.oops(e))
   }
 
-  /** A scan that arrived while signing in (or "Still …?") was open — said, not used. */
+  private cardScanned() {
+    // Someone is at the scanner right now: so the Switch user button below works on the first tap
+    // (a tap on a scanner idle for long enough would otherwise ask "Still …?" and swallow it).
+    this.lastActivityAt = Date.now()
+    this.say("warn", "That's a sign-in card — press Switch user to sign in as them.", "Nothing was moved. A sign-in card is never an item.", null, {
+      actions: [["Switch user", () => this.switchUser()]],
+    })
+  }
+
+  /** A scan that arrived while "Still …?" was open — said, not used. */
   ignored = (raw: string) => {
+    if (looksLikeCard(raw)) {
+      if (this.s.stillYou) {
+        // The next person picked the scanner up and scanned their card: it isn't the last person, so
+        // straight on to Switch user (it sends their waiting scans first), where the card is scanned
+        // again to sign in. ("Still …?" covers the whole screen, so a banner here would go unseen.)
+        this.notMe()
+        return
+      }
+      this.say("warn", "That's a sign-in card", "Press Switch user, then scan the card again to sign in as them. Nothing was moved.", null)
+      return
+    }
     const code = cleanCode(raw)
     if (this.s.stillYou) {
       this.say("warn", "Scan not used", `${code} arrived before saying who's scanning. Press "Yes, it's me" or Switch user, then scan it again.`, code)
@@ -746,6 +834,7 @@ export class ScanController {
         this.netFail()
         return null
       }
+      if (e instanceof ScanApiError && (e.kind === "signed-out" || e.kind === "no-access")) this.sessionEnded()
       throw e
     }
   }
@@ -785,12 +874,13 @@ export class ScanController {
           this.say("error", `Nothing found for ${code}`, this.s.pending ? `It isn't a location, tote, pallet or lot the Hub knows. ${this.s.pending} is still waiting — scan the location label again.` : "It isn't a tote, pallet, lot or location the Hub knows. Check the label and scan again.", code)
           return
         }
+        // (Signed in with a card, the Hub leaves the customer's name out of these — lookup route.)
         if (hit.type === "receipt") {
-          this.say("error", `${code} is a receipt, not a tote`, `It's ${hit.customer}'s receipt. Scan the label on the tote or pallet itself.`, code)
+          this.say("error", `${code} is a receipt, not a tote`, `${hit.customer ? `It's ${hit.customer}'s receipt. ` : ""}Scan the label on the tote or pallet itself.`, code)
           return
         }
         if (hit.type === "customer") {
-          this.say("error", `${code} is a vendor number`, `That's ${hit.name}. Scan the label on the tote, pallet or lot instead.`, code)
+          this.say("error", `${code} is a vendor number`, `${hit.name ? `That's ${hit.name}. ` : ""}Scan the label on the tote, pallet or lot instead.`, code)
           return
         }
         if (hit.type === "location") {
@@ -975,7 +1065,7 @@ export class ScanController {
   /** Switch user — only once this person's waiting scans are sent (the Hub takes them only from them). */
   switchUser = async () => {
     // Not before the queue has been read: until then "nothing waiting" isn't known to be true.
-    if (!this.s.started || this.s.switching !== "idle") return
+    if (!this.s.started || this.s.switching !== "idle" || this.ended) return
     const n = this.s.waitingMine
     if (n > 0) {
       if (!this.s.online) {
@@ -984,7 +1074,15 @@ export class ScanController {
       }
       this.set({ switching: "sending", banner: this.banner("info", `Sending the ${n} waiting ${n === 1 ? "scan" : "scans"} first…`, "Someone else can sign in once they've gone.", null) })
       await this.engine?.sendNow()
+      if (this.ended) return // signed out: the sign-in screen is on its way
       const left = this.s.waitingMine
+      const k = this.s.sync.problem?.kind
+      if (left > 0 && (k === "signed-out" || k === "no-access")) {
+        // The Hub won't take them from this person now, so trying again can never work: the next
+        // person signs in, and the scans wait on this scanner for their owner to sign in again.
+        this.set({ switching: "open", banner: null })
+        return
+      }
       if (left > 0) {
         this.set({ switching: "idle" })
         this.say("error", `Send the ${left} waiting ${left === 1 ? "scan" : "scans"} first`, `They couldn't be sent: ${this.s.sync.problem?.message ?? "the Hub didn't take them"}. Try Send now again.`, null)
@@ -1136,7 +1234,13 @@ export class ScanController {
       return
     }
     if (hit.type === "receipt" || hit.type === "customer") {
-      this.setExtra(code, { state: "not-goods", what: hit.type === "receipt" ? `Receipt ${hit.id} (${hit.customer}) — not a tote, pallet or lot.` : `Vendor number for ${hit.name} — not a tote, pallet or lot.`, where: null })
+      this.setExtra(code, {
+        state: "not-goods",
+        what: hit.type === "receipt"
+          ? `Receipt ${hit.id}${hit.customer ? ` (${hit.customer})` : ""} — not a tote, pallet or lot.`
+          : `${hit.name ? `Vendor number for ${hit.name}` : "A customer's vendor number"} — not a tote, pallet or lot.`,
+        where: null,
+      })
       this.say("warn", `${code} isn't a tote, pallet or lot`, hit.type === "receipt" ? "That's a receipt number. Scan the tote or pallet's own label." : "That's a vendor number.", code)
       return
     }

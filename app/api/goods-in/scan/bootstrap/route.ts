@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import type { LocationKind } from "@/lib/goods-in/model"
 import { SCANNER_NOT_SET_UP, type BootstrapResponse } from "@/lib/goods-in/scan-contract"
-import { failure, gate, isMissingTable } from "../../_lib/shared"
+import { failure, isMissingTable } from "../../_lib/shared"
+import { scanGate } from "../_lib/scan-gate"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,13 +15,14 @@ export const dynamic = "force-dynamic"
 // scannedBy), which Hub this is, and every Goods In location with its kind and on/off setting.
 // `ready` is false until Run Migrations has made the scanner's table — the sync answers 503 and
 // applies nothing until then. Anyone with Warehouse access, checked here (/api is outside the login
-// gate). Read-only; nothing here touches Business Central.
+// gate) — the Hub session, or a scanner sign-in card (scanGate). Read-only; nothing here touches
+// Business Central.
 
 const KINDS = new Set<string>(["storage", "bench", "shelf", "other"])
 
 export async function GET() {
   try {
-    const g = await gate("warehouse")
+    const g = await scanGate()
     if (g.res) return g.res
     const me = g.me
 
@@ -33,7 +35,7 @@ export async function GET() {
     ])
 
     const body: BootstrapResponse = {
-      user: { id: me.id, name: me.name, tier: me.whRole },
+      user: { id: me.id, name: me.name || null, tier: me.tier },
       hub: process.env.RAILWAY_ENVIRONMENT_NAME || (process.env.NODE_ENV === "production" ? "unknown" : "development"),
       locations: locs.map(l => ({
         code: l.code,

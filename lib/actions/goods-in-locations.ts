@@ -8,6 +8,7 @@ import type { WarehouseRole } from "@/lib/apps"
 import { LOCATION_KINDS, STATUS_FOR_KIND, normaliseCode, type LocationKind } from "@/lib/goods-in/model"
 import { LOCATION_CODE_HELP, LOCATION_CODE_RULE, MAX_BULK_LOCATIONS, compareCodes, defaultLocationName } from "@/lib/goods-in/location-codes"
 import type { Result } from "@/lib/actions/goods-in"
+import { goodsHere } from "@/lib/goods-in/lookup-core"
 
 // Goods In → Locations: the many-at-once tools — add a run or a pasted list, remove, switch on or
 // off, change kind or names, edit one, empty a location into another, and list what is at some
@@ -506,70 +507,18 @@ export type GoodsHere = {
   by: string | null
 }
 
-const MAX_EXPORT_ROWS = 20_000
-
 /**
  * Any Goods In user (it reads only what the location pages already show). Everything at these
  * locations now — every tote and pallet there that hasn't gone back to the customer, and every lot
  * whose latest move is there — for the "export what's there" spreadsheets. At most 20,000 of each;
- * `truncated` says when there were more.
+ * `truncated` says when there were more. The reading itself is goodsHere in
+ * lib/goods-in/lookup-core.ts, shared with the handheld scanner's Check a location.
  */
 export async function goodsAtLocations(codes: string[]): Promise<Result<{ rows: GoodsHere[]; truncated: boolean }>> {
   try {
     await who()
     const asked = cleanCodes(codes, "exported")
     if (!asked.ok) return asked
-    const [containers, lots] = await Promise.all([
-      prisma.goodsInContainer.findMany({
-        where: { locationCode: { in: asked.codes }, OR: [{ status: null }, { status: { not: "returned" } }] },
-        select: { id: true, kind: true, status: true, category: true, description: true, movedAt: true, locationCode: true, receiptId: true, receipt: { select: { contact: { select: { name: true } } } } },
-        orderBy: [{ locationCode: "asc" }, { id: "asc" }],
-        take: MAX_EXPORT_ROWS + 1,
-      }),
-      prisma.$queryRaw<{ location: string; lotId: string; barcode: string | null; movedAt: Date | null; movedByName: string | null; title: string | null; status: string | null; sale: string | null }[]>`
-        SELECT cur."locationCode" AS "location", cur."lotId", COALESCE(l."barcode", cur."barcode") AS "barcode", cur."movedAt", cur."movedByName",
-               l."title", l."status", a."code" AS "sale"
-        FROM (
-          SELECT DISTINCT ON (m."lotId") m."lotId", m."barcode", m."locationCode", m."movedAt", m."movedByName"
-          FROM "GoodsInMovement" m
-          WHERE m."lotId" IN (
-            SELECT "lotId" FROM "GoodsInMovement" WHERE "lotId" IS NOT NULL AND "locationCode" = ANY(${asked.codes}::text[])
-          )
-          ORDER BY m."lotId", m."movedAt" DESC
-        ) cur
-        LEFT JOIN "CatalogueLot" l ON l."id" = cur."lotId"
-        LEFT JOIN "CatalogueAuction" a ON a."id" = l."auctionId"
-        WHERE cur."locationCode" = ANY(${asked.codes}::text[])
-        ORDER BY cur."locationCode", cur."movedAt" DESC
-        LIMIT ${MAX_EXPORT_ROWS + 1}`,
-    ])
-    const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null)
-    const rows: GoodsHere[] = [
-      ...containers.slice(0, MAX_EXPORT_ROWS).map(c => ({
-        location: c.locationCode ?? "",
-        type: (c.kind === "pallet" ? "pallet" : "tote") as GoodsHere["type"],
-        code: c.id,
-        status: c.status,
-        receipt: c.receiptId,
-        customer: c.receipt.contact.name,
-        what: [c.category, c.description].filter(Boolean).join(" — ") || null,
-        sale: null,
-        since: iso(c.movedAt),
-        by: null,
-      })),
-      ...lots.slice(0, MAX_EXPORT_ROWS).map(l => ({
-        location: l.location,
-        type: "lot" as const,
-        code: l.barcode ?? "",
-        status: l.status,
-        receipt: null,
-        customer: null,
-        what: l.title ?? "This lot is no longer in the Hub",
-        sale: l.sale,
-        since: iso(l.movedAt),
-        by: l.movedByName,
-      })),
-    ].sort((a, b) => compareCodes(a.location, b.location))
-    return { ok: true, data: { rows, truncated: containers.length > MAX_EXPORT_ROWS || lots.length > MAX_EXPORT_ROWS } }
+    return { ok: true, data: await goodsHere(asked.codes) }
   } catch (e) { return fail(e) }
 }

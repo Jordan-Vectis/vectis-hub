@@ -2339,6 +2339,24 @@ export const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "GoodsInScanEvent_userId_receivedAt_idx" ON "GoodsInScanEvent"("userId", "receivedAt")`,
   `CREATE INDEX IF NOT EXISTS "GoodsInScanEvent_deviceId_receivedAt_idx" ON "GoodsInScanEvent"("deviceId", "receivedAt")`,
+  // Goods In scanner sign-in cards (2026-10-16) — a QR card a worker scans to sign in to the handheld
+  // scanner only. Just a hash of the card's code is kept. New table only, no foreign keys.
+  `CREATE TABLE IF NOT EXISTS "GoodsInScannerPass" (
+    "id"            TEXT NOT NULL,
+    "userId"        TEXT NOT NULL,
+    "userName"      TEXT,
+    "tokenHash"     TEXT NOT NULL,
+    "label"         TEXT,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdById"   TEXT,
+    "createdByName" TEXT,
+    "lastUsedAt"    TIMESTAMP(3),
+    "revokedAt"     TIMESTAMP(3),
+    "revokedByName" TEXT,
+    CONSTRAINT "GoodsInScannerPass_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "GoodsInScannerPass_tokenHash_key" ON "GoodsInScannerPass"("tokenHash")`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInScannerPass_userId_idx" ON "GoodsInScannerPass"("userId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -34,7 +34,17 @@ export const authConfig: NextAuthConfig = {
       // resolve-routes.js), so "/first-aid/" normally arrives here already trimmed — except
       // in minimalMode, where those redirects are skipped. Cheap to be certain: a QR code
       // ending in a slash must never bounce someone to /login mid-emergency.
-      const publicExact = ["/first-aid"]
+      //
+      // Goods In → the handheld scanner screen /scan and its service worker /scan/sw (Jack,
+      // 2026-10-16: "a QR code to auto sign in please, as there's no keyboard"). A warehouse
+      // worker signs in there by scanning their scanner sign-in card, which needs the screen to
+      // open with no Hub login — this gate would bounce them to /login, which a scanner can't type
+      // into. EXACT paths like /first-aid; nothing under /scan opens. ⚠ The /scan layout does its
+      // own sign-in check (getScanUser in lib/goods-in/scanner-pass.ts: the Hub login, else a card)
+      // and shows nothing but "Scan your sign-in card" to nobody; its API routes check themselves.
+      // A card signs in to the scanner ONLY — the rest of the Hub stays behind this gate. See
+      // RULES.md → Goods In → handheld scanner → "Scanner sign-in cards".
+      const publicExact = ["/first-aid", "/scan", "/scan/sw"]
       const bare = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname
       if (publicExact.includes(bare)) return true
 

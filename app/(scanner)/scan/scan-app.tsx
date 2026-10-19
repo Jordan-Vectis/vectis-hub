@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { ScanController, type Me, type Snapshot } from "@/lib/goods-in/scan-client/controller"
 import { startScanner } from "@/lib/goods-in/scan-client/scanner"
+import CardSignIn from "./card-sign-in"
 import { BannerView, StatusBar, StillYou, Strips } from "./parts"
 import { CheckBar, CheckScreen, FindScreen, HomeBar, HomeScreen, MoveBar, MoveScreen } from "./screens"
-import SignInPanel from "./sign-in"
 
 // The handheld scanner screen. All the rules live in ScanController
 // (lib/goods-in/scan-client/controller.ts); this renders its snapshot. Laid out for a 4–6" portrait
@@ -39,6 +39,12 @@ export default function ScanApp({ me }: { me: Me }) {
   const [ctl] = useState(() => new ScanController(me))
   const s = useSyncExternalStore(ctl.subscribe, ctl.getSnapshot, ctl.getServerSnapshot)
   const scanBox = useRef<HTMLInputElement>(null)
+  // While Switch user is open, scans go to its card sign-in instead of the screen (one scanner per page).
+  const cardTake = useRef<((code: string) => void) | null>(null)
+  const connectCard = useCallback((take: (code: string) => void) => {
+    cardTake.current = take
+    return () => { if (cardTake.current === take) cardTake.current = null }
+  }, [])
 
   useEffect(() => {
     ctl.start()
@@ -48,11 +54,15 @@ export default function ScanApp({ me }: { me: Me }) {
   useEffect(() => {
     return startScanner({
       input: scanBox.current,
-      onScan: (code, source) => ctl.scan(code, source),
-      isPaused: () => {
-        const now = ctl.getSnapshot()
-        return now.switching === "open" || now.stillYou
+      onScan: (code, source) => {
+        if (ctl.getSnapshot().switching === "open") {
+          cardTake.current?.(code)
+          return
+        }
+        ctl.scan(code, source)
       },
+      // Not paused while Switch user is open: the next person's card is scanned there.
+      isPaused: () => ctl.getSnapshot().stillYou,
       onIgnored: code => ctl.ignored(code),
       onMode: mode => ctl.setScannerMode(mode),
     })
@@ -61,14 +71,15 @@ export default function ScanApp({ me }: { me: Me }) {
   return (
     <div data-scan-ready="1" className="flex min-h-0 flex-1 flex-col">
       {/* The box keyboard-style scanners type into: no on-screen keyboard (inputMode none), out of
-          the way, and given the cursor back whenever nothing else is being typed in. */}
+          the way, and given the cursor back whenever nothing else is being typed in. Letters as they
+          are (codes are upper-cased in ScanController.scan) — a sign-in card's code is case-sensitive. */}
       <input
         ref={scanBox}
         aria-label="Scanner input"
         inputMode="none"
         autoComplete="off"
         autoCorrect="off"
-        autoCapitalize="characters"
+        autoCapitalize="none"
         spellCheck={false}
         tabIndex={-1}
         className="pointer-events-none absolute left-0 top-0 h-px w-px opacity-0"
@@ -101,17 +112,18 @@ export default function ScanApp({ me }: { me: Me }) {
       {s.stillYou && s.switching !== "open" && <StillYou name={me.name} ctl={ctl} />}
 
       {s.switching === "open" && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50 dark:bg-[#141416]" role="dialog" aria-modal="true" aria-labelledby="scan-signin-title">
-          <div className="mx-auto w-full max-w-md px-4 py-6">
-            <SignInPanel
-              title={s.sync.problem?.kind === "signed-out" && s.waitingMine ? `Sign in again, ${me.name}` : "Switch user"}
-              intro={s.sync.problem?.kind === "signed-out" && s.waitingMine
-                ? `Your ${s.waitingMine === 1 ? "scan is" : `${s.waitingMine} scans are`} waiting to be sent. Sign in as yourself to send them.`
-                : "Whoever signs in now is recorded on every scan after this."}
-              onCancel={ctl.cancelSwitch}
-              beforeLeave={ctl.forgetForSwitch}
-            />
-          </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50 dark:bg-[#141416]" role="dialog" aria-modal="true" aria-label="Switch user">
+          <CardSignIn
+            mode="switch"
+            current={me.via}
+            connect={connectCard}
+            eyebrow={s.sync.problem?.kind === "signed-out" && s.waitingMine ? `Sign in again, ${me.name}` : "Switch user"}
+            intro={s.sync.problem?.kind === "signed-out" && s.waitingMine
+              ? `Your ${s.waitingMine === 1 ? "scan is" : `${s.waitingMine} scans are`} waiting to be sent. Scan your own card (or sign in as yourself) to send them.`
+              : "The next person scans their card. Whoever signs in now is recorded on every scan after this."}
+            onCancel={ctl.cancelSwitch}
+            beforeLeave={ctl.forgetForSwitch}
+          />
         </div>
       )}
     </div>
