@@ -18,7 +18,7 @@ export type TileCard = {
 
 // One app card on the home page. Also drawn by the home page editor (link = false).
 export function AppCardTile({ app, link = true }: { app: TileCard; link?: boolean }) {
-  const cardClass = `relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center min-h-[320px]
+  const cardClass = `relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 h-full flex flex-col items-center text-center min-h-[320px]
     transition-all duration-200 hover:shadow-xl ${app.glow} hover:-translate-y-0.5`
 
   const colour = app.colour ? { borderColor: app.colour } : undefined

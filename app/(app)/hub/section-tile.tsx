@@ -22,7 +22,7 @@ export function SectionTile({ label, icon, colour, textColour, appNames, href }:
       </span>
     </>
   )
-  const className = "relative bg-white dark:bg-[#1c1f27] border rounded-xl p-7 flex flex-col items-center text-center min-h-[320px] transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5"
+  const className = "relative bg-white dark:bg-[#1c1f27] border rounded-xl p-7 h-full flex flex-col items-center text-center min-h-[320px] transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5"
   const style = { borderColor: colour, ["--tw-shadow-color" as string]: `${colour}66` }
   return href
     ? <Link href={href} className={`${className} cursor-pointer`} style={style}>{body}</Link>

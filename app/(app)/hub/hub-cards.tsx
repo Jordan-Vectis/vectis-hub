@@ -7,7 +7,7 @@ import { getEffectiveSession } from "@/lib/impersonation"
 
 export const sectionSlug = (key: string) => key.toLowerCase().replace(/_/g, "-")
 
-export const CARD_GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5"
+export const CARD_GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-fr gap-5"
 
 // The cards this person may see, with the admin's Home Page settings applied,
 // grouped into their sections. Shared by /hub and /hub/[section].

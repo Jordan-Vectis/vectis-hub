@@ -24,7 +24,7 @@ export type EditorCard = {
 type Selected = { type: "section" | "card"; key: string } | null
 
 const DEF = new Map(APP_CARD_DEFS.map(d => [d.key, d]))
-const GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5"
+const GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-fr gap-5"
 const NONE = "__none__"
 
 const field = "w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 min-h-[44px] focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-400"
@@ -316,7 +316,7 @@ export default function HomeEditor({ initialCards, initialLayout, startSection }
                 onDoubleClick={() => { setView(s.key); setSelected(null) }}
                 className={`relative rounded-xl cursor-pointer ${ring(on)} ${s.hidden ? "opacity-50" : ""}`}>
                 {s.hidden && hiddenBadge}
-                <div className="pointer-events-none">
+                <div className="pointer-events-none h-full">
                   <SectionTile label={s.label || "Section"} icon={s.icon} colour={s.colour} textColour={s.textColour} appNames={inIt.map(c => tile(c).label)} />
                 </div>
               </div>
@@ -330,7 +330,7 @@ export default function HomeEditor({ initialCards, initialLayout, startSection }
                 onClick={() => setSelected({ type: "card", key: c.key })}
                 className={`relative rounded-xl cursor-pointer ${ring(on)} ${c.visible ? "" : "opacity-50"}`}>
                 {!c.visible && hiddenBadge}
-                <div className="pointer-events-none"><AppCardTile app={tile(c)} link={false} /></div>
+                <div className="pointer-events-none h-full"><AppCardTile app={tile(c)} link={false} /></div>
               </div>
             )
           })}
