@@ -38,10 +38,58 @@ function Raw({ label, data }: { label: string; data: unknown }) {
   )
 }
 
+// One value off a BC card, readable: Yes/No, blank dates (BC's 0001-01-01) and zeros left out.
+function cardVal(v: unknown): string | null {
+  if (v == null || v === "" || v === false || v === 0) return null
+  if (v === true) return "Yes"
+  if (typeof v === "string" && /^0001-01-01/.test(v)) return null
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(v).toLocaleString("en-GB", { timeZone: "Europe/London" })
+  return String(v)
+}
+function CardRows({ data, rows }: { data: any; rows: [string, string][] }) {
+  const shown = rows.map(([k, label]) => [label, cardVal(data?.[k])] as const).filter(([, v]) => v)
+  if (!shown.length) return <p className="text-sm text-gray-500 dark:text-gray-400">Nothing set.</p>
+  return <dl>{shown.map(([label, v]) => <Row key={label} k={label} v={v} />)}</dl>
+}
+
+// The fields Jordan's list cared about, in plain words. Everything else is in "Everything BC sent".
+const SELLER_TERMS: [string, string][] = [
+  ["EVA_ChargeLottingFee", "Charge entry fee"], ["EVA_LottingFee", "Entry fee"],
+  ["EVA_UnsoldType", "Unsold charge type"], ["EVA_UnsoldPercentage", "Unsold %"],
+  ["EVA_WithdrawnType", "Withdrawn charge type"], ["EVA_WithdrawnCharge", "Withdrawn charge"],
+  ["EVA_IntroductionCommPayee", "Introduction commission to"], ["EVA_IntroductionCommType", "Introduction commission type"],
+  ["EVA_IntroductionCommPerc", "Introduction commission %"], ["EVA_IntroCommExpiryDate", "Introduction commission ends"],
+  ["EVA_NeverChargeCommission", "Never charge commission"], ["EVA_NeverChargeUnsold", "Never charge unsold"],
+  ["EVA_NeverChargeEntryFeeOnSold", "Never charge entry fee on sold"], ["EVA_NeverChargeIllustration", "Never charge illustration"],
+  ["EVA_NeverChargeMinimumComm", "Never charge minimum commission"], ["EVA_NeverChargeInsurance", "Never charge insurance"],
+  ["EVA_NeverChargeVAT", "Never charge VAT"], ["EVA_NeverChargeWithdrawn", "Never charge withdrawn"],
+  ["EVA_SellItemsExcludingVAT", "Sell items excluding VAT"], ["EVA_PayToVendorNo", "Pay a different seller"],
+  ["EVA_PayToVendorName", "…called"], ["EVA_PayToVendorOnly", "Pay to that seller only"], ["EVA_ChqPayeeName", "Cheque payee"],
+  ["EVA_HoldInvoices", "Hold invoices"], ["EVA_TrustedVendor", "Trusted seller"], ["EVA_StaffVendor", "Staff seller"],
+  ["EVA_StandardVendor", "Standard seller"], ["EVA_Trade", "Trade"], ["EVA_Originator", "Brought in by"],
+  ["EVA_VendorComments", "Comments"], ["EVA_NoOfReceipts", "Receipts (BC's count)"], ["EVA_NoOfItemsSold", "Items sold (BC's count)"],
+  ["EVA_NoOfItemsUnsold", "Items unsold (BC's count)"], ["EVA_TotalGrossSales", "Total gross sales (BC)"],
+]
+const ID_CHECKS: [string, string][] = [
+  ["EVA_CalcFirstName", "First name"], ["EVA_CalcSurname", "Surname"], ["EVA_CalcCompanyName", "Company"],
+  ["EVA_DateOfBirth", "Date of birth"], ["EVA_Nationality", "Nationality"], ["EVA_PreferredLanguage", "Preferred language"],
+  ["EVA_HowDidYouHearAboutUs", "How they heard about us"], ["EVA_ContactAccountType", "Account type"],
+  ["EVA_Approved", "Approved to buy"], ["EVA_ApprovedBy", "…by"], ["EVA_ApprovedAt", "…on"],
+  ["EVA_VendorApproved", "Approved to sell"], ["EVA_VendorApprovedBy", "…by"], ["EVA_VendorApprovedAt", "…on"],
+  ["EVA_ID1Type", "ID 1"], ["EVA_ID2Type", "ID 2"], ["EVA_IDCheckedStatus", "ID status"], ["EVA_IDStatusInvalidReason", "Why invalid"],
+  ["EVA_DateChecked", "ID checked on"], ["EVA_SCN_ScreeningComplete", "Screening done"], ["EVA_SCN_ScreeningCompDate", "Screened on"],
+  ["EVA_SCN_ScreenExpDate", "Screening expires"], ["EVA_ScreeningServiceID", "Screening reference"], ["EVA_KYCAssignedTo", "KYC assigned to"],
+  ["EVA_HighRisk", "High risk"], ["EVA_HighRiskReason", "…because"], ["EVA_Blocked", "Blocked"], ["PTE_BlockedReason", "…because"],
+  ["Privacy_Blocked", "Privacy blocked"], ["EVA_CompanyRegistrationNo", "Company reg. no."], ["EVA_CompanyDirectorName", "Company director"],
+  ["EVA_CompanyOtherBenefName", "Other beneficiary"],
+]
+
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const c = await prisma.customer.findUnique({ where: { id }, include: { shipTo: { orderBy: { code: "asc" } } } }).catch(() => null)
   if (!c) notFound()
+  // Its own table, read on its own: before Run Migrations it simply isn't there yet.
+  const card = await prisma.customerBcCard.findUnique({ where: { customerId: c.id } }).catch(() => null)
 
   // What they've consigned — from the BC copies the Hub already keeps, linked by seller number.
   const [receipts, lotCount, soldCount] = c.vendorNo
@@ -103,7 +151,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                   </table>
                 </div>
               )}
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Commission terms and the &quot;never charge&quot; settings aren&apos;t in BC&apos;s published feeds yet — see &quot;What does BC publish?&quot; on the Customers page.</p>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Their commission terms are in Seller terms below.</p>
             </>
           ) : <p className="text-sm text-gray-500 dark:text-gray-400">Not a seller.</p>}
         </Card>
@@ -132,12 +180,23 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
         </Card>
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <Card title="Seller terms (BC vendor card)">
+          {card?.vendorCard ? <CardRows data={card.vendorCard} rows={SELLER_TERMS} /> : <p className="text-sm text-gray-500 dark:text-gray-400">{c.vendorNo ? "Not copied yet — it comes with the next copy." : "Not a seller."}</p>}
+        </Card>
+        <Card title="ID checks & approvals (BC contact card)">
+          {card?.contactCard ? <CardRows data={card.contactCard} rows={ID_CHECKS} /> : <p className="text-sm text-gray-500 dark:text-gray-400">Not copied yet — it comes with the next copy.</p>}
+        </Card>
+      </div>
+
       <Card title="Everything Business Central sent">
         <div className="space-y-2">
           <Raw label="Person (BC contact)" data={c.bcContact} />
           <Raw label="Seller (BC vendor)" data={c.bcVendor} />
           <Raw label="Buyer (BC customer)" data={c.bcBuyer} />
           <Raw label="Website account" data={c.bcWeb} />
+          <Raw label="Contact card" data={card?.contactCard} />
+          <Raw label="Vendor card (bank fields removed)" data={card?.vendorCard} />
           {!c.bcContact && !c.bcVendor && !c.bcBuyer && !c.bcWeb && <p className="text-sm text-gray-500">Nothing stored.</p>}
         </div>
       </Card>

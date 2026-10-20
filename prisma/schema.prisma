@@ -1935,10 +1935,24 @@ model Customer {
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @default(now()) @updatedAt
   shipTo                     CustomerShipTo[]
+  bcCard                     CustomerBcCard?
 
   @@index([email])
   @@index([postCode])
   @@index([name])
+}
+
+// BC's two big cards for a person, kept whole: the Contact Card (ID / anti-money-laundering checks,
+// approvals, date of birth, nationality…) and the Vendor Card (the seller's terms — entry fee, unsold
+// and withdrawn charges, introduction commission, every "never charge" setting). Its own table, not
+// columns on Customer, so the copy and the customer pages keep working before Run Migrations.
+// ⚠ Anything about bank accounts is stripped before it is stored (lib/customer-sync.ts noBank).
+model CustomerBcCard {
+  customerId  String    @id
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactCard Json?
+  vendorCard  Json?
+  syncedAt    DateTime  @default(now())
 }
 
 // Delivery addresses a buyer has on file in BC (Ship-to Address).

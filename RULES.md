@@ -2284,9 +2284,13 @@ redirects here; the `Contact` table itself stays — Submissions use it.
   the row already holding the number, else a new row. A number found on a different row from its
   contact's is moved, and a stub that held nothing else is deleted. Proven against a fake database
   (stub merge, BC moving a seller to another contact, gap filling) before shipping.
-- ⚠ **The Evo feeds don't carry the seller's commission terms, the "never charge" settings or the ID /
-  anti-money-laundering checks.** "What does BC publish?" on the page lists every published BC page
-  about customers so the next feed can be chosen from fact, not guessed.
+- **Two more stages read BC's CARDS** (published ODataV4 services found with "What does BC publish?"):
+  `Contact_Card_Excel` (ID / anti-money-laundering checks, approvals, date of birth, nationality, first
+  name/surname) by contact number, and `Vendor_Card_Excel` (the seller's terms — entry fee, unsold and
+  withdrawn charges, introduction commission, every "never charge" setting) by seller number; a supplier
+  who isn't an auction seller is skipped. Kept whole in **`CustomerBcCard`** — its own table, so the
+  copy and the pages work before Run Migrations. ⚠ `noBank()` drops every field whose name mentions a
+  bank before storing. The person page shows the main fields in plain words (Seller terms, ID checks).
 - ⚠ **Bank details are never stored** (they go to Sage), same rule as Goods In.
 - **Data check** tab: counts, likely duplicates (same email on several records), missing email /
   postcode, delivery addresses with no buyer here — the tidying to do before anything depends on it.

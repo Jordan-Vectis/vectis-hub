@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Business Central isn't signed in." }, { status: 503 })
 
     const feeds: Record<string, any> = {}
-    for (const phase of CUSTOMER_PHASES) {
+    for (const phase of CUSTOMER_PHASES.filter(p => !p.endsWith("Cards"))) {
       try {
         const url = await bcApiUrl(token, "api/evo/base/v1.0", phase)
         const { rows } = await bcPageWithNext(token, `${url}?$top=1`)

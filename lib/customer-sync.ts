@@ -19,6 +19,17 @@ import { bcApiUrl, bcPageWithNext } from "@/lib/bc"
 import { CUSTOMER_PHASES, type CustomerPhase } from "@/lib/customer-sync-phases"
 export { CUSTOMER_PHASES, type CustomerPhase }
 
+const CARD_SERVICE: Partial<Record<CustomerPhase, string>> = {
+  contactCards: "Contact_Card_Excel",
+  vendorCards:  "Vendor_Card_Excel",
+}
+
+// ⚠ Bank details never come into the Hub (they go to Sage). Any field whose NAME mentions a bank is
+// dropped before a card is stored, along with OData's own bookkeeping fields.
+export function noBank(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(row).filter(([k]) => !/bank/i.test(k) && !k.startsWith("@odata")))
+}
+
 const str = (v: unknown): string | null => {
   const s = String(v ?? "").trim()
   return s || null
@@ -88,7 +99,10 @@ export type PageResult = {
 }
 
 export async function copyCustomerPage(token: string, phase: CustomerPhase, nextLink: string | null): Promise<PageResult> {
-  const url = nextLink ?? await bcApiUrl(token, "api/evo/base/v1.0", phase)
+  // The two cards are published ODataV4 web services (found with "What does BC publish?"); the rest
+  // are Evo's API pages.
+  const card = CARD_SERVICE[phase]
+  const url = nextLink ?? (card ?? await bcApiUrl(token, "api/evo/base/v1.0", phase))
   const { rows, nextLink: nl } = await bcPageWithNext(token, url)
   const res: PageResult = { rows: rows.length, created: 0, updated: 0, merged: 0, unmatched: 0, failed: 0, firstError: null, nextLink: nl }
   const now = new Date()
@@ -137,6 +151,25 @@ export async function copyCustomerPage(token: string, phase: CustomerPhase, next
       })
       res.updated++
     })
+  } else if (card) {
+    // One card per person: the Contact Card by contact number, the Vendor Card by seller number.
+    // A Vendor Card for a supplier who isn't an auction seller has no person here and is skipped.
+    const isContact = phase === "contactCards"
+    const nos = rows.map((r: any) => str(r.No)).filter(Boolean) as string[]
+    const owners = new Map((await prisma.customer.findMany({
+      where:  isContact ? { contactNo: { in: nos } } : { vendorNo: { in: nos } },
+      select: { id: true, contactNo: true, vendorNo: true },
+    })).map(c => [(isContact ? c.contactNo : c.vendorNo)!, c.id]))
+    const field = isContact ? "contactCard" : "vendorCard"
+    for (let i = 0; i < rows.length; i += 20) {
+      await Promise.all(rows.slice(i, i + 20).map((r: any) => each(r, async () => {
+        const customerId = owners.get(str(r.No) ?? "")
+        if (!customerId) { res.unmatched++; return }
+        const data = { [field]: noBank(r), syncedAt: now }
+        await prisma.customerBcCard.upsert({ where: { customerId }, update: data, create: { customerId, ...data } })
+        res.updated++
+      })))
+    }
   } else {
     const buyerNos = [...new Set(rows.map((r: any) => str(r.customerNo)).filter(Boolean))] as string[]
     const owners = new Map((await prisma.customer.findMany({ where: { buyerNo: { in: buyerNos } }, select: { id: true, buyerNo: true } })).map(c => [c.buyerNo!, c.id]))

@@ -2407,6 +2407,13 @@ export const MIGRATIONS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "CustomerShipTo_bcSystemId_key" ON "CustomerShipTo"("bcSystemId")`,
   `CREATE INDEX IF NOT EXISTS "CustomerShipTo_buyerNo_idx" ON "CustomerShipTo"("buyerNo")`,
   `CREATE INDEX IF NOT EXISTS "CustomerShipTo_customerId_idx" ON "CustomerShipTo"("customerId")`,
+  // Customers — BC's contact and vendor cards, kept whole per person (2026-10-20).
+  `CREATE TABLE IF NOT EXISTS "CustomerBcCard" (
+    "customerId" TEXT NOT NULL, "contactCard" JSONB, "vendorCard" JSONB,
+    "syncedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "CustomerBcCard_pkey" PRIMARY KEY ("customerId"),
+    CONSTRAINT "CustomerBcCard_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

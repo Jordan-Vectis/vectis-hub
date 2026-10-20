@@ -59,7 +59,7 @@ export default function SyncPanel({ lastRun }: { lastRun: string | null }) {
       }
       const people = t.contacts?.rows ?? 0
       const failed = Object.values(t).reduce((n, x) => n + x.failed, 0)
-      setResult({ ok: failed === 0, text: `Finished: read ${people.toLocaleString()} people, ${(t.vendors?.rows ?? 0).toLocaleString()} sellers, ${(t.customers?.rows ?? 0).toLocaleString()} buyers, ${(t.webCustomers?.rows ?? 0).toLocaleString()} website accounts and ${(t.shipToAddresses?.rows ?? 0).toLocaleString()} delivery addresses.${failed ? ` ${failed} rows could not be saved — the first is shown below.` : ""}` })
+      setResult({ ok: failed === 0, text: `Finished: read ${people.toLocaleString()} people, ${(t.vendors?.rows ?? 0).toLocaleString()} sellers, ${(t.customers?.rows ?? 0).toLocaleString()} buyers, ${(t.webCustomers?.rows ?? 0).toLocaleString()} website accounts, ${(t.shipToAddresses?.rows ?? 0).toLocaleString()} delivery addresses, ${(t.contactCards?.updated ?? 0).toLocaleString()} ID-check cards and ${(t.vendorCards?.updated ?? 0).toLocaleString()} seller-terms cards.${failed ? ` ${failed} rows could not be saved — the first is shown below.` : ""}` })
       router.refresh()
     } catch (e: any) {
       setResult({ ok: false, text: `Stopped with an error: ${e?.message ?? e}. What was copied before it is kept.` })
@@ -97,7 +97,7 @@ export default function SyncPanel({ lastRun }: { lastRun: string | null }) {
       </div>
 
       {(running || Object.keys(tally).length > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-2">
           {CUSTOMER_PHASES.map(p => {
             const x = tally[p]
             const on = phase === p
