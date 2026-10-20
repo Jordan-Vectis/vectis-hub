@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b381e8641e1ebc64a0c48c6932dac2c211865f6b","author":"Jordan Orange","date":"2026-10-20T16:36:13+01:00","subject":"Customers data check: count every shared email, not just the first 200"},
   {"sha":"338c35ab36374551eff75319ac4fd1f2e0070d6a","author":"Jordan Orange","date":"2026-10-20T14:17:05+01:00","subject":"Customers copy: a live heartbeat so a slow batch doesn't look frozen"},
   {"sha":"27cd1fa4c72961f88b48c526e035522087c380fe","author":"Jordan Orange","date":"2026-10-20T11:45:06+01:00","subject":"Customers: the Hub's own customer database, copied nightly from BC"},
   {"sha":"17817cbf1c05d03a16d61eec1ed74ecf80ed1252","author":"jack-vectis","date":"2026-10-20T09:38:42+01:00","subject":"Goods In Locations: import the warehouse's full list of 3,920 locations"},

@@ -1913,7 +1913,7 @@ the same way, never as an export of an actions file.
   page instead).
 - Registered in `lib/help-map.ts` (Book in · Receipt list · Scan to move · Benches · Code lookup ·
   Locations & labels · Number series & email · Movement record · Fees & agreement · Handheld scanner ·
-  Scanner sign-in cards). ⚠ Those names and their keywords avoid everyday words
+  Scanner sign-in cards · Output by person). ⚠ Those names and their keywords avoid everyday words
   ("find", "move", "receipts", "bench", "settings") on purpose: the Help box refuses a question that
   matches a tool the asker can't open, and a cataloguer asking "where do I find…" must never be told
   Goods In isn't part of their Hub.
@@ -2257,6 +2257,109 @@ the Hub**, not a separate build.
     the scanner or the card, never bare "sign in" or "qr code".
 - Registered in `lib/help-map.ts` as **"Goods In → Handheld scanner"** — never plain "Scanner", which
   would refuse a cataloguer whose tablet "scanner isn't working" with Goods In.
+
+### 📊 Goods In → Reports: what each warehouse person does, per day (2026-10-20)
+
+Jack: *"I need a tracking page inside of the warehouse called Reports which counts how many scans each
+user does per day etc — some nice user tracking like what the cataloguers have."*
+`/tools/warehouse/reports` (until now a redirect to History), with a page per person at
+`/tools/warehouse/reports/<userId>`: range buttons (Today · Yesterday · 7 days · 30 days · 90 days ·
+6 months · 1 year, or a From/To), summary tiles, a per-person table, charts, a CSV export, and each
+person's day-by-day figures, hours and latest activity. The numbers are ONE module,
+`lib/goods-in/reports.ts` (`parseRange`, `warehouseReport`, `personActivity`, `REPORT_DEFINITIONS`) —
+change a definition there, never in a page.
+
+- **Read-only, from what Goods In already records.** No new table or column, nothing written, nothing
+  sent to or read from Business Central.
+- ⚠⚠ **Who sees what, decided on the server** (`getGoodsInUser` + `atLeast`): a Warehouse **manager
+  or admin** sees everyone; a **warehouse**-tier person sees only their OWN numbers — the same page,
+  with the report ASKED FOR with their id only (`onlyUserId`), so nobody else's name or figures ever
+  reach their browser — and the per-person page refuses anyone else's id. Filter in the query, never
+  by hiding rows on the screen.
+- **What counts** (the page's "What the numbers mean" fold-out shows `REPORT_DEFINITIONS`):
+  - **Scans** — `GoodsInScanEvent` rows (the handheld scanner) by `userId`, on the day of `scannedAt`;
+    **Refused** (outcome refused), **Overtaken** (stale), **Sent late** (reached the Hub more than 5
+    minutes after it was scanned — made with no Wi-Fi); **Scanners used** = distinct `deviceId`.
+  - **Moves** — `GoodsInMovement` rows by `movedById`, from every screen, on the day of `movedAt`:
+    **Put away** (a tote or pallet to a `storage` or `other` location, one with no kind, or one since
+    removed), **To bench**, **Lots shelved** (any move with a `lotId`), **Moved in bulk** (the note
+    starts "Moved everything from" — counted in Moves as well). The kind is the location's kind NOW
+    (`GoodsInLocation`); a move doesn't store it.
+  - **Check-ins** — receipts booked in (not `draft`, not `void`) by `createdById`, on the day of
+    `createdAt` (Book in's time), with the **totes and pallets booked** on them. A receipt voided
+    later drops out.
+  - **First / last** and the **busiest hour** are over moves, scans and check-ins.
+  - ⚠ **A scan that moved something is in BOTH Scans and Moves** (the scanner writes its move under
+    the same person, stamped with the scan's time) — they are separate measures, so never add them up
+    as one "total". The busiest hour, the hour-of-day counts and the activity list count it ONCE, as
+    its move: an applied scan adds nothing to the hour counts, and the activity list shows only the
+    refused and overtaken scans, marking a move made on the scanner "handheld scanner".
+  - Grouped by **user id, never by name**. The name shown is the one stored on their latest activity,
+    else the User table's. A row with no person id isn't counted.
+- ⚠ **London days and hours, worked out in SQL**: `("col" AT TIME ZONE 'UTC') AT TIME ZONE
+  'Europe/London'` on the UTC `timestamp(3)` columns; range bounds are London midnights
+  (`londonDayStart`) sent as plain UTC timestamps, so the WHERE compares the bare columns. ⚠ Never bucket
+  these columns with a single `AT TIME ZONE 'Europe/London'`: on a timestamp WITHOUT time zone that
+  reads the UTC value as if it were London time, so through BST every time lands an hour early
+  instead of an hour late, and work just after midnight falls on the day before.
+- **One grouped query per report** — a UNION ALL of the three sources with GROUPING SETS (person ×
+  day, person × hour of day, person) — plus one for the activity list. Never a query per person or
+  per day; parameterised throughout.
+- ⚠ **Tolerant of missing tables.** `GoodsInScanEvent` exists only after Run Migrations: the report
+  checks with `to_regclass` first and leaves a missing source out — its counts are 0 and it is named
+  in `missing`, so the page can say so rather than show a quiet zero. Any other database fault throws,
+  and the page says so.
+- **Ranges are in the URL** — `?range=today|yesterday|7d|30d|90d|6m|1y`, or `?range=custom&from=&to=`
+  (London days, both ends included). The default, and the answer to anything unreadable, is the last
+  7 days; a custom range is tidied (swapped, kept to today, at most about three years).
+- ⚠ **The per-day chart draws Moves, Scans and Check-ins SIDE BY SIDE, never stacked.** Every scan
+  that moved something is also a move, so a stack counted each scanner move twice and made a day on
+  the handheld look twice as busy as the same work on Scan to move. **No chart may stack Scans on
+  top of Moves, or add them into one total.** Three bars a day get thin, so up to 45 days it is a
+  group a day, up to 200 days a group a week (weeks start on Monday), and beyond that a month
+  (`day-points.ts`); the part-weeks and part-months at each end count only the days picked, and the
+  chart says which it is. A one-day range has no per-day chart (the hour strip covers it). The same
+  figures are always in "Show these figures as a table".
+- **"Moves a day" / "Scans a day"** in the per-person table and its CSV are the total ÷ Days active
+  (one decimal place), shown when the range is more than one day; first and last times only when it
+  is one day.
+- ⚠⚠ **A warehouse-tier person who opens someone else's per-person page is refused BEFORE that id is
+  read** — the refusal names nobody, doesn't say whether the id exists, and links to their own
+  page. Their activity list also takes the name out of an overtaken scan's message (it names whoever
+  moved the item since — `personActivity(…, { hideOtherNames })`); a manager or admin sees it as
+  stored.
+- The per-person page is a 404 only for an id with no Hub account AND nothing ever on record in
+  Goods In (`personOnRecord`), and only when both reads worked: a former member of staff whose
+  account has gone still has a page ("nothing recorded" for a quiet range), and a read that failed
+  falls back to "This person" rather than calling a real person's page missing.
+- **The CSVs are made in the BROWSER from what the page already holds** (`reports/export.ts`) —
+  there is no export route, so there is no second door round the warehouse-tier filter. ⚠ If a
+  server export is ever added it must apply the same filter. Every cell through `csvCell`, a UTF-8
+  byte-order mark (written as the escape `"\uFEFF"`), Windows line endings, London days as
+  YYYY-MM-DD and London times.
+- **The pages write NOTHING** — not even an Access Log row. (The Goods In layout still logs anyone
+  turned away from the section; a refused per-person page is not logged.)
+- **Every fault is an error on the page.** Neither page has a "not set up yet" branch — a missing
+  table arrives as `missing` (the amber Run Migrations note), so a "does not exist" that throws is a
+  real fault and is shown and logged. ⚠ The module's `isMissingRelation` tolerates a missing TABLE
+  only (42P01 / P2021), never a missing column: every column it reads was in its table's first
+  CREATE TABLE, so a missing column can only be a bug and must not look like "needs Run Migrations".
+- **Loading screens** (`reports/loading.tsx`, `reports/[userId]/loading.tsx`) say the figures are
+  being worked out while a range or a person opens — without them a long range left the old figures
+  up as if the tap had done nothing. Keep them.
+- **Speed.** The report reads by date range through `GoodsInReceipt(createdAt)`,
+  `GoodsInMovement(movedAt)` and `GoodsInScanEvent(scannedAt)` indexes (the last two added 2026-10-20,
+  migration `20261020120000_goods_in_report_indexes` — until Run Migrations it still works, it just
+  reads those tables whole). The scan reads also add an always-true `receivedAt` bound (with a day's
+  margin for clock difference — never tighten it) so the `(userId, receivedAt)` index narrows a
+  one-person read.
+- **It is staff monitoring.** It is on the staff-monitoring lists in Admin → Data & Compliance and
+  the DPIA. Keep it to work activity, and keep the warehouse-tier filter.
+- Registered in `lib/help-map.ts` as **"Goods In → Output by person"** — never "Reports" or
+  "Warehouse reports" as the name: a name part scores as a word, and a BC Reports or Cataloguing
+  Reports user asking for "the reports" must not be refused with Goods In. Its keywords name Goods
+  In, the handheld or the warehouse's people — no bare "warehouse report" or "warehouse tracking",
+  which a BC Warehouse user could ask about their own screens.
 
 ---
 ## 👥 Customers — the Hub's own customer database (2026-10-20)

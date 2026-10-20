@@ -299,6 +299,27 @@ export const DESTINATIONS: Destination[] = [
     what: "Every move of a Goods In tote, pallet or lot — from where to where, who moved it and when — filterable by item, location and day. The page is called History in the Goods In menu.",
     also: ["goods in history", "goods in moves", "goods in movements", "goods in movement history", "moved in goods in"],
   },
+  // Goods In → Reports, the warehouse's per-person figures (2026-10-20). ⚠ Named "Output by person",
+  // never "Reports" or "Warehouse reports": a name part scores the moment it appears as a word, so a
+  // BC Reports or Cataloguing Reports user asking "where are the reports?" would be refused with
+  // Goods In. For the same reason there is no bare "warehouse report(s)" or "warehouse tracking"
+  // keyword — a BC Warehouse user asking for "the warehouse report" on unsold items, or "warehouse
+  // tracking" of where an item is, must not be refused with Goods In. Every keyword names Goods In,
+  // the handheld, or the warehouse's PEOPLE with what is counted; never bare "reports", "scans",
+  // "performance" or "per cataloguer" (Cataloguing Reports owns those two). No `ask`, so the Goods In
+  // suggestions stay as they were. The `what` line says the menu calls it Reports, so the answer can
+  // point a Goods In user to the right word.
+  {
+    name: "Goods In → Output by person", href: "/tools/warehouse/reports", app: "WAREHOUSE",
+    what: "How much each person in Goods In has done over a period (today, yesterday, the last 7, 30 or 90 days, 6 months, a year, or any From/To) — handheld scans (with how many were refused, overtaken by someone else's move, or sent late after being made with no Wi-Fi), moves (put away, taken to a bench, lots shelved, moved in bulk) and check-ins with the totes and pallets booked, per day, with each person's first and last time on a day and their busiest hour. Charts, a table that sorts by any column, a CSV export, and a page per person with their day-by-day figures, the hours they work and their latest activity. Warehouse managers and admins see everyone; everyone else sees only their own numbers. The page is called Reports in the Goods In menu. UK days and times.",
+    also: [
+      "goods in reports", "goods in report", "goods in output", "goods in tracking", "goods in scans per person",
+      "warehouse user tracking", "warehouse staff tracking", "warehouse staff output", "warehouse output per person",
+      "what warehouse are doing per user", "what the warehouse staff are doing",
+      "how many scans each", "scans per person", "scans per day", "handheld scans per person", "handheld scans per day",
+      "moves per person", "put away per person", "check ins per person",
+    ],
+  },
 
   // ── Reports & people ────────────────────────────────────────────────────────
   {

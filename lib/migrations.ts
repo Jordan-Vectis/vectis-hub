@@ -2357,6 +2357,10 @@ export const MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "GoodsInScannerPass_tokenHash_key" ON "GoodsInScannerPass"("tokenHash")`,
   `CREATE INDEX IF NOT EXISTS "GoodsInScannerPass_userId_idx" ON "GoodsInScannerPass"("userId")`,
+  // Goods In → Reports (2026-10-20): the per-person report reads moves and handheld scans by date range.
+  // Indexes only; the report works (more slowly) before they exist.
+  `CREATE INDEX IF NOT EXISTS "GoodsInMovement_movedAt_idx" ON "GoodsInMovement"("movedAt")`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInScanEvent_scannedAt_idx" ON "GoodsInScanEvent"("scannedAt")`,
   // Retired personal tables (removed 2026-10-19). Empty on production; safe to delete this line
   // once Run Migrations has been pressed there.
   `DO $$ DECLARE t text; BEGIN
