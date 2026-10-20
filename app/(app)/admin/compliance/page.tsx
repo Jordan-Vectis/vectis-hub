@@ -37,6 +37,7 @@ const MONITORING: string[] = [
   "The save check — a working-hours gap between a cataloguer's saved lots is checked when they save the next lot.",
   "Device clock / timezone tamper detection (records what a device's clock claimed vs the real time).",
   "The Lot Change Log — who changed what on every lot, and when.",
+  "Goods In → Reports — each warehouse person's output per day: moves (put away, to a bench, lots shelved), handheld-scanner scans (including refused, overtaken and sent-late scans, and which scanner) and check-ins booked, with the times of their first and last activity and their busiest hour. Read from the Goods In records already kept; managers and admins see everyone, other warehouse staff only their own.",
 ]
 
 const FLAGS: { title: string; body: string; level: "high" | "med" }[] = [

@@ -1256,6 +1256,7 @@ model GoodsInMovement {
   @@index([lotId, movedAt])
   @@index([barcode])
   @@index([locationCode])
+  @@index([movedAt])
 }
 
 /// The next number for receipts, totes, pallets and vendors. Taken one at a time with a single
@@ -1301,6 +1302,7 @@ model GoodsInScanEvent {
 
   @@index([userId, receivedAt])
   @@index([deviceId, receivedAt])
+  @@index([scannedAt])
 }
 
 /// A scanner sign-in card: a QR code a warehouse worker scans to sign in to the handheld scanner
