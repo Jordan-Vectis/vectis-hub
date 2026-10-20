@@ -1,22 +1,24 @@
 import { LOCATION_KINDS, normaliseCode, type LocationKind } from "./model"
 
 // Reading and making Goods In location codes. Pure functions only — safe on the server and in the
-// browser. The warehouse's own list (lib/warehouse-locations.json, 1,946 codes) follows a few
-// patterns, and the Locations screen filters on them:
+// browser. The warehouse's full list (lib/goods-in/location-list.json, 3,920 codes from its own
+// spreadsheet, 2026-10-20) follows a few patterns, and the Locations screen filters on them:
 //
-//   A10A1    Aisle 10, Bay A, Shelf 1     A{aisle}{bay letter}{shelf number}   (1,823 of them)
-//   A60A     Aisle 60, Bay A              A{aisle}{bay letter} — no shelf level  (a few)
+//   A10A1    Aisle 10, Bay A, Shelf 1     A{aisle}{bay letter}{shelf number}
+//   10A1     Aisle 10, Bay A, Shelf 1     the same without the A — the list has both forms
+//   11A1A    Aisle 11, Bay A, Shelf 1A    a half-shelf: shelf number + A/B
+//   A60A     Aisle 60, Bay A              {aisle}{bay letter} — no shelf level  (a few)
 //   BENCH3   Bench 3                      BENCH{number}                          (64)
 //   CAB5E    Cabinet 5, Shelf E           CAB{cabinet}{shelf letter}             (36)
-//   anything else — RETURNED, DISPOSAL, CHECK-IN, MELOFFICE, ARCHIVE… — is a "named area".
+//   anything else — CAGE0001, RETURNED, DISPOSAL, CHECK-IN, ADMIN_OFF, ARCHIVE… — is a "named area".
 //
 // ⚠ ARCHIVE starts with A but has no digits after it, so it is a named area, not an aisle.
 // ⚠ Codes are stored normalised (normaliseCode: spaces removed, upper case) — "MEL OFFICE" on the
 //   warehouse's list is MELOFFICE here.
 
-/** What a location code may be: letters and numbers (and - / .), up to 24 characters, no spaces. */
-export const LOCATION_CODE_RULE = /^[A-Z0-9][A-Z0-9\-/.]{0,23}$/
-export const LOCATION_CODE_HELP = "A location code is letters and numbers (and - / .), up to 24 characters, with no spaces."
+/** What a location code may be: letters and numbers (and - _ / .), up to 24 characters, no spaces. */
+export const LOCATION_CODE_RULE = /^[A-Z0-9][A-Z0-9_\-/.]{0,23}$/
+export const LOCATION_CODE_HELP = "A location code is letters and numbers (and - _ / .), up to 24 characters, with no spaces."
 
 /** The most locations one bulk add, change or remove may touch at once. */
 export const MAX_BULK_LOCATIONS = 2000
@@ -24,7 +26,7 @@ export const MAX_BULK_LOCATIONS = 2000
 export type LocationArea = "aisle" | "bench" | "cabinet" | "named"
 
 export const LOCATION_AREAS: { value: LocationArea; label: string; help: string }[] = [
-  { value: "aisle", label: "Aisles", help: "Racking — A10A1 is Aisle 10, Bay A, Shelf 1." },
+  { value: "aisle", label: "Aisles", help: "Racking — A10A1 (or 10A1) is Aisle 10, Bay A, Shelf 1; 11A1A is half-shelf 1A." },
   { value: "bench", label: "Benches", help: "BENCH1, BENCH2… — the numbered cataloguing benches." },
   { value: "cabinet", label: "Cabinets", help: "CAB5E is Cabinet 5, Shelf E." },
   { value: "named", label: "Named areas", help: "Everything else — Returned, Disposal, Check in, offices…" },
@@ -36,7 +38,7 @@ export type CodeParts = {
   aisle: number | null
   /** Bay letter for A10A1-style codes. */
   bay: string | null
-  /** Shelf level: "1"–"7" on aisles, "A"–"F" in cabinets; null when the code has none. */
+  /** Shelf level: "1"–"7" on aisles ("1A"/"1B" for a half-shelf), "A"–"F" in cabinets; null when the code has none. */
   shelf: string | null
   /** Bench number for BENCH3. */
   bench: number | null
@@ -44,7 +46,9 @@ export type CodeParts = {
   cabinet: number | null
 }
 
-const AISLE = /^A(\d{1,3})([A-Z])(\d{1,2})?$/
+// The A is optional (the warehouse's list has A10A1 and 10A1 for the same shelf) and a shelf may
+// carry a half-shelf letter (11A1A). ⚠ ARCHIVE still isn't an aisle: digits must follow the A.
+const AISLE = /^A?(\d{1,3})([A-Z])(?:(\d{1,2})([A-Z])?)?$/
 const BENCH = /^BENCH(\d{1,4})$/
 const CABINET = /^CAB(\d{1,3})([A-Z])?$/
 
@@ -53,7 +57,7 @@ export function parseLocationCode(raw: string): CodeParts {
   const code = normaliseCode(raw)
   const none = { aisle: null, bay: null, shelf: null, bench: null, cabinet: null }
   let m = code.match(AISLE)
-  if (m) return { ...none, area: "aisle", aisle: Number(m[1]), bay: m[2], shelf: m[3] ? String(Number(m[3])) : null }
+  if (m) return { ...none, area: "aisle", aisle: Number(m[1]), bay: m[2], shelf: m[3] ? String(Number(m[3])) + (m[4] ?? "") : null }
   m = code.match(BENCH)
   if (m) return { ...none, area: "bench", bench: Number(m[1]) }
   m = code.match(CABINET)

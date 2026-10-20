@@ -1936,7 +1936,14 @@ the same way, never as an export of an actions file.
   - **Adding in bulk never changes an existing location** (`createLocations`, behind Add a range and
     Paste a list) — a code that's already there is reported as already there and left exactly as it
     is. Every way in (single edit, bulk add, the warehouse's list) checks codes with
-    `LOCATION_CODE_RULE`.
+    `LOCATION_CODE_RULE` (letters, numbers and `- _ / .`, up to 24).
+  - **"Import the warehouse's location list" reads `lib/goods-in/location-list.json`** — the full
+    3,920-code list from the warehouse's own spreadsheet (Jack, 2026-10-20): aisles in both the
+    A10A1 and 10A1 forms (780 pairs name the same shelf — both are kept because both are in use),
+    half-shelves (11A1A/11A1B), cages, benches and named areas. ⚠ It is Goods In's own copy:
+    `lib/warehouse-locations.json` (1,946 codes) feeds the BC warehouse heat-maps and must not be
+    swapped for it. To refresh, rebuild location-list.json from a new export (Code, Name,
+    Cataloguing Bench) and press Import again — it only adds codes that are missing.
   - **Move everything** (`moveEverything`) empties a location into another: every tote and pallet
     there (not returned) and every lot whose latest move is there, one movement each noted "Moved
     everything from …", all in one transaction. Status follows `moveTo`'s rule (catalogued and returned

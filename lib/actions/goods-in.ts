@@ -432,15 +432,18 @@ export async function moveTo(rawItem: string, rawLocation: string, note?: string
 }
 
 /**
- * Fill Goods In's locations from the warehouse's own location list (lib/warehouse-locations.json —
- * every aisle, bay, shelf and bench code, BENCH codes marked as benches). Adds the missing ones
- * only; a location already here keeps its name, kind and on/off setting. A static file in the repo
- * — nothing is asked of Business Central.
+ * Fill Goods In's locations from the warehouse's full location list (lib/goods-in/location-list.json —
+ * 3,920 codes from the warehouse's own spreadsheet, Jack 2026-10-20: every aisle, bay, shelf and
+ * half-shelf in both the A10A1 and 10A1 forms, cages, benches and named areas; cataloguing benches
+ * marked). Adds the missing ones only; a location already here keeps its name, kind and on/off
+ * setting. A static file in the repo — nothing is asked of Business Central.
+ * ⚠ Goods In's own copy on purpose: lib/warehouse-locations.json feeds the BC warehouse heat-maps
+ * and stays as it was. To refresh this list, rebuild the JSON from a new spreadsheet export.
  */
 export async function importLocationList(): Promise<Result<{ added: number; already: number }>> {
   try {
     await who("manager")
-    const list = (await import("@/lib/warehouse-locations.json")).default as { code: string; name: string; cataloguingBench: boolean }[]
+    const list = (await import("@/lib/goods-in/location-list.json")).default as { code: string; name: string | null; cataloguingBench: boolean }[]
     const rows = list
       .map(l => ({ code: normaliseCode(l.code), name: l.name || null, kind: (l.cataloguingBench ? "bench" : "storage") as LocationKind, active: true }))
       .filter(l => LOCATION_CODE_RULE.test(l.code))

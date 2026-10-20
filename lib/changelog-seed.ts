@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-19, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-20, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"847a120a23af3a8ea13b854f6cf3623cbbc5de41","author":"Jordan Orange","date":"2026-10-20T09:18:33+01:00","subject":"Remove the Unaccounted Time report page"},
   {"sha":"45bdf86e29268bcd5359380a6f5320de15b88cdd","author":"Jordan Orange","date":"2026-10-19T16:55:51+01:00","subject":"Merge staging into main: home page sections + editor, Admin page tidy"},
   {"sha":"38b6c2504b95f1501d771c215353f8240ed0dedb","author":"Jordan Orange","date":"2026-10-19T16:25:08+01:00","subject":"Admin page: search, grouped by job, small tiles, one icon each"},
   {"sha":"f18d8c8690c8d0013f8c33d95c6c06b2e15a6a5b","author":"Jordan Orange","date":"2026-10-19T16:03:39+01:00","subject":"Home page: every row of cards the same height"},
