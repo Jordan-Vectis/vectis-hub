@@ -153,7 +153,7 @@ async function List(sp: Search) {
 // What needs tidying before anything depends on this data. Every figure links to the people behind it.
 async function DataCheck() {
   const notBlank = (f: "email" | "postCode") => ({ AND: [{ [f]: { not: null } }, { NOT: { [f]: "" } }] })
-  const [total, sellers, buyers, both, web, noEmail, noPostcode, blocked, orphanAddr, dupEmails] = await Promise.all([
+  const [total, sellers, buyers, both, web, noEmail, noPostcode, blocked, orphanAddr, dupEmails, dupTotals] = await Promise.all([
     prisma.customer.count(),
     prisma.customer.count({ where: { vendorNo: { not: null } } }),
     prisma.customer.count({ where: { buyerNo: { not: null } } }),
@@ -165,8 +165,12 @@ async function DataCheck() {
     prisma.customerShipTo.count({ where: { customerId: null } }),
     prisma.$queryRawUnsafe<{ email: string; n: bigint }[]>(
       `SELECT lower(trim("email")) AS email, count(*) AS n FROM "Customer" WHERE coalesce(trim("email"), '') <> '' GROUP BY 1 HAVING count(*) > 1 ORDER BY n DESC, 1 LIMIT 200`),
+    // The true totals — the list above is only the first 200.
+    prisma.$queryRawUnsafe<{ emails: bigint; records: bigint }[]>(
+      `SELECT count(*) AS emails, coalesce(sum(n), 0) AS records FROM (SELECT count(*) AS n FROM "Customer" WHERE coalesce(trim("email"), '') <> '' GROUP BY lower(trim("email")) HAVING count(*) > 1) d`),
   ])
-  const dupPeople = dupEmails.reduce((n, d) => n + Number(d.n), 0)
+  const dupEmailCount = Number(dupTotals[0]?.emails ?? 0)
+  const dupPeople = Number(dupTotals[0]?.records ?? 0)
   const Tile = ({ label, value, href, warn }: { label: string; value: number; href?: string; warn?: boolean }) => {
     const inner = (
       <>
@@ -191,7 +195,7 @@ async function DataCheck() {
       <div>
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">To tidy (amber = something to look at)</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <Tile label="Emails shared by more than one record" value={dupEmails.length} warn />
+          <Tile label="Emails shared by more than one record" value={dupEmailCount} warn />
           <Tile label="Records involved in those" value={dupPeople} warn />
           <Tile label="No email address" value={noEmail} warn />
           <Tile label="No postcode" value={noPostcode} warn />
@@ -202,7 +206,7 @@ async function DataCheck() {
       {dupEmails.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Likely duplicates — the same email on more than one record</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Often the same person with two BC accounts, or a couple sharing an inbox. Open one to see the records side by side.{dupEmails.length === 200 ? " Showing the first 200." : ""}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Often the same person with two BC accounts, or a couple sharing an inbox. Open one to see the records side by side.{dupEmailCount > dupEmails.length ? ` Showing the first ${dupEmails.length} of ${dupEmailCount.toLocaleString()}, most-shared first.` : ""}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
             {dupEmails.map(d => (
               <Link key={d.email} href={`/tools/customers?q=${encodeURIComponent(d.email)}`}
