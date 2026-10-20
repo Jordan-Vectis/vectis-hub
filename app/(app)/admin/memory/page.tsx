@@ -4010,7 +4010,7 @@ Reason for exclusion isn't captured (only who/when) — kept simple per the requ
     filename: "idle_gaps_detector.md",
     content: `---
 name: idle-gap-detector-tamper-proof-backstop-to-the-idle-popup
-description: /admin/unaccounted-time (was /admin/idle-gaps, URL renamed 2026-07-23) server-side unexplained-gap report (built 2026-07-20 after a cataloguer circumvented the client popup). Read before touching idle detection.
+description: REPORT PAGE REMOVED 2026-10-20 (was /admin/unaccounted-time); lib/idle-gaps.ts still feeds the save gate. Server-side unexplained-gap report (built 2026-07-20 after a cataloguer circumvented the client popup). Read before touching idle detection.
 metadata: 
   node_type: memory
   type: reference
@@ -4019,6 +4019,8 @@ metadata:
 ---
 
 # Unexplained idle gaps — server-side detector (2026-07-20, STAGING)
+
+⚠⚠ **The REPORT PAGE was REMOVED 2026-10-20** (Jordan: "This page doesnt do anything it needs removing") — /admin/unaccounted-time, its /admin/idle-gaps redirect, the Admin tile and the Activity Timer link are gone, and with it the "Save-time gate decisions" viewer. **lib/idle-gaps.ts stays**: the save gate (lib/idle-gate.ts assessGap) and the activity report still use it. Don't rebuild the page without asking.
 
 **Why:** a cataloguer (Keiran Southgate) had a ~4h working-hours gap between lot saves (09:41→13:40 on 20/07) with ZERO idle logs all day — the client idle popup was being circumvented. The exact client mechanism could NOT be pinned from static analysis + prod data (the check has fragile deps: async /api/catalogue/last-activity fetch, per-device localStorage heartbeat, and it only fires on a specific barcode-entry path). ⚠ **Do NOT re-blame the cataloguer or claim you found the client bug unless you actually reproduced it** — separate issue from the [[reference_phantom_catalogue_counts]] red herring, but the same "don't accuse without proof" discipline.
 

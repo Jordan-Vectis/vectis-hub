@@ -29,7 +29,7 @@ const DATA_CATEGORIES: { cat: string; detail: string }[] = [
   { cat: "Goods In receipts & consignment terms", detail: "What a consignor handed in (totes and pallets by category and description) and when; their vendor number, mobile, VAT registration number and the commission, fees and reserve agreed; the owner/agent declarations; and a copy of their name, address, email and phone as they were on the day. Who booked it in, where each tote has been since, and when the receipt was printed or emailed and to which address. ⚠ Bank details are never stored — the receipt carries a blank form the customer fills in by hand." },
   { cat: "Financial", detail: "Bank/card statement reconciliation records in the Accounts tool. ⚠ Full card numbers must never be stored (keeps Vectis out of PCI-DSS scope)." },
   { cat: "Staff account", detail: "Name, email, username, hashed password, role and app permissions." },
-  { cat: "Staff monitoring", detail: "Cataloguing output and timings, activity/away logging, unaccounted-time gaps, device clock/timezone tamper detection, and a full lot change log (who changed what, when). See the monitoring section below." },
+  { cat: "Staff monitoring", detail: "Cataloguing output and timings, activity/away logging, save-time gap checks, device clock/timezone tamper detection, and a full lot change log (who changed what, when). See the monitoring section below." },
   { cat: "Website usage", detail: "Google Analytics visitor/usage data — applies once the public site launches; brings cookie-consent duties." },
   { cat: "Induction records", detail: "Name, company, job title, start date, a drawn signature image, which points the person confirmed, anything they asked, and which member of staff took the record. A handwritten signature is biometric-adjacent identity data and is the strongest single identifier the Hub holds about someone with no account." },
 ]
@@ -57,7 +57,7 @@ const PROCESSORS: { name: string; what: string; data: string; transfer: string }
 const MONITORING: string[] = [
   "Cataloguing Activity reports — how long each cataloguer spends and their output.",
   "The activity / away popup and its timing thresholds.",
-  "Unaccounted Time — working-hours gaps between a cataloguer's saved lots.",
+  "The save check — a working-hours gap between a cataloguer's saved lots is checked when they save the next lot.",
   "Device clock / timezone tamper detection (records what a device's clock claimed vs the real time).",
   "The Lot Change Log — who changed what on every lot, and when.",
 ]

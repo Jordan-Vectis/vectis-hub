@@ -33,7 +33,7 @@ const PROCESSORS: { name: string; what: string; data: string }[] = [
 const MONITORING: string[] = [
   "Cataloguing Activity reports — how long each cataloguer spends and their output.",
   "The activity / away popup and its timing thresholds.",
-  "Unaccounted Time — working-hours gaps between a cataloguer's saved lots.",
+  "The save check — a working-hours gap between a cataloguer's saved lots is checked when they save the next lot.",
   "Device clock / timezone tamper detection (records what a device's clock claimed vs the real time).",
   "The Lot Change Log — who changed what on every lot, and when.",
 ]

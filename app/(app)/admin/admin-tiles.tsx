@@ -34,15 +34,9 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    label: "Cataloguer time", icon: "⏱️", colour: "#8b5cf6",
-    tiles: [
-      { href: "/admin/activity-timer",   label: "Activity Timer",   icon: "⏱️", short: "The activity popup's reasons and timings", description: "Configure the activity popup — add or remove reasons, change wording, set timing thresholds." },
-      { href: "/admin/unaccounted-time", label: "Unaccounted Time", icon: "🕵️", short: "Gaps nobody gave a reason for", description: "Working-hours gaps between a cataloguer's lot saves that were never accounted for with an activity reason — the tamper-proof backstop to the popup." },
-    ],
-  },
-  {
     label: "Cataloguing setup & records", icon: "🏷️", colour: "#10b981",
     tiles: [
+      { href: "/admin/activity-timer",     label: "Activity Timer",         icon: "⏱️", short: "The activity popup's reasons and timings", description: "Configure the activity popup — add or remove reasons, change wording, set timing thresholds." },
       { href: "/admin/categories",         label: "Cataloguing Categories", icon: "🏷️", short: "Categories and subcategories", description: "Add, rename, reorder or remove the categories and subcategories cataloguers pick from when entering lots." },
       { href: "/admin/condition-wording",  label: "Condition Wording",      icon: "📦", short: "Box and packaging wording presets", description: "Manage the box/packaging wording presets (e.g. \"Box is\", \"Carded Back is\") used in the separate condition." },
       { href: "/admin/lot-log",            label: "Lot Change Log",         icon: "📋", short: "Every change to every lot", description: "Full audit trail of every field changed on every lot — who changed what, when, and what it was before." },
