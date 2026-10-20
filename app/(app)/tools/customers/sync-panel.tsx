@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CUSTOMER_PHASES, PHASE_LABEL, type CustomerPhase } from "@/lib/customer-sync-phases"
 
@@ -20,13 +20,23 @@ export default function SyncPanel({ lastRun }: { lastRun: string | null }) {
   const [probe, setProbe] = useState<any>(null)
   const [probing, setProbing] = useState(false)
   const busy = useRef(false)
+  // A heartbeat while it runs: one batch of up to 500 takes ~15 s, so the counts alone sit still long
+  // enough to look frozen. This says how many batches are done and how long since the last one.
+  const [batches, setBatches] = useState(0)
+  const [lastAt, setLastAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [running])
   const stop = useRef(false)
 
   async function run() {
     if (busy.current) return
     busy.current = true
     stop.current = false
-    setRunning(true); setResult(null); setFirstError(null); setTally({})
+    setRunning(true); setResult(null); setFirstError(null); setTally({}); setBatches(0); setLastAt(Date.now())
     let p: CustomerPhase | null = "contacts"
     let next: string | null = null
     const t: Record<string, Tally> = {}
@@ -41,6 +51,8 @@ export default function SyncPanel({ lastRun }: { lastRun: string | null }) {
         for (const k of Object.keys(ZERO) as (keyof Tally)[]) cur[k] += d[k] ?? 0
         t[p] = cur
         setTally({ ...t })
+        setBatches(b => b + 1)
+        setLastAt(Date.now())
         if (d.firstError) setFirstError(f => f ?? d.firstError)
         p = d.nextPhase ?? null
         next = d.nextLink ?? null
@@ -104,6 +116,18 @@ export default function SyncPanel({ lastRun }: { lastRun: string | null }) {
           })}
         </div>
       )}
+
+      {running && lastAt && (() => {
+        const secs = Math.max(0, Math.round((now - lastAt) / 1000))
+        return (
+          <p className={`text-xs ${secs > 90 ? "text-amber-600 dark:text-amber-400" : "text-gray-600 dark:text-gray-300"}`}>
+            <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse mr-1.5 align-middle" />
+            {batches.toLocaleString()} batches done · last batch {secs}s ago (each batch of up to 500 takes about 15 seconds)
+            {secs > 90 ? " — this one is taking unusually long; it may have stalled. Stop and run it again if it doesn't move." : ""}
+            {" "}The figures further down this page update when the copy finishes.
+          </p>
+        )
+      })()}
 
       {result && <p className={`text-sm ${result.ok ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}>{result.text}</p>}
       {firstError && <p className="text-xs text-red-600 dark:text-red-400">First failed row: {firstError}</p>}
