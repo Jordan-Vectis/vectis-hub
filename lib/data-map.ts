@@ -54,6 +54,8 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "Device", personal: "staff", what: "The tablets and scanners: serial number, type, MAC address and who has it." },
       { model: "Packer", personal: "staff", what: "The packing staff list — full time, agency or ex-staff — with the name aliases their labels come through under." },
       { model: "AppCard", what: "The Hub's app cards: order, label, description, and whether each is visible or pinned." },
+      { model: "Customer", what: "The Hub's own customer database: one row per person (seller, buyer or both) with their contact details and buyer settings, copied every night from Business Central, plus everything BC sent about them. No bank details." },
+      { model: "CustomerShipTo", what: "Delivery addresses a buyer has on file, copied from Business Central." },
       { model: "HomePageLayout", what: "How the Hub home page is laid out for everyone: the sections and their order, names, icons and colours, and which section each app card sits in." },
       { model: "Announcement", what: "The site-wide banner message and how loudly it is shown." },
       { model: "AppReload", what: "A one-line token that tells open tabs to reload themselves after a release." },

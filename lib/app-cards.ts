@@ -33,16 +33,18 @@ export type AppCardDef = {
 export const APP_CARD_DEFS: AppCardDef[] = [
   {
     key:                "CUSTOMERS",
-    href:               "/contacts",
+    href:               "/tools/customers",
     defaultLabel:       "Customers",
-    defaultDescription: "Unified customer database — view seller history, buyer activity, and contact details in one place.",
+    defaultDescription: "Everyone who sells or buys with Vectis — one record per person, with what they've consigned. Copied from Business Central every night.",
     icon:               "👥",
     border:             "border-green-500",
     iconBg:             "text-green-400",
     btnBg:              "bg-green-600 hover:bg-green-500",
     glow:               "hover:shadow-green-900/40",
     group:              "OPERATIONS",
-    allUsers:           true,
+    // Every customer's personal details — its own permission, not open to everyone like the test
+    // Contacts page it replaced (2026-10-20).
+    appKey:             "CUSTOMERS",
   },
   {
     key:                "CRM",

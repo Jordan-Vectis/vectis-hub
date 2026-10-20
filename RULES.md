@@ -2257,3 +2257,36 @@ the Hub**, not a separate build.
     the scanner or the card, never bare "sign in" or "qr code".
 - Registered in `lib/help-map.ts` as **"Goods In → Handheld scanner"** — never plain "Scanner", which
   would refuse a cataloguer whose tablet "scanner isn't working" with Goods In.
+
+---
+## 👥 Customers — the Hub's own customer database (2026-10-20)
+
+The first step of the Hub taking over the whole business from Business Central (Jordan, 2026-10-20 —
+*"we are now starting to plan for the hub taking over the entire business"*). `/tools/customers`,
+the Customers card in Admin & Operations, its own app permission **`CUSTOMERS`** (admins
+automatically; anyone else is ticked in Users & Permissions). The old test Contacts page (`/contacts`)
+redirects here; the `Contact` table itself stays — Submissions use it.
+
+- **One row per PERSON** (`Customer`): seller (`vendorNo`, BC's C…), buyer (`buyerNo`) or both,
+  keyed on BC's contact number — the same shape BC uses (a Contact linked to a Vendor and/or a
+  Customer). Delivery addresses are `CustomerShipTo`. **NEEDS Run Migrations**; until then the page
+  says so and the copy refuses to start.
+- **Filled from BC every night** (`lib/customer-sync.ts`, `POST /api/customers/sync`, run as a stage
+  of the 5am FULL BC copy in `/api/cron/bc-warehouse`, and by the admin-only **Copy customers now**
+  button). Five read-only Evo feeds under `api/evo/base/v1.0` — `contacts`, `vendors`, `customers`,
+  `webCustomers`, `shipToAddresses` (AL pages 75609/75608/75607/75615/75627 in Evo-auction Base) — one
+  page per call, the caller drives the loop (design rule 7b).
+- ⚠ **BC is in charge until switch day:** every column that came from BC is overwritten on the next
+  copy, so nothing is edited in the Hub yet. The contact owns the person's details; a seller or buyer
+  feed only fills gaps (`gapsOnly`). Every field each feed sent is kept whole in `bcContact` /
+  `bcVendor` / `bcBuyer` / `bcWeb` (Jordan: keep everything, "better to have it than not").
+- **`attachAccount` puts a seller/buyer number on ONE row**: its contact's row if BC links one, else
+  the row already holding the number, else a new row. A number found on a different row from its
+  contact's is moved, and a stub that held nothing else is deleted. Proven against a fake database
+  (stub merge, BC moving a seller to another contact, gap filling) before shipping.
+- ⚠ **The Evo feeds don't carry the seller's commission terms, the "never charge" settings or the ID /
+  anti-money-laundering checks.** "What does BC publish?" on the page lists every published BC page
+  about customers so the next feed can be chosen from fact, not guessed.
+- ⚠ **Bank details are never stored** (they go to Sage), same rule as Goods In.
+- **Data check** tab: counts, likely duplicates (same email on several records), missing email /
+  postcode, delivery addresses with no buyer here — the tidying to do before anything depends on it.

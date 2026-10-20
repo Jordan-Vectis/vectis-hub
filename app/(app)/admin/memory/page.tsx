@@ -4007,6 +4007,37 @@ Reason for exclusion isn't captured (only who/when) — kept simple per the requ
 \`/tools/reports/[userId]/page.tsx\` used to key the display name AND its \`notFound()\` off a timing log: \`const anyLog = catalogueTimingLog.findFirst({where:{userId}}); if (!anyLog) notFound()\`. But the **overview list unions timing-log AND research-log users** (\`ids = new Set([...timingRows, ...researchRows])\`, comment "research-only users still appear"), so someone with \`ResearchLog\` rows but **zero \`CatalogueTimingLog\`** appeared in the list and 404'd when clicked. Fix: resolve \`userName\` from the **\`User\` record** (\`user.findUnique({where:{id:userId}})\`) with fallbacks to \`rawLogs[0]/researchLogs[0]/idleLogs[0].userName\`, and only \`notFound()\` when the name is genuinely unresolvable (bad/stale URL) — never on "no lots in range" (the page already has empty-state cards). ⚠ Don't reintroduce the timing-log-only gate. Note this surfaced right after a prod deploy so it *looked* like deploy skew (which the same click also threw), but it was a real latent bug — a hard refresh did NOT clear it.`,
   },
   {
+    filename: "project_replace_bc.md",
+    content: `---
+name: project-replace-bc
+description: "The Hub is to take over the WHOLE business from Business Central (planning started 2026-10-20); finance goes to Sage or similar, not a home-made ledger; existing customer/receipt builds were tests only."
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: 0451a74a-15c6-4117-bb0a-374cbf0af74b
+  modified: 2026-10-20T10:28:25.727Z
+---
+
+Jordan, 2026-10-20: "we need to obviously remove the BC parts of the app and make our own" and "we are now starting to plan for the hub taking over the entire business".
+
+- **Finance** (ledger, VAT, payments) is going to **Sage or another external package** — the Hub feeds it, never builds its own ledger.
+- **The customer and receipt screens already built were only tests** ("we dont use they were just made as a test") — don't treat them as the foundation to extend without asking what stays. Confirmed 2026-10-20: Goods In (check-in, receipts, totes) and the older Contacts / Internal Warehouse pages are test builds ("most the ones you said are correct"; "you can tell from which parts have a substantial amount of data"). ⚠ The \`Contact\` table also backs Submissions, which IS used — don't drop it with the tests.
+- **No single cut-over** — goods arrive and customers need accounts every day, and goods-in → settled takes MONTHS. Proposed (2026-10-20): customers mirrored into the Hub first; from a start date (one department as pilot) new goods are booked into the Hub and their sales run wholly on the Hub + new website; sales already in BC finish there; BC stock not yet in a sale can be READ across into the Hub to shorten the overlap. Lots go into a BC sale only ~2 weeks ahead, so a department's staff overlap is ~2–3 weeks (its last BC sales); BC finance runs on until those sales are settled.
+- Plan agreed in principle: one area at a time, cut over at a sale boundary, Hub writes back to BC while an area is being proven. Biggest unknowns: the website provider's feed (vectis.co.uk takes everything from BC) and the BC licence end date.
+- ⚠⚠ **The Hub CANNOT write into BC** (Jordan: "we cant api data in") — reading via OData only. The sole write path is the AHK macro typing into BC's screens. So no dual-write: each area is cut over cleanly, and everything downstream of it (reports, website feed) must be moving off BC FIRST.
+- **vectis.co.uk is run by a company called Auction Marketer** (2026-10-20) — a different company from the BC partner. ⚠⚠ **DECIDED: the website is being replaced too** (Jordan: "when I said everything I mean it") — the Hub takes over BC AND the customer website, customer accounts and online bidding. Don't re-pitch keeping Auction Marketer.
+- **The BC partner has locked BC down, has no file import, and is unhelpful now Vectis is leaving.** Jordan sees the **customers + website transition (all the customer accounts)** as the hardest part.
+- ⚠⚠ **No downtime, no disruption to staff** (Jordan: "we cant have a week of downtime"). Every switch is per area, per department or per sale, with BC still running behind it and a way back.
+- **Step 1 = the Hub's own customer database, filled nightly from BC (read-only).** BC models a person as a Contact linked to a Vendor (C…, seller) and/or a Customer (buyer) — the Hub matches that, keyed on BC's contact number. Field list read from the Evo AL source (Vendor 75007, Customer 75605, Contact 75056 table extensions). Jordan, 2026-10-20: **keep EVERY field, including the bespoke/obsolete ones** ("better to have it than not"); BC's running totals kept as a frozen "as BC had it" snapshot. Bank details still never stored (Sage). BC also has a Web Customer table (55307 ext) — not yet looked at.
+- The "Hub mints no unique IDs" rule ([[reference_unique_id_assignment]]) will have to be reversed deliberately when lots/numbering move over.
+
+**Why:** BC is being retired; this reshapes every BC-dependent flow ([[project_hub_workflow]], [[reference_end_of_day_bc]], [[reference_bc_macro_ahk]]).
+**How to apply:** plan by business area, ask before building on the test screens, and route money to Sage.
+
+**Built 2026-10-20 (staging):** the Customer + CustomerShipTo tables, the nightly copy (5am FULL BC copy stage + admin "Copy customers now"), /tools/customers (list, person page linked to their BC receipts/totes/lots, Data check tab), own CUSTOMERS permission; /contacts redirects there. NEEDS Run Migrations. The Evo feeds lack commission terms / never-charge flags / ID checks — "What does BC publish?" lists the other published pages; that's the next feed decision. Details in RULES.md "👥 Customers".
+`,
+  },
+  {
     filename: "idle_gaps_detector.md",
     content: `---
 name: idle-gap-detector-tamper-proof-backstop-to-the-idle-popup

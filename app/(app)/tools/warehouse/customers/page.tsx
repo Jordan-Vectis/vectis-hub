@@ -215,8 +215,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Recently booked in</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
-                Only customers who have booked goods in are listed here. The full customer database is the CRM&apos;s{" "}
-                <Link href="/contacts" className="text-indigo-700 dark:text-indigo-300 underline">Contacts</Link> — the search above looks through all of it.
+                Only customers who have booked goods in are listed here. The search above looks through every contact.
               </p>
             </div>
           )}

@@ -1882,6 +1882,90 @@ model CatalogueLastBatch {
 // does carry a country letter code but is not auction-scoped. The sync reads the standard one
 // first for the country and falls back to Evo's; `source` records which answered, and a blank
 // country on a UK-shaped postcode is resolved to GB by the report, never by this table.
+// ── The Hub's own customer database (2026-10-20) ─────────────────────────────────────────────
+// One row per PERSON, who may be a seller (BC vendor C…), a buyer (BC customer) or both — the
+// same shape BC uses (a Contact linked to a Vendor and/or a Customer). Filled every night from BC
+// by /api/customers/sync while BC is still in charge; the Hub becomes the owner on switch day.
+// ⚠ Until then every column that came from BC is OVERWRITTEN by the next copy — don't edit them in
+// the Hub. Everything each BC feed sent is kept whole in the bc* JSON columns ("better to have it").
+// ⚠ Bank details are never stored here (they go to Sage).
+model Customer {
+  id                         String    @id @default(cuid())
+  contactNo                  String?   @unique   // BC Contact "No." — the person
+  vendorNo                   String?   @unique   // BC Vendor "No." (C…) — as a seller
+  buyerNo                    String?   @unique   // BC Customer "No." — as a buyer
+  name                       String?
+  name2                      String?
+  email                      String?
+  email2                     String?
+  phone                      String?
+  mobile                     String?
+  mobile2                    String?
+  address                    String?
+  address2                   String?
+  address3                   String?
+  city                       String?
+  county                     String?
+  postCode                   String?
+  countryCode                String?
+  vatRegNo                   String?
+  eoriNumber                 String?
+  currencyCode               String?
+  blocked                    String?   // BC's own wording ("" / "All" / "Payment"…), not a guess
+  websiteId                  String?
+  // As a buyer (Evo customer API)
+  paddleNo                   String?
+  permanentPaddleNo          String?
+  permanentBuyer             Boolean?
+  trustedBuyer               Boolean?
+  preferentialTelephoneBuyer Boolean?
+  privateTrade               String?
+  buyerPremiumDiscPct        Float?
+  doNotEmailResults          Boolean?
+  doNotChargeStdDelivery     Boolean?
+  // Everything each BC feed sent for this person, untouched
+  bcContact                  Json?
+  bcVendor                   Json?
+  bcBuyer                    Json?
+  bcWeb                      Json?
+  bcCreatedAt                DateTime?
+  bcModifiedAt               DateTime?
+  source                     String    @default("bc")   // "bc" = copied from BC; "hub" = made in the Hub
+  syncedAt                   DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @default(now()) @updatedAt
+  shipTo                     CustomerShipTo[]
+
+  @@index([email])
+  @@index([postCode])
+  @@index([name])
+}
+
+// Delivery addresses a buyer has on file in BC (Ship-to Address).
+model CustomerShipTo {
+  id          String    @id @default(cuid())
+  bcSystemId  String    @unique
+  buyerNo     String
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  code        String?
+  name        String?
+  name2       String?
+  address     String?
+  address2    String?
+  city        String?
+  county      String?
+  postCode    String?
+  countryCode String?
+  email       String?
+  phone       String?
+  bc          Json?
+  syncedAt    DateTime  @default(now())
+
+  @@index([buyerNo])
+  @@index([customerId])
+}
+
 model BcVendor {
   id           String    @id @default(cuid())
   /// BC's vendor "No." — the C###### the receipts carry.

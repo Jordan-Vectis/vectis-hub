@@ -597,8 +597,8 @@ const APPS: App[] = [
     key: "customers",
     icon: "👥",
     name: "Customers",
-    path: "/contacts",
-    overview: "Unified customer database combining BC contact data with local submission and bidding history.",
+    path: "/tools/customers",
+    overview: "The Hub's own customer database (2026-10-20): every BC contact, seller and buyer, one record per person, copied from Business Central every night (5am) until the Hub takes over. Its own Customers permission. The old test Contacts page now redirects here; the sections below describe that old page.",
     howItWorks: [
       {
         label: "List & search",

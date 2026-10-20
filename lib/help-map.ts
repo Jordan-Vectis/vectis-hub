@@ -173,6 +173,14 @@ export const DESTINATIONS: Destination[] = [
     what: "Write marketing content from sale data — social posts, web descriptions, email lists, images.",
     also: ["social media", "marketing content", "newsletter"],
   },
+  // The Hub's own customer database (2026-10-20), copied nightly from BC. Its own permission.
+  // ⚠ Keywords stay specific ("customer database", "seller number") so a Goods In or CRM user asking
+  // about their own customer screens isn't refused with this one.
+  {
+    name: "Customers", href: "/tools/customers", app: "CUSTOMERS",
+    what: "The customer database — everyone who sells or buys with Vectis, one record per person, copied from Business Central every night. Search by name, email, postcode, phone, seller (C…) or buyer number; open someone to see their details, buyer settings, delivery addresses and the receipts and lots they've consigned. The Data check tab lists likely duplicates and missing details.",
+    also: ["customer database", "seller number", "buyer number", "customer s details", "customer s address", "customer s email", "duplicate customers", "bc customers", "bc contacts"],
+  },
 
   // ── Goods In ────────────────────────────────────────────────────────────────
   // The Hub's own check-in (2026-10-15). Gated on WAREHOUSE, the same as its Hub card. Within it,

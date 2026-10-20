@@ -261,6 +261,33 @@ async function runSync(full: boolean, secret: string): Promise<void> {
     results.auctionNames = res.ok ? { namesWritten: data.namesWritten ?? 0 } : { error: data.error ?? `HTTP ${res.status}` }
   } catch (e: any) { results.auctionNames = { error: e.message } }
 
+  // ── Customers (people, sellers, buyers, website accounts, delivery addresses) ─
+  // The Hub's own customer database, refreshed from BC until switch day. Same page-at-a-time
+  // loop as the button on the Customers page (lib/customer-sync.ts). FULL (5am) run only: it reads
+  // every customer, far too much for the 11:00 and 17:00 catch-ups.
+  if (full) {
+    let phase: string | null = "contacts", next: string | null = null, pages = 0
+    const totals = { rows: 0, created: 0, failed: 0 }
+    while (phase && pages < 2000) {
+      try {
+        const res: Response = await fetch(`${base}/api/customers/sync`, {
+          method: "POST", headers, body: JSON.stringify({ phase, nextLink: next }),
+        })
+        const data: any = await res.json().catch(() => ({}))
+        if (!res.ok) { results.customers = { ...totals, error: data.error ?? `HTTP ${res.status}`, phase }; break }
+        totals.rows += data.rows ?? 0
+        totals.created += data.created ?? 0
+        totals.failed += data.failed ?? 0
+        phase = data.nextPhase ?? null
+        next = data.nextLink ?? null
+        pages++
+      } catch (e: any) { results.customers = { ...totals, error: e.message, phase }; break }
+    }
+    if (!results.customers) results.customers = { ...totals, pages }
+  } else {
+    results.customers = { skipped: "only on the 5am full copy" }
+  }
+
   // ── Remove records deleted in BC ────────────────────────────────────────────
   // The stages above are upsert-only, so a row deleted in BC would otherwise live in the
   // cache forever (the R008537 ghosts). Checks suspect receipts against LIVE BC; deletes
