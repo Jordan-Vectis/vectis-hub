@@ -56,6 +56,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "AppCard", what: "The Hub's app cards: order, label, description, and whether each is visible or pinned." },
       { model: "Customer", what: "The Hub's own customer database: one row per person (seller, buyer or both) with their contact details and buyer settings, copied every night from Business Central, plus everything BC sent about them. No bank details." },
       { model: "CustomerBcCard", what: "Business Central's contact card and vendor card for each customer, kept whole: ID and anti-money-laundering checks, approvals, date of birth, nationality, and the seller's commission terms. Bank details are removed before storing." },
+      { model: "CustomerSyncState", what: "How far each stage of the nightly customer copy from Business Central has got, so it can copy only what changed and carry on after a stop. No personal data." },
       { model: "CustomerShipTo", what: "Delivery addresses a buyer has on file, copied from Business Central." },
       { model: "HomePageLayout", what: "How the Hub home page is laid out for everyone: the sections and their order, names, icons and colours, and which section each app card sits in." },
       { model: "Announcement", what: "The site-wide banner message and how loudly it is shown." },

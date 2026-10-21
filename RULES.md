@@ -2499,6 +2499,16 @@ redirects here; the `Contact` table itself stays — Submissions use it.
   who isn't an auction seller is skipped. Kept whole in **`CustomerBcCard`** — its own table, so the
   copy and the pages work before Run Migrations. ⚠ `noBank()` drops every field whose name mentions a
   bank before storing. The person page shows the main fields in plain words (Seller terms, ID checks).
+- ⚠⚠ **Changes only, and it carries on** (2026-10-21 — a copy spent four hours re-reading what it
+  already had, then a Stop sent it back to the start). **`CustomerSyncState`** keeps, per stage, `since`
+  (when its last COMPLETE pass began, less 10 minutes) and `nextLink` (where an unfinished pass got
+  to). **Copy changes** asks BC only for rows changed after `since` (`changedSinceFilter`:
+  `systemModifiedAt` on the Evo feeds, `LastDateTimeModified` on the Contact Card, `Last_Date_Modified`
+  — a date — on the Vendor Card); **Copy everything** reads it all; **Carry on** restarts the first
+  unfinished stage from its saved link. If BC refuses a date filter, that stage reads everything and
+  says so. The nightly copy is changes-only, and everything on **Sundays** (BC can change a field
+  without stamping it as changed). Every pass's first page asks BC's `$count`, so each stage shows
+  "X of Y". **Stop asks first.** Until Run Migrations the copy still works but can't remember.
 - ⚠ **Bank details are never stored** (they go to Sage), same rule as Goods In.
 - **Data check** tab: counts, likely duplicates (same email on several records), missing email /
   postcode, delivery addresses with no buyer here — the tidying to do before anything depends on it.

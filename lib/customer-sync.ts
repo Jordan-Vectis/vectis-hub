@@ -96,15 +96,33 @@ export type PageResult = {
   failed: number
   firstError: string | null
   nextLink: string | null
+  total: number | null      // BC's own count for this pass — only on a pass's first page
 }
 
-export async function copyCustomerPage(token: string, phase: CustomerPhase, nextLink: string | null): Promise<PageResult> {
+// The filter that asks BC only for rows changed since a moment. Each feed names its "last changed"
+// field differently; the Vendor Card only keeps a DATE, so that one overlaps by up to a day.
+export function changedSinceFilter(phase: CustomerPhase, since: Date): string {
+  const iso = since.toISOString().replace(/\.\d{3}Z$/, "Z")
+  if (phase === "contactCards") return `LastDateTimeModified gt ${iso}`
+  if (phase === "vendorCards") return `Last_Date_Modified ge ${iso.slice(0, 10)}`
+  return `systemModifiedAt gt ${iso}`
+}
+
+// One page of one stage. With no nextLink it starts a pass: asking BC for its count (so the screen can
+// say "X of Y"), and — with `since` — only for the rows changed after that moment.
+export async function copyCustomerPage(token: string, phase: CustomerPhase, nextLink: string | null, since?: Date | null): Promise<PageResult> {
   // The two cards are published ODataV4 web services (found with "What does BC publish?"); the rest
   // are Evo's API pages.
   const card = CARD_SERVICE[phase]
-  const url = nextLink ?? (card ?? await bcApiUrl(token, "api/evo/base/v1.0", phase))
-  const { rows, nextLink: nl } = await bcPageWithNext(token, url)
-  const res: PageResult = { rows: rows.length, created: 0, updated: 0, merged: 0, unmatched: 0, failed: 0, firstError: null, nextLink: nl }
+  let url = nextLink
+  if (!url) {
+    const q: string[] = ["$count=true"]
+    if (since) q.push(`$filter=${encodeURIComponent(changedSinceFilter(phase, since))}`)
+    const base = card ? `${card}` : await bcApiUrl(token, "api/evo/base/v1.0", phase)
+    url = `${base}?${q.join("&")}`
+  }
+  const { rows, nextLink: nl, count } = await bcPageWithNext(token, url)
+  const res: PageResult = { rows: rows.length, created: 0, updated: 0, merged: 0, unmatched: 0, failed: 0, firstError: null, nextLink: nl, total: nextLink ? null : (typeof count === "number" ? count : null) }
   const now = new Date()
 
   // One bad row never stops the page, but it is counted and named, never swallowed.

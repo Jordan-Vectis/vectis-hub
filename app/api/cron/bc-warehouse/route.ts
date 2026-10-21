@@ -266,12 +266,15 @@ async function runSync(full: boolean, secret: string): Promise<void> {
   // loop as the button on the Customers page (lib/customer-sync.ts). FULL (5am) run only: it reads
   // every customer, far too much for the 11:00 and 17:00 catch-ups.
   if (full) {
+    // Only what BC changed since the last copy, except on Sundays, when it reads everything — a
+    // field BC changes without stamping it as changed still comes across within the week.
+    const mode = new Date().getDay() === 0 ? "all" : "changes"
     let phase: string | null = "contacts", next: string | null = null, pages = 0
     const totals = { rows: 0, created: 0, failed: 0 }
     while (phase && pages < 2000) {
       try {
         const res: Response = await fetch(`${base}/api/customers/sync`, {
-          method: "POST", headers, body: JSON.stringify({ phase, nextLink: next }),
+          method: "POST", headers, body: JSON.stringify({ phase, nextLink: next, mode }),
         })
         const data: any = await res.json().catch(() => ({}))
         if (!res.ok) { results.customers = { ...totals, error: data.error ?? `HTTP ${res.status}`, phase }; break }
@@ -283,7 +286,7 @@ async function runSync(full: boolean, secret: string): Promise<void> {
         pages++
       } catch (e: any) { results.customers = { ...totals, error: e.message, phase }; break }
     }
-    if (!results.customers) results.customers = { ...totals, pages }
+    if (!results.customers) results.customers = { ...totals, pages, mode }
   } else {
     results.customers = { skipped: "only on the 5am full copy" }
   }

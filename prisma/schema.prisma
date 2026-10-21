@@ -1979,6 +1979,20 @@ model CustomerBcCard {
   syncedAt    DateTime  @default(now())
 }
 
+// Where each stage of the BC → Hub customer copy has got to (one row per stage). "since" is when the
+// last COMPLETE pass of that stage began, so the next copy asks BC only for what changed after it;
+// "nextLink" is where an unfinished pass stopped, so it can carry on instead of starting again.
+model CustomerSyncState {
+  phase         String    @id
+  since         DateTime?
+  passStartedAt DateTime?
+  passMode      String?
+  nextLink      String?
+  total         Int?
+  done          Int       @default(0)
+  updatedAt     DateTime  @default(now()) @updatedAt
+}
+
 // Delivery addresses a buyer has on file in BC (Ship-to Address).
 model CustomerShipTo {
   id          String    @id @default(cuid())

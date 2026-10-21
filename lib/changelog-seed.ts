@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-20, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-21, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"08006e4e1d09d0dc0d9d75b8ed3a638318c3c404","author":"jack-vectis","date":"2026-10-21T09:43:10+01:00","subject":"Handheld scanner: a failed scan stops scanning until it is acknowledged"},
   {"sha":"a43b6a8b7a172f2ffb0c87bfec87ff78ed7294fb","author":"Jordan Orange","date":"2026-10-20T16:41:31+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"b95a517991e6404c334dc42d2aa7525043a6d71e","author":"Jordan Orange","date":"2026-10-20T16:41:24+01:00","subject":"Customers: copy BC's contact and vendor cards too"},
   {"sha":"25fe187e300d648b72b607ae00015ff640120af3","author":"jack-vectis","date":"2026-10-20T16:34:33+01:00","subject":"Goods In: Reports — what each warehouse person does, per day"},
