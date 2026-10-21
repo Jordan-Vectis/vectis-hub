@@ -2,10 +2,11 @@ import type { WarehouseRole } from "@/lib/apps"
 import type { ContainerKind, LocationKind } from "@/lib/goods-in/model"
 
 // The handheld scanner's contract with the Hub — the /scan screen (and the Vectis Scanner app that
-// wraps it) on one side, app/api/goods-in/scan/{sync,bootstrap,lookup} on the other. Pure: types
+// wraps it) on one side, app/api/goods-in/scan/{sync,acks,bootstrap,lookup} on the other. Pure: types
 // and constants only, safe in the browser and on the server.
 //
 //   POST /api/goods-in/scan/sync       { deviceId, events: ScanEvent[] } → SyncResponse
+//   POST /api/goods-in/scan/acks       { deviceId, acks: ScanAck[] } → ScanAckResponse (failed scans acknowledged on the pop-up)
 //   GET  /api/goods-in/scan/bootstrap  → BootstrapResponse (cache it: it recognises location codes offline)
 //   GET  /api/goods-in/scan/lookup?code=X → LookupResponse (online only)
 //
@@ -80,6 +81,88 @@ export type ScanResult = {
  * `error` then says why) — keep it queued and send it again; `unsent` counts them.
  */
 export type SyncResponse = { results: ScanResult[]; serverTime: string; unsent?: number; error?: string }
+
+// ─── Failed scans acknowledged on the pop-up (2026-10-21) ────────────────────────────────────
+//
+// Jack: a scan that fails must be acknowledged before scanning carries on, and the acknowledgement
+// is kept in Goods In → Reports per person. The screen queues ONE ScanAck per failure listed on the
+// pop-up when "I've seen it — carry on" is pressed (in the same device store as the scans) and sends
+// them to POST /api/goods-in/scan/acks. Stored in GoodsInScanAck, once per id — a replay stores
+// nothing new and answers ok again. 503 SCANNER_NOT_SET_UP (before Run Migrations has made the
+// table) stores NOTHING — keep every acknowledgement queued. Same errors as the sync otherwise.
+
+/** Most acknowledgements one call takes. More is refused (400) with nothing stored. */
+export const MAX_SCAN_ACKS = 200
+/** The longest barcode an acknowledgement keeps (longer is cut). */
+export const MAX_ACK_CODE = 64
+/** The longest "what went wrong" an acknowledgement keeps (longer is cut). */
+export const MAX_ACK_REASON = 500
+/** An acknowledgement made longer ago than this is refused (not stored — drop it). Any other time older than this is taken as unknown. */
+export const MAX_ACK_AGE_DAYS = 30
+
+/**
+ * What went wrong with the scan the pop-up showed:
+ * - refused: the Hub answered "refused" (from the sync — possibly minutes later, after being offline).
+ * - stale:   the Hub answered "stale" — someone else had moved the item since it was scanned.
+ * - error:   the screen itself showed it as a failure (a red result) — it never reached the Hub as a move.
+ * - blocked: scanned while the pop-up was already open, so it wasn't acted on at all.
+ */
+export const SCAN_ACK_PROBLEMS = ["refused", "stale", "error", "blocked"] as const
+export type ScanAckProblem = (typeof SCAN_ACK_PROBLEMS)[number]
+
+/** Each problem in plain words — the pop-up and the Reports pages say the same thing. */
+export const SCAN_ACK_PROBLEM_WORDS: Record<ScanAckProblem, string> = {
+  refused: "Refused by the Hub",
+  stale: "Overtaken — someone had moved it since",
+  error: "Didn't go through",
+  blocked: "Not taken — the pop-up was open",
+}
+
+/**
+ * The ONE refusal an acknowledgement is kept for (`keep: true`): it was made by someone other than
+ * whoever is sending it. Keep it queued — it is stored once that person signs in on this scanner and
+ * it is sent again. (Switch user sends the person's waiting acknowledgements first when online, but
+ * never waits on them; it is held only while a failure is still on the pop-up.)
+ */
+export const ACKED_BY_SOMEONE_ELSE = "Acknowledged by someone else — sign in as them to send it."
+
+export type ScanAck = {
+  /** A uuid made on the scanner, one per failure acknowledged — sending it again never stores it twice. */
+  id: string
+  /** The barcode as scanned (null when there wasn't one). ⚠ Never a sign-in card's code — the Hub drops one if sent. */
+  code: string | null
+  problem: ScanAckProblem
+  /** What went wrong, in the plain words the pop-up showed (the Hub's message for refused / stale). */
+  reason: string | null
+  /** The scan's own id (ScanEvent.id), when it was a queued scan. */
+  scanId?: string | null
+  /** ISO, when it was scanned (device clock, corrected as the scans' are). */
+  scannedAt?: string | null
+  /** ISO, when the pop-up first showed this failure. */
+  shownAt: string
+  /** ISO, when "I've seen it — carry on" was pressed. */
+  acknowledgedAt: string
+  /** The user id signed in when it was acknowledged — must be whoever sends it. */
+  scannedBy: string
+}
+
+export type ScanAckRequest = { deviceId: string; acks: ScanAck[] }
+
+/**
+ * - ok: stored now, or stored before (a replay — or the same failed scan already acknowledged under
+ *   another id: one row per scan and problem) — take it off the queue.
+ * - ok false, keep true: ACKED_BY_SOMEONE_ELSE — keep it queued; it is stored once that person sends it.
+ * - ok false, no keep: it can never be stored (no proper id, an unknown problem, no proper time, too
+ *   old) and would be refused the same way every time — take it off the queue. `error` says why.
+ */
+export type ScanAckResult = { id: string; ok: boolean; error?: string; keep?: boolean }
+
+/**
+ * 200. One result per acknowledgement PROCESSED, in the order sent. ⚠ One with no result here wasn't
+ * processed (the call ran out of time, or the database stopped answering part-way — `error` says
+ * why) — keep it queued and send it again; `unsent` counts them.
+ */
+export type ScanAckResponse = { results: ScanAckResult[]; serverTime: string; unsent?: number; error?: string }
 
 export type ScanLocation = { code: string; name: string | null; kind: LocationKind; active: boolean }
 

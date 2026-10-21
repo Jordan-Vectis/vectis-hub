@@ -7,12 +7,15 @@ import { callPlugin, hasPlugin } from "./native"
 //   error — a low buzz (red: that scan did NOT do what you wanted)
 // and one more sound for a change of MODE that the ear must not mistake for a move:
 //   set   — two rising pips (a location now stays set, or a check has begun: what comes next goes there)
+// and two for the failed-scan pop-up (scanning stops until it is tapped away):
+//   alert  — two long low buzzes and a long vibration, as the pop-up opens
+//   remind — one short low pip and buzz, every few seconds while it stays open
 // Web Audio for sound; the app's Haptics plugin when it has one, else navigator.vibrate. Silent
 // wherever either is missing — no sound is never a reason to stop a scan.
 
 export type Tone = "ok" | "warn" | "error"
-/** What can be played: a banner's tone, or "set". */
-export type Sound = Tone | "set"
+/** What can be played: a banner's tone, "set", or the failed-scan pop-up's two. */
+export type Sound = Tone | "set" | "alert" | "remind"
 
 let ctx: AudioContext | null = null
 
@@ -40,6 +43,8 @@ const TONES: Record<Sound, { freqs: number[]; type: OscillatorType; len: number;
   warn: { freqs: [700, 700], type: "triangle", len: 0.09, gap: 0.06, vol: 0.12 },
   error: { freqs: [196], type: "square", len: 0.36, gap: 0, vol: 0.12 },
   set: { freqs: [880, 1320], type: "sine", len: 0.08, gap: 0.04, vol: 0.09 },
+  alert: { freqs: [196, 165], type: "square", len: 0.34, gap: 0.08, vol: 0.13 },
+  remind: { freqs: [196], type: "square", len: 0.12, gap: 0, vol: 0.07 },
 }
 
 export function beep(tone: Sound) {
@@ -67,7 +72,7 @@ export function beep(tone: Sound) {
   }
 }
 
-const BUZZ: Record<Sound, number[]> = { ok: [40], warn: [70, 60, 70], error: [220, 90, 220], set: [40, 40, 40] }
+const BUZZ: Record<Sound, number[]> = { ok: [40], warn: [70, 60, 70], error: [220, 90, 220], set: [40, 40, 40], alert: [700, 150, 500], remind: [160] }
 
 export function buzz(tone: Sound) {
   try {

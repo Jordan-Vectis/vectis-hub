@@ -1305,6 +1305,28 @@ model GoodsInScanEvent {
   @@index([scannedAt])
 }
 
+/// A failed scan the worker acknowledged on the handheld scanner. A failed scan stops scanning with a
+/// pop-up until it is tapped away; each one is kept here (who, which barcode, what went wrong, when it
+/// was scanned and when it was acknowledged) for Goods In → Reports. The id is the scanner's own id for
+/// the acknowledgement, so one sent twice (offline replay) is stored once. No link to User on purpose.
+model GoodsInScanAck {
+  id             String    @id
+  userId         String
+  userName       String?
+  deviceId       String?
+  code           String?
+  problem        String
+  reason         String?
+  scanId         String?
+  scannedAt      DateTime?
+  shownAt        DateTime
+  acknowledgedAt DateTime
+  receivedAt     DateTime  @default(now())
+
+  @@index([userId, acknowledgedAt])
+  @@index([acknowledgedAt])
+}
+
 /// A scanner sign-in card: a QR code a warehouse worker scans to sign in to the handheld scanner
 /// (/scan) — the devices are shared and have no keyboard to speak of. Only a SHA-256 of the card's
 /// random code is kept. A card signs in to the scanner screen ONLY, never the rest of the Hub, and can

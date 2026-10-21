@@ -30,6 +30,7 @@ const COLS: Col[] = [
   { key: "refused", label: "Refused", group: "scans", title: "Scans the Hub turned down" },
   { key: "stale", label: "Overtaken", group: "scans", title: "Scans not used because someone moved the item since" },
   { key: "late", label: "Sent late", group: "scans", title: "Scanned with no Wi-Fi, sent over 5 minutes later" },
+  { key: "acks", label: "Acknowledged", group: "scans", title: "Failed scans they saw on the scanner's pop-up and confirmed seen" },
   { key: "scanners", label: "Scanners", group: "scans", title: "Different handheld scanners used" },
   { key: "checkIns", label: "Check-ins", group: "checkIns", title: "Receipts booked in" },
   { key: "totesBooked", label: "Totes", group: "checkIns", title: "Totes on the receipts they booked in" },

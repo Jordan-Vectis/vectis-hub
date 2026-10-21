@@ -49,6 +49,10 @@ export const dayMedium = (ymd: string) =>
 export const londonTime = (iso: string | null | undefined) =>
   iso ? new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso)) : "—"
 
+/** "08:12:05" in London time, to the second, or a dash. */
+export const londonSeconds = (iso: string | null | undefined) =>
+  iso ? new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date(iso)) : "—"
+
 /** 14 → "14:00–15:00". */
 export const hourSpan = (h: number | null | undefined) =>
   h == null ? "—" : `${String(h).padStart(2, "0")}:00–${String((h + 1) % 24).padStart(2, "0")}:00`
@@ -248,7 +252,7 @@ export function WiderRangeLink({ path, range }: { path: string; range: ReportRan
 /** Said plainly when a source's table isn't on this environment yet (before Run Migrations), so a 0 isn't read as "nobody did any". */
 export function MissingNote({ missing }: { missing?: ReportSource[] }) {
   if (!missing?.length) return null
-  const words: Record<ReportSource, string> = { scans: "handheld scans", moves: "moves", "check-ins": "check-ins" }
+  const words: Record<ReportSource, string> = { scans: "handheld scans", moves: "moves", "check-ins": "check-ins", acks: "failed scans acknowledged on the scanner" }
   const list = missing.map(m => words[m] ?? m)
   const said = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`
   return (

@@ -53,6 +53,12 @@ export default async function GoodsInReportsPage({ searchParams }: { searchParam
 
   const shown = report?.range ?? range
   const oneDay = isOneDay(shown)
+  // Before Run Migrations acknowledgements have nowhere to be kept (the scanners hold on to them):
+  // never shown as a calm 0 (design rule 7).
+  const acksMissing = report?.missing?.includes("acks") ?? false
+  // People active = with a move, scan or check-in — as Days active. Someone whose only activity in
+  // the range was acknowledging failed scans is still listed in the table, with 0 days active.
+  const activePeople = (report?.people ?? []).filter(p => p.activeDays > 0).length
   const hrefs = Object.fromEntries((report?.people ?? []).map(p => [p.userId, personHref(p.userId, shown)]))
   const me = report?.people.find(p => p.userId === user.id)
 
@@ -94,12 +100,16 @@ export default async function GoodsInReportsPage({ searchParams }: { searchParam
               { label: "Put away", value: num(report.totals.putAway), sub: "totes and pallets to storage" },
               { label: "To bench", value: num(report.totals.toBench), sub: "totes and pallets to a bench" },
               { label: "Lots shelved", value: num(report.totals.lotsShelved), sub: "single lots moved" },
-              { label: "Check-ins", value: num(report.totals.checkIns), sub: "receipts booked in" },
-              { label: "Totes booked", value: num(report.totals.totesBooked), sub: report.totals.palletsBooked ? `and ${plural(report.totals.palletsBooked, "pallet")}` : "on those receipts" },
+              // Totes and pallets ride on the Check-ins tile, as on a person's page, so the tiles stay at
+              // ten (two rows of five — never 5 + 5 + 1) with "Failed scans acknowledged" added.
+              { label: "Check-ins", value: num(report.totals.checkIns), sub: report.totals.checkIns ? `${plural(report.totals.totesBooked, "tote")} · ${plural(report.totals.palletsBooked, "pallet")}` : "receipts booked in" },
               seesEveryone
-                ? { label: "People active", value: num(report.totals.people), sub: oneDay ? "did something that day" : "did something in these days" }
-                : { label: "Days active", value: num(me?.activeDays ?? 0), sub: me?.busiestHour != null ? `busiest ${String(me.busiestHour).padStart(2, "0")}:00` : "days with anything done" },
+                ? { label: "People active", value: num(activePeople), sub: oneDay ? "a move, scan or check-in that day" : "a move, scan or check-in in these days" }
+                : { label: "Days active", value: num(me?.activeDays ?? 0), sub: me?.busiestHour != null ? `busiest ${String(me.busiestHour).padStart(2, "0")}:00` : "days with a move, scan or check-in" },
               { label: "Refused scans", value: num(report.totals.refused), sub: report.totals.stale ? `and ${num(report.totals.stale)} overtaken` : "turned down by the Hub" },
+              acksMissing
+                ? { label: "Failed scans acknowledged", value: "—", sub: "not recorded on this Hub yet — needs Run Migrations" }
+                : { label: "Failed scans acknowledged", value: num(report.totals.acks), sub: "seen on the scanner's pop-up and confirmed" },
               { label: "Sent late", value: num(report.totals.late), sub: "scanned offline, sent 5+ min later" },
             ]} />
 

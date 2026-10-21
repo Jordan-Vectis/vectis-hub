@@ -179,6 +179,11 @@ export function SettingsPanel({ s, ctl, build, onClose }: { s: Snapshot; ctl: Sc
                 {s.sync.lastOkAt ? `Last sent at ${clock(s.sync.lastOkAt)}` : "Nothing sent since this screen opened."}
               </p>
               {waiting > 0 && problem && <p className="mt-1 text-[13px] leading-snug text-amber-800 dark:text-amber-200 break-words">{problem.message}</p>}
+              {s.acksWaiting > 0 && (
+                <p className={`mt-1 ${muted} break-words`}>
+                  Also {plural(s.acksWaiting, "acknowledged failed scan")} to send, for Reports{s.sync.ackProblem ? ` — ${s.sync.ackProblem.message}` : "."}
+                </p>
+              )}
               <button type="button" className={`${btnTall} mt-2 w-full`} onClick={() => void ctl.sendNow()} disabled={s.sync.sending || !s.started}>
                 {s.sync.sending ? "Sending…" : "Send now"}
               </button>

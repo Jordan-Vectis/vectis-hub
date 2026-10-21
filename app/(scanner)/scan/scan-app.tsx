@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { ScanController, type Me, type Snapshot } from "@/lib/goods-in/scan-client/controller"
 import { startScanner } from "@/lib/goods-in/scan-client/scanner"
 import CardSignIn from "./card-sign-in"
+import { FailedScans } from "./failed-scans"
 import { BannerView, StillYou, Strips, TopBar } from "./parts"
 import { CheckBar, CheckScreen, FindScreen, HomeScreen, MoveScreen } from "./screens"
 import { SettingsPanel } from "./settings"
@@ -18,6 +19,10 @@ import { sheet } from "./ui"
 //   4. Check's Finish row — shrink-0, part of the column, never floating over it
 // Everything that isn't scanning (who, Switch user, Sign out, Send now, which Hub, sound…) is behind
 // the cog (settings.tsx).
+//
+// Over it, when needed: Settings (z-30), the failed-scan pop-up (failed-scans.tsx, z-35 — scans
+// aren't used while it's up, and Settings can't be opened over it), "Still …?" (z-40) and Switch user
+// (z-50); the pop-up isn't drawn while either of the last two is up.
 //
 // ⚠ The banner sits OUTSIDE the scrolling part, so the answer to every scan is on screen however far
 // down the lists someone has scrolled (it scrolls inside itself if it's ever taller than ~40% of the
@@ -102,7 +107,11 @@ export default function ScanApp({ me, build = null }: { me: Me; build?: string |
     }
   }, [settingsOpen, ctl])
 
-  const openSettings = useCallback(() => setSettingsOpen(true), [])
+  // Not over the failed-scan pop-up (it's answered first).
+  const openSettings = useCallback(() => {
+    if (ctl.getSnapshot().failures.length) return
+    setSettingsOpen(true)
+  }, [ctl])
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
   return (
@@ -143,6 +152,8 @@ export default function ScanApp({ me, build = null }: { me: Me; build?: string |
       {s.screen === "check" && <CheckBar s={s} ctl={ctl} />}
 
       {settingsOpen && <SettingsPanel s={s} ctl={ctl} build={build} onClose={closeSettings} />}
+
+      {s.failures.length > 0 && !s.stillYou && s.switching !== "open" && <FailedScans s={s} ctl={ctl} />}
 
       {s.stillYou && s.switching !== "open" && <StillYou name={me.name} ctl={ctl} />}
 

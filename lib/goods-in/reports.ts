@@ -1,19 +1,24 @@
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/app/generated/prisma/client"
 import { addDaysYmd, isYmd, londonDayStart, londonYmd } from "@/app/(app)/tools/warehouse/history/london-days"
+import { SCAN_ACK_PROBLEM_WORDS, SCAN_ACK_PROBLEMS, type ScanAckProblem } from "@/lib/goods-in/scan-contract"
 
 // Goods In → Reports: what each warehouse person has done, per day. SERVER ONLY, a plain module
 // (not "use server"), and it checks NOBODY — the page decides who may see what (getGoodsInUser +
 // atLeast: a manager or admin sees everyone, a warehouse-tier person passes their own id as
 // `onlyUserId` and sees only themselves).
 //
-// Read-only, from what Goods In already records — no new tables or columns, and nothing here
-// touches Business Central:
+// Read-only, from what Goods In already records — nothing is written, and nothing here touches
+// Business Central:
 //   • Scans     — GoodsInScanEvent (the handheld scanner, /scan), by userId, on the day of scannedAt.
 //   • Moves     — GoodsInMovement (every screen: Scan to move, Benches, Locations, the scanner), by
 //                 movedById, on the day of movedAt; the location's kind from GoodsInLocation.
 //   • Check-ins — GoodsInReceipt booked in (not a draft, not void), by createdById, on the day of
 //                 createdAt (Book in sets it to the booking time), with its totes and pallets.
+//   • Acks      — GoodsInScanAck (2026-10-21): failed scans acknowledged on the handheld's pop-up,
+//                 one row per failure listed, by userId, on the day of acknowledgedAt. ⚠ They are
+//                 COUNTED only (`acks`) — never in Days active, first / last, the busiest hour, the
+//                 hour counts or Scanners used, whose definitions are moves, scans and check-ins.
 //
 // ⚠ Days and hours are LONDON days and hours, worked out IN SQL from the UTC `timestamp(3)` columns
 // with ("col" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/London' — BST-safe, whatever the database
@@ -33,7 +38,7 @@ import { addDaysYmd, isYmd, londonDayStart, londonYmd } from "@/app/(app)/tools/
 // is in both; but the busiest hour, the hour-of-day counts and the activity list count it ONCE, as
 // its move, so a scanner worker's hours aren't doubled.
 //
-// ⚠ Tolerant of missing tables: GoodsInScanEvent only exists after Run Migrations, and the rest
+// ⚠ Tolerant of missing tables: GoodsInScanEvent and GoodsInScanAck only exist after Run Migrations, and the rest
 // only once Goods In is set up. A table that isn't there yet simply contributes nothing (its counts
 // are 0) and is named in `missing`. Any OTHER database failure throws — the page says so.
 
@@ -162,6 +167,7 @@ export const REPORT_DEFINITIONS: { term: string; meaning: string }[] = [
   { term: "Refused", meaning: "Scans the Hub couldn't act on — an unknown code, a location that's switched off, the item already there, or a scan too old to send." },
   { term: "Overtaken", meaning: "Scans not used because someone else had moved the item after it was scanned." },
   { term: "Sent late", meaning: "Scans made with no Wi-Fi that reached the Hub more than 5 minutes after they were scanned." },
+  { term: "Failed scans acknowledged", meaning: "Failed scans the person acknowledged on the handheld scanner's pop-up (\"I've seen it — carry on\"), counted on the day they pressed it: one for each failure the pop-up listed — refused, overtaken, one that didn't go through on the scanner, or one scanned while the pop-up was open. They don't count towards Days active, first / last or the busiest hour." },
   { term: "Moves", meaning: "Every move recorded under the person — on Scan to move, Benches, Locations or the handheld scanner. A scan that moved something counts here as well as under Scans." },
   { term: "Put away", meaning: "A tote or pallet moved to a storage or \"other\" location (or one with no kind set, or one that has since been removed)." },
   { term: "To bench", meaning: "A tote or pallet moved to a cataloguing bench." },
@@ -183,6 +189,8 @@ export type Counts = {
   scans: number; refused: number; stale: number; late: number
   moves: number; putAway: number; toBench: number; lotsShelved: number; bulk: number
   checkIns: number; totesBooked: number; palletsBooked: number
+  /** Failed scans acknowledged on the handheld's pop-up (GoodsInScanAck), on the day they were acknowledged. */
+  acks: number
 }
 export type PersonTotals = Counts & {
   userId: string; name: string; activeDays: number
@@ -194,7 +202,7 @@ export type PersonTotals = Counts & {
 }
 export type PersonDay = Counts & { userId: string; day: string; firstAt: string | null; lastAt: string | null }
 /** Which sources contributed nothing because their table isn't there yet (before Run Migrations). */
-export type ReportSource = "scans" | "moves" | "check-ins"
+export type ReportSource = "scans" | "moves" | "check-ins" | "acks"
 export type WarehouseReport = {
   range: ReportRange
   totals: Counts & { people: number }
@@ -212,10 +220,11 @@ export const ZERO_COUNTS: Counts = {
   scans: 0, refused: 0, stale: 0, late: 0,
   moves: 0, putAway: 0, toBench: 0, lotsShelved: 0, bulk: 0,
   checkIns: 0, totesBooked: 0, palletsBooked: 0,
+  acks: 0,
 }
 const COUNT_KEYS = Object.keys(ZERO_COUNTS) as (keyof Counts)[]
 
-type Present = { moves: boolean; scans: boolean; receipts: boolean; containers: boolean; locations: boolean }
+type Present = { moves: boolean; scans: boolean; receipts: boolean; containers: boolean; locations: boolean; acks: boolean }
 
 async function tablesPresent(): Promise<Present> {
   const [r] = await prisma.$queryRaw<Present[]>`
@@ -223,8 +232,9 @@ async function tablesPresent(): Promise<Present> {
            to_regclass('"GoodsInScanEvent"') IS NOT NULL AS "scans",
            to_regclass('"GoodsInReceipt"')   IS NOT NULL AS "receipts",
            to_regclass('"GoodsInContainer"') IS NOT NULL AS "containers",
-           to_regclass('"GoodsInLocation"')  IS NOT NULL AS "locations"`
-  return r ?? { moves: false, scans: false, receipts: false, containers: false, locations: false }
+           to_regclass('"GoodsInLocation"')  IS NOT NULL AS "locations",
+           to_regclass('"GoodsInScanAck"')   IS NOT NULL AS "acks"`
+  return r ?? { moves: false, scans: false, receipts: false, containers: false, locations: false, acks: false }
 }
 
 function missingOf(p: Present): ReportSource[] {
@@ -232,6 +242,7 @@ function missingOf(p: Present): ReportSource[] {
   if (!p.scans) out.push("scans")
   if (!p.moves) out.push("moves")
   if (!p.receipts) out.push("check-ins")
+  if (!p.acks) out.push("acks")
   return out
 }
 
@@ -261,10 +272,13 @@ const isMissingRelation = (e: unknown) =>
   /42P01|P2021|relation "[^"]*" does not exist/i.test(`${(e as { message?: string })?.message ?? ""} ${(e as { code?: string })?.code ?? ""}`)
 
 /**
- * The SELECTs over the three sources, one row per thing done, all with the same columns:
- * who ("uid", "name"), when ("tAt", UTC), the scanner ("device", scans only), a 0/1 for each count,
- * the totes and pallets on a check-in, and "acts" — 1 for each thing done once (an applied scan is
- * 0 here because its move is already 1).
+ * The SELECTs over the four sources, one row per thing done, all with the same columns IN THE SAME
+ * ORDER (UNION ALL matches them by position): who ("uid", "name"), when ("tAt", UTC), the scanner
+ * ("device", scans only), a 0/1 for each count, the totes and pallets on a check-in, "acks" (1 on an
+ * acknowledgement's row, 0 on every other — the grouped query leaves those rows out of Days active
+ * and first / last by it), and "acts" — 1 for each thing done once (an applied scan is 0 here because
+ * its move is already 1, and an acknowledgement is 0: it isn't work done, so it never moves the
+ * busiest hour).
  */
 function sources(p: Present, lo: string, hi: string, onlyUserId?: string): Prisma.Sql[] {
   const parts: Prisma.Sql[] = []
@@ -281,7 +295,7 @@ function sources(p: Present, lo: string, hi: string, onlyUserId?: string): Prism
              CASE WHEN m."lotId" IS NOT NULL THEN 1 ELSE 0 END AS "lotsShelved",
              CASE WHEN m."note" LIKE 'Moved everything from%' THEN 1 ELSE 0 END AS "bulk",
              0 AS "checkIns", 0 AS "totesBooked", 0 AS "palletsBooked",
-             1 AS "acts"
+             0 AS "acks", 1 AS "acts"
       FROM "GoodsInMovement" m
       ${joinLoc}
       WHERE m."movedById" IS NOT NULL
@@ -298,7 +312,7 @@ function sources(p: Present, lo: string, hi: string, onlyUserId?: string): Prism
              CASE WHEN s."receivedAt" - s."scannedAt" > interval '5 minutes' THEN 1 ELSE 0 END AS "late",
              0 AS "moves", 0 AS "putAway", 0 AS "toBench", 0 AS "lotsShelved", 0 AS "bulk",
              0 AS "checkIns", 0 AS "totesBooked", 0 AS "palletsBooked",
-             CASE WHEN s."outcome" = 'applied' THEN 0 ELSE 1 END AS "acts"
+             0 AS "acks", CASE WHEN s."outcome" = 'applied' THEN 0 ELSE 1 END AS "acts"
       FROM "GoodsInScanEvent" s
       WHERE s."scannedAt" >= ${lo}::timestamp AND s."scannedAt" < ${hi}::timestamp
         ${RECEIVED_AFTER_LO(lo)}
@@ -317,13 +331,27 @@ function sources(p: Present, lo: string, hi: string, onlyUserId?: string): Prism
              0 AS "scans", 0 AS "refused", 0 AS "stale", 0 AS "late",
              0 AS "moves", 0 AS "putAway", 0 AS "toBench", 0 AS "lotsShelved", 0 AS "bulk",
              1 AS "checkIns", COALESCE(c."totes", 0) AS "totesBooked", COALESCE(c."pallets", 0) AS "palletsBooked",
-             1 AS "acts"
+             0 AS "acks", 1 AS "acts"
       FROM "GoodsInReceipt" r
       ${boxes}
       WHERE r."createdById" IS NOT NULL
         AND COALESCE(r."status", 'open') NOT IN ('draft', 'void')
         AND r."createdAt" >= ${lo}::timestamp AND r."createdAt" < ${hi}::timestamp
         ${onlyUserId ? Prisma.sql`AND r."createdById" = ${onlyUserId}` : Prisma.empty}`)
+  }
+
+  if (p.acks) {
+    // Read by GoodsInScanAck(acknowledgedAt), or (userId, acknowledgedAt) for one person. No device:
+    // Scanners used counts the scanners scans were SENT from.
+    parts.push(Prisma.sql`
+      SELECT ak."userId" AS "uid", NULLIF(btrim(ak."userName"), '') AS "name", ak."acknowledgedAt" AS "tAt", NULL::text AS "device",
+             0 AS "scans", 0 AS "refused", 0 AS "stale", 0 AS "late",
+             0 AS "moves", 0 AS "putAway", 0 AS "toBench", 0 AS "lotsShelved", 0 AS "bulk",
+             0 AS "checkIns", 0 AS "totesBooked", 0 AS "palletsBooked",
+             1 AS "acks", 0 AS "acts"
+      FROM "GoodsInScanAck" ak
+      WHERE ak."acknowledgedAt" >= ${lo}::timestamp AND ak."acknowledgedAt" < ${hi}::timestamp
+        ${onlyUserId ? Prisma.sql`AND ak."userId" = ${onlyUserId}` : Prisma.empty}`)
   }
 
   return parts
@@ -392,11 +420,13 @@ export async function warehouseReport(range: ReportRange, onlyUserId?: string): 
              SUM("b"."checkIns")::int      AS "checkIns",
              SUM("b"."totesBooked")::int   AS "totesBooked",
              SUM("b"."palletsBooked")::int AS "palletsBooked",
+             SUM("b"."acks")::int          AS "acks",
              SUM("b"."acts")::int          AS "acts",
-             COUNT(DISTINCT "b"."day")::int    AS "activeDays",
-             COUNT(DISTINCT "b"."device")::int AS "scanners",
-             MIN("b"."tAt")                    AS "firstAt",
-             MAX("b"."tAt")                    AS "lastAt",
+             -- An acknowledgement's row is left out of these: they are moves, scans and check-ins only.
+             (COUNT(DISTINCT "b"."day") FILTER (WHERE "b"."acks" = 0))::int AS "activeDays",
+             COUNT(DISTINCT "b"."device")::int                              AS "scanners",
+             MIN("b"."tAt") FILTER (WHERE "b"."acks" = 0)                   AS "firstAt",
+             MAX("b"."tAt") FILTER (WHERE "b"."acks" = 0)                   AS "lastAt",
              (array_agg("b"."name" ORDER BY "b"."tAt" DESC) FILTER (WHERE "b"."name" IS NOT NULL))[1] AS "name"
       FROM "b"
       GROUP BY GROUPING SETS (("b"."uid", "b"."day"), ("b"."uid", "b"."hour"), ("b"."uid"))`
@@ -404,7 +434,7 @@ export async function warehouseReport(range: ReportRange, onlyUserId?: string): 
     // A table dropped or not yet whole between the check above and this query — say nothing rather than fail.
     if (isMissingRelation(e)) {
       console.error("goods-in reports: a table went missing mid-report:", e)
-      return emptyReport(range, missing.length ? missing : ["scans", "moves", "check-ins"])
+      return emptyReport(range, missing.length ? missing : ["scans", "moves", "check-ins", "acks"])
     }
     throw e
   }
@@ -491,6 +521,9 @@ export async function personOnRecord(userId: string): Promise<{ name: string | n
     SELECT NULLIF(btrim(r."createdByName"), '') AS "name", r."createdAt" AS "at" FROM "GoodsInReceipt" r
     WHERE r."createdById" = ${userId} AND COALESCE(r."status", 'open') NOT IN ('draft', 'void')
     ORDER BY r."createdAt" DESC LIMIT 1)`)
+  if (present.acks) parts.push(Prisma.sql`(
+    SELECT NULLIF(btrim(ak."userName"), '') AS "name", ak."acknowledgedAt" AS "at" FROM "GoodsInScanAck" ak
+    WHERE ak."userId" = ${userId} ORDER BY ak."acknowledgedAt" DESC LIMIT 1)`)
   if (parts.length === 0) return null
 
   let rows: { name: string | null; at: Date }[]
@@ -510,23 +543,47 @@ export async function personOnRecord(userId: string): Promise<{ name: string | n
 
 // ─── One person's latest activity ─────────────────────────────────────────────────────────
 
+export type ActivityKind = "move" | "scan" | "check-in" | "ack"
+
+/** An acknowledged failed scan, as stored (kind "ack" only) — for a list of them with their own columns. */
+export type ActivityAck = {
+  /** The barcode as scanned; null when there wasn't one (or it was a sign-in card, which is never stored). */
+  code: string | null
+  problem: ScanAckProblem
+  /** The problem in plain words (SCAN_ACK_PROBLEM_WORDS). */
+  problemWords: string
+  /** What the pop-up said went wrong (the Hub's message for refused / overtaken). For a warehouse-tier viewer, with nobody else's name in it. */
+  reason: string | null
+  /** ISO instants. scannedAt is null when it isn't known. */
+  scannedAt: string | null
+  shownAt: string
+  acknowledgedAt: string
+}
+
 export type ActivityItem = {
-  /** ISO instant. */
+  /** ISO instant — for an acknowledgement, when it was acknowledged. */
   at: string
-  kind: "move" | "scan" | "check-in"
+  kind: ActivityKind
   title: string
   detail: string | null
   href: string | null
   /** Scans only: "refused" or "stale" (overtaken). */
   outcome?: string
+  /** Acknowledgements only (kind "ack"). */
+  ack?: ActivityAck
 }
 
 const findHref = (code: string) => `/tools/warehouse/find?q=${encodeURIComponent(code)}`
 const receiptHref = (id: string) => `/tools/warehouse/receipts/${encodeURIComponent(id)}`
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`
 
+/**
+ * One row of the activity query — every part has every column, in this order (UNION ALL matches by
+ * position). An acknowledgement's row carries its problem in "outcome", its reason in "message",
+ * and its own times in "scanAt" / "shownAt".
+ */
 type ActivityRow = {
-  kind: "move" | "scan" | "check-in"
+  kind: ActivityKind
   at: Date
   containerId: string | null
   containerKind: string | null
@@ -542,28 +599,39 @@ type ActivityRow = {
   viaScanner: boolean | null
   totes: number | null
   pallets: number | null
+  scanAt: Date | null
+  shownAt: Date | null
 }
+
+/** The columns only an acknowledgement's row fills, as NULLs for every other part. */
+const NO_ACK_TIMES = Prisma.sql`NULL::timestamp AS "scanAt", NULL::timestamp AS "shownAt"`
 
 /**
  * The person's latest activity in the range, newest first (at most `limit`, default 50, up to 500):
  * their moves, their scans that DIDN'T move anything (refused or overtaken — a scan that moved
- * something is shown once, as its move, marked "handheld scanner"), and the receipts they booked in.
+ * something is shown once, as its move, marked "handheld scanner"), the receipts they booked in,
+ * and the failed scans they acknowledged on the handheld's pop-up (kind "ack", with `ack` filled).
  * Codes link to Code lookup, receipts to the receipt. Never throws on missing tables (they add
  * nothing); throws on any other database failure.
  *
+ * `kinds` (optional): only those kinds — e.g. `{ kinds: ["ack"] }` for a list of acknowledgements
+ * alone, which a busy day's moves would otherwise push out of the latest `limit`.
+ *
  * `hideOtherNames` (the page sets it for a warehouse-tier viewer): an overtaken scan's stored
- * message names whoever moved the item since ("… was moved to X by <Name> at …"); with this set,
- * that name is taken out, so nobody else's name reaches a warehouse-tier screen.
+ * message names whoever moved the item since ("… was moved to X by <Name> at …"), and so can the
+ * reason on an acknowledgement of one; with this set, that name is taken out, so nobody else's name
+ * reaches a warehouse-tier screen.
  */
 export async function personActivity(
-  userId: string, range: ReportRange, limit = 50, opts: { hideOtherNames?: boolean } = {},
+  userId: string, range: ReportRange, limit = 50, opts: { hideOtherNames?: boolean; kinds?: ActivityKind[] } = {},
 ): Promise<ActivityItem[]> {
   const n = Math.max(1, Math.min(500, Math.floor(Number(limit)) || 50))
   const present = await tablesPresent()
   const { lo, hi } = bounds(range)
   const parts: Prisma.Sql[] = []
+  const want = (k: ActivityKind) => !opts.kinds || opts.kinds.includes(k)
 
-  if (present.moves) {
+  if (present.moves && want("move")) {
     // An applied scan's move is stamped with the scan's (clamped) scannedAt, and the sync refuses a
     // scan more than 7 days old, so its receivedAt lies within [movedAt − clock margin, movedAt + 8
     // days) — bounds that let the (userId, receivedAt) index find it instead of reading every scan
@@ -582,7 +650,7 @@ export async function personActivity(
              m."locationCode" AS "location", m."fromCode" AS "fromCode", m."note" AS "note",
              ${present.locations ? Prisma.sql`lower(NULLIF(btrim(l."kind"), ''))` : Prisma.sql`NULL::text`} AS "locKind",
              NULL::text AS "outcome", NULL::text AS "message", NULL::boolean AS "late",
-             ${viaScanner} AS "viaScanner", NULL::int AS "totes", NULL::int AS "pallets"
+             ${viaScanner} AS "viaScanner", NULL::int AS "totes", NULL::int AS "pallets", ${NO_ACK_TIMES}
       FROM "GoodsInMovement" m
       ${present.containers ? Prisma.sql`LEFT JOIN "GoodsInContainer" k ON k."id" = m."containerId"` : Prisma.empty}
       ${present.locations ? Prisma.sql`LEFT JOIN "GoodsInLocation" l ON l."code" = m."locationCode"` : Prisma.empty}
@@ -591,13 +659,13 @@ export async function personActivity(
       LIMIT ${n})`)
   }
 
-  if (present.scans) {
+  if (present.scans && want("scan")) {
     parts.push(Prisma.sql`(
       SELECT 'scan' AS "kind", s."scannedAt" AS "at", NULL::text AS "containerId", NULL::text AS "containerKind",
              NULL::text AS "lotId", s."item" AS "code", s."location" AS "location", NULL::text AS "fromCode", NULL::text AS "note",
              NULL::text AS "locKind", s."outcome" AS "outcome", s."message" AS "message",
              (s."receivedAt" - s."scannedAt" > interval '5 minutes') AS "late",
-             NULL::boolean AS "viaScanner", NULL::int AS "totes", NULL::int AS "pallets"
+             NULL::boolean AS "viaScanner", NULL::int AS "totes", NULL::int AS "pallets", ${NO_ACK_TIMES}
       FROM "GoodsInScanEvent" s
       WHERE s."userId" = ${userId} AND s."outcome" <> 'applied'
         AND s."scannedAt" >= ${lo}::timestamp AND s."scannedAt" < ${hi}::timestamp
@@ -606,7 +674,7 @@ export async function personActivity(
       LIMIT ${n})`)
   }
 
-  if (present.receipts) {
+  if (present.receipts && want("check-in")) {
     const boxes = present.containers
       ? Prisma.sql`(SELECT COUNT(*) FROM "GoodsInContainer" k WHERE k."receiptId" = r."id" AND lower(k."kind") = 'tote')::int AS "totes",
                    (SELECT COUNT(*) FROM "GoodsInContainer" k WHERE k."receiptId" = r."id" AND lower(k."kind") = 'pallet')::int AS "pallets"`
@@ -615,12 +683,27 @@ export async function personActivity(
       SELECT 'check-in' AS "kind", r."createdAt" AS "at", NULL::text AS "containerId", NULL::text AS "containerKind",
              NULL::text AS "lotId", r."id" AS "code", NULL::text AS "location", NULL::text AS "fromCode", NULL::text AS "note",
              NULL::text AS "locKind", NULL::text AS "outcome", NULL::text AS "message", NULL::boolean AS "late",
-             NULL::boolean AS "viaScanner", ${boxes}
+             NULL::boolean AS "viaScanner", ${boxes}, ${NO_ACK_TIMES}
       FROM "GoodsInReceipt" r
       WHERE r."createdById" = ${userId}
         AND COALESCE(r."status", 'open') NOT IN ('draft', 'void')
         AND r."createdAt" >= ${lo}::timestamp AND r."createdAt" < ${hi}::timestamp
       ORDER BY r."createdAt" DESC, r."id" DESC
+      LIMIT ${n})`)
+  }
+
+  if (present.acks && want("ack")) {
+    // Through GoodsInScanAck(userId, acknowledgedAt). The problem rides in "outcome", the reason in "message".
+    parts.push(Prisma.sql`(
+      SELECT 'ack' AS "kind", ak."acknowledgedAt" AS "at", NULL::text AS "containerId", NULL::text AS "containerKind",
+             NULL::text AS "lotId", ak."code" AS "code", NULL::text AS "location", NULL::text AS "fromCode", NULL::text AS "note",
+             NULL::text AS "locKind", ak."problem" AS "outcome", ak."reason" AS "message", NULL::boolean AS "late",
+             NULL::boolean AS "viaScanner", NULL::int AS "totes", NULL::int AS "pallets",
+             ak."scannedAt" AS "scanAt", ak."shownAt" AS "shownAt"
+      FROM "GoodsInScanAck" ak
+      WHERE ak."userId" = ${userId}
+        AND ak."acknowledgedAt" >= ${lo}::timestamp AND ak."acknowledgedAt" < ${hi}::timestamp
+      ORDER BY ak."acknowledgedAt" DESC, ak."id" DESC
       LIMIT ${n})`)
   }
 
@@ -655,8 +738,47 @@ function withoutOtherNames(message: string): string {
   return cut !== message ? cut : "Someone had moved it again since it was scanned, so this scan wasn't used."
 }
 
+const LONDON_CLOCK = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+const LONDON_DAY = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "short" })
+/** "10:42:05" — London time, with seconds. */
+const clockWords = (d: Date) => LONDON_CLOCK.format(d)
+
+/**
+ * An acknowledged failed scan: "T026156 didn't scan at 10:42:05 — <reason>. Acknowledged 10:42:31."
+ * The scan's day is added ("at 23:59:58 on 20 Oct") when it isn't the London day it was acknowledged.
+ */
+function ackItem(r: ActivityRow, at: string, hideOtherNames: boolean): ActivityItem {
+  const p = r.outcome ?? ""
+  const problem: ScanAckProblem = (SCAN_ACK_PROBLEMS as readonly string[]).includes(p) ? (p as ScanAckProblem) : "error"
+  const problemWords = SCAN_ACK_PROBLEM_WORDS[problem]
+  const stored = r.message?.trim() || null
+  const reason = stored && hideOtherNames ? withoutOtherNames(stored) : stored
+  const ackAt = new Date(r.at)
+  const scanAt = r.scanAt ? new Date(r.scanAt) : null
+  const code = r.code?.trim() || null
+
+  let when = ""
+  if (scanAt) {
+    when = ` at ${clockWords(scanAt)}`
+    if (londonYmd(scanAt) !== londonYmd(ackAt)) when += ` on ${LONDON_DAY.format(scanAt)}`
+  }
+  const why = reason || problemWords
+  const detail = `${code ? `${code} didn't scan` : "A scan didn't go through"}${when} — ${why}${/[.!?]$/.test(why) ? "" : "."} Acknowledged ${clockWords(ackAt)}.`
+  return {
+    at, kind: "ack", title: "Acknowledged a failed scan", detail, href: code ? findHref(code) : null,
+    ack: {
+      code, problem, problemWords, reason,
+      scannedAt: scanAt ? scanAt.toISOString() : null,
+      shownAt: new Date(r.shownAt ?? r.at).toISOString(),
+      acknowledgedAt: at,
+    },
+  }
+}
+
 function activityItem(r: ActivityRow, hideOtherNames: boolean): ActivityItem {
   const at = new Date(r.at).toISOString()
+
+  if (r.kind === "ack") return ackItem(r, at, hideOtherNames)
 
   if (r.kind === "check-in") {
     const bits: string[] = []

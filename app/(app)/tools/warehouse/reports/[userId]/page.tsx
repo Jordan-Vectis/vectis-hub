@@ -7,10 +7,11 @@ import { Empty, ErrorBox, PageHeader, box, mono, td, th } from "../../_component
 import { londonYmd } from "../../history/london-days"
 import { DailyChart, ExportButtons } from "../charts"
 import { dayPoints } from "../day-points"
-import { Definitions, HourStrip, MissingNote, REPORTS_PATH, RangeBar, SectionTitle, Tiles, WiderRangeLink, dayLong, dayShort, hourSpan, isOneDay, londonTime, num, oneParam, plural, rangeQuery, rangeWords } from "../parts"
+import { Definitions, HourStrip, MissingNote, REPORTS_PATH, RangeBar, SectionTitle, Tiles, WiderRangeLink, dayLong, dayShort, hourSpan, isOneDay, londonSeconds, londonTime, num, oneParam, plural, rangeQuery, rangeWords } from "../parts"
 
 // Goods In → Reports → one person: their figures for the days picked, a line and a bar per day,
-// when in the day they work, and the latest things they did (codes open Find or the receipt).
+// when in the day they work, the failed scans they confirmed seeing on the scanner's pop-up, and the
+// latest things they did (codes open Find or the receipt).
 //
 // ⚠ Who may open whose page is decided HERE, before anything about the person is read: a Warehouse
 // manager or admin may open anyone's; a warehouse-tier person only their own — anyone else's id is
@@ -67,23 +68,29 @@ export default async function GoodsInPersonReportPage({ params, searchParams }: 
   let days: PersonDay[] = []
   let hours: { hour: number; count: number }[] = []
   let activity: ActivityItem[] = []
+  let acks: ActivityItem[] = []
   let shown = range
   let missing: ReportSource[] | undefined
   let error: string | null = null
   let activityError: string | null = null
+  let acksError: string | null = null
+  // The lists are a nicety beside the figures: if one fails, the figures still show. A
+  // warehouse-tier viewer never sees anyone else's name in them (an overtaken scan's message, and
+  // the reason on an acknowledgement of one, names whoever moved the item since).
+  const list = (what: string, items: Promise<ActivityItem[]>) => items.then(
+    found => ({ items: found, error: null as string | null }),
+    (e: unknown) => {
+      console.error(`goods-in person ${what} error:`, e)
+      return { items: [] as ActivityItem[], error: errText(e, 200) }
+    },
+  )
   try {
-    const [report, act] = await Promise.all([
+    const [report, act, ack] = await Promise.all([
       warehouseReport(range, userId),
-      // The list is a nicety beside the figures: if it fails, the figures still show. A
-      // warehouse-tier viewer never sees anyone else's name in it (an overtaken scan's message
-      // names whoever moved the item since).
-      personActivity(userId, range, limit, { hideOtherNames: !seesEveryone }).then(
-        items => ({ items, error: null as string | null }),
-        (e: unknown) => {
-          console.error("goods-in person activity error:", e)
-          return { items: [] as ActivityItem[], error: errText(e, 200) }
-        },
-      ),
+      list("activity", personActivity(userId, range, limit, { hideOtherNames: !seesEveryone })),
+      // The failed scans they acknowledged, asked for on their own so a busy day's moves can't push
+      // them out of the list.
+      list("acknowledgements", personActivity(userId, range, limit, { hideOtherNames: !seesEveryone, kinds: ["ack"] })),
     ])
     shown = report.range
     missing = report.missing
@@ -92,6 +99,8 @@ export default async function GoodsInPersonReportPage({ params, searchParams }: 
     hours = report.hours.filter(h => h.userId === userId)
     activity = act.items
     activityError = act.error
+    acks = ack.items.filter(it => it.kind === "ack")
+    acksError = ack.error
   } catch (e) {
     console.error("goods-in person report error:", e)
     error = errText(e, 300)
@@ -129,6 +138,13 @@ export default async function GoodsInPersonReportPage({ params, searchParams }: 
   const own = userId === user.id
   const path = `${REPORTS_PATH}/${encodeURIComponent(userId)}`
   const p = person
+  // Before Run Migrations there is nowhere for acknowledgements to be kept (the scanners hold on to
+  // them): never shown as a calm 0 or an empty list (design rule 7).
+  const acksMissing = missing?.includes("acks") ?? false
+  // The failed scans they confirmed seen on the scanner's pop-up are listed on their own (newest
+  // first, as they arrive) and stay in Latest activity too, where they read in order with the scans
+  // around them.
+  const ackTitle = own ? "Failed scans you acknowledged" : "Failed scans they acknowledged"
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -166,10 +182,14 @@ export default async function GoodsInPersonReportPage({ params, searchParams }: 
               { label: "Check-ins", value: num(p.checkIns), sub: p.checkIns ? `${plural(p.totesBooked, "tote")} · ${plural(p.palletsBooked, "pallet")}` : "receipts booked in" },
               oneDay
                 ? { label: "First – last", value: <span className={mono}>{londonTime(p.firstAt)}–<wbr />{londonTime(p.lastAt)}</span>, sub: "UK time" }
-                : { label: "Days active", value: num(p.activeDays), sub: "days with anything done" },
+                : { label: "Days active", value: num(p.activeDays), sub: "days with a move, scan or check-in" },
               { label: "Busiest hour", value: <span className={mono}>{p.busiestHour == null ? "—" : `${String(p.busiestHour).padStart(2, "0")}:00`}</span>, sub: p.busiestHour == null ? "no times recorded" : hourSpan(p.busiestHour) },
               { label: "Scanners used", value: num(p.scanners), sub: p.late ? `${plural(p.late, "scan")} sent late` : "different handheld scanners" },
-              { label: "Refused scans", value: num(p.refused), sub: p.stale ? `and ${num(p.stale)} overtaken` : "turned down by the Hub" },
+              // Refused and overtaken are on the Scans tile whenever there are any, so this tenth tile
+              // is the failed scans they confirmed seen (the tiles stay at two rows of five).
+              acksMissing
+                ? { label: "Failed scans acknowledged", value: "—", sub: "not recorded on this Hub yet — needs Run Migrations" }
+                : { label: "Failed scans acknowledged", value: num(p.acks), sub: p.acks ? "each one is listed below" : "seen on the scanner's pop-up and confirmed" },
             ]} />
 
             {!oneDay && (() => {
@@ -183,7 +203,9 @@ export default async function GoodsInPersonReportPage({ params, searchParams }: 
             })()}
 
             <section aria-label="Day by day">
-              <SectionTitle aside={<span className="text-xs text-gray-500 dark:text-gray-400">Newest first. Days with nothing done aren&apos;t listed. Times are UK time.</span>}>
+              {/* A day with only acknowledgements is listed (its Acknowledged column), though it isn't a day
+                  active — so this count can be more than the Days active tile. */}
+              <SectionTitle aside={<span className="text-xs text-gray-500 dark:text-gray-400">Newest first. Days with no moves, scans, check-ins or acknowledgements aren&apos;t listed. Times are UK time.</span>}>
                 Day by day — {plural(days.length, "day")}
               </SectionTitle>
               <DayTable days={days} />
@@ -194,6 +216,23 @@ export default async function GoodsInPersonReportPage({ params, searchParams }: 
               <HourStrip hours={hours} empty="No times recorded in these days." />
             </section>
           </>
+        )}
+
+        {!error && (acks.length > 0 || (p?.acks ?? 0) > 0 || (p?.scans ?? 0) > 0) && (
+          <section aria-label={ackTitle}>
+            <SectionTitle aside={acksError || acksMissing ? undefined : <AckListNote shown={acks.length} total={p?.acks ?? null} limit={limit} moreHref={`${path}?${rangeQuery(shown)}&list=${ACTIVITY_MAX}`} />}>
+              {ackTitle}
+            </SectionTitle>
+            {acksMissing
+              ? (
+                <p role="status" className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-4 py-3 text-sm">
+                  Not recorded on this Hub yet — an admin needs to press <b>Run Migrations</b>. The scanners keep each acknowledgement until then, and send it once it can be kept.
+                </p>
+              )
+              : acksError
+                ? <ErrorBox>The list of failed scans couldn&apos;t be loaded just now: {acksError}</ErrorBox>
+                : <AckTable items={acks} />}
+          </section>
         )}
 
         {!error && (p || activity.length > 0) && (
@@ -244,6 +283,7 @@ function DayTable({ days }: { days: PersonDay[] }) {
             <th className={h}>Lots shelved</th>
             <th className={h}>Scans</th>
             <th className={h}>Refused</th>
+            <th className={h} title="Failed scans they saw on the scanner's pop-up and confirmed seen, on the day they confirmed it">Acknowledged</th>
             <th className={h}>Check-ins</th>
             <th className={h}>Totes</th>
             <th className={h}>Pallets</th>
@@ -261,6 +301,7 @@ function DayTable({ days }: { days: PersonDay[] }) {
               <td className={r}>{n(d.lotsShelved)}</td>
               <td className={`${r} font-semibold`}>{n(d.scans)}</td>
               <td className={r}>{n(d.refused)}</td>
+              <td className={r}>{n(d.acks)}</td>
               <td className={`${r} font-semibold`}>{n(d.checkIns)}</td>
               <td className={r}>{n(d.totesBooked)}</td>
               <td className={r}>{n(d.palletsBooked)}</td>
@@ -274,9 +315,95 @@ function DayTable({ days }: { days: PersonDay[] }) {
   )
 }
 
+// ─── Failed scans they acknowledged ───────────────────────────────────────────────────────
+//
+// Every scan that didn't go through on the handheld scanner holds the screen with a pop-up until
+// the person taps "I've seen it — carry on"; each one they confirmed is listed here, newest first:
+// the barcode, what went wrong, when it was scanned and when they confirmed seeing it (UK time, to
+// the second). Read from personActivity's "ack" items — the page counts nothing itself.
+
+type AckRow = { key: string; code: string | null; href: string | null; wrong: string; scanned: string; scannedTitle: string; ackDay: string; ackClock: string; ackTitle: string }
+
+/**
+ * One acknowledgement as the list shows it, from the item's `ack` (what was stored). For a
+ * warehouse-tier viewer personActivity has already taken anyone else's name out of the reason
+ * (`hideOtherNames` — an overtaken scan's reason names whoever moved the item since).
+ */
+function ackRow(it: ActivityItem, i: number): AckRow {
+  const a = it.ack
+  const problem = a?.problemWords?.trim() || null
+  const reason = a?.reason?.trim() || null
+  // The reason under the problem's words — not given them twice when it already starts with them.
+  const said = problem && reason && !reason.toLowerCase().startsWith(problem.toLowerCase()) ? `${problem}: ${reason}` : null
+  const wrong = said || reason || problem || it.detail?.trim() || "Didn't go through"
+
+  // When it was scanned carries its day only when that isn't the day it was acknowledged.
+  const ackIso = a?.acknowledgedAt || it.at
+  const ackDay = londonYmd(new Date(ackIso))
+  let scanned = "—"
+  let scannedTitle = "When it was scanned isn't known"
+  if (a?.scannedAt) {
+    const day = londonYmd(new Date(a.scannedAt))
+    scanned = day === ackDay ? londonSeconds(a.scannedAt) : `${dayShort(day)} ${londonSeconds(a.scannedAt)}`
+    scannedTitle = `Scanned ${dayLong(day)}, ${londonSeconds(a.scannedAt)}`
+  }
+  const ackTitle = `Acknowledged ${dayLong(ackDay)}, ${londonSeconds(ackIso)}${a?.shownAt ? ` — the pop-up showed it at ${londonSeconds(a.shownAt)}` : ""}`
+  return { key: `${ackIso}-${i}`, code: a?.code ?? null, href: it.href, wrong, scanned, scannedTitle, ackDay, ackClock: londonSeconds(ackIso), ackTitle }
+}
+
+/** Beside the title: how they're listed, and — if the list was cut off — how many there are and how to see more. */
+function AckListNote({ shown, total, limit, moreHref }: { shown: number; total: number | null; limit: number; moreHref: string }) {
+  const link = "inline-flex items-center min-h-11 underline text-indigo-700 dark:text-indigo-300"
+  if (total != null && shown < total) {
+    return (
+      <span className="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-x-3">
+        <span>Showing the latest {num(shown)} of {num(total)}.{limit < ACTIVITY_MAX ? "" : " Pick fewer days to see the rest."}</span>
+        {limit < ACTIVITY_MAX && <Link href={moreHref} className={link}>Show the latest {num(ACTIVITY_MAX)}</Link>}
+      </span>
+    )
+  }
+  return <span className="text-xs text-gray-500 dark:text-gray-400">Newest first. Times are UK time, to the second.</span>
+}
+
+function AckTable({ items }: { items: ActivityItem[] }) {
+  if (items.length === 0) return <Empty>No failed scans acknowledged in these days.</Empty>
+  const rows = items.map(ackRow)
+  return (
+    <div className={`${box} overflow-x-auto overscroll-x-contain`}>
+      <table className="w-full">
+        <thead className="border-b border-gray-200 dark:border-gray-800">
+          <tr>
+            <th className={th}>Barcode</th>
+            <th className={th}>What went wrong</th>
+            <th className={`${th} text-right`}>Scanned at</th>
+            <th className={`${th} text-right`}>Acknowledged at</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+          {rows.map(r => (
+            <tr key={r.key} className="hover:bg-gray-50 dark:hover:bg-gray-800 align-top">
+              <td className={`${td} whitespace-nowrap`}>
+                {r.code && r.href
+                  ? <Link href={r.href} className={`${mono} font-semibold text-indigo-700 dark:text-indigo-300 hover:underline inline-flex items-center min-h-11 -my-3`}>{r.code}</Link>
+                  : <span className={`${mono} font-semibold text-gray-900 dark:text-white`}>{r.code ?? "No barcode"}</span>}
+              </td>
+              <td className={`${td} min-w-[16rem] text-gray-800 dark:text-gray-200 break-words`}>{r.wrong}</td>
+              <td className={`${td} ${mono} text-right whitespace-nowrap`} title={r.scannedTitle}>{r.scanned}</td>
+              <td className={`${td} ${mono} text-right whitespace-nowrap`} title={r.ackTitle}>
+                <span className="text-gray-500 dark:text-gray-400">{dayShort(r.ackDay)}</span> {r.ackClock}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // ─── Latest activity ──────────────────────────────────────────────────────────────────────
 
-const KIND_WORDS: Record<ActivityItem["kind"], string> = { move: "Move", scan: "Scan", "check-in": "Check-in" }
+// "Pop-up": a failed scan they acknowledged on the scanner's pop-up.
+const KIND_WORDS: Record<ActivityItem["kind"], string> = { move: "Move", scan: "Scan", "check-in": "Check-in", ack: "Pop-up" }
 
 // What happened to a scan, in words (the word is the key — no colour stands alone).
 const OUTCOME: Record<string, { label: string; tone: string }> = {

@@ -1,6 +1,7 @@
-import type { BootstrapResponse, LookupResponse, ScanEvent, SyncResponse } from "./types"
+import type { BootstrapResponse, LookupResponse, ScanAck, ScanAckResponse, ScanEvent, SyncResponse } from "./types"
 
-// The handheld scanner — the three calls to the Hub (lib/goods-in/scan-contract.ts). Browser only.
+// The handheld scanner — the calls to the Hub (lib/goods-in/scan-contract.ts), plus sending the
+// failed-scan pop-up's acknowledgements (POST /api/goods-in/scan/acks). Browser only.
 // Every failure becomes a ScanApiError with a `kind` the screen can say plainly — never a bare
 // network error — and every call has a time limit: a Wi-Fi dead spot can leave a request hanging
 // for minutes otherwise.
@@ -22,10 +23,18 @@ export class ScanApiError extends Error {
 const SYNC_URL = "/api/goods-in/scan/sync"
 const BOOTSTRAP_URL = "/api/goods-in/scan/bootstrap"
 const LOOKUP_URL = "/api/goods-in/scan/lookup"
+const ACKS_URL = "/api/goods-in/scan/acks"
 
 async function call<T>(url: string, init: RequestInit, timeoutMs: number): Promise<{ body: T; res: Response }> {
   const ctl = typeof AbortController !== "undefined" ? new AbortController() : null
   const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null
+  // The caller's own signal (the sync engine letting go of a call) stops it too.
+  const outer = init.signal ?? null
+  const letGo = () => ctl?.abort()
+  if (outer && ctl) {
+    if (outer.aborted) ctl.abort()
+    else outer.addEventListener("abort", letGo, { once: true })
+  }
   let res: Response
   try {
     res = await fetch(url, {
@@ -34,12 +43,13 @@ async function call<T>(url: string, init: RequestInit, timeoutMs: number): Promi
       cache: "no-store",
       // JSON only: inside the app, Capacitor only rewrites requests that ask for HTML.
       headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers ?? {}) },
-      signal: ctl?.signal,
+      signal: ctl?.signal ?? outer,
     })
   } catch {
     throw new ScanApiError("offline", "The Hub couldn't be reached — no Wi-Fi, or it didn't answer in time.")
   } finally {
     if (timer) clearTimeout(timer)
+    outer?.removeEventListener("abort", letGo)
   }
   let body: unknown = null
   try {
@@ -71,6 +81,19 @@ export async function getBootstrap(): Promise<{ data: BootstrapResponse; fromCac
   const { body, res } = await call<BootstrapResponse>(BOOTSTRAP_URL, { method: "GET" }, 12_000)
   if (!body.user || !Array.isArray(body.locations)) throw new ScanApiError("server", "The Hub's answer about locations didn't make sense.")
   return { data: body, fromCache: res.headers.get("x-scan-from-cache") === "1" }
+}
+
+/**
+ * Send acknowledged failed scans (≤ MAX_SCAN_ACKS) — { deviceId, acks } → { results: { id, ok, error?, keep? }[] }.
+ * 503 = the Hub's table isn't there yet (Run Migrations): nothing stored, and they stay queued. The
+ * Hub stops starting new ones about 15 s in, well inside this call's 30 s (app/api/goods-in/scan/acks).
+ * `signal` lets the sync engine let go of it when a scan is waiting to go (scans first); the Hub
+ * stores each once, so sending them again after that is safe.
+ */
+export async function postAcks(deviceId: string, acks: ScanAck[], signal?: AbortSignal): Promise<ScanAckResponse> {
+  const { body } = await call<ScanAckResponse>(ACKS_URL, { method: "POST", body: JSON.stringify({ deviceId, acks }), signal }, 30_000)
+  if (!Array.isArray(body.results)) throw new ScanApiError("server", "The Hub's answer didn't say what happened to the acknowledgements — they're kept and will be sent again.")
+  return body
 }
 
 /** What a code is and where it is now (online only). */

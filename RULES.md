@@ -1871,7 +1871,8 @@ the same way, never as an export of an actions file.
 - **New tables only**: `GoodsInCustomer`, `GoodsInReceipt`, `GoodsInContainer`, `GoodsInLocation`,
   `GoodsInMovement`, `GoodsInCounter`, `GoodsInMailAuth`, and (2026-10-16) `GoodsInAgreement` and
   `GoodsInScanEvent` (the handheld scanner's record, below) and `GoodsInScannerPass` (its sign-in
-  cards) (**NEEDS Run Migrations**). ⚠ **Nothing was
+  cards), and (2026-10-21) `GoodsInScanAck` (failed scans acknowledged on the scanner's pop-up)
+  (**NEEDS Run Migrations**). ⚠ **Nothing was
   added to `Contact`, `CatalogueLot` or `User`** — a shipped-but-unmigrated column there breaks every
   contact or lot save, or login, between the deploy and Run Migrations. Keep it that way. Until the
   tables exist every Goods In screen says it isn't set up yet rather than crashing.
@@ -2096,11 +2097,91 @@ the Hub**, not a separate build.
   dismissed, with a red button to them in the status bar. In keyboard mode a scanner's burst typed
   into one of the screen's own boxes (the note, Type a code) is caught as a scan and taken back out
   of the box (`lib/goods-in/scan-client/scanner.ts`), so it is never lost or sent as a note.
+- ⚠⚠ **A failed scan must be acknowledged before scanning carries on** (2026-10-21 — Jack: *"it's fine
+  to rapid scan 100s of them but currently they do this and one fails and they don't check"*).
+  - **What opens the pop-up**: every scan whose answer is a failure the worker must know about —
+    anything the screen shows as a red (error) result, a **refused** or **stale** answer from the sync
+    (even minutes later, after being offline), and a scan **not taken because the pop-up was already
+    open**. Amber or information answers that aren't failures ("already there", location set) don't.
+  - **The pop-up** covers the whole scanner screen (red header, "This scan didn't go through") and
+    lists every failure not yet acknowledged: the barcode, what went wrong in plain words, when it was
+    scanned (UK time, to the second), and for the Hub's answers who and where when known. One button,
+    **"I've seen it — carry on"** (≥ 48px), covers everything listed. ⚠ It must be a deliberate TAP:
+    never focused by itself, Enter and Tab are ignored while it is open (a keyboard-output scanner
+    sends Enter after every code), and no scan can press it. It stays compact enough for the MT65.
+  - ⚠ **While it is open, nothing scanned is acted on** — from the plugin or the keyboard. Each such
+    code is added to the pop-up as "Not taken — the pop-up was open" with an error buzz, as a failure
+    of its own (`blocked`) to acknowledge too. It buzzes when it opens (Settings → Sound & alerts is
+    respected) and again about every 8 seconds while it stays open. It survives a reload, shows for the
+    signed-in person only, and blocks Switch user and Settings while it is up. Refused and stale scans
+    still stay in "Need a look" for rescanning, as before.
+    - ⚠ **Nothing else gets past it either.** A TAP's action that queues a move or starts a check (a
+      banner button, Move it here, Move it anyway, Move / Check from Find, Check again) waits behind any
+      scan still being handled and is dropped with an error buzz if the pop-up is open by its turn
+      (`afterScans` in the controller) — use it for any new tap that acts. Back does nothing
+      underneath: the app's `vectis:back` is refused, and a plain browser's Back (a popstate) puts the
+      screen's history entry back. (Back from the very first entry leaves /scan, which no page can stop
+      — the pop-up is still there when /scan opens again.)
+    - ⚠ **It says whose failures they are**: "<name>, check it before you carry on — the button records
+      that you've seen it". When Switch user is pressed and held (the usual way: "Still …?" → Switch
+      user, when the scanner may be in someone else's hands), it adds that only <name> should tap it.
+      The acknowledgement is recorded under the signed-in person, so someone else tapping it away would
+      make Reports say the wrong person saw it. ⚠ **A decision for Jack** (not yet made): whether
+      Switch user from "Still …?" should instead go ahead and leave the failures on the pop-up for
+      their owner (they come back when that person signs in on this scanner again). Until he says,
+      the brief's rule stands — held.
+  - **Each acknowledgement is recorded.** The button queues one `ScanAck` per failure listed
+    (`lib/goods-in/scan-contract.ts`: its own uuid, the code, the problem — `refused` · `stale` ·
+    `error` · `blocked` — the reason in words, the scan's id, when scanned / shown / acknowledged, and
+    who) in the device's store beside the scans; the sync engine sends them to
+    **`POST /api/goods-in/scan/acks`** (≤ 200 a call, `scanGate()` — cards allowed). They become
+    `GoodsInScanAck` rows (in `lib/data-map.ts` as staff data), read by Goods In → Reports. This ADDS
+    a step and a second kind of queued record: how moves and scans are applied, the stale and refused
+    rules, card sign-in and the scan queue are unchanged.
+    - **On the device** (`lib/goods-in/scan-client/`): IndexedDB `vectis-scan` **version 2** adds the
+      `acks` object store beside `scans` and `kv` (localStorage key `vectis-scan-acks-v1` when
+      IndexedDB can't open, carried back into IndexedDB on a later visit; page memory as the last
+      resort). An `AckRecord` goes `open` (on the pop-up) → `waiting` (acknowledged) → `sent` or
+      `refused` (the Hub can never store it). ⚠ `StoredScan.flagged` is the pop-up's mark on a queued
+      scan: sync.ts writes `flagged: false` in the SAME store write as a refused or stale answer, and
+      the controller sets it true only once that failure's record is really WRITTEN on the device — so
+      an answer that lands as the page closes, or whose record couldn't be saved, still reaches the
+      pop-up when it opens again. Scans from before this have no flag and never pop up. ⚠ `prune()`
+      must never drop a scan with `flagged: false`, or an `open` or `waiting` acknowledgement — only
+      sent / refused ones beyond the newest 100. Change prune and a failure can vanish from the pop-up.
+    - **Sending**: acknowledgements go only after every waiting scan has gone with no problem, and
+      never while another send is asked for — a scan queued while an acks call is in flight lets go of
+      that call (aborted; the Hub stores each once, so they simply go again after the scan). They have
+      their own back-off and their own problem (`ackProblem`), so an acks 503 before Run Migrations
+      never shows as scans "not sent". Switch user sends scans only (`sendNow({ scansOnly: true })`)
+      and waits at most 8 seconds for a person's waiting acknowledgements — never a reason not to switch.
+    - ⚠ **The reason never carries a customer's name or another member of staff's** — it is what
+      Reports keeps. A red banner that names someone (a receipt's or vendor number's customer with a
+      Hub login, "now signed in as <someone else>") passes its own `reason` without the name
+      (`say(…, { failure: { reason } })`). The one exception is the Hub's own overtaken message (who
+      moved it since), which Reports takes the name out of for a warehouse-tier viewer.
+  - ⚠ **The acks route** (`app/api/goods-in/scan/acks/route.ts`) stores each acknowledgement ONCE per
+    id (`createMany` with `skipDuplicates`), so a replay answers ok and stores nothing new — and once
+    per person, queued scan and problem: one naming a `scanId` already acknowledged with the same
+    problem under another id (two /scan tabs, or a scan put on the pop-up again after its first record
+    was sent and pruned) answers ok and is not stored, so Reports counts that failure once. `scannedBy`
+    must be the signed-in person: that refusal (`ACKED_BY_SOMEONE_ELSE`, with `keep: true`) isn't
+    stored, and the scanner keeps it until that person sends it. Any other refusal (no proper id, an
+    unknown problem, no proper time, acknowledged more than 30 days ago) could never be stored, and the
+    scanner drops it. Fields are tidied, never trusted: code ≤ 64, reason ≤ 500, a time in the future is
+    taken as now and any other time older than 30 days as unknown. ⚠⚠ **A sign-in card's code is never
+    stored** — as the code it is dropped, and inside the reason it becomes "a sign-in card". One insert
+    per call; only a fault in one record's own DATA makes it store them one at a time so just that one
+    is refused — anything else stores nothing and answers 503, and they are sent again. About 15
+    seconds in it starts no more (the rest get no result and stay queued), inside the screen's
+    30-second wait (`postAcks`) — change them together.
 - ⚠⚠ **Run Migrations.** `GoodsInScanEvent` is a new table (one row per scan: who, which device, item,
   location, when scanned and when received, outcome, message — in `lib/data-map.ts` as staff data).
   Until it exists the sync answers **503 "Goods In scanner isn't set up — an admin needs to press Run
   Migrations."** before touching anything, the scanner keeps its queue, and the bootstrap says
-  `ready: false`. Nothing was added to `Contact`, `CatalogueLot` or `User`.
+  `ready: false`. Nothing was added to `Contact`, `CatalogueLot` or `User`. **`GoodsInScanAck`** (2026-10-21,
+  migration `20261021120000_goods_in_scan_acks`) is the same: until it exists the acks route answers
+  the same 503 with nothing stored, and the scanner keeps every acknowledgement queued — never drops one.
 - **A call that can't finish.** The sync stops starting new events after about 25 seconds, and stops at
   any unexpected error (a lock, a timeout, the connection, a fault in the Hub's own code): the events
   already done are answered, the rest get no result (`unsent`, with `error` saying why) and stay queued.
@@ -2269,8 +2350,9 @@ person's day-by-day figures, hours and latest activity. The numbers are ONE modu
 `lib/goods-in/reports.ts` (`parseRange`, `warehouseReport`, `personActivity`, `REPORT_DEFINITIONS`) —
 change a definition there, never in a page.
 
-- **Read-only, from what Goods In already records.** No new table or column, nothing written, nothing
-  sent to or read from Business Central.
+- **Read-only, from what Goods In already records.** Nothing written, nothing sent to or read from
+  Business Central. Its one table of its own is `GoodsInScanAck` (2026-10-21), which the handheld
+  scanner's failed-scan pop-up fills — the report only reads it.
 - ⚠⚠ **Who sees what, decided on the server** (`getGoodsInUser` + `atLeast`): a Warehouse **manager
   or admin** sees everyone; a **warehouse**-tier person sees only their OWN numbers — the same page,
   with the report ASKED FOR with their id only (`onlyUserId`), so nobody else's name or figures ever
@@ -2288,12 +2370,25 @@ change a definition there, never in a page.
   - **Check-ins** — receipts booked in (not `draft`, not `void`) by `createdById`, on the day of
     `createdAt` (Book in's time), with the **totes and pallets booked** on them. A receipt voided
     later drops out.
+  - **Failed scans acknowledged** (`acks`, 2026-10-21) — `GoodsInScanAck` rows by `userId`, on the
+    day of `acknowledgedAt`: one per failure the handheld's pop-up listed when they pressed "I've seen
+    it — carry on". ⚠ COUNTED ONLY — never in Days active, first / last, the busiest hour, the hour
+    counts or Scanners used, which are moves, scans and check-ins: an acknowledgement's row has
+    `acts = 0` and no device, and the grouped query FILTERs it out of the day count and the times.
+    Someone with only acknowledgements in a range is listed with 0 days active, and isn't counted in
+    **People active** (people with a move, scan or check-in — as Days active). A day with only
+    acknowledgements IS listed in a person's Day by day table (its Acknowledged column), so that
+    table's day count can be more than Days active — its note says which days are listed.
+    ⚠ Before Run Migrations (`missing` has `"acks"`) the tiles show "—" with "not recorded on this
+    Hub yet", and the person page's list says the same instead of "No failed scans acknowledged" —
+    never a calm 0 (design rule 7): the scanners are still holding them.
   - **First / last** and the **busiest hour** are over moves, scans and check-ins.
   - ⚠ **A scan that moved something is in BOTH Scans and Moves** (the scanner writes its move under
     the same person, stamped with the scan's time) — they are separate measures, so never add them up
     as one "total". The busiest hour, the hour-of-day counts and the activity list count it ONCE, as
     its move: an applied scan adds nothing to the hour counts, and the activity list shows only the
-    refused and overtaken scans, marking a move made on the scanner "handheld scanner".
+    refused and overtaken scans, marking a move made on the scanner "handheld scanner". (The list
+    also has each acknowledged failed scan, kind `"ack"`.)
   - Grouped by **user id, never by name**. The name shown is the one stored on their latest activity,
     else the User table's. A row with no person id isn't counted.
 - ⚠ **London days and hours, worked out in SQL**: `("col" AT TIME ZONE 'UTC') AT TIME ZONE
@@ -2302,13 +2397,14 @@ change a definition there, never in a page.
   these columns with a single `AT TIME ZONE 'Europe/London'`: on a timestamp WITHOUT time zone that
   reads the UTC value as if it were London time, so through BST every time lands an hour early
   instead of an hour late, and work just after midnight falls on the day before.
-- **One grouped query per report** — a UNION ALL of the three sources with GROUPING SETS (person ×
-  day, person × hour of day, person) — plus one for the activity list. Never a query per person or
-  per day; parameterised throughout.
-- ⚠ **Tolerant of missing tables.** `GoodsInScanEvent` exists only after Run Migrations: the report
-  checks with `to_regclass` first and leaves a missing source out — its counts are 0 and it is named
-  in `missing`, so the page can say so rather than show a quiet zero. Any other database fault throws,
-  and the page says so.
+- **One grouped query per report** — a UNION ALL of the four sources (moves, scans, check-ins,
+  acknowledgements) with GROUPING SETS (person × day, person × hour of day, person) — plus one for the
+  activity list. Never a query per person or per day; parameterised throughout. ⚠ UNION ALL matches
+  columns by POSITION: a column added to one source's SELECT goes into every source's, in the same place.
+- ⚠ **Tolerant of missing tables.** `GoodsInScanEvent` and `GoodsInScanAck` exist only after Run
+  Migrations: the report checks with `to_regclass` first and leaves a missing source out — its counts
+  are 0 and it is named in `missing` (`"acks"` for the acknowledgements), so the page can say so rather
+  than show a quiet zero. Any other database fault throws, and the page says so.
 - **Ranges are in the URL** — `?range=today|yesterday|7d|30d|90d|6m|1y`, or `?range=custom&from=&to=`
   (London days, both ends included). The default, and the answer to anything unreadable, is the last
   7 days; a custom range is tidied (swapped, kept to today, at most about three years).
@@ -2327,7 +2423,15 @@ change a definition there, never in a page.
   read** — the refusal names nobody, doesn't say whether the id exists, and links to their own
   page. Their activity list also takes the name out of an overtaken scan's message (it names whoever
   moved the item since — `personActivity(…, { hideOtherNames })`); a manager or admin sees it as
-  stored.
+  stored. The same goes for the reason on an acknowledged overtaken scan (it is the Hub's message):
+  `hideOtherNames` takes the name out of `ack.reason` as well as the item's words.
+- **"Failed scans they acknowledged"** on the per-person page (2026-10-21): every acknowledgement in
+  the range, newest first — the barcode, what went wrong, when it was scanned and when they
+  acknowledged it (UK time, to the second) — from `personActivity(…, { kinds: ["ack"] })`, asked for
+  on its own so a busy day's moves can't push them out of the latest list. Each `"ack"` item carries
+  `ack` (code, problem and its words, reason, scanned / shown / acknowledged times); its words read
+  *"T026156 didn't scan at 10:42:05 — <reason>. Acknowledged 10:42:31."* The summary tiles, the
+  per-person table and the CSVs carry the `acks` count.
 - The per-person page is a 404 only for an id with no Hub account AND nothing ever on record in
   Goods In (`personOnRecord`), and only when both reads worked: a former member of staff whose
   account has gone still has a page ("nothing recorded" for a quiet range), and a read that failed
@@ -2352,7 +2456,8 @@ change a definition there, never in a page.
   migration `20261020120000_goods_in_report_indexes` — until Run Migrations it still works, it just
   reads those tables whole). The scan reads also add an always-true `receivedAt` bound (with a day's
   margin for clock difference — never tighten it) so the `(userId, receivedAt)` index narrows a
-  one-person read.
+  one-person read. Acknowledgements are read through `GoodsInScanAck(acknowledgedAt)` and
+  `(userId, acknowledgedAt)`, made with the table.
 - **It is staff monitoring.** It is on the staff-monitoring lists in Admin → Data & Compliance and
   the DPIA. Keep it to work activity, and keep the warehouse-tier filter.
 - Registered in `lib/help-map.ts` as **"Goods In → Output by person"** — never "Reports" or

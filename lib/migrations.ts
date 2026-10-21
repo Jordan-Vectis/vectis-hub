@@ -2361,6 +2361,25 @@ export const MIGRATIONS = [
   // Indexes only; the report works (more slowly) before they exist.
   `CREATE INDEX IF NOT EXISTS "GoodsInMovement_movedAt_idx" ON "GoodsInMovement"("movedAt")`,
   `CREATE INDEX IF NOT EXISTS "GoodsInScanEvent_scannedAt_idx" ON "GoodsInScanEvent"("scannedAt")`,
+  // Goods In handheld scanner (2026-10-21): failed scans the worker acknowledged on the pop-up, for
+  // Reports. New table only, no foreign keys.
+  `CREATE TABLE IF NOT EXISTS "GoodsInScanAck" (
+    "id"             TEXT NOT NULL,
+    "userId"         TEXT NOT NULL,
+    "userName"       TEXT,
+    "deviceId"       TEXT,
+    "code"           TEXT,
+    "problem"        TEXT NOT NULL,
+    "reason"         TEXT,
+    "scanId"         TEXT,
+    "scannedAt"      TIMESTAMP(3),
+    "shownAt"        TIMESTAMP(3) NOT NULL,
+    "acknowledgedAt" TIMESTAMP(3) NOT NULL,
+    "receivedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "GoodsInScanAck_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInScanAck_userId_acknowledgedAt_idx" ON "GoodsInScanAck"("userId", "acknowledgedAt")`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInScanAck_acknowledgedAt_idx" ON "GoodsInScanAck"("acknowledgedAt")`,
   // Retired personal tables (removed 2026-10-19). Empty on production; safe to delete this line
   // once Run Migrations has been pressed there.
   `DO $$ DECLARE t text; BEGIN

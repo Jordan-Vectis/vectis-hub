@@ -24,8 +24,11 @@ function londonDateTime(iso: string | null): string {
 const londonClock = (iso: string | null) => (iso ? LONDON_T.format(new Date(iso)) : "")
 const hourWords = (h: number | null) => (h == null ? "" : `${String(h).padStart(2, "0")}:00-${String((h + 1) % 24).padStart(2, "0")}:00`)
 
-const COUNT_HEAD = ["Moves", "Put away", "To bench", "Lots shelved", "Moved in bulk", "Scans", "Refused", "Overtaken", "Sent late", "Check-ins", "Totes booked", "Pallets booked"]
-const counts = (c: PersonTotals | PersonDay) => [c.moves, c.putAway, c.toBench, c.lotsShelved, c.bulk, c.scans, c.refused, c.stale, c.late, c.checkIns, c.totesBooked, c.palletsBooked]
+// "Failed scans acknowledged" = failed scans the person saw on the scanner's pop-up and confirmed
+// seen, counted on the day they confirmed it (London) — so a day's figure can include a scan made
+// the day before.
+const COUNT_HEAD = ["Moves", "Put away", "To bench", "Lots shelved", "Moved in bulk", "Scans", "Refused", "Overtaken", "Sent late", "Failed scans acknowledged", "Check-ins", "Totes booked", "Pallets booked"]
+const counts = (c: PersonTotals | PersonDay) => [c.moves, c.putAway, c.toBench, c.lotsShelved, c.bulk, c.scans, c.refused, c.stale, c.late, c.acks, c.checkIns, c.totesBooked, c.palletsBooked]
 
 /** A total per day active, to one decimal place ("" with no days) — the table's "a day" columns. */
 export const perDay = (total: number, activeDays: number): number | null =>

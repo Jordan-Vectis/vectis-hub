@@ -8,7 +8,7 @@ import { forgetOfflineCopy, startOffline } from "./offline"
 import { nativeScannerAvailable, setTakeScansDirectly, type ScannerMode, type ScanSource } from "./scanner"
 import { openScanStore, type ScanStore, type StoreKind } from "./store"
 import { SyncEngine, type Answered, type SyncState } from "./sync"
-import { RECENT_SHOWN, SCANNER_NOT_SET_UP, type BootstrapResponse, type LookupResponse, type ScanHere, type ScanLocation, type StoredScan } from "./types"
+import { MAX_ACK_REASON, RECENT_SHOWN, SCANNER_NOT_SET_UP, type AckProblem, type AckRecord, type BootstrapResponse, type LookupResponse, type ScanHere, type ScanLocation, type StoredScan } from "./types"
 
 // The handheld scanner's brain — everything the /scan screen does, outside React. The screen
 // subscribes to its snapshot (useSyncExternalStore) and calls its methods; it holds no rules itself.
@@ -36,6 +36,19 @@ import { RECENT_SHOWN, SCANNER_NOT_SET_UP, type BootstrapResponse, type LookupRe
 // A scanner sign-in card (card.ts) scanned here is never an item: it is turned away before it is
 // queued or looked up ("That's a sign-in card — press Switch user…"); signing in with one happens in
 // the Switch user panel, which takes the scans while it is open (app/(scanner)/scan/scan-app.tsx).
+//
+// FAILED SCANS STOP SCANNING until they are acknowledged (Jack, 2026-10-21: rapid-scanning hundreds
+// is fine, but one fails and nobody checks). Every red answer to a scan (say() with tone "error"),
+// every refused or stale answer from the Hub — even minutes later, after being offline — goes on a
+// full-screen pop-up (app/(scanner)/scan/failed-scans.tsx) that stays until "I've seen it — carry on"
+// is tapped. While it is open nothing scanned is used: each code is added to it as "Not taken" (problem
+// "blocked"), so it is acknowledged too. Each failure is an AckRecord kept on the device (store.ts) —
+// so the pop-up survives a reload — and, once acknowledged, sent to the Hub by the sync engine for
+// Goods In → Reports. The pop-up is the signed-in person's only; Switch user waits until it is
+// answered (and the pop-up then says plainly whose failures they are). Nothing else gets past it
+// either: a tap's action queued behind a scan that fails is dropped (afterScans), and Back — the
+// app's vectis:back or a plain browser's popstate — changes nothing underneath. Refused and stale
+// scans still stay in "Need a look" as before.
 //
 // Two guards for a shared device left lying about: a location that stays set is let go after
 // PIN_IDLE_MS without a scan (the next item waits for a location instead of going there), and after
@@ -133,7 +146,16 @@ export type Snapshot = {
   clockOffMs: number | null
   /** False when the browser wouldn't promise to keep this scanner's saved scans (plain browsers only); null = not known. */
   persisted: boolean | null
+  /** This person's failed scans on the pop-up (not acknowledged yet), newest first. Any here = the pop-up is open and scans aren't used. */
+  failures: AckRecord[]
+  /** Switch user was pressed while the pop-up was open (so it was held): the pop-up says whose these are. Cleared when it closes. */
+  switchHeld: boolean
+  /** This person's acknowledgements still to be sent to the Hub. */
+  acksWaiting: number
 }
+
+/** What a new failure needs; the rest of its AckRecord is filled in by raise(). */
+type FailureInput = Pick<AckRecord, "problem" | "code" | "title"> & Partial<Pick<AckRecord, "detail" | "reason" | "scanId" | "location" | "scannedAt" | "answeredAt">>
 
 const SOUND_KEY = "vectis-scan-sound"
 const VIBRATE_KEY = "vectis-scan-vibrate"
@@ -157,8 +179,12 @@ const IDLE_ASK_MS = 20 * 60_000
 /** When this page last reloaded because the Hub said its person was signed out (sessionStorage) — so it can never loop. */
 const ENDED_KEY = "vectis-scan-ended-at"
 const ENDED_AGAIN_MS = 30_000
+/** A short reminder buzz this often while the failed-scan pop-up stays open. */
+const REMIND_MS = 8_000
+/** Switch user waits at most this long for this person's acknowledgements to go (never a reason not to switch). */
+const ACK_SWITCH_WAIT_MS = 8_000
 
-const EMPTY_SYNC: SyncState = { sending: false, problem: null, lastOkAt: null, nextTryAt: null }
+const EMPTY_SYNC: SyncState = { sending: false, problem: null, lastOkAt: null, nextTryAt: null, ackProblem: null }
 const NO_IDS: ReadonlySet<string> = new Set()
 
 const isProblem = (s: StoredScan) => (s.status === "refused" || s.status === "stale") && !s.dismissed
@@ -231,11 +257,34 @@ export class ScanController {
   private ended = false
   private channel: BroadcastChannel | null = null
   private cleanup: (() => void)[] = []
+  /** Every failed-scan record on this device (store.ts "acks"), as last read — plus any still being written. */
+  private acks: AckRecord[] = []
+  private lastAckSeq = 0
+  /** Ack ids with a write still on its way to the store (count per id): a reload keeps the version in memory for these. */
+  private ackPending = new Map<string, number>()
+  /** Ack ids whose latest write FAILED: kept in memory (the pop-up still shows it, a reload keeps it) until a later write lands. */
+  private ackUnsaved = new Set<string>()
+  /** Ack writes go one after another, in order. */
+  private ackIo: Promise<void> = Promise.resolve()
+  /** Resolves once the device's store is open (ack writes wait for it). */
+  private storeOpen: Promise<void>
+  private openedStore: () => void = () => {}
+  /** Resolves once the store has been read the first time (so a scan in the first moment sees a pop-up left open). */
+  private firstLoad: Promise<void>
+  private loadedFirst: () => void = () => {}
+  private loaded = false
+  /** The scan being handled now: its code and when it arrived — for a red answer's failure record. */
+  private ctx: { code: string; at: string } | null = null
+  private remindTimer: ReturnType<typeof setInterval> | null = null
+  /** Between start() and stop(). */
+  private live = false
   private s: Snapshot
   private readonly initial: Snapshot
 
   constructor(me: Me) {
     this.me = me
+    this.storeOpen = new Promise<void>(resolve => { this.openedStore = resolve })
+    this.firstLoad = new Promise<void>(resolve => { this.loadedFirst = () => { this.loaded = true; resolve() } })
     this.initial = {
       started: false,
       screen: "home",
@@ -269,6 +318,9 @@ export class ScanController {
       stillYou: false,
       clockOffMs: null,
       persisted: null,
+      failures: [],
+      switchHeld: false,
+      acksWaiting: 0,
     }
     this.s = this.initial
   }
@@ -293,6 +345,7 @@ export class ScanController {
 
   start() {
     const gen = ++this.gen
+    this.live = true
     this.lastActivityAt = Date.now()
     this.set({
       hub: hubInfo(location.hostname),
@@ -313,6 +366,16 @@ export class ScanController {
     }
 
     const onPop = (e: PopStateEvent) => {
+      // The failed-scan pop-up is answered with its own button only. In a plain browser (Chrome on
+      // the scanner) Back is a popstate, not the app's vectis:back: put this screen's entry back and
+      // change nothing underneath (a location that stays set isn't let go, a waiting item isn't put
+      // down). (Back from the very first entry leaves /scan altogether, which nothing on a page can
+      // stop — the pop-up is kept on the device and is there again when /scan opens.)
+      if (this.hasOpen()) {
+        const here = this.s.screen
+        try { window.history.pushState({ scanScreen: here }, "", here === "home" ? location.pathname : `${location.pathname}?s=${here}`) } catch { /* no history here */ }
+        return
+      }
       const want = (e.state as { scanScreen?: Screen } | null)?.scanScreen ?? "home"
       this.pushed = want !== "home"
       this.go(want, false)
@@ -339,6 +402,7 @@ export class ScanController {
     const onBack = (e: Event) => {
       if (this.s.stillYou) { e.preventDefault(); return } // answer "Still …?" first
       if (this.s.switching === "open") { this.cancelSwitch(); e.preventDefault(); return }
+      if (this.hasOpen()) { e.preventDefault(); return } // the failed-scan pop-up is answered with its own button only
       if (this.s.screen === "move" && this.s.pending) { this.notThisOne(); e.preventDefault(); return }
       if (this.s.screen === "move" && this.s.pinned) { this.done(); e.preventDefault() }
     }
@@ -371,6 +435,7 @@ export class ScanController {
       if (gen !== this.gen) return
       this.store = store
       this.set({ storeKind: store.kind })
+      this.openedStore()
       for (const w of this.whenOpen.splice(0)) w()
       try {
         const saved = await store.getKV<{ data: BootstrapResponse; savedAt: number }>(BOOT_KEY)
@@ -384,6 +449,9 @@ export class ScanController {
       } catch { /* none saved */ }
       void this.askToKeep(gen)
       await this.reload()
+      this.loadedFirst()
+      // A refused or stale answer that arrived just as the page last closed: on to the pop-up now.
+      try { await this.flagNew() } catch { /* next answer */ }
       try { await store.prune() } catch { /* next time */ }
       if (gen !== this.gen) return
       this.engine = new SyncEngine({
@@ -393,6 +461,7 @@ export class ScanController {
         onAnswered: a => { void this.answered(a) },
         onState: st => this.onSyncState(st),
         onSending: ids => this.set({ sendingIds: ids.size ? new Set(ids) : NO_IDS }),
+        onAcksAnswered: () => { void this.reload().then(() => this.told()) },
       })
       this.engine.start()
       this.set({ started: true })
@@ -418,10 +487,13 @@ export class ScanController {
 
   stop() {
     this.gen++
+    this.live = false
     this.engine?.stop()
     this.engine = null
     for (const t of this.timers) clearInterval(t)
     this.timers = []
+    if (this.remindTimer) clearInterval(this.remindTimer)
+    this.remindTimer = null
     for (const c of this.cleanup) c()
     this.cleanup = []
     try { this.channel?.close() } catch { /* ignore */ }
@@ -438,7 +510,26 @@ export class ScanController {
       return
     }
     this.lastSeq = this.scans.reduce((m, s) => Math.max(m, s.seq), this.lastSeq)
+    try {
+      this.acks = this.withPending(await this.store.allAcks())
+      this.lastAckSeq = this.acks.reduce((m, a) => Math.max(m, a.seq), this.lastAckSeq)
+    } catch {
+      // Kept as they were in memory; read again next time.
+    }
     this.derive()
+  }
+
+  /** The store's failed-scan records, with this page's own still being written laid over them (a reload mustn't lose one). */
+  private withPending(stored: AckRecord[]): AckRecord[] {
+    if (!this.ackPending.size && !this.ackUnsaved.size) return stored
+    const mine = new Map(this.acks.filter(a => this.ackPending.has(a.id) || this.ackUnsaved.has(a.id)).map(a => [a.id, a]))
+    const seen = new Set<string>()
+    const out = stored.map(a => {
+      seen.add(a.id)
+      return mine.get(a.id) ?? a
+    })
+    for (const [id, a] of mine) if (!seen.has(id)) out.push(a)
+    return out.sort((a, b) => a.seq - b.seq)
   }
 
   private derive() {
@@ -454,12 +545,23 @@ export class ScanController {
         others.set(s.scannedBy, o)
       }
     }
+    const failures = this.acks.filter(a => a.status === "open" && a.scannedBy === this.me.id).sort((a, b) => b.seq - a.seq)
+    const acksWaiting = this.acks.reduce((n, a) => n + (a.status === "waiting" && a.scannedBy === this.me.id ? 1 : 0), 0)
+    const before = this.s.failures.length
     this.set({
       recent: newestFirst.filter(s => !isProblem(s) || isAlreadyThere(s)).slice(0, RECENT_SHOWN),
       problems: newestFirst.filter(s => isProblem(s) && !isAlreadyThere(s)),
       waitingMine: mine,
       waitingOthers: [...others.values()],
+      failures,
+      acksWaiting,
+      ...(failures.length ? {} : { switchHeld: false }),
     })
+    // The pop-up's own sounds (say() leaves a failure's to it): the alert as it opens — here, so it
+    // also sounds when it comes back after a reload or from another tab — and the error buzz for each
+    // failure added while it's open.
+    if (failures.length > before && !this.ended) signal(before === 0 ? "alert" : "error", this.s.sound, this.s.vibrate)
+    this.syncReminder(failures.length > 0)
   }
 
   private told() {
@@ -564,6 +666,8 @@ export class ScanController {
     else if (st.problem?.kind === "offline" && st.problem !== prev.problem) this.netFail()
     this.set({ sync: st })
     if ((st.problem?.kind === "signed-out" || st.problem?.kind === "no-access") && st.problem !== prev.problem) this.sessionEnded()
+    // Sending acknowledgements can be the first call to hear it, when no scans are waiting.
+    else if ((st.ackProblem?.kind === "signed-out" || st.ackProblem?.kind === "no-access") && st.ackProblem !== prev.ackProblem) this.sessionEnded()
   }
 
   /**
@@ -689,11 +793,32 @@ export class ScanController {
    * Show a banner, with its beep and buzz — the banner's own tone unless `sound` says otherwise
    * ("set" for a change of mode; the ok pip for a plain-white answer to a scan). An info banner is
    * silent unless given a sound; `quiet` silences any.
+   *
+   * ⚠ A RED banner is a failed scan: it also goes on the failed-scan pop-up (raise), whose sound it
+   * then is. `failure` says which barcode and when (default: the code given, the scan being handled
+   * and when it arrived); `failure: false` only for a red that isn't the answer to a scan (Switch
+   * user's "send them first"), or a refused answer the pop-up already has (flagNew).
+   *
+   * ⚠ The failure's `reason` is what the Hub keeps (GoodsInScanAck, shown in Reports) — by default
+   * the banner's own words. A banner that names a CUSTOMER or another member of staff passes a
+   * `reason` without the name: the scanner may show it, Reports must never keep it.
    */
-  private say(tone: BannerTone, title: string, detail: string | null, code: string | null, opts: { scanId?: string | null; actions?: [string, () => void | Promise<void>][]; quiet?: boolean; sound?: Sound } = {}) {
+  private say(tone: BannerTone, title: string, detail: string | null, code: string | null, opts: { scanId?: string | null; actions?: [string, () => void | Promise<void>][]; quiet?: boolean; sound?: Sound; failure?: false | { code?: string | null; scannedAt?: string | null; reason?: string } } = {}) {
     // Signed out: "Signed out — opening the sign-in screen" stays up until the page goes.
     if (this.ended) return
     this.set({ banner: this.banner(tone, title, detail, code, opts.scanId ?? null, opts.actions ?? []) })
+    if (tone === "error" && opts.failure !== false) {
+      const f = opts.failure ?? {}
+      void this.raise([{
+        problem: "error",
+        code: f.code !== undefined ? f.code : code ?? this.ctx?.code ?? null,
+        title,
+        detail,
+        reason: f.reason ?? (detail ? `${title}. ${detail}` : title),
+        scannedAt: f.scannedAt ?? this.ctx?.at ?? this.nowIso(),
+      }])
+      return
+    }
     if (opts.quiet) return
     const sound: Sound | null = opts.sound ?? (tone === "info" ? null : tone)
     if (sound) signal(sound, this.s.sound, this.s.vibrate)
@@ -703,14 +828,224 @@ export class ScanController {
     const fn = this.actions.get(id)
     if (!fn) return
     this.actions.delete(id)
-    this.chain = this.chain.then(() => fn()).catch(e => this.oops(e))
+    this.afterScans(fn)
+  }
+
+  /**
+   * A TAP's action (a banner button, Move it here, Move from Find, Check again…), in turn behind any
+   * scan still being handled. ⚠ Checked again when its turn comes: if a scan ahead of it failed and
+   * the pop-up is open by then, it isn't used (an error buzz) — nothing is acted on while it's up.
+   */
+  private afterScans(fn: () => void | Promise<void>) {
+    this.chain = this.chain.then(() => (this.heldByPopup() ? undefined : fn())).catch(e => this.oops(e))
+  }
+
+  /** The failed-scan pop-up is open: a tap that would act isn't used (an error buzz). */
+  private heldByPopup(): boolean {
+    if (!this.hasOpen()) return false
+    signal("error", this.s.sound, this.s.vibrate)
+    return true
   }
 
   clearBanner = () => this.set({ banner: null })
 
-  private oops(e: unknown) {
+  private oops(e: unknown, code: string | null = null, at: string | null = null) {
     console.error("scanner:", e)
-    this.say("error", "That scan couldn't be handled — scan it again", String((e as Error)?.message ?? e).slice(0, 160), null)
+    this.say("error", "That scan couldn't be handled — scan it again", String((e as Error)?.message ?? e).slice(0, 160), null, { failure: { code, scannedAt: at } })
+  }
+
+  // ── The failed-scan pop-up ─────────────────────────────────────────────────────────────────
+
+  /** This person has failed scans on the pop-up (so scans aren't used). */
+  private hasOpen(): boolean {
+    return this.acks.some(a => a.status === "open" && a.scannedBy === this.me.id)
+  }
+
+  /**
+   * Put failures on the pop-up — at once in memory (the next scan is blocked straight away), then
+   * saved on the device. Resolves once the writes are over, with whether each one (in `inputs`'
+   * order) was really saved — a write that failed leaves it on the pop-up in this page's memory only.
+   */
+  private raise(inputs: FailureInput[]): Promise<boolean[]> {
+    if (!inputs.length) return Promise.resolve([])
+    const shownAt = this.nowIso()
+    const recs: AckRecord[] = inputs.map(i => ({
+      id: newId(),
+      scannedBy: this.me.id,
+      userName: this.me.name,
+      code: i.code,
+      problem: i.problem,
+      title: i.title.slice(0, 300),
+      detail: i.detail ? i.detail.slice(0, 600) : null,
+      reason: i.reason ? i.reason.slice(0, MAX_ACK_REASON) : null,
+      scanId: i.scanId ?? null,
+      location: i.location ?? null,
+      scannedAt: i.scannedAt ?? null,
+      answeredAt: i.answeredAt ?? null,
+      shownAt,
+      acknowledgedAt: null,
+      status: "open",
+      message: null,
+      doneAt: null,
+      seq: (this.lastAckSeq = Math.max(this.lastAckSeq + 1, Date.now())),
+    }))
+    this.acks = [...this.acks, ...recs]
+    const saved = Promise.all(recs.map(r => this.persistAck(r)))
+    this.derive()
+    return saved
+  }
+
+  /**
+   * Write one failed-scan record to the device's store (after the ones before it). Never rejects:
+   * resolves true once it is written, false when the write failed — then it stays in this page's
+   * memory (ackUnsaved: the pop-up still shows it, a reload keeps it) until a later write lands.
+   */
+  private persistAck(rec: AckRecord): Promise<boolean> {
+    this.ackPending.set(rec.id, (this.ackPending.get(rec.id) ?? 0) + 1)
+    const write = this.ackIo.then(async () => {
+      await this.storeOpen
+      if (!this.store) throw new Error("not open")
+      await this.store.putAck(rec)
+    })
+    this.ackIo = write.catch(() => {})
+    const settled = () => {
+      const n = (this.ackPending.get(rec.id) ?? 1) - 1
+      if (n > 0) this.ackPending.set(rec.id, n)
+      else this.ackPending.delete(rec.id)
+    }
+    return write.then(
+      () => {
+        settled()
+        this.ackUnsaved.delete(rec.id)
+        this.told()
+        return true
+      },
+      e => {
+        settled()
+        this.ackUnsaved.add(rec.id)
+        console.warn("scanner: a failed scan couldn't be saved on this device:", e)
+        return false
+      },
+    )
+  }
+
+  /** This failed-scan record is on the device's store as this page has it (no write waiting, none failed). */
+  private ackSaved(id: string): boolean {
+    return !this.ackPending.has(id) && !this.ackUnsaved.has(id)
+  }
+
+  /**
+   * Refused and stale answers the pop-up hasn't been given yet (sync.ts marks them `flagged: false`
+   * as it records the answer): on to the pop-up — saved first, THEN the scan is marked, so one can't
+   * be lost or shown twice if the page closes in between. ⚠ A scan is marked only once its record is
+   * really WRITTEN: one whose write failed stays `flagged: false` (and its record is written again on
+   * the next answer), so if the page closes before that, the pop-up raises it afresh when it opens.
+   * "Already there" isn't a failure. Returns how many went on.
+   */
+  private async flagNew(): Promise<number> {
+    const store = this.store
+    if (!store) return 0
+    const fresh = this.scans.filter(s => s.flagged === false && s.scannedBy === this.me.id)
+    if (!fresh.length) return 0
+    const inputs: FailureInput[] = []
+    /** The scans that can be marked: not a failure, or their record is safely on the device. */
+    const mark = new Set<string>()
+    /** Records already made for one of these whose write failed: written again now. */
+    const again: { scanId: string; ackId: string }[] = []
+    for (const s of fresh) {
+      if ((s.status !== "refused" && s.status !== "stale") || isAlreadyThere(s)) {
+        mark.add(s.id)
+        continue
+      }
+      const problem: AckProblem = s.status === "stale" ? "stale" : "refused"
+      const had = this.acks.find(a => a.scanId === s.id && a.problem === problem)
+      if (had) {
+        // Already on the pop-up (or acknowledged since). A write still on its way: left for the next answer.
+        if (this.ackSaved(had.id)) mark.add(s.id)
+        else if (!this.ackPending.has(had.id)) again.push({ scanId: s.id, ackId: had.id })
+        continue
+      }
+      // The pop-up's chip already says refused / overtaken (SCAN_ACK_PROBLEM_WORDS); the line says where
+      // it was going, and the Hub's own words (for stale: who moved it, where and when).
+      const title = `Not moved to ${s.location}`
+      inputs.push({
+        problem, code: s.item, scanId: s.id, location: s.location, scannedAt: s.scannedAt, answeredAt: s.doneAt,
+        title,
+        detail: s.message,
+        reason: s.message ? `${title} — ${s.message}` : `${title} — ${problem === "stale" ? "someone had moved it since" : "refused by the Hub"}.`,
+      })
+    }
+    const saved = await this.raise(inputs)
+    inputs.forEach((f, i) => { if (saved[i] && f.scanId) mark.add(f.scanId) })
+    for (const { scanId, ackId } of again) {
+      // Its version as it is NOW (it may have been acknowledged meanwhile) — and not when a newer
+      // write is already on its way (that one carries it; the next answer looks again).
+      const now = this.acks.find(a => a.id === ackId)
+      if (!now || this.ackPending.has(ackId)) continue
+      if (await this.persistAck(now)) mark.add(scanId)
+    }
+    if (!mark.size) return inputs.length
+    for (const id of mark) {
+      try { await store.update(id, { flagged: true }) } catch { /* asked again next time — the record above stops a second one */ }
+    }
+    this.scans = this.scans.map(s => (mark.has(s.id) ? { ...s, flagged: true } : s))
+    this.told()
+    return inputs.length
+  }
+
+  /** A scan that arrived while the pop-up was open: not used — it goes on the pop-up itself. */
+  private blockedScan(code: string | null, at: string, card = false) {
+    this.lastActivityAt = Date.now()
+    void this.raise([card
+      ? {
+          // A sign-in card's code is a secret: never shown or kept.
+          problem: "blocked", code: null, scannedAt: at,
+          title: "A sign-in card — not used",
+          detail: "Tap \"I've seen it\" first, then Switch user (Settings) to sign in with it.",
+          reason: "A sign-in card was scanned while the failed-scan pop-up was open, so it wasn't used.",
+        }
+      : {
+          problem: "blocked", code, scannedAt: at,
+          title: "Not taken — the pop-up was open",
+          detail: "Scan it again once you've tapped \"I've seen it\".",
+          reason: "Scanned while the failed-scan pop-up was open, so it wasn't used.",
+        }])
+  }
+
+  /**
+   * "I've seen it — carry on": every failure the pop-up SHOWED (`ids`, from the render the tap was
+   * on — one that arrived a moment later stays up) is acknowledged now and queued for the Hub.
+   */
+  acknowledge = async (ids: readonly string[]) => {
+    unlockSound()
+    this.lastActivityAt = Date.now()
+    const want = new Set(ids)
+    const at = this.nowIso()
+    const done: AckRecord[] = []
+    this.acks = this.acks.map(a => {
+      if (!want.has(a.id) || a.status !== "open" || a.scannedBy !== this.me.id) return a
+      const next: AckRecord = { ...a, status: "waiting", acknowledgedAt: at }
+      done.push(next)
+      return next
+    })
+    if (!done.length) return
+    this.derive()
+    await Promise.all(done.map(a => this.persistAck(a)))
+    this.engine?.kick()
+  }
+
+  /** The short reminder buzz while the pop-up stays open (not while "Still …?" or Switch user covers it). */
+  private syncReminder(open: boolean) {
+    if (open && this.live && !this.remindTimer) {
+      this.remindTimer = setInterval(() => {
+        if (this.ended || !this.s.failures.length || this.s.stillYou || this.s.switching === "open") return
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return
+        signal("remind", this.s.sound, this.s.vibrate)
+      }, REMIND_MS)
+    } else if (!open && this.remindTimer) {
+      clearInterval(this.remindTimer)
+      this.remindTimer = null
+    }
   }
 
   // ── Every scan comes in here ───────────────────────────────────────────────────────────────
@@ -718,16 +1053,30 @@ export class ScanController {
   scan = (raw: string, source: ScanSource | "typed" = "scanner") => {
     // Signed out (sessionEnded): the sign-in screen is on its way; nothing more is taken as this person's.
     if (this.ended) return
+    const at = this.nowIso()
+    // The failed-scan pop-up is open: this scan won't be used (decided as it arrives, and again when
+    // its turn comes — a scan queued behind the one that failed isn't used either).
+    const blocked = this.hasOpen()
     // A sign-in card is never an item or a location: it isn't queued, looked up or shown — its code
     // is a secret (card.ts). Signing in with it is Switch user's job.
     if (looksLikeCard(raw)) {
-      this.chain = this.chain.then(() => this.cardScanned()).catch(e => this.oops(e))
+      this.chain = this.chain.then(() => (blocked || this.hasOpen() ? this.blockedScan(null, at, true) : this.cardScanned())).catch(e => this.oops(e))
       return
     }
     const code = cleanCode(raw)
     if (!code) return
     if (source !== "scanner") unlockSound()
-    this.chain = this.chain.then(() => this.route(code)).catch(e => this.oops(e))
+    this.chain = this.chain.then(() => this.take(code, at, blocked)).catch(e => this.oops(e, code, at))
+  }
+
+  /** One scan's turn: route() it, remembering which scan this is for a red answer's failure record. */
+  private async take(code: string, at: string, blocked: boolean) {
+    this.ctx = { code, at }
+    try {
+      await this.route(code, blocked)
+    } finally {
+      this.ctx = null
+    }
   }
 
   private cardScanned() {
@@ -779,7 +1128,7 @@ export class ScanController {
     void this.switchUser()
   }
 
-  private async route(code: string) {
+  private async route(code: string, blocked = false) {
     if (!this.store) {
       // A scan in the first moment, while the device's storage opens: wait for it rather than lose it.
       await new Promise<void>(resolve => {
@@ -791,8 +1140,13 @@ export class ScanController {
       this.say("error", `${code} wasn't taken — the scanner is still starting`, "Scan it again in a moment. If it keeps happening, restart the scanner.", code)
       return
     }
+    // …and until it has been read once, so a pop-up left open before a reload blocks this scan too.
+    if (!this.loaded) await Promise.race([this.firstLoad, new Promise<void>(resolve => setTimeout(resolve, 3000))])
     if (this.s.userMismatch) {
-      this.say("error", "Reload the scanner before scanning", `This device is now signed in as ${this.s.userMismatch}, not ${this.me.name}. Reload so each scan is recorded against the right person.`, code)
+      this.say("error", "Reload the scanner before scanning", `This device is now signed in as ${this.s.userMismatch}, not ${this.me.name}. Reload so each scan is recorded against the right person.`, code, {
+        // (Who else is signed in isn't kept with the acknowledgement.)
+        failure: { reason: "Reload the scanner before scanning. Someone else is now signed in on this device, so the scan wasn't used." },
+      })
       return
     }
     const now = Date.now()
@@ -806,6 +1160,11 @@ export class ScanController {
       }
     }
     this.lastActivityAt = now
+    // The failed-scan pop-up is open: not used, and added to it ("Not taken").
+    if (blocked || this.hasOpen()) {
+      this.blockedScan(code, this.ctx?.at ?? this.nowIso())
+      return
+    }
     // A location that stays set, with nothing scanned for a long while: let it go, so an item scanned
     // by someone coming back to it later doesn't go straight there.
     if (this.s.screen === "move" && this.s.pinned && this.lastScanAt && now - this.lastScanAt > PIN_IDLE_MS) {
@@ -886,13 +1245,18 @@ export class ScanController {
           this.say("error", `Nothing found for ${code}`, this.s.pending ? `It isn't a location, tote, pallet or lot the Hub knows. ${this.s.pending} is still waiting — scan the location label again.` : "It isn't a tote, pallet, lot or location the Hub knows. Check the label and scan again.", code)
           return
         }
-        // (Signed in with a card, the Hub leaves the customer's name out of these — lookup route.)
+        // (Signed in with a card, the Hub leaves the customer's name out of these — lookup route. With a
+        // Hub login it's shown here, but never kept with the acknowledgement: `reason` leaves it out.)
         if (hit.type === "receipt") {
-          this.say("error", `${code} is a receipt, not a tote`, `${hit.customer ? `It's ${hit.customer}'s receipt. ` : ""}Scan the label on the tote or pallet itself.`, code)
+          this.say("error", `${code} is a receipt, not a tote`, `${hit.customer ? `It's ${hit.customer}'s receipt. ` : ""}Scan the label on the tote or pallet itself.`, code, {
+            failure: { reason: `${code} is a receipt, not a tote. Scan the label on the tote or pallet itself.` },
+          })
           return
         }
         if (hit.type === "customer") {
-          this.say("error", `${code} is a vendor number`, `${hit.name ? `That's ${hit.name}. ` : ""}Scan the label on the tote, pallet or lot instead.`, code)
+          this.say("error", `${code} is a vendor number`, `${hit.name ? `That's ${hit.name}. ` : ""}Scan the label on the tote, pallet or lot instead.`, code, {
+            failure: { reason: `${code} is a vendor number. Scan the label on the tote, pallet or lot instead.` },
+          })
           return
         }
         if (hit.type === "location") {
@@ -1012,6 +1376,9 @@ export class ScanController {
   private async answered(list: Answered[]) {
     await this.reload()
     this.told()
+    // Every refused or stale one goes on the failed-scan pop-up (whose alert is then the sound).
+    let raised = 0
+    try { raised = await this.flagNew() } catch { /* asked again when the page next opens */ }
     let worst: Answered | null = null
     for (const a of list) {
       const { scan, result } = a
@@ -1035,6 +1402,7 @@ export class ScanController {
       if (result.outcome === "stale") {
         this.say("warn", `${earlier}${scan.item} not moved — someone moved it since`, `${result.message}${more}`, scan.item, {
           scanId: scan.id,
+          quiet: raised > 0,
           actions: [
             [`Move it to ${scan.location} anyway`, () => this.moveAnyway(scan.id)],
             ["Leave it", () => this.dismiss(scan.id)],
@@ -1043,6 +1411,8 @@ export class ScanController {
       } else {
         this.say("error", `${earlier}${scan.item} → ${scan.location} wasn't done`, `${result.message}${more}`, scan.item, {
           scanId: scan.id,
+          quiet: raised > 0,
+          failure: false, // already on the pop-up (flagNew above)
           actions: [["OK", () => this.dismiss(scan.id)]],
         })
       }
@@ -1059,7 +1429,7 @@ export class ScanController {
   /** After a stale answer: put it there after all, as a new scan made now. */
   moveAnyway = async (id: string) => {
     const s = this.scans.find(x => x.id === id)
-    if (!s) return
+    if (!s || this.heldByPopup()) return
     const place = this.placeFor(cleanCode(s.location)) ?? { code: s.location, name: null, kind: s.kind, active: true }
     await this.dismiss(id)
     await this.queueMove(s.item, place, "anyway", s.note ?? "")
@@ -1078,15 +1448,30 @@ export class ScanController {
   switchUser = async () => {
     // Not before the queue has been read: until then "nothing waiting" isn't known to be true.
     if (!this.s.started || this.s.switching !== "idle" || this.ended) return
+    // A failed scan on the pop-up is acknowledged first — by the person whose scan it was. ⚠ Held,
+    // not silent: the pop-up then says plainly whose they are and that the button records that THAT
+    // person has seen them (someone else picking the scanner up — "Still …?" → Switch user — must
+    // not tap it unawares, or Reports would say the wrong person acknowledged them).
+    if (this.hasOpen()) {
+      signal("error", this.s.sound, this.s.vibrate)
+      this.set({ switchHeld: true })
+      return
+    }
     const n = this.s.waitingMine
     if (n > 0) {
       if (!this.s.online) {
-        this.say("error", `Send the ${n} waiting ${n === 1 ? "scan" : "scans"} first`, `They were scanned by ${this.me.name}, so they must be sent before someone else signs in — and this scanner is offline. Get back on Wi-Fi, then press Send now (Settings, the cog top right).`, null)
+        this.say("error", `Send the ${n} waiting ${n === 1 ? "scan" : "scans"} first`, `They were scanned by ${this.me.name}, so they must be sent before someone else signs in — and this scanner is offline. Get back on Wi-Fi, then press Send now (Settings, the cog top right).`, null, { failure: false })
         return
       }
       this.set({ switching: "sending", banner: this.banner("info", `Sending the ${n} waiting ${n === 1 ? "scan" : "scans"} first…`, "Someone else can sign in once they've gone.", null) })
-      await this.engine?.sendNow()
+      // Scans only: this waits on them, never on acknowledgements (sent later, or by this person next time).
+      await this.engine?.sendNow({ scansOnly: true })
       if (this.ended) return // signed out: the sign-in screen is on its way
+      // One came back refused or stale: the pop-up says so, and is answered before anyone switches.
+      if (this.hasOpen()) {
+        this.set({ switching: "idle", switchHeld: true })
+        return
+      }
       const left = this.s.waitingMine
       const k = this.s.sync.problem?.kind
       if (left > 0 && (k === "signed-out" || k === "no-access")) {
@@ -1097,7 +1482,20 @@ export class ScanController {
       }
       if (left > 0) {
         this.set({ switching: "idle" })
-        this.say("error", `Send the ${left} waiting ${left === 1 ? "scan" : "scans"} first`, `They couldn't be sent: ${this.s.sync.problem?.message ?? "the Hub didn't take them"}. Try Send now again (Settings, the cog top right).`, null)
+        this.say("error", `Send the ${left} waiting ${left === 1 ? "scan" : "scans"} first`, `They couldn't be sent: ${this.s.sync.problem?.message ?? "the Hub didn't take them"}. Try Send now again (Settings, the cog top right).`, null, { failure: false })
+        return
+      }
+    } else if (this.s.acksWaiting > 0 && this.s.online) {
+      // Acknowledgements are sent only by their own person too: try them now (they wait for this
+      // person otherwise). Never a reason not to switch.
+      const k = this.s.acksWaiting
+      this.set({ switching: "sending", banner: this.banner("info", `Sending ${k === 1 ? "an acknowledgement" : `${k} acknowledgements`} first…`, "Someone else can sign in in a moment.", null) })
+      // At most ACK_SWITCH_WAIT_MS: a slow call carries on in the background (or waits on this scanner
+      // for this person) rather than holding the next one up.
+      await Promise.race([this.engine?.sendNow(), new Promise<void>(resolve => setTimeout(resolve, ACK_SWITCH_WAIT_MS))])
+      if (this.ended) return
+      if (this.hasOpen()) {
+        this.set({ switching: "idle", banner: null, switchHeld: true })
         return
       }
     }
@@ -1161,10 +1559,10 @@ export class ScanController {
     this.go("move")
     if (hit.type === "location") {
       const place = this.placeFor(cleanCode(hit.code)) ?? { code: hit.code, name: hit.name, kind: hit.kind, active: true }
-      this.chain = this.chain.then(() => this.useAsLocation(place)).catch(e => this.oops(e))
+      this.afterScans(() => this.useAsLocation(place))
     } else if (hit.type === "container" || hit.type === "lot") {
       const code = hit.type === "container" ? hit.id : hit.barcode
-      this.chain = this.chain.then(() => this.useAsItem(cleanCode(code))).catch(e => this.oops(e))
+      this.afterScans(() => this.useAsItem(cleanCode(code)))
     }
   }
 
@@ -1175,7 +1573,7 @@ export class ScanController {
     const hit = f.res.hit
     this.go("check")
     const place = this.placeFor(cleanCode(hit.code)) ?? { code: hit.code, name: hit.name, kind: hit.kind, active: true }
-    this.chain = this.chain.then(() => this.startCheck(place, f.res)).catch(e => this.oops(e))
+    this.afterScans(() => this.startCheck(place, f.res))
   }
 
   // ── Check a location ───────────────────────────────────────────────────────────────────────
@@ -1326,10 +1724,10 @@ export class ScanController {
   moveHere = (code: string) => {
     const c = this.s.check
     if (!c) return
-    this.chain = this.chain.then(async () => {
+    this.afterScans(async () => {
       const scan = await this.queueMove(code, c.place, "check", `Found at ${c.place.code} in a location check`)
       if (scan) this.setExtra(code, { state: "queued", scanId: scan.id })
-    }).catch(e => this.oops(e))
+    })
   }
 
   private updateCheckFor(scan: StoredScan) {
@@ -1354,7 +1752,7 @@ export class ScanController {
       this.say("warn", `Checking ${c.place.code} again`, "Offline, so this uses the list the Hub gave when the check began. Scan everything you can see on it.", c.place.code, { quiet: true })
       return
     }
-    this.chain = this.chain.then(() => this.startCheck(c.place, null)).catch(e => this.oops(e))
+    this.afterScans(() => this.startCheck(c.place, null))
   }
 
   /** Finish — saying what the check found in numbers, since the lists go when it closes. */

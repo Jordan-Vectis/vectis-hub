@@ -235,12 +235,17 @@ export const DESTINATIONS: Destination[] = [
   // keyword names the handheld or its app. No `ask`, so the Goods In suggestions stay as they were.
   {
     name: "Goods In → Handheld scanner", href: "/scan", app: "WAREHOUSE",
-    what: "A phone-sized Goods In screen for the warehouse's handheld scanners, at /scan — in any browser with a scanner set to keyboard output, or in the Vectis Scanner app on the Newland scanners, which opens the same screen and takes each scan straight from the scanner. Put away / Move (scan the tote, pallet or lot, then the location; or scan a location first and everything scanned after goes there until Done), Find (what a code is and where it is now — needs Wi-Fi) and Check a location. Scans made with no Wi-Fi are kept on the scanner and sent in order when it reconnects: each is applied once even if it is sent twice, stamped with the time it was scanned, and one whose item someone else has moved since isn't applied — it says who moved it, where and when. The top of the screen shows who is signed in; on a shared scanner use Switch user (the waiting scans are sent first). Until an admin has pressed Run Migrations for it, scans wait on the scanner rather than being sent. The app is built by GitHub and its install file comes from there.",
+    what: "A phone-sized Goods In screen for the warehouse's handheld scanners, at /scan — in any browser with a scanner set to keyboard output, or in the Vectis Scanner app on the Newland scanners, which opens the same screen and takes each scan straight from the scanner. Put away / Move (scan the tote, pallet or lot, then the location; or scan a location first and everything scanned after goes there until Done), Find (what a code is and where it is now — needs Wi-Fi) and Check a location. Scans made with no Wi-Fi are kept on the scanner and sent in order when it reconnects: each is applied once even if it is sent twice, stamped with the time it was scanned, and one whose item someone else has moved since isn't applied — it says who moved it, where and when. A scan that fails (refused, overtaken by someone else's move, one that didn't go through, or one scanned while the pop-up is already open) holds the screen with a pop-up until you tap \"I've seen it — carry on\" — nothing scanned while it is open is used, so scan those again afterwards — and each failure you acknowledge is recorded in Goods In → Reports. The top of the screen shows who is signed in; on a shared scanner use Switch user (the waiting scans are sent first). Until an admin has pressed Run Migrations for it, scans wait on the scanner rather than being sent. The app is built by GitHub and its install file comes from there.",
     also: [
       "handheld scanner", "handheld scanners", "the handheld", "scanner app", "vectis scanner", "vectis scanner app",
       "newland scanner app", "install the scanner app", "update the scanner app", "scanner apk", "goods in scanner",
       "scan offline", "scanning offline", "scans waiting to send", "scans not sent", "send the waiting scans",
       "switch user on the scanner", "scanner switch user", "stale scan",
+      // The failed-scan pop-up (2026-10-21). Each names the handheld — a cataloguer's "my scan failed"
+      // on the tablet must never be refused with Goods In. (The button's words "I've seen it — carry
+      // on" aren't a keyword: "i ve seen it" is everyday, and the dash breaks the phrase match.)
+      "failed scan on the handheld", "handheld failed scan", "handheld failed scans", "handheld pop up",
+      "pop up on the handheld",
     ],
   },
   // Scanner sign-in cards (2026-10-16). Every keyword names the scanner or the card — never bare
@@ -311,13 +316,14 @@ export const DESTINATIONS: Destination[] = [
   // point a Goods In user to the right word.
   {
     name: "Goods In → Output by person", href: "/tools/warehouse/reports", app: "WAREHOUSE",
-    what: "How much each person in Goods In has done over a period (today, yesterday, the last 7, 30 or 90 days, 6 months, a year, or any From/To) — handheld scans (with how many were refused, overtaken by someone else's move, or sent late after being made with no Wi-Fi), moves (put away, taken to a bench, lots shelved, moved in bulk) and check-ins with the totes and pallets booked, per day, with each person's first and last time on a day and their busiest hour. Charts, a table that sorts by any column, a CSV export, and a page per person with their day-by-day figures, the hours they work and their latest activity. Warehouse managers and admins see everyone; everyone else sees only their own numbers. The page is called Reports in the Goods In menu. UK days and times.",
+    what: "How much each person in Goods In has done over a period (today, yesterday, the last 7, 30 or 90 days, 6 months, a year, or any From/To) — handheld scans (with how many were refused, overtaken by someone else's move, or sent late after being made with no Wi-Fi), moves (put away, taken to a bench, lots shelved, moved in bulk), check-ins with the totes and pallets booked, and the failed scans each person acknowledged on the handheld's pop-up (which barcode, what went wrong, when it was scanned and when they acknowledged it), per day, with each person's first and last time on a day and their busiest hour. Charts, a table that sorts by any column, a CSV export, and a page per person with their day-by-day figures, the hours they work and their latest activity. Warehouse managers and admins see everyone; everyone else sees only their own numbers. The page is called Reports in the Goods In menu. UK days and times.",
     also: [
       "goods in reports", "goods in report", "goods in output", "goods in tracking", "goods in scans per person",
       "warehouse user tracking", "warehouse staff tracking", "warehouse staff output", "warehouse output per person",
       "what warehouse are doing per user", "what the warehouse staff are doing",
       "how many scans each", "scans per person", "scans per day", "handheld scans per person", "handheld scans per day",
       "moves per person", "put away per person", "check ins per person",
+      "failed scans acknowledged", "acknowledged failed scans", "who acknowledged a failed scan",
     ],
   },
 

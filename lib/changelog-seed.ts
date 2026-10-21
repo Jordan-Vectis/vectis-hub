@@ -19,6 +19,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a43b6a8b7a172f2ffb0c87bfec87ff78ed7294fb","author":"Jordan Orange","date":"2026-10-20T16:41:31+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"b95a517991e6404c334dc42d2aa7525043a6d71e","author":"Jordan Orange","date":"2026-10-20T16:41:24+01:00","subject":"Customers: copy BC's contact and vendor cards too"},
+  {"sha":"25fe187e300d648b72b607ae00015ff640120af3","author":"jack-vectis","date":"2026-10-20T16:34:33+01:00","subject":"Goods In: Reports — what each warehouse person does, per day"},
   {"sha":"b381e8641e1ebc64a0c48c6932dac2c211865f6b","author":"Jordan Orange","date":"2026-10-20T16:36:13+01:00","subject":"Customers data check: count every shared email, not just the first 200"},
   {"sha":"338c35ab36374551eff75319ac4fd1f2e0070d6a","author":"Jordan Orange","date":"2026-10-20T14:17:05+01:00","subject":"Customers copy: a live heartbeat so a slow batch doesn't look frozen"},
   {"sha":"27cd1fa4c72961f88b48c526e035522087c380fe","author":"Jordan Orange","date":"2026-10-20T11:45:06+01:00","subject":"Customers: the Hub's own customer database, copied nightly from BC"},
