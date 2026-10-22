@@ -8,7 +8,7 @@ export default function SetupForm({ name, qr, secret }: { name: string; qr: stri
   const [code, setCode] = useState("")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
-  const [codes, setCodes] = useState<string[] | null>(null)
+  const [done, setDone] = useState(false)
 
   async function confirm(e: React.FormEvent) {
     e.preventDefault()
@@ -16,29 +16,20 @@ export default function SetupForm({ name, qr, secret }: { name: string; qr: stri
     setBusy(true); setError("")
     const r = await confirmTwoFactorSetup(code)
     setBusy(false)
-    if (r.ok && r.codes) setCodes(r.codes)
+    if (r.ok) setDone(true)
     else setError(r.error ?? "Something went wrong.")
   }
 
-  if (codes) {
+  if (done) {
     return (
       <div className="space-y-4">
         <p className="text-sm font-semibold text-green-700">✓ Two-factor is on.</p>
         <p className="text-sm text-gray-700">
-          These are your <strong>backup codes</strong>. Each one works once, if you lose your phone.
-          Write them down or print them now — <strong>they won&apos;t be shown again.</strong>
+          From now on you&apos;ll type the code from your app after your password.
+          If you lose your phone, ask an admin to reset your two-factor.
         </p>
-        <ul className="grid grid-cols-2 gap-2 font-mono text-base text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          {codes.map(c => <li key={c}>{c}</li>)}
-        </ul>
-        <div className="flex gap-2">
-          <button onClick={() => navigator.clipboard?.writeText(codes.join("\n"))}
-            className="flex-1 min-h-11 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Copy</button>
-          <button onClick={() => window.print()}
-            className="flex-1 min-h-11 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Print</button>
-        </div>
         <Link href="/login" className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg text-sm">
-          I&apos;ve saved them — sign in now
+          Sign in now
         </Link>
       </div>
     )

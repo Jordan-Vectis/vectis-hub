@@ -31,7 +31,7 @@ export async function setTwoFactorRequired(userId: string, required: boolean): P
   }
 }
 
-/** Lost phone: forget their authenticator, backup codes and remembered devices — they set up afresh. */
+/** Lost phone: forget their authenticator and remembered devices — they set up afresh. */
 export async function resetTwoFactor(userId: string): Promise<Result> {
   try {
     const session = await admin()

@@ -6,7 +6,7 @@ import { setTwoFactorRequired, resetTwoFactor } from "@/lib/actions/two-factor-a
 
 export type TwoFactorStatus =
   | { ready: false }
-  | { ready: true; required: boolean; enabledAt: string | null; backupLeft: number; updatedByName: string | null }
+  | { ready: true; required: boolean; enabledAt: string | null; updatedByName: string | null }
 
 export default function TwoFactorCard({ userId, isSelf, status }: { userId: string; isSelf: boolean; status: TwoFactorStatus }) {
   const router = useRouter()
@@ -47,7 +47,7 @@ export default function TwoFactorCard({ userId, isSelf, status }: { userId: stri
 
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {status.enabledAt
-              ? `Set up on ${new Date(status.enabledAt).toLocaleDateString("en-GB")} · ${status.backupLeft} backup code${status.backupLeft === 1 ? "" : "s"} left`
+              ? `Set up on ${new Date(status.enabledAt).toLocaleDateString("en-GB")}`
               : status.required
                 ? "Not set up yet — they'll be asked to set it up at their next sign-in."
                 : "Not set up."}
@@ -63,7 +63,7 @@ export default function TwoFactorCard({ userId, isSelf, status }: { userId: stri
           {status.enabledAt && (
             confirmReset ? (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-gray-700 dark:text-gray-300">Forget their phone and backup codes?</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Forget their phone? They&apos;ll scan a new QR code at their next sign-in.</span>
                 <button onClick={() => run(() => resetTwoFactor(userId))} disabled={busy}
                   className="min-h-11 px-4 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50">
                   Yes, reset

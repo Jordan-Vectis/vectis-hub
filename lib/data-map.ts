@@ -45,7 +45,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "User", personal: "staff", what: "A staff account: name, email, username, hashed password, role, which apps they may open, their timer settings, and the last tote, vendor and receipt they typed." },
       { model: "BCToken", personal: "staff", what: "One person's Business Central sign-in token, so the BC tools can read BC as them. Tokens only — no password." },
       { model: "Department", what: "The departments, and which sale types each one is allowed to see." },
-      { model: "UserTwoFactor", personal: "staff", what: "Two-factor login: whether a person must use it, their authenticator secret (encrypted), one-way hashes of their unused backup codes, and when it was set up." },
+      { model: "UserTwoFactor", personal: "staff", what: "Two-factor login: whether a person must use it, their authenticator secret (encrypted), and when it was set up." },
       { model: "UserDepartment", personal: "staff", what: "Which staff belong to which department." },
       { model: "RoleDefault", what: "The apps, permissions and dashboard a new account gets for each role." },
       { model: "DashboardLayout", personal: "staff", what: "The widgets each person has chosen for their own home page." },

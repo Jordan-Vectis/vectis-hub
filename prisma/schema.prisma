@@ -1332,7 +1332,8 @@ model GoodsInScanAck {
 /// random code is kept. A card signs in to the scanner screen ONLY, never the rest of the Hub, and can
 /// be cancelled at any time. No link to User on purpose (never add to User).
 // Two-factor login (2026-10-22). One row per person; "required" is the tick box in Users & Permissions.
-// secret = AES-GCM sealed with a key from AUTH_SECRET; backupCodes = SHA-256 of each unused code.
+// secret = AES-GCM sealed with a key from AUTH_SECRET. backupCodes is UNUSED (no backup codes, by
+// Jordan's choice, 2026-10-22 — a lost phone means an admin reset); kept so no migration is needed.
 model UserTwoFactor {
   userId        String    @id
   required      Boolean   @default(false)

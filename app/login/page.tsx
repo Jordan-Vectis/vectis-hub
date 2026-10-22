@@ -78,7 +78,7 @@ export default function LoginPage() {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="123456"
                 />
-                <p className="text-xs text-gray-500 mt-1">Lost your phone? Type one of your backup codes instead.</p>
+                <p className="text-xs text-gray-500 mt-1">Lost your phone? Ask an admin to reset your two-factor.</p>
                 <label className="flex items-center gap-2 mt-3 text-sm text-gray-700 min-h-11 cursor-pointer">
                   <input type="checkbox" name="remember" className="h-5 w-5" />
                   Remember this device for 30 days

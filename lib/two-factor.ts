@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 // ─── Two-factor login (2026-10-22) ────────────────────────────────────────────
 // An authenticator-app code (TOTP, RFC 6238: SHA-1, 6 digits, 30 s) after the password, for anyone
 // whose "Require two-factor" box is ticked in Users & Permissions. Rules in RULES.md → "Two-factor".
-// ⚠ Every key below is made from AUTH_SECRET: change AUTH_SECRET and every secret, backup code
+// ⚠ Every key below is made from AUTH_SECRET: change AUTH_SECRET and every secret
 // check and remembered device stops working — everyone ticked has to set up again.
 
 export const REMEMBER_COOKIE = "vectis-2fa-device"
@@ -86,14 +86,6 @@ export function openSecret(sealed: string): string {
   return Buffer.concat([d.update(Buffer.from(enc, "base64url")), d.final()]).toString("utf8")
 }
 
-// ── Backup codes: shown once, stored as SHA-256 only ──
-export function newBackupCodes(n = 10): string[] {
-  return Array.from({ length: n }, () => { const h = randomBytes(4).toString("hex"); return `${h.slice(0, 4)}-${h.slice(4)}` })
-}
-export function hashBackupCode(code: string): string {
-  return createHash("sha256").update(code.toLowerCase().replace(/[^0-9a-f]/g, "")).digest("hex")
-}
-
 // ── Signed cookies: the remembered device, and the short set-up pass ──
 function sign(label: string, body: string) { return b64url(createHmac("sha256", key(label)).update(body).digest()) }
 
@@ -131,7 +123,7 @@ export function cookieFrom(header: string | null | undefined, name: string): str
 // ── Reading a person's row ──
 export type TwoFactorRow = {
   userId: string; required: boolean; secret: string | null; enabledAt: Date | null
-  backupCodes: string[]; lastStep: number | null
+  lastStep: number | null
 }
 
 function isMissingTable(e: any) {
@@ -147,7 +139,7 @@ export async function readTwoFactor(userId: string): Promise<TwoFactorRow | null
   try {
     return await prisma.userTwoFactor.findUnique({
       where: { userId },
-      select: { userId: true, required: true, secret: true, enabledAt: true, backupCodes: true, lastStep: true },
+      select: { userId: true, required: true, secret: true, enabledAt: true, lastStep: true },
     })
   } catch (e) {
     if (isMissingTable(e)) return null
@@ -161,8 +153,9 @@ export async function twoFactorTableExists(): Promise<boolean> {
 }
 
 /**
- * Checks a code typed at login: an authenticator code (each time step used once — a code read over
- * someone's shoulder can't be replayed) or an unused backup code (used up). True = let them in.
+ * Checks a code typed at login: an authenticator code, each time step used once — a code read over
+ * someone's shoulder can't be replayed. No backup codes (Jordan, 2026-10-22): a lost phone means an
+ * admin presses Reset. True = let them in.
  */
 export async function useLoginCode(row: TwoFactorRow, typed: string): Promise<boolean> {
   if (!row.secret || !row.enabledAt) return false
@@ -175,11 +168,5 @@ export async function useLoginCode(row: TwoFactorRow, typed: string): Promise<bo
     })
     return r.count === 1
   }
-  const h = hashBackupCode(code)
-  if (!/^[0-9a-f]{8}$/i.test(code.replace(/-/g, "")) || !row.backupCodes.includes(h)) return false
-  const r = await prisma.userTwoFactor.updateMany({
-    where: { userId: row.userId, backupCodes: { has: h } },
-    data: { backupCodes: row.backupCodes.filter(c => c !== h) },
-  })
-  return r.count === 1
+  return false
 }

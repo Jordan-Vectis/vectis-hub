@@ -42,13 +42,12 @@ export default async function EditUserPage({
   if (await twoFactorTableExists()) {
     const tf = await prisma.userTwoFactor.findUnique({
       where: { userId: id },
-      select: { required: true, enabledAt: true, backupCodes: true, updatedByName: true },
+      select: { required: true, enabledAt: true, updatedByName: true },
     })
     twoFactor = {
       ready: true,
       required: tf?.required ?? false,
       enabledAt: tf?.enabledAt?.toISOString() ?? null,
-      backupLeft: tf?.backupCodes.length ?? 0,
       updatedByName: tf?.updatedByName ?? null,
     }
   }
