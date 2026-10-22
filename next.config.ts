@@ -28,6 +28,20 @@ const nextConfig: NextConfig = {
     // upgrading/codemods.md and the proxyClientMaxBodySize doc page.
     proxyClientMaxBodySize: "20mb",
   },
+  poweredByHeader: false,
+  // Security headers (security review, 2026-10-22): no other site may show the Hub inside a frame
+  // (click-stealing), browsers must not guess file types, and full addresses never leak to other sites.
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      ],
+    }]
+  },
   images: {
     // Allow query-string local proxy routes (required by Next.js 16)
     localPatterns: [

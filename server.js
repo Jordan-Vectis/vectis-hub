@@ -85,8 +85,19 @@ app.prepare().then(async () => {
   })
 
   const io = new Server(httpServer, {
-    cors: { origin: '*', methods: ['GET', 'POST'] },
     transports: ['websocket', 'polling'],
+    // Only the Hub's own pages may connect (security review, 2026-10-22) — every live-auction and
+    // trainer screen is served by this server. `cors` alone doesn't stop a websocket, so check Origin.
+    // No Origin = not a browser page; let it through as before.
+    allowRequest: (req, cb) => {
+      const origin = req.headers.origin
+      if (!origin) return cb(null, true)
+      const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim()
+      let ok = false
+      try { ok = new URL(origin).host === host } catch {}
+      if (!ok) console.warn(`> Socket refused from another site: ${origin}`)
+      cb(null, ok)
+    },
   })
 
   setupAuctionSocket(io)

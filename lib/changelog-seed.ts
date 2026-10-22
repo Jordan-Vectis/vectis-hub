@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-21, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-22, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7d2c48880ece062bdd64e6b6f3efd46599d13391","author":"Jordan Orange","date":"2026-10-22T10:05:29+01:00","subject":"Security quick wins: sign-in on upload-url + auction-results, admins-only AI Models, login attempt limit, update next/next-auth/sharp/socket.io"},
   {"sha":"2d56235c33e834ece68c72ca1475a383aa2cad4a","author":"Jordan Orange","date":"2026-10-21T14:27:41+01:00","subject":"Customers copy: changes only, carries on after a stop, Stop asks first"},
   {"sha":"08006e4e1d09d0dc0d9d75b8ed3a638318c3c404","author":"jack-vectis","date":"2026-10-21T09:43:10+01:00","subject":"Handheld scanner: a failed scan stops scanning until it is acknowledged"},
   {"sha":"a43b6a8b7a172f2ffb0c87bfec87ff78ed7294fb","author":"Jordan Orange","date":"2026-10-20T16:41:31+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
