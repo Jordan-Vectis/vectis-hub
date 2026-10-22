@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"eb438f22f80736fbce943d6b5d5b461558b53aa9","author":"Jordan Orange","date":"2026-10-22T11:02:42+01:00","subject":"Clerk controls from the Hub login: Auction Controller access instead of a shared clerk password"},
   {"sha":"0e681fdc60424d8cc3249f87b4bc04d2e6bf3dde","author":"Jordan Orange","date":"2026-10-22T10:24:42+01:00","subject":"Security: frame/nosniff/referrer headers, live-auction socket only from the Hub's own pages, no clerk123 fallback"},
   {"sha":"7d2c48880ece062bdd64e6b6f3efd46599d13391","author":"Jordan Orange","date":"2026-10-22T10:05:29+01:00","subject":"Security quick wins: sign-in on upload-url + auction-results, admins-only AI Models, login attempt limit, update next/next-auth/sharp/socket.io"},
   {"sha":"2d56235c33e834ece68c72ca1475a383aa2cad4a","author":"Jordan Orange","date":"2026-10-21T14:27:41+01:00","subject":"Customers copy: changes only, carries on after a stop, Stop asks first"},

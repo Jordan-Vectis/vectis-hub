@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isGapRelayKey } from '@/lib/gap-relay-key'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,9 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    // Without the key anyone on the internet could feed fake "sold" / "fair warning" messages to the
+    // Auto Clerk mid-sale (security review, 2026-10-22).
+    if (!isGapRelayKey(body?.key)) return NextResponse.json({ error: 'Unauthorised' }, { status: 401, headers: CORS })
     const { message, hammer, asking, lot } = body
 
     if (!message || !message.trim()) {
@@ -100,6 +104,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    if (!isGapRelayKey(req.nextUrl.searchParams.get('k'))) return NextResponse.json({ error: 'Unauthorised' }, { status: 401, headers: CORS })
     const since  = parseInt(req.nextUrl.searchParams.get('since') || '0')
     const recent = _events.filter(e => e.id > since)
     return NextResponse.json(

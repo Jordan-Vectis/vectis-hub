@@ -103,6 +103,12 @@ function defaultRelayUrl() {
 export default function AutoClerkSaleroomPage() {
   const [actions, setActions]       = useState<Action[]>([])
   const [relayUrl, setRelayUrl]     = useState(defaultRelayUrl)
+  // The feed's key for THIS Hub (each environment has its own) — sent by the script and the poll.
+  const [relayKey, setRelayKey]     = useState('')
+  const refusedRef                  = useRef(false)
+  useEffect(() => {
+    fetch('/api/gap-relay/key').then(r => r.ok ? r.json() : null).then(d => setRelayKey(d?.key || '')).catch(() => {})
+  }, [])
   const [active, setActive]         = useState(false)
   const [lastEventAt, setLastEventAt] = useState<number | null>(null)
   const [lotState, setLotState]     = useState({ lot: '—', hammer: 0, asking: 0, message: '—' })
@@ -147,8 +153,17 @@ export default function AutoClerkSaleroomPage() {
 
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${relayUrl}?since=${cursorRef.current}`)
+        const res = await fetch(`${relayUrl}?since=${cursorRef.current}&k=${relayKey}`)
+        if (res.status === 401 && !refusedRef.current) {
+          refusedRef.current = true
+          addAction({
+            id: -Date.now(), at: ts(), aType: 'disconnect',
+            headline: 'Relay refused this page — its key is for a different Hub',
+            detail: 'Pick the relay for the Hub this page is open on, or reload the page.', raw: ''
+          })
+        }
         if (!res.ok) return
+        refusedRef.current = false
         const data = await res.json()
 
         if (data.events && data.events.length > 0) {
@@ -333,10 +348,12 @@ export default function AutoClerkSaleroomPage() {
             <span className="text-xs text-slate-400">Console script — paste into DevTools on the Saleroom page:</span>
             <button
               onClick={() => {
-                const script = `(function(){var R='${relayUrl}';var S={hammer:0,asking:0,lot:'',message:''};var T=null;function send(){fetch(R,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({},S,{at:Date.now()}))}).catch(function(e){console.error('Relay error:',e);})}function upd(k,v){S[k]=v;clearTimeout(T);T=setTimeout(send,100);}function watch(id,k,num){var el=document.getElementById(id);if(!el){console.warn('Not found:',id);return;}new MutationObserver(function(){var v=el.textContent.trim();upd(k,num?parseFloat(v.replace(/[^0-9.]/g,''))||0:v);}).observe(el,{childList:true,characterData:true,subtree:true});console.log('Watching:',id);}watch('hammer-price','hammer',true);watch('asking-price','asking',true);watch('lot-number','lot',false);watch('auction-message-content','message',false);console.log('Vectis relay started',R);})();`
+                const script = `(function(){var R='${relayUrl}';var K='${relayKey}';var S={hammer:0,asking:0,lot:'',message:''};var T=null;function send(){fetch(R,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({},S,{at:Date.now(),key:K}))}).catch(function(e){console.error('Relay error:',e);})}function upd(k,v){S[k]=v;clearTimeout(T);T=setTimeout(send,100);}function watch(id,k,num){var el=document.getElementById(id);if(!el){console.warn('Not found:',id);return;}new MutationObserver(function(){var v=el.textContent.trim();upd(k,num?parseFloat(v.replace(/[^0-9.]/g,''))||0:v);}).observe(el,{childList:true,characterData:true,subtree:true});console.log('Watching:',id);}watch('hammer-price','hammer',true);watch('asking-price','asking',true);watch('lot-number','lot',false);watch('auction-message-content','message',false);console.log('Vectis relay started',R);})();`
                 navigator.clipboard.writeText(script)
               }}
-              className="bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-xs font-semibold transition-colors shrink-0"
+              disabled={!relayKey}
+              title={relayKey ? undefined : "Waiting for this Hub to hand over the relay key"}
+              className="disabled:opacity-40 bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-xs font-semibold transition-colors shrink-0"
             >
               Copy script
             </button>
