@@ -2484,6 +2484,57 @@ model AccountingCardholder {
   createdAt DateTime @default(now())
 }
 
+/// Accounts → Paid, not collected: a buyer who has paid for their lots but hasn't collected them.
+/// Entered by hand for now (source "manual"); a BC feed of paid invoices can fill it later
+/// (source "bc", bcKey = the invoice it came from, so a re-run never adds it twice). customerId is the
+/// Hub's Customer row when matched — a plain id, no foreign key, so this works whatever order the
+/// migrations run in.
+model UncollectedPaid {
+  id            String                 @id @default(cuid())
+  source        String                 @default("manual")
+  bcKey         String?                @unique
+  buyerNo       String?
+  customerId    String?
+  buyerName     String
+  email         String?
+  phone         String?
+  saleCode      String?
+  invoiceNo     String?
+  lots          Int?
+  amountPaid    Float?
+  paidAt        DateTime?
+  status        String                 @default("waiting")
+  nextChaseAt   DateTime?
+  storageFrom   DateTime?
+  notes         String?
+  createdById   String?
+  createdByName String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  closedAt      DateTime?
+  events        UncollectedPaidEvent[]
+
+  @@index([status])
+  @@index([paidAt])
+  @@index([buyerNo])
+  @@index([nextChaseAt])
+}
+
+/// Everything that happened on an UncollectedPaid case — a call, an email, a letter, a note, a change
+/// of status, collected — with who and when.
+model UncollectedPaidEvent {
+  id     String          @id @default(cuid())
+  caseId String
+  case   UncollectedPaid @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  kind   String
+  text   String?
+  byId   String?
+  byName String?
+  at     DateTime        @default(now())
+
+  @@index([caseId, at])
+}
+
 // A bank/card statement uploaded for a month, to reconcile entered lines against.
 model BankStatement {
   id           String            @id @default(cuid())

@@ -3,6 +3,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { UNKNOWN_CARDHOLDER } from "@/lib/accounting"
 import { getAccountsAccess } from "@/lib/accounts-auth"
+import { countOpenCases } from "@/lib/actions/uncollected"
 import NewMonthForm from "./new-month-form"
 import ManageCardholders from "./manage-cardholders"
 import MonthStar from "./month-star"
@@ -25,6 +26,10 @@ export default async function AccountsPage() {
     include: { _count: { select: { documents: true } } },
   })
   const reservedCount = await prisma.accountingDocument.count({ where: { reserved: true } })
+  // Paid, not collected — read tolerantly (countOpenCases never throws): until Run Migrations the
+  // table isn't there, and that must never take the Accounts page down with it. The card says
+  // which — needs Run Migrations, couldn't count — rather than a calm 0 (design rule 7).
+  const uncollected = await countOpenCases()
   const cardholders = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
 
   // Names still on entries that aren't in the managed list (left behind by a rename) —
@@ -75,6 +80,27 @@ export default async function AccountsPage() {
           <p className="text-sm text-gray-500">Receipts parked from other checks — view, edit, or pull into a month.</p>
         </div>
         <span className="text-amber-600 dark:text-amber-400 font-semibold text-sm">{reservedCount} {reservedCount === 1 ? "line" : "lines"} →</span>
+      </Link>
+
+      <Link href="/tools/accounts/uncollected" prefetch={false}
+        className={`${card} p-4 mb-3 flex items-center justify-between gap-3 hover:border-emerald-500/60 transition-colors`}>
+        <div>
+          <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">📦 Paid, not collected</p>
+          <p className="text-sm text-gray-500">Buyers who&apos;ve paid but haven&apos;t collected their lots.</p>
+        </div>
+        {!uncollected.ready ? (
+          <span className="shrink-0 text-amber-600 dark:text-amber-400 font-semibold text-sm inline-flex items-center gap-2">
+            Needs Run Migrations → <LinkSpinner />
+          </span>
+        ) : uncollected.error ? (
+          <span className="shrink-0 text-amber-600 dark:text-amber-400 font-semibold text-sm inline-flex items-center gap-2">
+            Couldn&apos;t count just now → <LinkSpinner />
+          </span>
+        ) : (
+          <span className="shrink-0 text-emerald-600 dark:text-emerald-400 font-semibold text-sm inline-flex items-center gap-2">
+            {uncollected.open} open {uncollected.open === 1 ? "case" : "cases"} → <LinkSpinner />
+          </span>
+        )}
       </Link>
 
       <TransferData />

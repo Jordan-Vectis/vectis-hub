@@ -251,6 +251,8 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "AccountingDocument", what: "One receipt or invoice: supplier, item, website, date, VAT code, gross, VAT and net, its image, and whether it has been reviewed." },
       { model: "AccountingSupplierRule", what: "A rule that sets a supplier's VAT code and column automatically when its name matches." },
       { model: "AccountingCardholder", personal: "staff", what: "The people whose cards are reconciled." },
+      { model: "UncollectedPaid", personal: "customer", what: "A buyer who has paid for their lots but not collected them: their name, buyer number, email and phone, the sale, invoice, number of lots, amount paid and when, where the case stands, the next chase date and when storage charges start." },
+      { model: "UncollectedPaidEvent", personal: "customer", what: "Everything done about an uncollected case — calls, emails, letters, notes and changes of status, including what was said to or about the buyer — with which member of staff did it and when." },
       { model: "BankStatement", personal: "staff", what: "An uploaded statement: its label, whose card it is, and the page images." },
       { model: "BankTransaction", what: "A single line on a statement — dates, description, reference, amount and any fee — and which documents it was matched to." },
     ],

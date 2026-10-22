@@ -2514,6 +2514,105 @@ redirects here; the `Contact` table itself stays — Submissions use it.
   postcode, delivery addresses with no buyer here — the tidying to do before anything depends on it.
 
 ---
+## 📦 Accounts → Paid, not collected (2026-10-22)
+
+Jack: *"a new panel inside the Accounts section to track people who pay and are not collecting —
+make the framework for now"*. `/tools/accounts/uncollected` (the 📦 card under Reserves on the
+Accounts page), a case page per buyer at `/tools/accounts/uncollected/<id>`. One case = one buyer
+who has paid (an invoice, or a sale's worth) and hasn't collected their lots: who they are, the
+sale and invoice, lots and £ paid, when they paid, where it stands, the next chase date, when
+storage charges start, and a timeline of every call, email, letter, note and change.
+
+- **Admins only, exactly like Reserves.** The pages use `getAccountsAccess()` (`!canAccess` → `/hub`,
+  `!isAdmin` → `/tools/accounts/simple`), and **every server action re-checks admin on the server**
+  (`lib/actions/uncollected.ts`). A non-admin granted Accounts never sees it, and neither does the
+  Help box (`adminOnly` in `lib/help-map.ts`).
+- **One module for the words** — `lib/uncollected.ts` (a plain, client-safe module: no Prisma):
+  statuses with their labels, help text and colours (`STATUS_META`), age bands (`AGE_BANDS`),
+  London-day helpers, the shapes the actions return, and the URL filter
+  (`parseUncollectedFilter` / `uncollectedFilterQuery`). Change a label or a band there, never in a
+  page. ⚠ The server's SQL age-band filter is built from `AGE_BANDS` and repeats `daysWaiting()`'s
+  rule — change the two together.
+- **Statuses:** `waiting` (Paid — waiting to collect) · `contacted` (We've been in touch) ·
+  `arranged` (Collection or delivery arranged) · `storage` (Storage charges apply) · `collected`
+  (closes the case) · `closed` (Closed another way — refunded, re-offered — **needs a reason**).
+  Collected/closed set `closedAt`; going back to an open status clears it. Choosing Storage with no
+  storage date yet starts the charges today. A call, email or letter logged on a `waiting` case moves
+  it to `contacted` (said on the timeline). A status change only wins if the case is still where it
+  was read, so two people changing it at once can't both win.
+  - A status in the table that isn't one of the six (a future feed's typo) **reads as `waiting`
+    everywhere** — `statusOf()` on the screen, the same `CASE` in the list's SQL, and "open" is
+    defined as *anything but collected / closed* for the tiles, the Accounts card and the invoice
+    check. So it is listed, counted and chased, never vanishes from every chip; an amber line on the
+    panel says how many there are (`totals.unknownStatus`) so someone picks the right one.
+- **Days waiting = today − the day they paid, in London days**, frozen on the day a case closed;
+  no paid date = no days and no age band. Bands 0–7 · 8–14 · 15–30 · 31–60 · Over 60 (61 and up —
+  the key stays `60+`, the label says "Over 60 days" so day 60 is plainly in the band before). Date-only values
+  (paid on, next chase, storage from) are stored at **12:00 UTC on their London day**, like the Goods
+  In signed-terms day, so they read as the same day all year. The tiles (open cases, lots and £
+  waiting, oldest wait, chases due today/overdue) are over every OPEN case, whatever the filters.
+- **Actions return `{ ok, error }`** (`UncollectedResult`); a missing table answers `notReady: true`
+  with "needs Run Migrations" and the page says so — never crashes. `countOpenCases()` (the Accounts
+  card's number) never fails, and never passes off "couldn't tell" as 0 (design rule 7): `ready:
+  false` before Run Migrations (the card says "Needs Run Migrations"), `error: true` when the count
+  couldn't be read ("Couldn't count just now").
+- **Tables `UncollectedPaid` + `UncollectedPaidEvent`** (cascade) — **NEEDS Run Migrations**. Their
+  own tables; nothing added to `Customer`, `Contact` or `User`. `customerId` is a plain id (no
+  foreign key), filled when the buyer number matches a Hub **Customers** record (read tolerantly from
+  the Hub's own copy — never BC).
+- ⚠⚠ **Manual entry only for now. Nothing here calls or touches Business Central.** The next step
+  is a feed of BC's paid invoices and the collected flag, and the table is built for it:
+  - The feed writes rows with **`source = "bc"`** keyed on **`bcKey`** (unique — the invoice it came
+    from), so a re-run updates its row and never adds a second.
+  - ⚠ **It must never duplicate a manual case.** Before inserting, it looks for an OPEN manual case
+    for the same invoice (or buyer number + sale) and adopts it — sets its `bcKey` and `source` — rather
+    than adding a second case for the same buyer. With no match it adds a new row. Never delete or
+    overwrite a manual case's timeline, status or notes from the feed.
+  - It writes only the fields BC owns (`BC_OWNED_FIELDS`: name, buyer number, sale, invoice, lots,
+    amount paid, paid on), and only our six status values (an unknown one reads as "waiting" — see
+    Statuses). BC's collected flag may move a case to `collected`; nothing else in the feed changes
+    a status. It must take the same invoice lock as the Hub's own writes (below) when it adopts or
+    adds a case.
+  - ⚠ **Not decided yet — for Jack and Jordan before the feed is built:** exactly how it matches an
+    existing manual case (the invoice alone, or buyer number + sale when a manual case has no
+    invoice number).
+  - On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses
+    Delete (the feed would bring it back — close it instead). A manual case can be deleted, confirmed
+    in the page. Contact details, chase dates, storage start and notes stay the Hub's own.
+- ⚠ **One OPEN case per invoice** (case-insensitive) — the feed's "adopt the open manual case"
+  depends on it. Enforced by every write that could break it: adding a case, giving an open case a
+  new invoice number, and reopening a closed case whose invoice has had another case opened since.
+  Each takes a transaction-scoped advisory lock on the invoice (`lockInvoice` —
+  `hashtext('uncollected-invoice:' || lower(invoice))`, via `$executeRaw`) FIRST, then checks, then
+  writes, in one transaction, so two people doing it at once queue and the second is refused. A
+  refusal names the buyer and carries the other case's id (`existingId`); every screen that can be
+  refused links to it. ⚠ Always the advisory lock before any row lock (updateCase then takes the row
+  `FOR UPDATE`), so these writes can't deadlock each other; setStatus only writes if the case's
+  status AND invoice are still what it read. A closed case may share an invoice with an open one.
+- ⚠ **Customer personal data, and never bank or card details.** `looksLikeBankDetails()` refuses
+  the obvious shapes — the words "sort code" or "IBAN"; a sort code beside an 8-digit account number
+  (one that reads as a date, 22-10-26, only with an account word nearby); a card number (13–19
+  digits of WHOLE digit groups, unbroken or in a card's grouping, passing the Luhn check — so two
+  phone numbers side by side are never a card) — in **every box**: name, buyer number, sale,
+  invoice, email, notes, contact text and closing reasons. The phone box takes at most 15 digits
+  (no phone number has more) instead, because some real international numbers pass the card check.
+  The timeline records which contact details changed, never the old values.
+- ⚠ **Nothing personal goes in a URL — only the case id and the filters `?status= &age= &sort=`.
+  NEVER the search** (`uncollectedFilterQuery` never writes it, `parseUncollectedFilter` ignores a
+  `?q=`): a search is usually a customer's name or email, and an address ends up in the browser's
+  history and the server's request logs. The panel sends the search to `listCases` itself (a
+  server action — a POST, nothing in the URL) and keeps it in the tab's **sessionStorage** (in
+  try/catch, restored after hydration) so Back from a case returns to the same search. The server
+  page always renders the list unsearched. Don't move the search back into the address bar.
+- **Deleting a case** removes its timeline with it, so `deleteCase` writes one line to the server's
+  log (`console.info "uncollected case deleted"`: who, when, the case id, source, buyer number and
+  invoice — never contact details). Accounts has no audit table and none was added for this.
+- It is listed in `lib/data-map.ts`.
+- Registered in `lib/help-map.ts` as **"Paid, not collected (Accounts)"** — ⚠ never "Accounts → …":
+  with "Accounts" as a name part, any question mentioning accounts would score against this
+  admin-only entry and refuse a Simple-mode user about their own screens.
+
+---
 ## 🔐 Two-factor login (2026-10-22)
 
 Jordan: a tick box per person — *"Could we set it up as a tick box in the user panel would make
