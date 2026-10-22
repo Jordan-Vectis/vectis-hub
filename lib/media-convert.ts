@@ -1,4 +1,4 @@
-import sharp from "sharp"
+import sharp, { type Sharp } from "sharp"
 import { getObjectBuffer, objectExistsInR2, uploadBufferToR2 } from "@/lib/r2"
 import { isHeicKey, isRawKey, isVideoKey, jpegCopyKey, needsJpegCopy } from "@/lib/media"
 import { ensureVideoCopy } from "@/lib/video-convert"
@@ -36,7 +36,7 @@ const inFlight = new Map<string, Promise<string>>()
 /** Any image this module understands, as an upright JPEG no bigger than MAX_EDGE. `name` decides how
  *  it's read (by its extension). Throws when the file can't be read. */
 export async function imageToJpeg(input: Buffer, name: string): Promise<Buffer> {
-  let image: sharp.Sharp
+  let image: Sharp
   if (isHeicKey(name) && looksLikeHeif(input)) {
     const { default: decode } = await import("heic-decode")
     const img = await decode({ buffer: input }) // libheif applies the photo's own rotation
@@ -61,7 +61,7 @@ function looksLikeHeif(buf: Buffer): boolean {
 }
 
 /** The camera's own preview inside a RAW file, turned the way the camera recorded it. */
-async function rawPreview(raw: Buffer): Promise<sharp.Sharp> {
+async function rawPreview(raw: Buffer): Promise<Sharp> {
   const preview = await largestEmbeddedJpeg(raw)
   if (!preview) {
     // No JPEG preview inside — some DNGs keep an ordinary picture as their first TIFF page instead.

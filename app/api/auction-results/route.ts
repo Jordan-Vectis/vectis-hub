@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { auth } from "@/auth"
 
 // GET /api/auction-results
 // Returns list of finished auctions (no ?auctionId)
 // GET /api/auction-results?auctionId=xxx
 // Returns all lots with statuses/hammer prices for that auction
 
+// ⚠ Signed-in only (security review, 2026-10-22): it hands out hammer prices, which stay behind the
+// login by decision. Its only caller is the Auction Controller's results page.
 export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
   const auctionId = req.nextUrl.searchParams.get("auctionId")
 
   if (!auctionId) {

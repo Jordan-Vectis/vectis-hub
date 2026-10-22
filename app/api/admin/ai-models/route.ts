@@ -11,7 +11,8 @@ export const maxDuration = 30
 export async function GET() {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    // Admins only (security review, 2026-10-22) — this sets which AI model every tool uses.
+    if (session?.user?.role !== "ADMIN") return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const apiKey = process.env.GEMINI_API_KEY
     const [rows, googleRes, disabledRows] = await Promise.all([
@@ -56,7 +57,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    // Admins only (security review, 2026-10-22) — this sets which AI model every tool uses.
+    if (session?.user?.role !== "ADMIN") return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const body = await req.json()
     const updates: { slot: string; modelId: string }[] = Array.isArray(body?.updates)

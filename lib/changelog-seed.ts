@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2d56235c33e834ece68c72ca1475a383aa2cad4a","author":"Jordan Orange","date":"2026-10-21T14:27:41+01:00","subject":"Customers copy: changes only, carries on after a stop, Stop asks first"},
   {"sha":"08006e4e1d09d0dc0d9d75b8ed3a638318c3c404","author":"jack-vectis","date":"2026-10-21T09:43:10+01:00","subject":"Handheld scanner: a failed scan stops scanning until it is acknowledged"},
   {"sha":"a43b6a8b7a172f2ffb0c87bfec87ff78ed7294fb","author":"Jordan Orange","date":"2026-10-20T16:41:31+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"b95a517991e6404c334dc42d2aa7525043a6d71e","author":"Jordan Orange","date":"2026-10-20T16:41:24+01:00","subject":"Customers: copy BC's contact and vendor cards too"},
