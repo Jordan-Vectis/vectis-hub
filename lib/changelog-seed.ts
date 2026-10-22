@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"0e681fdc60424d8cc3249f87b4bc04d2e6bf3dde","author":"Jordan Orange","date":"2026-10-22T10:24:42+01:00","subject":"Security: frame/nosniff/referrer headers, live-auction socket only from the Hub's own pages, no clerk123 fallback"},
   {"sha":"7d2c48880ece062bdd64e6b6f3efd46599d13391","author":"Jordan Orange","date":"2026-10-22T10:05:29+01:00","subject":"Security quick wins: sign-in on upload-url + auction-results, admins-only AI Models, login attempt limit, update next/next-auth/sharp/socket.io"},
   {"sha":"2d56235c33e834ece68c72ca1475a383aa2cad4a","author":"Jordan Orange","date":"2026-10-21T14:27:41+01:00","subject":"Customers copy: changes only, carries on after a stop, Stop asks first"},
   {"sha":"08006e4e1d09d0dc0d9d75b8ed3a638318c3c404","author":"jack-vectis","date":"2026-10-21T09:43:10+01:00","subject":"Handheld scanner: a failed scan stops scanning until it is acknowledged"},

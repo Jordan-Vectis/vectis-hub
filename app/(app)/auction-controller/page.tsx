@@ -77,7 +77,6 @@ export default function AuctionControllerPage() {
   const socketRef = useRef<Socket | null>(null)
 
   const [phase, setPhase] = useState<"login" | "select" | "control">("login")
-  const [password, setPassword] = useState("")
   const [loginError, setLoginError] = useState("")
 
   const [auctions, setAuctions] = useState<AuctionMeta[]>([])
@@ -114,10 +113,12 @@ export default function AuctionControllerPage() {
     socketRef.current = socket
 
     socket.on("clerk:auth:ok", () => {
-      setPhase("select")
+      setPhase(p => (p === "login" ? "select" : p)) // a reconnect mid-sale stays where it is
       socket.emit("clerk:loadAuctions")
     })
-    socket.on("clerk:auth:fail", () => setLoginError("Incorrect password. Please try again."))
+    socket.on("clerk:auth:fail", (e: { message?: string }) => setLoginError(e?.message || "You don't have access to the clerk controls."))
+    // Access comes from the Hub login — ask on every (re)connect, so a dropped connection keeps the controls.
+    socket.on("connect", () => socket.emit("clerk:auth"))
     socket.on("clerk:auctions",  (list: AuctionMeta[]) => setAuctions(list))
     socket.on("clerk:auctionLoaded", () => setPhase("control"))
     socket.on("clerk:error", (e: { message: string }) => showError("Auction controller error", e.message))
@@ -213,22 +214,19 @@ export default function AuctionControllerPage() {
         <div className="bg-[#161b2e] border border-white/10 rounded-2xl p-10 w-96 shadow-2xl text-center">
           <div className="text-4xl mb-3">🔨</div>
           <h1 className="text-white text-xl font-extrabold mb-1">Clerking Controller</h1>
-          <p className="text-slate-400 text-sm mb-6">Enter clerk password to access the control panel</p>
-          <input
-            type="password"
-            className="w-full bg-[#0d1117] border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm mb-3 outline-none focus:border-blue-500"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && emit("clerk:auth", { password })}
-          />
-          {loginError && <p className="text-red-400 text-xs mb-3">{loginError}</p>}
-          <button
-            onClick={() => { setLoginError(""); emit("clerk:auth", { password }) }}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg transition-colors"
-          >
-            Login
-          </button>
+          {loginError ? (
+            <>
+              <p className="text-red-400 text-sm mb-6">{loginError}</p>
+              <button
+                onClick={() => { setLoginError(""); emit("clerk:auth") }}
+                className="w-full min-h-11 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg transition-colors"
+              >
+                Try again
+              </button>
+            </>
+          ) : (
+            <p className="text-slate-400 text-sm">Checking your Hub access…</p>
+          )}
         </div>
       </div>
     )

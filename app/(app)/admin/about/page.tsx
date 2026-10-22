@@ -769,7 +769,7 @@ const APPS: App[] = [
       {
         label: "Pre-sale",
         items: [
-          "Clerk authenticates with a separate clerk password (not the staff login).",
+          "Clerk controls come from the staff Hub login: the socket reads the login cookie and allows anyone with Auction Controller access (admins always).",
           "Select a published auction to operate. LiveAuction record set to ACTIVE.",
         ],
       },
