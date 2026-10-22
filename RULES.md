@@ -2512,3 +2512,32 @@ redirects here; the `Contact` table itself stays — Submissions use it.
 - ⚠ **Bank details are never stored** (they go to Sage), same rule as Goods In.
 - **Data check** tab: counts, likely duplicates (same email on several records), missing email /
   postcode, delivery addresses with no buyer here — the tidying to do before anything depends on it.
+
+---
+## 🔐 Two-factor login (2026-10-22)
+
+Jordan: a tick box per person — *"Could we set it up as a tick box in the user panel would make
+testing easier"* — plus "remember this device for 30 days". Users & Permissions → a person →
+**Two-factor login** card: **Require two-factor**, and **Reset two-factor (lost phone)**.
+
+- **Authenticator app codes (TOTP)**, built on Node's `crypto` in `lib/two-factor.ts` — no new
+  package. 10 backup codes shown ONCE at set-up, stored as SHA-256 only, each used up when typed.
+  Each authenticator time step is accepted once (`lastStep`), so a code seen over a shoulder can't
+  be replayed. Wrong codes count towards the login attempt limit in `auth.ts`.
+- **Its own table, `UserTwoFactor`** (**NEEDS Run Migrations**) — never columns on `User` (the
+  login lockout rule above). `readTwoFactor` treats a MISSING table as "not required", so a deploy
+  can't lock anyone out; ⚠ any other database fault throws, so a blip never lets a ticked person
+  in on their password alone. Don't widen that catch.
+- **Flow** (`authorize` in `auth.ts` → `app/login/actions.ts`): password right + ticked + set up →
+  the login form asks for the code (`2fa_required` / `2fa_wrong`). Ticked but not set up →
+  `2fa_setup`: NO session — a 15-minute signed set-up pass cookie (path `/two-factor`) and a
+  redirect to **`/two-factor/setup`** (public EXACT path in `auth.config.ts`; the pass is the only
+  way in). There they scan the QR, confirm a code, get their backup codes, then sign in properly.
+- **Remember this device**: a signed `vectis-2fa-device` cookie for 30 days, set only when a code
+  was actually typed. It includes the person's `enabledAt`, so **Reset** kills every remembered device.
+- ⚠⚠ **Every key comes from `AUTH_SECRET`.** Change it and every secret, backup code check and
+  remembered device stops working — everyone ticked must be reset and set up again. Rotate
+  `AUTH_SECRET` BEFORE switching two-factor on for real.
+- ⚠ Known limit: whoever first signs in to a ticked-but-not-set-up account sets up its phone. Tick
+  someone when they're about to sign in, not days ahead.
+- Unticking keeps the set-up (ticking again needs no new QR). Admins only, checked on the server.

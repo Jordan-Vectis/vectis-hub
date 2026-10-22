@@ -44,7 +44,9 @@ export const authConfig: NextAuthConfig = {
       // and shows nothing but "Scan your sign-in card" to nobody; its API routes check themselves.
       // A card signs in to the scanner ONLY — the rest of the Hub stays behind this gate. See
       // RULES.md → Goods In → handheld scanner → "Scanner sign-in cards".
-      const publicExact = ["/first-aid", "/scan", "/scan/sw"]
+      // "/two-factor/setup": reached from the login form after a correct password, guarded by its own
+      // 15-minute set-up pass cookie (lib/two-factor.ts) — it never gives a Hub session.
+      const publicExact = ["/first-aid", "/scan", "/scan/sw", "/two-factor/setup"]
       const bare = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname
       if (publicExact.includes(bare)) return true
 

@@ -6,6 +6,8 @@ import EditUserForm from "./edit-user-form"
 import { permissionGroups } from "@/lib/home-layout"
 import { getHomeLayout } from "@/lib/home-layout-server"
 import DeleteUserButton from "../delete-button"
+import TwoFactorCard, { type TwoFactorStatus } from "./two-factor-card"
+import { twoFactorTableExists } from "@/lib/two-factor"
 
 export default async function EditUserPage({
   params,
@@ -33,6 +35,22 @@ export default async function EditUserPage({
     departmentIds = links.map(l => l.departmentId)
   } catch {
     departmentIds = user.departmentId ? [user.departmentId] : []
+  }
+
+  // Two-factor lives in its own table, which only exists after Run Migrations.
+  let twoFactor: TwoFactorStatus = { ready: false }
+  if (await twoFactorTableExists()) {
+    const tf = await prisma.userTwoFactor.findUnique({
+      where: { userId: id },
+      select: { required: true, enabledAt: true, backupCodes: true, updatedByName: true },
+    })
+    twoFactor = {
+      ready: true,
+      required: tf?.required ?? false,
+      enabledAt: tf?.enabledAt?.toISOString() ?? null,
+      backupLeft: tf?.backupCodes.length ?? 0,
+      updatedByName: tf?.updatedByName ?? null,
+    }
   }
 
   // Always include ADMIN + this user's current role + every other role known
@@ -86,6 +104,8 @@ export default async function EditUserPage({
         isSelf={session.user.id === user.id}
         homeSections={permissionGroups(await getHomeLayout())}
       />
+
+      <TwoFactorCard userId={user.id} isSelf={session.user.id === user.id} status={twoFactor} />
     </div>
   )
 }

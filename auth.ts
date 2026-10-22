@@ -1,8 +1,15 @@
-import NextAuth from "next-auth"
+import NextAuth, { CredentialsSignin } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { authConfig } from "@/auth.config"
+import { readTwoFactor, useLoginCode, rememberCookieValid, cookieFrom, REMEMBER_COOKIE } from "@/lib/two-factor"
+
+// Two-factor answers the login form reads (app/login/actions.ts) — the password WAS right for both.
+// ⚠ Neither gives a session: "setup" only earns a 15-minute pass to the set-up page.
+export class TwoFactorRequired extends CredentialsSignin { code = "2fa_required" }
+export class TwoFactorWrong extends CredentialsSignin { code = "2fa_wrong" }
+export class TwoFactorSetup extends CredentialsSignin { code = "2fa_setup" }
 
 declare module "next-auth" {
   interface Session {
@@ -52,6 +59,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        code: { label: "Code", type: "text" },
       },
       authorize: async (credentials, request) => {
         if (!credentials?.email || !credentials?.password) return null
@@ -83,6 +91,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           user.password
         )
         if (!valid) return fail()
+
+        // Two-factor (2026-10-22): the "Require two-factor" tick in Users & Permissions.
+        const tf = await readTwoFactor(user.id)
+        if (tf?.required) {
+          if (!tf.enabledAt || !tf.secret) { loginFails.delete(nameKey); throw new TwoFactorSetup() }
+          const remembered = rememberCookieValid(cookieFrom(request?.headers?.get("cookie"), REMEMBER_COOKIE), user.id, tf.enabledAt)
+          if (!remembered) {
+            const code = String(credentials.code ?? "").trim()
+            if (!code) throw new TwoFactorRequired()
+            if (!(await useLoginCode(tf, code))) { fail(); throw new TwoFactorWrong() }
+          }
+        }
         loginFails.delete(nameKey)
 
         const SUPERADMIN_EMAILS = ["it@vectis.co.uk"]

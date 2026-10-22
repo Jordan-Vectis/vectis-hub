@@ -2444,6 +2444,13 @@ export const MIGRATIONS = [
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "CustomerSyncState_pkey" PRIMARY KEY ("phase")
   )`,
+  // Two-factor login (2026-10-22) — its own table, never columns on "User" (login lockout rule).
+  `CREATE TABLE IF NOT EXISTS "UserTwoFactor" (
+    "userId" TEXT NOT NULL, "required" BOOLEAN NOT NULL DEFAULT false, "secret" TEXT, "enabledAt" TIMESTAMP(3),
+    "backupCodes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[], "lastStep" INTEGER,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedByName" TEXT,
+    CONSTRAINT "UserTwoFactor_pkey" PRIMARY KEY ("userId")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
