@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"bc7537a0c9206f661a5e2072ef6392eef917a403","author":"Jordan Orange","date":"2026-10-22T14:51:41+01:00","subject":"Two-factor: no backup codes — a lost phone means an admin presses Reset"},
   {"sha":"825ea9cd0dcfe7cf2739827acd3eabc479eb32c4","author":"Jordan Orange","date":"2026-10-22T12:33:11+01:00","subject":"Lot wizard: choose AI or manual description before typing (switch asks and keeps the text); warn on a barcode that isn't one letter + six digits"},
   {"sha":"c26d62ea68ab781f7e734615199b21b9ccdd4a0f","author":"Jordan Orange","date":"2026-10-22T11:54:47+01:00","subject":"Two-factor login: per-person tick box in Users & Permissions, authenticator codes, backup codes, remember device 30 days"},
   {"sha":"7faca5c94e915d14aade5a2fa1c63d7adc5a71a6","author":"Jordan Orange","date":"2026-10-22T11:22:07+01:00","subject":"Security: Auto Clerk bid feed needs this Hub's key; live auction state behind the login"},
