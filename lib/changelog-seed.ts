@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c26d62ea68ab781f7e734615199b21b9ccdd4a0f","author":"Jordan Orange","date":"2026-10-22T11:54:47+01:00","subject":"Two-factor login: per-person tick box in Users & Permissions, authenticator codes, backup codes, remember device 30 days"},
   {"sha":"7faca5c94e915d14aade5a2fa1c63d7adc5a71a6","author":"Jordan Orange","date":"2026-10-22T11:22:07+01:00","subject":"Security: Auto Clerk bid feed needs this Hub's key; live auction state behind the login"},
   {"sha":"eb438f22f80736fbce943d6b5d5b461558b53aa9","author":"Jordan Orange","date":"2026-10-22T11:02:42+01:00","subject":"Clerk controls from the Hub login: Auction Controller access instead of a shared clerk password"},
   {"sha":"0e681fdc60424d8cc3249f87b4bc04d2e6bf3dde","author":"Jordan Orange","date":"2026-10-22T10:24:42+01:00","subject":"Security: frame/nosniff/referrer headers, live-auction socket only from the Hub's own pages, no clerk123 fallback"},

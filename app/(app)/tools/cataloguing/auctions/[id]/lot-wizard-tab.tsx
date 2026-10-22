@@ -948,6 +948,18 @@ export default function LotWizardTab({
   // only the visible half.
   const [aiExcluded,  setAiExcluded]  = useState(manualDescriptions)
   const [manualDesc,  setManualDesc]  = useState("")
+  // Step 3 asks AI-or-manual FIRST (Jordan, 2026-10-22): people typed key points, then ticked
+  // "Exclude from AI" and the box swapped to an empty one — what they'd typed was lost on Next.
+  // Nothing is typed until the choice is made, switching asks first, and the text carries over.
+  const [modeChosen,  setModeChosen]  = useState(manualDescriptions)
+  const [switchAsk,   setSwitchAsk]   = useState(false)
+  function switchMode() {
+    if (aiExcluded) { setKeyPoints(k => k.trim() ? k : manualDesc); setAiExcluded(false) }
+    else            { setManualDesc(m => m.trim() ? m : keyPoints); setAiExcluded(true) }
+    setSwitchAsk(false)
+  }
+  // Our barcodes are always one letter and six digits (F159123) — an extra or missing digit warns.
+  const [barcodeFormatWarning, setBarcodeFormatWarning] = useState(false)
   // Spell FLAGGING for Key Points / Description (step 3) — lists unrecognised words,
   // ignoring brand names + codes/numbers. See lib/spellcheck.ts.
   const [misspelled,  setMisspelled]  = useState<string[]>([])
@@ -1175,6 +1187,7 @@ export default function LotWizardTab({
       if (!receipt.trim()) return "Receipt Number is required"
     }
     if (s === 2 && !barcode.trim()) return "Internal Barcode is required"
+    if (s === 3 && !modeChosen) return "Choose AI (key points) or a manual description first"
     if (s === 5) {
       if (!estLow.trim() || !estHigh.trim()) return "Both Estimate Low and High are required"
       if (isNaN(Number(estLow.replace(/[£,]/g, ""))) || isNaN(Number(estHigh.replace(/[£,]/g, ""))))
@@ -1263,7 +1276,7 @@ export default function LotWizardTab({
     setStep(1)
   }
 
-  async function goNext() {
+  async function goNext(skipFormat = false) {
     const err = validateStep(step)
     if (err) { setValidErr(err); return }
     setValidErr("")
@@ -1273,6 +1286,10 @@ export default function LotWizardTab({
         setStep1LengthWarning(true)
         return
       }
+    }
+    if (step === 2 && barcode.trim() && !skipFormat && !/^[A-Za-z]\d{6}$/.test(barcode.trim())) {
+      setBarcodeFormatWarning(true)
+      return
     }
     // Is this barcode already assigned to a lot anywhere in the app? A live
     // server check, so it sees lots created seconds ago on another device.
@@ -1323,6 +1340,8 @@ export default function LotWizardTab({
     setCategoryWarning(null)
     setEstimateWarning(false)
     setBarcodeWarning(false)        // else the top-nav button stays disabled back on step 1
+    setBarcodeFormatWarning(false)
+    setSwitchAsk(false)
     setDupeWarning(null)
     setDupeCheckError(null)
     setStep1LengthWarning(false)
@@ -1499,6 +1518,7 @@ export default function LotWizardTab({
       // descriptions the tick is hidden, so resetting it to false turned their Description box
       // into Key Points from the second lot on with no way to turn it back.
       setBarcode(""); setKeyPoints(""); setAiExcluded(manualDescriptions); setManualDesc("")
+      setModeChosen(manualDescriptions); setSwitchAsk(false)
       setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand(pinnedBrand)
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
       setBoxOn(false); setBoxPrefixMode("Box is"); setBoxCustomPrefix(""); setBoxCond1(""); setBoxCond2("")
@@ -1937,8 +1957,8 @@ export default function LotWizardTab({
         </button>
         <span className={`text-gray-600 ${tablet ? "text-base" : "text-xs"}`}>{step} / 8</span>
         {step < 8 ? (
-          <button onClick={step === 1 ? startCataloguing : goNext}
-            disabled={barcodeWarning || step1LengthWarning || !!dupeWarning || !!dupeCheckError || checkingBarcode}
+          <button onClick={step === 1 ? startCataloguing : () => goNext()}
+            disabled={barcodeWarning || barcodeFormatWarning || step1LengthWarning || !!dupeWarning || !!dupeCheckError || checkingBarcode}
             className={`font-semibold rounded transition-colors disabled:opacity-40 ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}
             style={{ background: CAT_ACCENT, color: "#1C1C1E", touchAction: tablet ? "manipulation" : undefined }}>
             {checkingBarcode ? "Checking…" : step === 1 ? "Start cataloguing →" : "Next →"}
@@ -2276,6 +2296,7 @@ export default function LotWizardTab({
                 if (v) startLotTimerDisplay()
                 setBarcode(v)
                 if (barcodeWarning) setBarcodeWarning(false)
+                if (barcodeFormatWarning) setBarcodeFormatWarning(false)
                 if (dupeWarning) setDupeWarning(null)
                 if (dupeCheckError) setDupeCheckError(null)
               }} className={inpFocus} placeholder="Scan or type barcode…" autoFocus />
@@ -2335,7 +2356,7 @@ export default function LotWizardTab({
                 </p>
                 <div className="flex gap-2 flex-wrap">
                   <button type="button"
-                    onClick={() => { setDupeCheckError(null); goNext() }}
+                    onClick={() => { setDupeCheckError(null); goNext(true) }}
                     className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-700/40 hover:bg-amber-700/60 text-amber-200 border border-amber-600/40 transition-colors">
                     Try again
                   </button>
@@ -2343,6 +2364,28 @@ export default function LotWizardTab({
                     onClick={() => { setDupeCheckError(null); setStep(3) }}
                     className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 border border-gray-600/40 transition-colors">
                     Continue anyway
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Wrong shape — an extra or missing digit */}
+            {barcodeFormatWarning && (
+              <div className="rounded-xl border border-amber-600/50 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 space-y-3">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  ⚠ Barcode <strong>{barcode.trim().toUpperCase()}</strong> isn&apos;t one letter and six numbers
+                  (like <strong>F159123</strong>) — {(() => { const d = barcode.trim().replace(/\D/g, "").length; return d > 6 ? `it has ${d} numbers` : d < 6 ? `it has only ${d} number${d === 1 ? "" : "s"}` : "check the letter at the start" })()}.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <button type="button"
+                    onClick={() => setBarcodeFormatWarning(false)}
+                    className="min-h-11 px-4 text-sm font-medium rounded-lg bg-amber-600 hover:bg-amber-700 dark:bg-amber-700/40 dark:hover:bg-amber-700/60 text-white dark:text-amber-200 border border-amber-600/40 transition-colors">
+                    Change barcode
+                  </button>
+                  <button type="button"
+                    onClick={() => { setBarcodeFormatWarning(false); goNext(true) }}
+                    className="min-h-11 px-4 text-sm font-medium rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700/40 dark:hover:bg-gray-700/60 text-gray-800 dark:text-gray-300 border border-gray-300 dark:border-gray-600/40 transition-colors">
+                    It&apos;s right — continue
                   </button>
                 </div>
               </div>
@@ -2380,14 +2423,48 @@ export default function LotWizardTab({
               <p className={`px-3 py-2.5 rounded-lg border border-amber-600/60 bg-amber-950/40 text-amber-300 w-fit ${tablet ? "text-base" : "text-sm"} font-medium`}>
                 ✍ You write your own descriptions — this lot is excluded from AI automatically.
               </p>
+            ) : !modeChosen ? (
+              <div className="space-y-3">
+                <p className={`text-gray-800 dark:text-gray-300 font-medium ${tablet ? "text-lg" : "text-base"}`}>How will this lot be described?</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button type="button" onClick={() => { setAiExcluded(false); setModeChosen(true) }}
+                    className="min-h-24 rounded-xl border-2 border-teal-600/60 bg-teal-50 dark:bg-teal-950/30 hover:bg-teal-100 dark:hover:bg-teal-900/40 px-4 py-4 text-left transition-colors">
+                    <span className={`block font-bold text-teal-700 dark:text-teal-300 ${tablet ? "text-lg" : "text-base"}`}>✨ AI writes it</span>
+                    <span className="block text-sm text-gray-600 dark:text-gray-400 mt-1">You type key points; the AI writes the description.</span>
+                  </button>
+                  <button type="button" onClick={() => { setAiExcluded(true); setModeChosen(true) }}
+                    className="min-h-24 rounded-xl border-2 border-amber-600/60 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 px-4 py-4 text-left transition-colors">
+                    <span className={`block font-bold text-amber-700 dark:text-amber-300 ${tablet ? "text-lg" : "text-base"}`}>✍ I&apos;ll type the description</span>
+                    <span className="block text-sm text-gray-600 dark:text-gray-400 mt-1">You write the full description; it won&apos;t go to the AI.</span>
+                  </button>
+                </div>
+              </div>
             ) : (
-              <label className={`flex items-center gap-3 cursor-pointer px-3 py-2.5 rounded-lg border transition-colors w-fit ${aiExcluded ? "bg-amber-950/40 border-amber-600/60 text-amber-300" : "border-gray-700 text-gray-500 hover:border-gray-500"}`}>
-                <input type="checkbox" checked={aiExcluded} onChange={e => setAiExcluded(e.target.checked)}
-                  className="w-4 h-4 accent-amber-500" />
-                <span className={tablet ? "text-base font-medium" : "text-sm font-medium"}>Exclude from AI — description typed manually</span>
-              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`px-3 py-2 rounded-lg border font-medium ${tablet ? "text-base" : "text-sm"} ${aiExcluded ? "bg-amber-50 dark:bg-amber-950/40 border-amber-600/60 text-amber-700 dark:text-amber-300" : "bg-teal-50 dark:bg-teal-950/30 border-teal-600/60 text-teal-700 dark:text-teal-300"}`}>
+                  {aiExcluded ? "✍ Manual description — not sent to AI" : "✨ AI writes it from your key points"}
+                </span>
+                {switchAsk ? (
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Switch to {aiExcluded ? "AI" : "a manual description"}? What you&apos;ve typed is kept.</span>
+                    <button type="button" onClick={switchMode}
+                      className="min-h-11 px-4 text-sm font-semibold rounded-lg bg-amber-600 hover:bg-amber-700 dark:bg-amber-700/50 dark:hover:bg-amber-700/70 text-white dark:text-amber-100 border border-amber-600/50">
+                      Yes, switch
+                    </button>
+                    <button type="button" onClick={() => setSwitchAsk(false)}
+                      className="min-h-11 px-4 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button type="button" onClick={() => setSwitchAsk(true)}
+                    className="min-h-11 px-3 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
+                    Change
+                  </button>
+                )}
+              </div>
             )}
-            {aiExcluded ? (
+            {!modeChosen ? null : aiExcluded ? (
               <div>
                 <label className={`${lbl} block mb-1`}>Description <span className="text-gray-500">(typed manually — will not be sent to AI)</span></label>
                 <textarea value={manualDesc} onChange={e => setManualDesc(e.target.value)} rows={7}
