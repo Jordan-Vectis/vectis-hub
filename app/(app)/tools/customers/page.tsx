@@ -116,7 +116,7 @@ async function List(sp: Search) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800 text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
               <tr>
-                <th className="px-3 py-2">Name</th><th className="px-3 py-2">Seller no.</th><th className="px-3 py-2">Buyer no.</th>
+                <th className="px-3 py-2">Name</th><th className="px-3 py-2">Customer no.</th><th className="px-3 py-2">Sells / buys</th>
                 <th className="px-3 py-2">Email</th><th className="px-3 py-2">Phone</th><th className="px-3 py-2">Town / postcode</th><th className="px-3 py-2">Website</th>
               </tr>
             </thead>
@@ -127,12 +127,22 @@ async function List(sp: Search) {
                     <Link href={`/tools/customers/${c.id}`} className="font-semibold text-indigo-700 dark:text-indigo-300 hover:underline">{c.name || c.name2 || "(no name)"}</Link>
                     {c.blocked && <span className="ml-2 text-xs rounded px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">Blocked: {c.blocked}</span>}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs">{c.vendorNo ?? "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{c.buyerNo ?? "—"}</td>
+                  {/* ⚠ These cells had no text colour, so the numbers were invisible on the dark theme
+                      (2026-10-23). And BC gives a person ONE number — the contact no. is the vendor no.
+                      and the customer no. in all but a few dozen of 208,000 — so it is shown once; the
+                      rare different seller or buyer number is named beside it. */}
+                  <td className="px-3 py-2 font-mono text-xs text-gray-800 dark:text-gray-200">
+                    {c.contactNo ?? c.vendorNo ?? c.buyerNo ?? "—"}
+                    {c.vendorNo && c.vendorNo !== c.contactNo && <span className="block text-gray-500 dark:text-gray-400">seller {c.vendorNo}</span>}
+                    {c.buyerNo && c.buyerNo !== c.contactNo && <span className="block text-gray-500 dark:text-gray-400">buyer {c.buyerNo}</span>}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                    {[c.vendorNo && "Seller", c.buyerNo && "Buyer"].filter(Boolean).join(" & ") || "—"}
+                  </td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{c.email ?? "—"}</td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{c.mobile || c.phone || "—"}</td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{[c.city, c.postCode].filter(Boolean).join(", ") || "—"}</td>
-                  <td className="px-3 py-2">{c.websiteId ? "✓" : ""}</td>
+                  <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{c.websiteId ? "✓" : ""}</td>
                 </tr>
               ))}
             </tbody>
@@ -145,7 +155,7 @@ async function List(sp: Search) {
           {page < pages && <Link href={link({ page: String(page + 1) })} className="min-h-[44px] inline-flex items-center px-4 rounded-lg border border-gray-300 dark:border-gray-600 text-sm">Next →</Link>}
         </div>
       )}
-      <p className="text-xs text-gray-500 dark:text-gray-400">Seller no. = BC vendor number (C…) · Buyer no. = BC customer number · ✓ = has an account on the website.</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Customer no. = the person&apos;s BC number (C…), the same for selling and buying · ✓ = has an account on the website.</p>
     </div>
   )
 }
