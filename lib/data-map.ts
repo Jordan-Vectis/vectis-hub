@@ -256,6 +256,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "UncollectedSettings", what: "How storage is charged on paid-but-uncollected lots: the free days after payment, the rate per lot, per day or week, and VAT — and who last changed it." },
       { model: "UncollectedSyncRun", personal: "staff", what: "Each run of the nightly BC check that fills Paid, not collected: when it ran, who started it, how many lots and buyers it looked at, what it added, updated and closed, and any error." },
       { model: "UncollectedPaidEvent", personal: "customer", what: "Everything done about an uncollected case — calls, emails, letters, notes and changes of status, including what was said to or about the buyer — with which member of staff did it and when." },
+      { model: "UncollectedShipping", personal: "staff", what: "Where an uncollected case stands for shipping, copied from BC by the nightly check: the collection docket numbers of its lots, the shipment request numbers on them with their status, date and tracking number, and who packed them (a member of staff's name)." },
       { model: "BankStatement", personal: "staff", what: "An uploaded statement: its label, whose card it is, and the page images." },
       { model: "BankTransaction", what: "A single line on a statement — dates, description, reference, amount and any fee — and which documents it was matched to." },
     ],

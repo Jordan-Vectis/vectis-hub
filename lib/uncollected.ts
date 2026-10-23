@@ -1126,7 +1126,58 @@ export type UncollectedCase = {
   /** true = paidAt is BC's own paid date ("Paid on (BC)"); false = the settled-date stand-in
    *  ("Paid by (BC settled date)") or typed by hand. readCaseStorageFlags in lib/uncollected-settings.ts. */
   paidExact: boolean
+  /** Its collection docket(s) and shipment request(s) as the BC check last read them
+   *  (UncollectedShipping); null = not read yet (a case added by hand, a new one, or before Run Migrations). */
+  shipping: UncollectedShippingInfo | null
 }
+
+// ─── Shipping: collection dockets and shipment requests (2026-10-23) ────────────────────────
+// Jack: "i need a way to filter the list to know what has a shipment number and i need the collection
+// docket number … also i need to know who packed it which is the internal reference inside of the
+// shipment request card". Each lot's collection docket is Auction_Lines_Excel EVA_CollectionNo
+// (COL049233); a shipment request (ShipmentRequestAPI) is for a docket: EVA_DocumentNo = the docket,
+// EVA_No = its number (SHP038405), EVA_Status, and PTE_InternalReference (the card's "Internal
+// Reference") = who packed it. Its type is always "Collection" (enum 75761 has one value); its status
+// is Awaiting Release · Error · Released · Cancelled (enum 75762). Read by the BC check, read only.
+
+/** One shipment request on a case's collection docket. */
+export type UncollectedShipment = {
+  /** The shipment number (EVA_No — SHP038405). */
+  no: string
+  /** The collection docket it is for (EVA_DocumentNo — COL049233). */
+  docket: string
+  /** As BC gives it: "Awaiting Release", "Error", "Released" or "Cancelled" (EVA_Status). */
+  status: string
+  /** Who packed it — the shipment request card's Internal Reference (PTE_InternalReference). */
+  packedBy: string | null
+  /** YYYY-MM-DD (EVA_ShipmentDate), or null. */
+  date: string | null
+  trackingNo: string | null
+}
+
+/** Where a case stands for shipping, as the BC check last read it. */
+export type UncollectedShippingInfo = {
+  /** The collection dockets of its lots still here (EVA_CollectionNo), distinct, sorted. */
+  collectionNos: string[]
+  /** Every shipment request on those dockets, cancelled ones too. */
+  shipments: UncollectedShipment[]
+  /** The shipment numbers that aren't cancelled — what "Has a shipment" means. */
+  shipmentNos: string[]
+  /** Who packed them (requests that aren't cancelled), distinct. */
+  packedBy: string[]
+  /** ISO — when the check read it. */
+  checkedAt: string
+}
+
+/** A shipment request counts unless it was cancelled. */
+export const isLiveShipment = (s: Pick<UncollectedShipment, "status">): boolean => s.status.trim().toLowerCase() !== "cancelled"
+
+/** The list's Shipment filter: "yes" = a shipment request that isn't cancelled is on a docket of the
+ *  case; "no" = the check read the case and found none. A case not read yet is in neither (Any only). */
+export const SHIP_FILTERS = ["yes", "no"] as const
+export type ShipFilter = (typeof SHIP_FILTERS)[number]
+export const SHIP_FILTER_LABELS: Record<ShipFilter, string> = { yes: "Has a shipment", no: "No shipment" }
+export const isShipFilter = (v: unknown): v is ShipFilter => typeof v === "string" && (SHIP_FILTERS as readonly string[]).includes(v)
 
 export type UncollectedEvent = {
   id: string
@@ -1171,7 +1222,12 @@ export type UncollectedFilter = {
    *  sends it to listCases itself and keeps it in the tab's sessionStorage. */
   q?: string
   sort?: UncollectedSort
+  /** Has a shipment / No shipment, or none for either (SHIP_FILTERS). */
+  ship?: ShipFilter | null
 }
+
+/** The filter as the server read it (defaults filled in). */
+export type UncollectedFilterRead = Required<Omit<UncollectedFilter, "age" | "ship">> & { age: AgeBandKey | null; ship: ShipFilter | null }
 
 export type UncollectedTotals = {
   /** Open cases (waiting, contacted, arranged, storage) — over EVERYTHING, whatever the filters. */
@@ -1207,13 +1263,16 @@ export type UncollectedList = {
   statusCounts: Record<UncollectedStatus, number>
   /** Per age band, with the search and statuses applied but not the band choice. `none` = no paid date. */
   ageCounts: Record<AgeBandKey | "none", number>
+  /** Has a shipment / No shipment / not read yet, with the search, statuses and age band applied but
+   *  not the shipment choice. null = the shipping table isn't there yet (Run Migrations). */
+  shipCounts: { yes: number; no: number; unread: number } | null
   totals: UncollectedTotals
   /** The London day the figures were worked out for (YYYY-MM-DD). */
   today: string
   /** The storage settings the figures used (readStorageSettings). */
   storageSettings: StorageSettingsInfo
   /** The filter as the server read it (defaults filled in). */
-  filter: Required<Omit<UncollectedFilter, "age">> & { age: AgeBandKey | null }
+  filter: UncollectedFilterRead
 }
 
 /** What createCase takes. Text boxes may send strings for every field; blanks mean "not known". */
@@ -1264,7 +1323,7 @@ export type UncollectedResult<T = undefined> =
     }
 
 // ─── The filter in the address bar ──────────────────────────────────────────────────────────
-// ?status=open (the default, left out) | closed | all | waiting,contacted…  ?age=15-30  ?sort=chase
+// ?status=open (the default, left out) | closed | all | waiting,contacted…  ?age=15-30  ?sort=chase  ?ship=yes|no
 // ⚠ Never the search words: they are usually a customer's name or email, and an address ends up in
 // the browser's history and the server's request logs. Only the case id and these filters go in a URL.
 
@@ -1281,7 +1340,7 @@ const sameSet = (a: UncollectedStatus[], b: UncollectedStatus[]) =>
 
 /** Reads the panel's filter from the address bar; anything unreadable falls back to the default.
  *  The search is always "" here — a `?q=` in an address is ignored (see above). */
-export function parseUncollectedFilter(sp: Params): Required<Omit<UncollectedFilter, "age">> & { age: AgeBandKey | null } {
+export function parseUncollectedFilter(sp: Params): UncollectedFilterRead {
   const rawStatus = (param(sp, "status") ?? "").trim().toLowerCase()
   let statuses: UncollectedStatus[]
   if (rawStatus === "all") statuses = [...UNCOLLECTED_STATUSES]
@@ -1292,11 +1351,13 @@ export function parseUncollectedFilter(sp: Params): Required<Omit<UncollectedFil
   }
   const age = param(sp, "age")
   const sort = param(sp, "sort")
+  const ship = param(sp, "ship")
   return {
     statuses,
     age: isAgeBandKey(age) ? age : null,
     q: "",
     sort: isUncollectedSort(sort) ? sort : "waiting",
+    ship: isShipFilter(ship) ? ship : null,
   }
 }
 
@@ -1309,6 +1370,7 @@ export function uncollectedFilterQuery(f: UncollectedFilter): string {
   else if (!sameSet(st, OPEN_STATUSES)) p.set("status", st.join(","))
   if (f.age) p.set("age", f.age)
   if (f.sort && f.sort !== "waiting") p.set("sort", f.sort)
+  if (f.ship) p.set("ship", f.ship)
   const s = p.toString()
   return s ? `?${s}` : ""
 }

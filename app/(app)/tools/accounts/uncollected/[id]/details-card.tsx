@@ -7,7 +7,7 @@ import {
   BC_OWNED_FIELDS, FIELD_LABELS, UNCOLLECTED_LIMITS, dateInputValue, formatDay, formatMoney, paidHelp, paidTerm,
   type UncollectedCaseDetail, type UncollectedField, type UncollectedPatch,
 } from "@/lib/uncollected"
-import { ChaseDate } from "../bits"
+import { ChaseDate, Shipping } from "../bits"
 import { Flash, NO_ANSWER, btn, btnGo, card, cardTitle, input, label, muted, type CaseHref, type FlashMessage } from "../ui"
 
 // The buyer's details — shown, then edited in place (Edit details → Save). Only the boxes the person
@@ -120,6 +120,10 @@ export default function DetailsCard({ c, today, caseHref }: { c: UncollectedCase
             {fromBc && c.paidAt && <span className={`block text-xs ${muted}`}>{paidHelp(c.source, c.paidExact)}</span>}
           </Item>
           <Item term="Next chase"><ChaseDate at={c.nextChaseAt} chase={c.chase} /></Item>
+          <Item term="Collection docket · shipment">
+            <Shipping s={c.shipping} />
+            {c.shipping && <span className={`block text-xs ${muted} mt-0.5`}>From BC — read by the check {formatDay(c.shipping.checkedAt)}</span>}
+          </Item>
           <div className="sm:col-span-2">
             <dt className="text-xs font-semibold text-gray-500 dark:text-gray-400">Notes</dt>
             <dd className="text-sm text-gray-800 dark:text-gray-200 mt-0.5 whitespace-pre-wrap break-words">{c.notes || <Blank />}</dd>

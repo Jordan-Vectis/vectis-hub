@@ -1,12 +1,53 @@
 import {
   AGE_BANDS, EVENT_META, SOURCE_META, STATUS_META, STORAGE_TEXT, UNCOLLECTED_STATUSES, ageBandFor, formatDateTime, formatDay,
-  formatPence, paidHelp, paidWords,
-  type ChaseState, type StorageCharge, type UncollectedLastContact, type UncollectedSource, type UncollectedStatus,
+  formatPence, isLiveShipment, paidHelp, paidWords,
+  type ChaseState, type StorageCharge, type UncollectedLastContact, type UncollectedShippingInfo, type UncollectedSource,
+  type UncollectedStatus,
 } from "@/lib/uncollected"
 import { muted } from "./ui"
 
 // Small pieces the panel and the case page share. Server-safe (no hooks). Every colour here has a
 // key beside it on the panel — ColourKey (RULES design rule 3).
+
+/** A case's collection docket(s), the shipment request(s) on them that aren't cancelled (number ·
+ *  status) and who packed them (the shipment request card's Internal Reference) — as the BC check last
+ *  read them. `null` = not read yet. Plain text, no colour to explain. */
+export function Shipping({ s, inline = false }: { s: UncollectedShippingInfo | null; inline?: boolean }) {
+  if (!s) return <span className={`text-xs ${muted}`} title="The BC check reads it on its next run">Not read yet</span>
+  const live = s.shipments.filter(isLiveShipment)
+  const docket = s.collectionNos.length ? s.collectionNos.join(", ") : null
+  if (inline) {
+    return (
+      <span className="break-words">
+        Docket {docket ? <span className="font-mono">{docket}</span> : "none"}
+        {" · "}
+        {live.length
+          ? live.map((x, i) => (
+              <span key={x.no}>
+                {i > 0 && ", "}
+                Shipment <span className="font-mono font-semibold">{x.no}</span> ({x.status}){x.packedBy ? ` — packed by ${x.packedBy}` : ""}
+              </span>
+            ))
+          : "no shipment"}
+      </span>
+    )
+  }
+  return (
+    <div className="min-w-0">
+      <div className="font-mono text-sm">{docket ?? <span className={`font-sans text-xs ${muted}`}>No docket</span>}</div>
+      {live.length ? (
+        live.map(x => (
+          <div key={x.no} className="text-xs mt-0.5">
+            <span className="font-mono font-semibold">{x.no}</span> · {x.status}
+            {x.packedBy && <div className={muted}>Packed by {x.packedBy}</div>}
+          </div>
+        ))
+      ) : (
+        <div className={`text-xs ${muted}`}>No shipment</div>
+      )}
+    </div>
+  )
+}
 
 export function StatusChip({ status, long = false }: { status: UncollectedStatus; long?: boolean }) {
   const m = STATUS_META[status]

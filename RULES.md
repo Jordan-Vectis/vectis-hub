@@ -2940,7 +2940,14 @@ storage charges start, and a timeline of every call, email, letter, note and cha
   - **The case page's "Lots in BC" card** (`[id]/bc-lots.tsx`) reads the lots live (above) as the
     case opens for a case from BC, and on a press for one added by hand — chosen over storing a lot
     list (the timeline keeps the snapshot). With several sales each lot says its sale. Below `sm` it
-    is stacked rows, not a table. Columns LOT · DESCRIPTION · HAMMER · **LOCATION** · COLLECTED?
+    is stacked rows, not a table. Columns LOT · **BARCODE** · DESCRIPTION · HAMMER · **LOCATION** · COLLECTED?
+    (BARCODE since 2026-10-23 — Jack: "can you add the internal barcodes": BC's Internal Barcode,
+    `PTE_InternalBarcode`, read off the lot's receipt line in the SAME Receipt_Lines_Excel call as its
+    location — `RECEIPT_LINE_SELECT`, `LotPlace.barcodes` (optional) — the one starting with the lot's
+    sale code when the item has had more than one. ⚠ On a wide screen Lots in BC spans the WHOLE page
+    under Details / Status + Log contact, with Storage and the Timeline beside each other below it, and
+    on a desktop the case page is up to 1,600px — "instead of using a scroll function just use more of
+    the page"; never put it back in a half-width column where its table scrolls sideways.)
     (2026-10-23 — Jack: *"can you also add the location in here please"*): Location is the lot's live
     BC location code (and bin), "—" for none, "Not read" when its receipt line couldn't be read. The
     COLLECTED? chip follows the check's own rule (`lotState`): green **Collected** when BC ticked it or
@@ -2969,6 +2976,34 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     refreshes the page. The card lists lots by the whole line (sale + lot + unique id), never the
     unique id alone, like the check. A case added by hand can be closed this way too — and its box says the BC check
     WON'T close it (the check only touches cases from BC).
+  - **Docket · shipment** (2026-10-23 — Jack: *"i need a way to filter the list to know what has a
+    shipment number and i need the collection docket number … also i need to know who packed it which is
+    the internal reference inside of the shipment request card"*). Verified live and in the BC source the
+    same day: each lot's **collection docket** is `Auction_Lines_Excel.EVA_CollectionNo` (COL049233 —
+    the feed's `LOT_SELECT` reads it, `FeedLot`/`CandidateLot.collectionNo`, optional); a **shipment
+    request** is BC's published `ShipmentRequestAPI` (page 58001 on table 75762 EVA_ShipmentRequest, the
+    same feed the Packing page reads), one per docket: `EVA_DocumentNo` = the docket, `EVA_No` = the
+    shipment number (SHP038405), `EVA_Status` (enum 75762: Awaiting Release · Error · Released ·
+    Cancelled), `EVA_ShipmentDate`, `EVA_TrackingNo`, and `PTE_InternalReference` (PTE table-extension
+    55008 — the card's "Internal Reference") = **who packed it**. Its type is always "Collection" (enum
+    75761 has one value). ⚠ `SHIPMENT_SELECT` never asks for the request's name, address, email or phone.
+    - **The BC check reads them** before saving (while the time for reading BC is still there): every
+      candidate's dockets, `EVA_DocumentNo eq … or …` up to 20 a call (one at a time if BC refuses the
+      batch); and after saving writes **`UncollectedShipping`** (one row per case — its own table,
+      **NEEDS Run Migrations**; cascade on the case): `collectionNos`, `shipments` (every request, JSON),
+      `shipmentNos` and `packedBy` (cancelled ones left out), `checkedAt`. Only for a candidate whose
+      dockets were ALL read this run; anything else keeps the row it had. BC is read only.
+    - **"Has a shipment" = a shipment request on a docket of the case that isn't cancelled**
+      (`isLiveShipment`). The list's **Shipment** chips — Any · Has a shipment · No shipment — count with
+      the search, statuses and age band applied (`?ship=yes|no` in the address — a filter, never a
+      name). A case not read yet (a new one, one added by hand — the check never reads those — or before
+      the first check after Run Migrations) is in neither, only under Any, and the panel says how many.
+      Before Run Migrations the chips say it needs Run Migrations and the filter is ignored (`shippingReady`
+      with `to_regclass` — every read is tolerant).
+    - The list's **Docket · shipment** column (the docket, then each shipment number · status, then
+      "Packed by …"), the phone cards, the case's Details card and the CSV (Collection docket, Shipment,
+      Shipment status, Packed by) all show the same `UncollectedCaseDetail.shipping`; the panel page is
+      up to 1,600px on a desktop so nine columns still fit without scrolling sideways.
 - On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses Delete
   (the feed would bring it back — close it instead). A manual case can be deleted, confirmed in the
   page. Contact details, chase dates, storage start and notes stay the Hub's own (a storage start a

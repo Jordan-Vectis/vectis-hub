@@ -39,7 +39,7 @@ import {
   BC_OWNED_FIELDS, PAID_EXACT_MARK, QUERY_LOCATIONS, addDays, dayToStored, daysBetween, formatDay, formatMoney, isDay,
   locationKind, locationListWords, londonDay, looksLikeBankDetails, lotState, normaliseLocation, queryLotWords,
   ruleMaySetStart, storageRuleWords, storageStartDay,
-  UNCOLLECTED_LIMITS, type LotState, type UncollectedField,
+  UNCOLLECTED_LIMITS, isLiveShipment, type LotState, type UncollectedField, type UncollectedShipment, type UncollectedShippingInfo,
 } from "@/lib/uncollected"
 
 /** BC's own paid date on an auction line (table 75004 EVA_AuctionLine, field 153; set by codeunit
@@ -76,6 +76,8 @@ export type FeedLot = {
   /** BC's own paid date for the lot (EVA_DatePaidByBuyer), YYYY-MM-DD — null when BC doesn't publish
    *  it, or hasn't one for this lot (not paid, or paid before BC kept it). */
   paidOn: string | null
+  /** Its collection docket (EVA_CollectionNo — COL049233), upper case; null/missing when it has none. */
+  collectionNo?: string | null
   /** Where BC has the lot now (Receipt_Lines_Excel EVA_ArticleLocationCode, normalised; "" = none) —
    *  set by the feed once its receipt line is read (withPlaces). Missing / null = not read: the
    *  Collected tick alone decides, as before. */
@@ -85,7 +87,11 @@ export type FeedLot = {
 }
 
 /** One lot on a candidate, as its case's timeline lists it. */
-export type CandidateLot = { uniqueId: string | null; lotNo: string; description: string | null; hammer: number; saleCode: string; saleDate: string }
+export type CandidateLot = {
+  uniqueId: string | null; lotNo: string; description: string | null; hammer: number; saleCode: string; saleDate: string
+  /** Its collection docket (EVA_CollectionNo), when the feed read one — for the case's shipping. */
+  collectionNo?: string | null
+}
 
 /** One BC sales invoice (standard API v2.0 salesInvoices), tidied. */
 export type FeedInvoice = {
@@ -206,6 +212,7 @@ export function toFeedLot(r: Record<string, unknown>): FeedLot | null {
     buyerName: str(r.EVA_BuyerSearchName) || null,
     // BC's blank date (0001-01-01) reads as none (bcDay).
     paidOn: bcDay(r[BC_PAID_DATE_FIELD]) || null,
+    collectionNo: str(r.EVA_CollectionNo).toUpperCase() || null,
   }
 }
 
@@ -273,6 +280,49 @@ export function withPlaces(lots: FeedLot[], places: Map<string, LotPlace>): Feed
     const p = l.uniqueId ? places.get(placeKey(l.uniqueId)) : undefined
     return p ? { ...l, location: p.location, bin: p.bin } : l
   })
+}
+
+// ─── Shipping: a case's collection dockets and the shipment requests on them ────────────────
+
+/** Fields read off ShipmentRequestAPI (verified live 2026-10-23: docket COL049233 → SHP038405,
+ *  "Awaiting Release", Internal Reference "Carmen Czerwinski"; the Hub's Packing page reads the same).
+ *  ⚠ Never its name, address, email or phone fields — the case already has who the buyer is. */
+export const SHIPMENT_SELECT = "EVA_No,EVA_DocumentNo,EVA_Status,EVA_ShipmentDate,EVA_TrackingNo,PTE_InternalReference"
+
+/** A ShipmentRequestAPI row as a case keeps it — or null without a number or a docket. The Internal
+ *  Reference (who packed it) is free text in BC: never kept when it looks like bank or card details. */
+export function toShipmentInfo(r: Record<string, unknown>): UncollectedShipment | null {
+  const no = str(r.EVA_No).toUpperCase()
+  const docket = str(r.EVA_DocumentNo).toUpperCase()
+  if (!no || !docket) return null
+  const packer = str(r.PTE_InternalReference).replace(/\s+/g, " ").slice(0, 120)
+  const tracking = str(r.EVA_TrackingNo).slice(0, 80)
+  return {
+    no,
+    docket,
+    status: str(r.EVA_Status) || "Unknown",
+    packedBy: packer && !looksLikeBankDetails(packer) ? packer : null,
+    date: bcDay(r.EVA_ShipmentDate) || null,
+    trackingNo: tracking && !looksLikeBankDetails(tracking) ? tracking : null,
+  }
+}
+
+/** The collection dockets of some lots: distinct, upper case, sorted. */
+export function docketsOf(lots: { collectionNo?: string | null }[]): string[] {
+  return [...new Set(lots.map((l) => (l.collectionNo ?? "").trim().toUpperCase()).filter(Boolean))].sort()
+}
+
+/** What a case keeps for its dockets, from the shipment requests read for them (`byDocket` — docket →
+ *  its requests). `shipmentNos` and `packedBy` leave cancelled requests out; `shipments` keeps all. */
+export function shippingFor(dockets: string[], byDocket: Map<string, UncollectedShipment[]>): Omit<UncollectedShippingInfo, "checkedAt"> {
+  const shipments = dockets.flatMap((d) => byDocket.get(d) ?? []).sort((a, b) => a.no.localeCompare(b.no))
+  const live = shipments.filter(isLiveShipment)
+  return {
+    collectionNos: [...dockets],
+    shipments,
+    shipmentNos: [...new Set(live.map((s) => s.no))],
+    packedBy: [...new Set(live.map((s) => s.packedBy).filter((p): p is string => !!p))],
+  }
 }
 
 /**
@@ -640,7 +690,10 @@ function toCandidate(
   for (const l of sorted) if (!sales.includes(l.saleCode)) sales.push(l.saleCode)
   const last = sorted[sorted.length - 1]
   const paidOn = paid.day
-  const one = (l: FeedLot): CandidateLot => ({ uniqueId: l.uniqueId, lotNo: l.lotNo, description: l.description, hammer: l.hammer, saleCode: l.saleCode, saleDate: l.saleDate })
+  const one = (l: FeedLot): CandidateLot => ({
+    uniqueId: l.uniqueId, lotNo: l.lotNo, description: l.description, hammer: l.hammer, saleCode: l.saleCode, saleDate: l.saleDate,
+    collectionNo: l.collectionNo ?? null,
+  })
   return {
     invoiceNo: inv.number,
     invoiceId: inv.id,

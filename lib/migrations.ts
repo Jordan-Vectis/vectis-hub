@@ -2530,6 +2530,21 @@ export const MIGRATIONS = [
     "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "UncollectedSettings_pkey" PRIMARY KEY ("id")
   )`,
+  // Accounts → Paid, not collected: each case's collection dockets and their shipment requests from BC —
+  // the shipment number, its status and who packed it (2026-10-23). New table only.
+  `CREATE TABLE IF NOT EXISTS "UncollectedShipping" (
+    "caseId"        TEXT NOT NULL,
+    "collectionNos" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "shipmentNos"   TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "packedBy"      TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "shipments"     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    "checkedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "UncollectedShipping_pkey" PRIMARY KEY ("caseId")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedShipping_checkedAt_idx" ON "UncollectedShipping"("checkedAt")`,
+  `DO $$ BEGIN
+    ALTER TABLE "UncollectedShipping" ADD CONSTRAINT "UncollectedShipping_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "UncollectedPaid"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
   // Customers → Notes & calls (2026-10-23), and the vendor-number indexes the customer list and page
   // read by — without them every row's receipt and lot counts were a full scan (7.9 s a page).
   `CREATE TABLE IF NOT EXISTS "CustomerNote" (

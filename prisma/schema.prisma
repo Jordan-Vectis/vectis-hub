@@ -2550,11 +2550,30 @@ model UncollectedPaid {
   updatedAt     DateTime               @updatedAt
   closedAt      DateTime?
   events        UncollectedPaidEvent[]
+  shipping      UncollectedShipping?
 
   @@index([status])
   @@index([paidAt])
   @@index([buyerNo])
   @@index([nextChaseAt])
+}
+
+/// Accounts → Paid, not collected: where a case stands for shipping, as the BC check last read it
+/// (Jack, 2026-10-23) — the collection docket(s) of its lots (Auction_Lines_Excel EVA_CollectionNo,
+/// COL049233) and the shipment request(s) on them (ShipmentRequestAPI: EVA_No SHP038405, EVA_Status,
+/// PTE_InternalReference = who packed it). One row per case, written by the BC check; BC is read only.
+/// Its own table so nothing is added to UncollectedPaid. `shipmentNos` / `packedBy` leave cancelled
+/// requests out; `shipments` keeps every one: [{ no, docket, status, packedBy, date, trackingNo }].
+model UncollectedShipping {
+  caseId        String          @id
+  case          UncollectedPaid @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  collectionNos String[]        @default([])
+  shipmentNos   String[]        @default([])
+  packedBy      String[]        @default([])
+  shipments     Json            @default("[]")
+  checkedAt     DateTime        @default(now())
+
+  @@index([checkedAt])
 }
 
 /// Accounts → Paid, not collected: how storage is charged (one row, id "default"). Storage starts the

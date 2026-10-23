@@ -1,5 +1,5 @@
 import { csvCell } from "@/lib/goods-in/location-codes"
-import { CONTACT_KINDS, EVENT_META, SOURCE_META, STATUS_META, dateInputValue, type UncollectedCase } from "@/lib/uncollected"
+import { CONTACT_KINDS, EVENT_META, SOURCE_META, STATUS_META, dateInputValue, isLiveShipment, type UncollectedCase } from "@/lib/uncollected"
 
 // Paid, not collected → Export CSV: the list as it is on screen (same filters, same order), made in
 // the BROWSER from what the page already holds — nothing is fetched again and there's no export
@@ -32,8 +32,19 @@ const HEAD = [
   // Days and weeks in their own columns, as plain numbers ("Storage weeks charged" only when it's
   // charged per week — every week started counts), so a spreadsheet can add them up.
   "Storage charges from", "Storage days charged", "Storage weeks charged", "Lots charged", "Storage £ ex VAT", "Storage VAT £", "Storage £ inc VAT", "Storage waived",
+  // Shipping, as the BC check last read it (blank = not read yet): the collection docket(s), the
+  // shipment request(s) that aren't cancelled, their status, and who packed them.
+  "Collection docket", "Shipment", "Shipment status", "Packed by",
   "Entered", "Notes",
 ]
+
+/** The shipping cells — blank when the check hasn't read the case yet. */
+function shippingCells(c: UncollectedCase): unknown[] {
+  const s = c.shipping
+  if (!s) return ["", "", "", ""]
+  const live = s.shipments.filter(isLiveShipment)
+  return [s.collectionNos.join(", "), live.map(x => x.no).join(", "), live.map(x => x.status).join(", "), s.packedBy.join(", ")]
+}
 
 /** What the paid date is: BC's own, BC's settled date (they paid on or before it), or typed in. */
 const paidKind = (c: UncollectedCase) =>
@@ -67,6 +78,7 @@ export function casesCsv(cases: UncollectedCase[]): string {
       c.lastContact ? `${contactWords(c.lastContact.kind)} ${londonStamp(c.lastContact.at)}` : "",
       c.lastContact?.byName ?? "",
       ...storageCells(c),
+      ...shippingCells(c),
       (SOURCE_META[c.source] ?? SOURCE_META.manual).label, c.notes ?? "",
     ]),
   ]

@@ -28,7 +28,8 @@ import {
   type UncollectedCase, type UncollectedCaseDetail, type UncollectedCheckState,
   type UncollectedField, type UncollectedFilter, type UncollectedInput, type UncollectedLastContact, type UncollectedList,
   type UncollectedPatch, type UncollectedResult, type UncollectedSort, type UncollectedStatus, type UncollectedSyncRunInfo,
-  type UncollectedTotals,
+  type UncollectedTotals, type UncollectedShipment, type UncollectedShippingInfo, type ShipFilter,
+  isShipFilter,
 } from "@/lib/uncollected"
 
 // Accounts → Paid, not collected — every read and write. SERVER ONLY.
@@ -289,7 +290,48 @@ const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null)
 
 /** What a case's storage is worked out with: the settings, and the case's storage switch and paid-date
  *  kind (readCaseStorageFlags — missing = never waived, not BC's own paid date). */
-type StorageContext = { settings: StorageSettings; flags: CaseStorageFlags | undefined }
+type StorageContext = { settings: StorageSettings; flags: CaseStorageFlags | undefined; shipping?: UncollectedShippingInfo | null }
+
+/** Is the shipping table there (Run Migrations)? Never throws — false when it can't be told. */
+async function shippingReady(): Promise<boolean> {
+  try {
+    const t = await prisma.$queryRaw<{ t: string | null }[]>`SELECT to_regclass('public."UncollectedShipping"')::text AS "t"`
+    return !!t[0]?.t
+  } catch (e) {
+    console.error("uncollected shipping table check error:", e)
+    return false
+  }
+}
+
+/** A stored shipments list, tidied (it is JSON in the table). */
+function asShipments(v: unknown): UncollectedShipment[] {
+  if (!Array.isArray(v)) return []
+  const s = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : null)
+  return v.flatMap((x) => {
+    const o = (x ?? {}) as Record<string, unknown>
+    const no = s(o.no), docket = s(o.docket)
+    return no && docket ? [{ no, docket, status: s(o.status) ?? "Unknown", packedBy: s(o.packedBy), date: s(o.date), trackingNo: s(o.trackingNo) }] : []
+  })
+}
+
+/** Each case's shipping as the BC check last read it (UncollectedShipping) — tolerant: the table not
+ *  there yet, or a fault reading it, gives nothing (the cases show "not read yet"). */
+async function readShipping(ids: string[], ready: boolean): Promise<Map<string, UncollectedShippingInfo>> {
+  const byId = new Map<string, UncollectedShippingInfo>()
+  if (!ready || !ids.length) return byId
+  try {
+    const rows = await prisma.uncollectedShipping.findMany({ where: { caseId: { in: ids } } })
+    for (const r of rows) {
+      byId.set(r.caseId, {
+        collectionNos: r.collectionNos, shipmentNos: r.shipmentNos, packedBy: r.packedBy,
+        shipments: asShipments(r.shipments), checkedAt: r.checkedAt.toISOString(),
+      })
+    }
+  } catch (e) {
+    console.error("uncollected shipping read error:", e)
+  }
+  return byId
+}
 
 function toCase(r: CaseRow, last: UncollectedLastContact | null, today: string, ctx: StorageContext): UncollectedCase {
   const status = statusOf(r.status)
@@ -327,6 +369,7 @@ function toCase(r: CaseRow, last: UncollectedLastContact | null, today: string, 
       today,
     ),
     paidExact: r.source === "bc" && !!ctx.flags?.paidExact,
+    shipping: ctx.shipping ?? null,
   }
 }
 
@@ -381,6 +424,13 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
     const age: AgeBandKey | null = isAgeBandKey(filter.age) ? filter.age : null
     const q = typeof filter.q === "string" ? filter.q.trim().slice(0, UNCOLLECTED_LIMITS.search) : ""
     const sort: UncollectedSort = isUncollectedSort(filter.sort) ? filter.sort : "waiting"
+    const ship: ShipFilter | null = isShipFilter(filter.ship) ? filter.ship : null
+    // Has a shipment / No shipment (UncollectedShipping, from the BC check). Before Run Migrations
+    // the filter is ignored and the panel says the counts aren't there yet.
+    const shipOn = await shippingReady()
+    const shipSql = shipOn
+      ? Prisma.sql`(SELECT CASE WHEN cardinality(s."shipmentNos") > 0 THEN 'yes' ELSE 'no' END FROM "UncollectedShipping" s WHERE s."caseId" = u."id")`
+      : Prisma.sql`NULL::text`
 
     const words = q.split(/\s+/).filter(Boolean).slice(0, 8)
     const searchSql = words.length
@@ -399,7 +449,8 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
         SELECT u."id",
                CASE WHEN u."status" IN (${Prisma.join(UNCOLLECTED_STATUSES)}) THEN u."status" ELSE 'waiting' END AS "status",
                u."buyerName", u."paidAt", u."nextChaseAt", u."amountPaid", u."createdAt",
-               ${daysSql(today)} AS "days"
+               ${daysSql(today)} AS "days",
+               ${shipSql} AS "ship"
         FROM "UncollectedPaid" u
         WHERE ${searchSql}
       ), b AS (
@@ -407,14 +458,19 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
       )`
     const statusWhere = Prisma.sql`b."status" IN (${Prisma.join(picked)})`
     const ageWhere = age ? Prisma.sql`b."band" = ${age}` : Prisma.sql`TRUE`
+    const shipWhere = ship && shipOn ? Prisma.sql`b."ship" = ${ship}` : Prisma.sql`TRUE`
 
-    const [statusRows, ageRows, idRows, totalsRows, settings] = await Promise.all([
+    const [statusRows, ageRows, shipRows, idRows, totalsRows, settings] = await Promise.all([
       prisma.$queryRaw<{ status: string; n: number }[]>`${base}
-        SELECT b."status" AS "status", COUNT(*)::int AS "n" FROM b WHERE ${ageWhere} GROUP BY b."status"`,
+        SELECT b."status" AS "status", COUNT(*)::int AS "n" FROM b WHERE ${ageWhere} AND ${shipWhere} GROUP BY b."status"`,
       prisma.$queryRaw<{ band: string; n: number }[]>`${base}
-        SELECT b."band" AS "band", COUNT(*)::int AS "n" FROM b WHERE ${statusWhere} GROUP BY b."band"`,
+        SELECT b."band" AS "band", COUNT(*)::int AS "n" FROM b WHERE ${statusWhere} AND ${shipWhere} GROUP BY b."band"`,
+      shipOn
+        ? prisma.$queryRaw<{ ship: string | null; n: number }[]>`${base}
+            SELECT b."ship" AS "ship", COUNT(*)::int AS "n" FROM b WHERE ${statusWhere} AND ${ageWhere} GROUP BY b."ship"`
+        : Promise.resolve([] as { ship: string | null; n: number }[]),
       prisma.$queryRaw<{ id: string }[]>`${base}
-        SELECT b."id" AS "id" FROM b WHERE ${statusWhere} AND ${ageWhere}
+        SELECT b."id" AS "id" FROM b WHERE ${statusWhere} AND ${ageWhere} AND ${shipWhere}
         ORDER BY ${Prisma.raw(ORDER_BY[sort])} LIMIT ${Prisma.raw(String(UNCOLLECTED_LIMITS.list + 1))}`,
       // Open = anything but collected / closed, so an unknown status counts as the waiting it reads as.
       prisma.$queryRaw<{
@@ -445,7 +501,10 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
     const truncated = idRows.length > UNCOLLECTED_LIMITS.list
     const ids = idRows.slice(0, UNCOLLECTED_LIMITS.list).map((r) => r.id)
 
-    const [rows, contacts, flags, owed] = await Promise.all([
+    const shipCounts = shipOn ? { yes: 0, no: 0, unread: 0 } : null
+    if (shipCounts) for (const r of shipRows) shipCounts[r.ship === "yes" ? "yes" : r.ship === "no" ? "no" : "unread"] += Number(r.n)
+
+    const [rows, contacts, flags, owed, shipping] = await Promise.all([
       ids.length ? prisma.uncollectedPaid.findMany({ where: { id: { in: ids } } }) : [],
       ids.length
         ? prisma.uncollectedPaidEvent.findMany({
@@ -459,13 +518,14 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
       readCaseStorageFlags(ids),
       // Storage owed over every OPEN case, for the tile — by the same rules as each case's line.
       storageOwedOnOpenCases(settings, today),
+      readShipping(ids, shipOn),
     ])
     const byId = new Map(rows.map((r) => [r.id, r]))
     const lastBy = new Map(contacts.map((e) => [e.caseId, e]))
     const cases = ids.flatMap((id) => {
       const r = byId.get(id)
       // Deleted between the reads → left out.
-      return r ? [toCase(r, lastContactOf(lastBy.get(id)), today, { settings, flags: flags.get(id) })] : []
+      return r ? [toCase(r, lastContactOf(lastBy.get(id)), today, { settings, flags: flags.get(id), shipping: shipping.get(id) ?? null })] : []
     })
 
     const t = totalsRows[0]
@@ -486,7 +546,7 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
     return {
       ok: true,
       data: {
-        cases, matched, truncated, statusCounts, ageCounts, totals, today, filter: { statuses: picked, age, q, sort },
+        cases, matched, truncated, statusCounts, ageCounts, shipCounts, totals, today, filter: { statuses: picked, age, q, sort, ship: shipOn ? ship : null },
         storageSettings: settings,
       },
     }
@@ -521,7 +581,7 @@ export async function getCase(id: string): Promise<UncollectedResult<Uncollected
   try {
     await requireAdmin()
     if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
-    const [r, flags, settings, startOwner] = await Promise.all([
+    const [r, flags, settings, startOwner, shipping] = await Promise.all([
       prisma.uncollectedPaid.findUnique({
         where: { id },
         include: { events: { orderBy: [{ at: "desc" }, { id: "desc" }], take: 1000 } },
@@ -531,6 +591,7 @@ export async function getCase(id: string): Promise<UncollectedResult<Uncollected
       readCaseStorageFlags([id]),
       readStorageSettings(),
       readStorageStartOwner(prisma, id),
+      shippingReady().then((ready) => readShipping([id], ready)),
     ])
     if (!r) throw new Refusal(NOT_FOUND)
     const today = londonDay()
@@ -538,7 +599,7 @@ export async function getCase(id: string): Promise<UncollectedResult<Uncollected
     return {
       ok: true,
       data: {
-        ...toCase(r, lastContactOf(last), today, { settings, flags: flags.get(id) }),
+        ...toCase(r, lastContactOf(last), today, { settings, flags: flags.get(id), shipping: shipping.get(id) ?? null }),
         events: r.events.map((e) => ({ id: e.id, kind: eventKindOf(e.kind), text: e.text, byName: e.byName, at: e.at.toISOString() })),
         storageSettings: settings,
         // A start on the case with no record of the rule setting it is a person's (ruleMaySetStart).

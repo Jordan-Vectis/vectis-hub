@@ -7,11 +7,11 @@ import { listCases } from "@/lib/actions/uncollected"
 import {
   AGE_BANDS, CLOSED_STATUSES, OPEN_STATUSES, SORT_LABELS, STATUS_META, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LIMITS, UNCOLLECTED_SORTS,
   UNCOLLECTED_STATUSES, ageBandFor, formatMoney, isUncollectedSort, uncollectedFilterQuery,
-  STORAGE_SETTINGS_READ_FAILED, STORAGE_TEXT, formatPence,
+  STORAGE_SETTINGS_READ_FAILED, STORAGE_TEXT, formatPence, SHIP_FILTERS, SHIP_FILTER_LABELS,
   type AgeBandKey, type StorageTotals, type UncollectedFilter, type UncollectedList, type UncollectedStatus,
 } from "@/lib/uncollected"
 import AddBuyer from "./add-buyer"
-import { ChaseDate, ColourKey, DaysWaiting, LastContact, PaidWhen, SourceBadge, StatusChip, StorageOwed } from "./bits"
+import { ChaseDate, ColourKey, DaysWaiting, LastContact, PaidWhen, Shipping, SourceBadge, StatusChip, StorageOwed } from "./bits"
 import { casesCsv, downloadCsv } from "./export"
 import { PANEL_PATH, btn, btnGo, card, cardTitle, inlineLink, input, plural, td, th } from "./ui"
 
@@ -131,7 +131,9 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
     startTransition(() => router.replace(PANEL_PATH, { scroll: false }))
   }
 
-  const isDefault = sameSet(filter.statuses, OPEN_STATUSES) && !filter.age && !tq && filter.sort === "waiting"
+  const isDefault = sameSet(filter.statuses, OPEN_STATUSES) && !filter.age && !filter.ship && !tq && filter.sort === "waiting"
+  const ships = shown.shipCounts
+  const anyShip = ships ? ships.yes + ships.no + ships.unread : 0
   const statusTotal = (sts: UncollectedStatus[]) => sts.reduce((n, s) => n + (shown.statusCounts[s] ?? 0), 0)
   const anyAge = Object.values(shown.ageCounts).reduce((n, v) => n + v, 0)
   // Each case's address carries the filter (never the search), so its Back link returns to this list.
@@ -264,6 +266,48 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
           )}
         </div>
 
+        {/* Shipment (Jack, 2026-10-23): a shipment request on the case's collection docket in BC that
+            isn't cancelled — as the BC check last read it. Each count is what picking it shows. */}
+        <div>
+          <p className={`${cardTitle} mb-2`}>Shipment</p>
+          {ships ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-pressed={!filter.ship}
+                  onClick={() => go({ ship: null })}
+                  className={`${chipBase} ${!filter.ship ? chipOn : chipOff}`}
+                >
+                  Any <span className="tabular-nums text-xs font-bold opacity-70">{anyShip.toLocaleString("en-GB")}</span>
+                </button>
+                {SHIP_FILTERS.map(k => {
+                  const on = filter.ship === k
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => go({ ship: k })}
+                      title={k === "yes" ? "BC has a shipment request on the collection docket that isn't cancelled" : "The BC check found no shipment request (or only cancelled ones)"}
+                      className={`${chipBase} ${on ? chipOn : chipOff}`}
+                    >
+                      {SHIP_FILTER_LABELS[k]} <span className="tabular-nums text-xs font-bold opacity-70">{ships[k].toLocaleString("en-GB")}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              {ships.unread > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  {plural(ships.unread, "case")} {ships.unread === 1 ? "hasn't" : "haven't"} been read for a shipment yet, so {ships.unread === 1 ? "it shows" : "they show"} under Any only — the next BC check reads {ships.unread === 1 ? "it" : "them"}.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Shipment numbers need <b>Run Migrations</b> — then the next BC check reads them.</p>
+          )}
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <label className="flex-1 min-w-0">
             <span className={`${cardTitle} block mb-2`}>Search</span>
@@ -335,15 +379,17 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
         </div>
       ) : (
         <div className={stale ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          {/* Wide screens (lg and up — an iPad in landscape too): a table. Eight columns, so it fits
+          {/* Wide screens (lg and up — an iPad in landscape too): a table. Nine columns, so it fits
               without scrolling sideways: "paid on" sits under the amount, storage inc VAT under
-              storage before VAT, the last contact under the next chase. */}
+              storage before VAT, the last contact under the next chase, the shipment and who packed
+              it under the collection docket (and on a desktop the page widens to 1,600px). */}
           <div className={`${card} hidden lg:block overflow-x-auto`}>
             <table className="w-full">
               <thead className="border-b border-gray-200 dark:border-gray-800">
                 <tr>
                   <th className={`${th} text-left`}>Buyer</th>
                   <th className={`${th} text-left`}>Sale / invoice</th>
+                  <th className={`${th} text-left`}>Docket · shipment</th>
                   <th className={`${th} text-right`}>Lots</th>
                   <th className={`${th} text-right`}>Paid</th>
                   <th className={`${th} text-right`}>Storage owed</th>
@@ -376,6 +422,7 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                       <div className="font-mono">{c.saleCode ?? "—"}</div>
                       {c.invoiceNo && <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">{c.invoiceNo}</div>}
                     </td>
+                    <td className={td}><Shipping s={c.shipping} /></td>
                     <td className={`${td} text-right tabular-nums`}>{c.lots ?? "—"}</td>
                     <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
                       <div>{formatMoney(c.amountPaid)}</div>
@@ -419,6 +466,7 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                     <PaidWhen source={c.source} paidAt={c.paidAt} exact={c.paidExact} />
                   </div>
                   <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Storage owed: <StorageOwed s={c.storage} inline /></p>
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-300"><Shipping s={c.shipping} inline /></p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-600 dark:text-gray-300">
                     <span>Next chase: <ChaseDate at={c.nextChaseAt} chase={c.chase} /></span>
                     <span>Last contact: <LastContact last={c.lastContact} compact /></span>

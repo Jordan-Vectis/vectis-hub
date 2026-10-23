@@ -67,7 +67,7 @@ import {
   CLOSED_STATUSES, STATUS_META, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LOOKBACK_MONTHS,
   UNCOLLECTED_RUN_STALE_MINUTES, UNCOLLECTED_STOPPED_PREFIX, dayToStored, isOpenRaw, londonDay, lotState, statusOf,
   syncResultWords,
-  type UncollectedBcLot, type UncollectedBcLots, type UncollectedSyncTrigger,
+  type UncollectedBcLot, type UncollectedBcLots, type UncollectedShipment, type UncollectedSyncTrigger,
 } from "@/lib/uncollected"
 import {
   graceDaysInTx, lockStorageSettingsShared, readPaidExact, readStorageSettings, readStorageStartOwner,
@@ -82,6 +82,7 @@ import {
   type BuyerToRead, type Candidate, type DroppedEvidence, type FeedChange, type FeedChangeOptions, type FeedInvoice, type FeedLot, type InvoiceLines,
   type JudgedBuyer, type LotPlace, type LotRef, type PlacesRead, type TickedLot,
 } from "@/lib/uncollected-feed-match"
+import { SHIPMENT_SELECT, docketsOf, shippingFor, toShipmentInfo } from "@/lib/uncollected-feed-match"
 
 export * from "@/lib/uncollected-feed-match"
 
@@ -114,6 +115,8 @@ const NOTE_MAX = 4000
 const LOT_SELECT = [
   "EVA_AuctionNo", "EVA_AuctionName", "EVA_AuctionDate", "EVA_UniqueID", "EVA_LotNo", "EVA_LotSuffix",
   "EVA_ShortDescription", "EVA_HammerPrice", "EVA_BuyerNo", "EVA_BuyerSearchName", "EVA_Collected", "EVA_WithdrawLot",
+  // The lot's collection docket (verified live 2026-10-23: R008018-138 → COL049233) — for shipping.
+  "EVA_CollectionNo",
 ].join(",")
 const INVOICE_SELECT = [
   "id", "number", "invoiceDate", "postingDate", "customerNumber", "customerName", "email", "phoneNumber",
@@ -341,6 +344,69 @@ async function readBuyerSaleRows(ctx: Ctx, saleCode: string, buyerNo: string): P
     if (!(e instanceof BcError) || e.status !== 400) throw e
     const rows = await readAll(ctx, base, { $filter: `EVA_AuctionNo eq ${odataString(saleCode)}`, $select: LOT_SELECT })
     return rows.filter((r) => String(r.EVA_BuyerNo ?? "").trim().toUpperCase() === buyerNo.toUpperCase())
+  }
+}
+
+/**
+ * The shipment requests on some collection dockets (ShipmentRequestAPI, `EVA_DocumentNo eq '…' or …`,
+ * up to PLACES_PER_CALL a call): docket → its requests (an empty list when it has none). BC refusing
+ * the batched filter (400) → one docket at a time. Throws on failure (BcError, OutOfTime / Stopped).
+ */
+async function readShipments(ctx: Ctx, dockets: string[]): Promise<Map<string, UncollectedShipment[]>> {
+  const base = bcODataUrl("ShipmentRequestAPI")
+  const out = new Map<string, UncollectedShipment[]>(dockets.map((d) => [d, []]))
+  const take = (rows: Record<string, unknown>[]) => {
+    for (const r of rows) { const s = toShipmentInfo(r); if (s) out.get(s.docket)?.push(s) }
+  }
+  try {
+    take(await readAll(ctx, base, { $filter: dockets.map((d) => `EVA_DocumentNo eq ${odataString(d)}`).join(" or "), $select: SHIPMENT_SELECT }))
+  } catch (e) {
+    if (!(e instanceof BcError) || e.status !== 400 || dockets.length === 1) throw e
+    for (const d of dockets) take(await readAll(ctx, base, { $filter: `EVA_DocumentNo eq ${odataString(d)}`, $select: SHIPMENT_SELECT }))
+  }
+  return out
+}
+
+/**
+ * Writes where each candidate's case stands for shipping (UncollectedShipping): its dockets and the
+ * shipment requests on them, for every candidate whose dockets were ALL read this run (`shipmentsOf`
+ * holds only dockets that were read) — anything else keeps what it had. Open cases from BC only.
+ * Answers a sentence for the run's notes, or null. Never throws: the table missing (before Run
+ * Migrations) or a fault is said, and nothing else in the run is held up by it.
+ */
+async function writeShipping(cands: Candidate[], shipmentsOf: Map<string, UncollectedShipment[]>): Promise<string | null> {
+  try {
+    const t = await prisma.$queryRaw<{ t: string | null }[]>`SELECT to_regclass('public."UncollectedShipping"')::text AS "t"`
+    if (!t[0]?.t) return "Shipment numbers aren't kept yet — an admin needs to press Run Migrations."
+    const want = cands
+      .map((c) => ({ key: c.invoiceNo, dockets: docketsOf([...c.lots, ...c.queryLots]) }))
+      .filter((w) => w.dockets.every((d) => shipmentsOf.has(d)))
+    if (!want.length) return null
+    const ids = new Map<string, string>()
+    for (const keys of chunk([...new Set(want.map((w) => w.key))], 500)) {
+      const found = await prisma.uncollectedPaid.findMany({
+        where: { source: "bc", bcKey: { in: keys }, status: { notIn: CLOSED_STATUSES } },
+        select: { id: true, bcKey: true },
+      })
+      for (const r of found) if (r.bcKey) ids.set(r.bcKey, r.id)
+    }
+    const rows = want.flatMap((w) => {
+      const id = ids.get(w.key)
+      return id ? [{ id, ...shippingFor(w.dockets, shipmentsOf) }] : []
+    })
+    for (const batch of chunk(rows, 200)) {
+      await prisma.$executeRaw`
+        INSERT INTO "UncollectedShipping" ("caseId", "collectionNos", "shipmentNos", "packedBy", "shipments", "checkedAt")
+        VALUES ${Prisma.join(batch.map((r) => Prisma.sql`(${r.id}, ${r.collectionNos}::text[], ${r.shipmentNos}::text[], ${r.packedBy}::text[], ${JSON.stringify(r.shipments)}::jsonb, NOW())`))}
+        ON CONFLICT ("caseId") DO UPDATE SET
+          "collectionNos" = EXCLUDED."collectionNos", "shipmentNos" = EXCLUDED."shipmentNos", "packedBy" = EXCLUDED."packedBy",
+          "shipments" = EXCLUDED."shipments", "checkedAt" = EXCLUDED."checkedAt"`
+    }
+    const withShip = rows.filter((r) => r.shipmentNos.length).length
+    return `Shipping: ${many(rows.length, "case")} read for collection dockets and shipment requests — ${n0(withShip)} ${withShip === 1 ? "has" : "have"} a shipment request that isn't cancelled.`
+  } catch (e) {
+    console.error("uncollected feed: where the cases stand for shipping couldn't be saved:", e)
+    return "Where the cases stand for shipping couldn't be saved this time — see the server's log. The next check tries again."
   }
 }
 
@@ -1519,6 +1585,32 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
       return out
     }
 
+    // ── Where the cases' lots stand for shipping (Jack, 2026-10-23: the collection docket, the shipment
+    // number and who packed it): each candidate's collection dockets (its lots' EVA_CollectionNo) and the
+    // shipment requests on them, read HERE, before saving, while the time for reading BC is still there,
+    // and written after saving (writeShipping). A docket whose read failed leaves its case's row as it was.
+    const dockets = [...new Set(f.candidates.flatMap((c) => docketsOf([...c.lots, ...c.queryLots])))].sort()
+    /** docket → its shipment requests — only dockets that were read. */
+    const shipmentsOf = new Map<string, UncollectedShipment[]>()
+    let shipNote: string | null = null
+    if (dockets.length && !ctx.outOfTime && !stopBy()) {
+      let unreadDockets = 0
+      let doneDockets = 0
+      await eachLimit(chunk(dockets, PLACES_PER_CALL), BC_CONCURRENCY, async (batch) => {
+        try {
+          if (ctx.outOfTime) throw ctx.stopped ? new Stopped() : new OutOfTime()
+          for (const [d, ss] of await readShipments(ctx, batch)) shipmentsOf.set(d, ss)
+        } catch {
+          unreadDockets += batch.length
+        }
+        doneDockets += batch.length
+        setProgress({ stage: "checking", done: doneDockets, total: dockets.length, words: `Reading shipment requests for the collection dockets — ${n0(doneDockets)} of ${n0(dockets.length)}` })
+      })
+      if (unreadDockets) shipNote = `The shipment requests on ${many(unreadDockets, "collection docket")} couldn't be read (BC didn't answer, or the time ran out) — those cases keep what was read before.`
+    } else if (dockets.length) {
+      shipNote = "There was no time left to read the shipment requests this run — the cases keep what was read before."
+    }
+
     // ── Save every candidate — until a Stop, or the run has gone on so long that a second one
     // could be let in (SAVE_STOP_MS); either way what's saved stays saved.
     const saveStopAt = started.getTime() + SAVE_STOP_MS
@@ -1543,6 +1635,13 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
     if (tally.leftClosed) notes.push(`${many(tally.leftClosed, "invoice")} still ${tally.leftClosed === 1 ? "shows" : "show"} lots not collected in BC, but ${tally.leftClosed === 1 ? "its case was" : "their cases were"} closed in the Hub — left closed.`)
     if (tally.failed) notes.push(`${many(tally.failed, "case")} couldn't be saved — see the server's log. The next check tries again.`)
     if (outOfSaveTime) notes.push(`The check ran so long that ${many(unsaved, "case")} it found ${unsaved === 1 ? "wasn't" : "weren't"} saved — the next check saves ${unsaved === 1 ? "it" : "them"}.`)
+
+    // ── Where the saved cases stand for shipping (read before saving — see above).
+    if (!stopBy()) {
+      const shipWords = await writeShipping(f.candidates, shipmentsOf)
+      if (shipWords) notes.push(shipWords)
+    }
+    if (shipNote) notes.push(shipNote)
 
     // ── Open cases from BC it didn't find this time — judged only for buyers it fully checked, and
     // not after a Stop or once saving has run out of time.

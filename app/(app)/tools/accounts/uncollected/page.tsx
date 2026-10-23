@@ -36,7 +36,7 @@ export default async function UncollectedPage({ searchParams }: { searchParams: 
   const [res, check] = await Promise.all([listCases(filter), lastSyncRun()])
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl desk:max-w-[1600px] mx-auto">
       <BackLink href="/tools/accounts">Accounts</BackLink>
       <div className="mt-1 mb-5">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">📦 Paid, not collected</h1>
@@ -87,6 +87,12 @@ function HowCasesAreAdded() {
           at <b>{locationListWords(QUERY_LOCATIONS)}</b> isn&apos;t charged or counted in the case&apos;s lots, and the case says to
           check it before chasing. A lot BC has no location for is judged on BC&apos;s tick alone; when BC doesn&apos;t answer for a
           buyer&apos;s lots, that buyer is left as they were until the next check rather than judged on half the picture.
+        </li>
+        <li>
+          <b>Docket · shipment.</b> The check also reads each case&apos;s <b>collection docket</b> (the COL… number on its lots) and
+          BC&apos;s <b>shipment request</b> on it: the shipment number (SHP…), its status, and who packed it — the request&apos;s
+          Internal Reference. <b>Has a shipment</b> means a shipment request that isn&apos;t cancelled. It&apos;s as fresh as the last
+          check, and a case added by hand isn&apos;t read.
         </li>
         <li>
           <b>&ldquo;Paid by&rdquo;</b> — BC doesn&apos;t publish the day the money arrived yet, so a case from BC shows the day BC settled the
