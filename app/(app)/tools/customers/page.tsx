@@ -78,7 +78,9 @@ async function List(sp: Search) {
   const [total, rows] = await Promise.all([
     prisma.customer.count({ where }),
     prisma.customer.findMany({
-      where, orderBy: [{ name: "asc" }, { id: "asc" }], take: PAGE, skip: (page - 1) * PAGE,
+      // Newest customer number first (Jordan, 2026-10-23) — BC hands them out in order, so the
+      // highest C-number is the most recent person. Fixed width, so a text sort is a number sort.
+      where, orderBy: [{ contactNo: { sort: "desc", nulls: "last" } }, { id: "asc" }], take: PAGE, skip: (page - 1) * PAGE,
       select: { id: true, name: true, name2: true, contactNo: true, vendorNo: true, buyerNo: true, email: true, phone: true, mobile: true, city: true, postCode: true, websiteId: true, blocked: true },
     }),
   ])
