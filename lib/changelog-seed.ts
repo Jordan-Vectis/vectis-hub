@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b8e410552636d66e921007ee4e2f15debb1675bb","author":"jack-vectis","date":"2026-10-23T16:17:00+01:00","subject":"Paid, not collected: Internal Barcode on Lots in BC, and the lot list across the full page"},
   {"sha":"572eb163a5413c281d6c3a7edb1c2a732be9cc5a","author":"Jordan Orange","date":"2026-10-23T16:14:37+01:00","subject":"Goods In and Submissions use the Customer table — BC first until switch day"},
   {"sha":"438852b7602c3cc0bd617a5656da1ecc77deb039","author":"jack-vectis","date":"2026-10-23T16:11:21+01:00","subject":"Paid, not collected: remove the key under Lots in BC and the Added line from BC cases' timeline"},
   {"sha":"d5c49a8fb4f5e4fe9a06f2eedac24c39808f7e10","author":"jack-vectis","date":"2026-10-23T15:43:49+01:00","subject":"Paid, not collected: a lot at QUERY counts as gone, like COLLECTED and SHIPPED"},

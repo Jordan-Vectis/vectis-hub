@@ -2205,9 +2205,11 @@ export const MIGRATIONS = [
     CONSTRAINT "GoodsInCustomer_pkey" PRIMARY KEY ("contactId")
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "GoodsInCustomer_vendorNo_key" ON "GoodsInCustomer"("vendorNo")`,
+  // ⚠ undefined_column too (2026-10-23): "One customer database" below renames contactId to
+  // customerId, so on every later run this column is gone (42703) — skip it then.
   `DO $$ BEGIN
     ALTER TABLE "GoodsInCustomer" ADD CONSTRAINT "GoodsInCustomer_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "Contact"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  EXCEPTION WHEN duplicate_object OR undefined_column THEN NULL; END $$`,
   `CREATE TABLE IF NOT EXISTS "GoodsInReceipt" (
     "id"             TEXT NOT NULL,
     "contactId"      TEXT NOT NULL,
@@ -2318,9 +2320,10 @@ export const MIGRATIONS = [
     "updatedAt"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "GoodsInAgreement_pkey" PRIMARY KEY ("contactId")
   )`,
+  // ⚠ undefined_column too — the column is renamed to customerId further down (as GoodsInCustomer above).
   `DO $$ BEGIN
     ALTER TABLE "GoodsInAgreement" ADD CONSTRAINT "GoodsInAgreement_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "Contact"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  EXCEPTION WHEN duplicate_object OR undefined_column THEN NULL; END $$`,
   // Goods In scanner app (2026-10-16) — every scan the handheld scanner sent in, keyed by the scanner's
   // own id for it so an offline scan replayed twice is applied once. New table only, no foreign keys.
   `CREATE TABLE IF NOT EXISTS "GoodsInScanEvent" (
@@ -2550,43 +2553,43 @@ export const MIGRATIONS = [
   `ALTER TABLE "GoodsInReceipt" ADD COLUMN IF NOT EXISTS "customerId" TEXT`,
   `ALTER TABLE "GoodsInReceipt" ALTER COLUMN "contactId" DROP NOT NULL`,
   `CREATE INDEX IF NOT EXISTS "GoodsInReceipt_customerId_idx" ON "GoodsInReceipt"("customerId")`,
-  `DO $ BEGIN
+  `DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GoodsInReceipt_customerId_fkey') THEN
     ALTER TABLE "GoodsInReceipt" ADD CONSTRAINT "GoodsInReceipt_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
   END IF;
-END $`,
+END $$`,
   `ALTER TABLE "GoodsInCustomer" DROP CONSTRAINT IF EXISTS "GoodsInCustomer_contactId_fkey"`,
-  `DO $ BEGIN
+  `DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'GoodsInCustomer' AND column_name = 'contactId') THEN
     ALTER TABLE "GoodsInCustomer" RENAME COLUMN "contactId" TO "customerId";
   END IF;
-END $`,
+END $$`,
   `DELETE FROM "GoodsInCustomer" WHERE "customerId" NOT IN (SELECT "id" FROM "Customer")`,
-  `DO $ BEGIN
+  `DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GoodsInCustomer_customerId_fkey') THEN
     ALTER TABLE "GoodsInCustomer" ADD CONSTRAINT "GoodsInCustomer_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
-END $`,
+END $$`,
   `ALTER TABLE "GoodsInAgreement" DROP CONSTRAINT IF EXISTS "GoodsInAgreement_contactId_fkey"`,
-  `DO $ BEGIN
+  `DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'GoodsInAgreement' AND column_name = 'contactId') THEN
     ALTER TABLE "GoodsInAgreement" RENAME COLUMN "contactId" TO "customerId";
   END IF;
-END $`,
+END $$`,
   `DELETE FROM "GoodsInAgreement" WHERE "customerId" NOT IN (SELECT "id" FROM "Customer")`,
-  `DO $ BEGIN
+  `DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GoodsInAgreement_customerId_fkey') THEN
     ALTER TABLE "GoodsInAgreement" ADD CONSTRAINT "GoodsInAgreement_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
-END $`,
+END $$`,
   `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "customerId" TEXT`,
   `ALTER TABLE "Submission" ALTER COLUMN "contactId" DROP NOT NULL`,
   `CREATE INDEX IF NOT EXISTS "Submission_customerId_idx" ON "Submission"("customerId")`,
-  `DO $ BEGIN
+  `DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Submission_customerId_fkey') THEN
     ALTER TABLE "Submission" ADD CONSTRAINT "Submission_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
   END IF;
-END $`,
+END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
