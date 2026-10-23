@@ -1046,6 +1046,9 @@ export type UncollectedBcLot = {
   location: string | null
   /** Its bin there (EVA_ArticleBinCode), or null. */
   bin: string | null
+  /** BC's Internal Barcode (PTE_InternalBarcode on its receipt line — F078196), or null when its
+   *  receipt line wasn't read or carries none. */
+  barcode: string | null
   /** false = the lot's receipt line couldn't be read (no unique ID, not found, or BC didn't answer),
    *  so its location isn't known and BC's Collected tick alone decides. */
   locationRead: boolean

@@ -19,19 +19,20 @@ import StatusCard from "./status-card"
 // One Paid, not collected case. Every card writes through lib/actions/uncollected.ts (admins only,
 // re-checked there) and then refreshes the page from the server, so what's shown is what's saved.
 //
-// Layout: on a wide screen (lg) Details + Lots in BC + Storage on the left, Status + Log contact +
-// Timeline on the right. Narrower — a phone, an iPad in portrait — one column with what's done most
-// FIRST: Status, Log contact, Details, Lots in BC, Storage, Timeline. The two column wrappers are `display: contents`
-// below lg, so each card takes its own `order` in the one column. The right-hand column comes first
-// in the page, so on the iPads the order you tab through matches what's shown (only the Timeline,
-// with nothing to tap, sits elsewhere in the page); on a wide screen the keyboard reaches Status and
-// Log contact before Details.
+// Layout: on a wide screen (lg) Details on the left beside Status + Log contact, then Lots in BC
+// ACROSS THE FULL WIDTH (Jack, 2026-10-23: "instead of using a scroll function just use more of the
+// page" — half a page made its table scroll sideways), then Storage beside the Timeline; on a desktop
+// (desk:) the page also grows to 1,600px. Narrower — a phone, an iPad in portrait — one column with
+// what's done most FIRST: Status, Log contact, Details, Lots in BC, Storage, Timeline. Every wrapper is
+// `display: contents` below lg, so each card takes its own `order` in the one column. The right-hand
+// stack comes first in the page, so on the iPads the order you tab through matches what's shown; on a
+// wide screen the keyboard reaches Status and Log contact before Details.
 
 export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDetail; today: string; backHref: string }) {
   const query = backHref.startsWith(PANEL_PATH) ? backHref.slice(PANEL_PATH.length) : ""
   const caseHref: CaseHref = id => `${PANEL_PATH}/${id}${query}`
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-6xl desk:max-w-[1600px] mx-auto">
       <BackLink href={backHref}>Paid, not collected</BackLink>
 
       <div className="mt-1 mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -60,16 +61,20 @@ export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDet
         )}
       </div>
 
-      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
-        <div className="contents lg:block lg:order-2 lg:min-w-0 lg:space-y-4">
-          <div className="order-1 min-w-0"><StatusCard c={c} caseHref={caseHref} /></div>
-          <div className="order-2 min-w-0"><ContactCard c={c} today={today} /></div>
-          <div className="order-6 min-w-0"><Timeline c={c} /></div>
+      <div className="flex flex-col gap-4">
+        <div className="contents lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start lg:order-1">
+          <div className="contents lg:block lg:col-start-2 lg:row-start-1 lg:min-w-0 lg:space-y-4">
+            <div className="order-1 min-w-0"><StatusCard c={c} caseHref={caseHref} /></div>
+            <div className="order-2 min-w-0"><ContactCard c={c} today={today} /></div>
+          </div>
+          <div className="contents lg:block lg:col-start-1 lg:row-start-1 lg:min-w-0">
+            <div className="order-3 min-w-0"><DetailsCard c={c} today={today} caseHref={caseHref} /></div>
+          </div>
         </div>
-        <div className="contents lg:block lg:order-1 lg:min-w-0 lg:space-y-4">
-          <div className="order-3 min-w-0"><DetailsCard c={c} today={today} caseHref={caseHref} /></div>
-          <div className="order-4 min-w-0"><BcLots c={c} /></div>
+        <div className="order-4 lg:order-2 min-w-0"><BcLots c={c} /></div>
+        <div className="contents lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start lg:order-3">
           <div className="order-5 min-w-0"><StorageCard c={c} /></div>
+          <div className="order-6 min-w-0"><Timeline c={c} /></div>
         </div>
       </div>
 

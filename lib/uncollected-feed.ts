@@ -1727,10 +1727,14 @@ export async function bcLotsForBuyer(token: string, saleCode: string, buyerNo: s
       else if (pr.ambiguous.has(k)) miss.ambiguous++
       else miss.noLine++
     }
+    // BC's Internal Barcode — the one for this sale when the item has had more than one (a barcode
+    // starts with its sale's code: F078196 in F078); one that fits no sale is shown only when alone.
+    const barcodes = p?.barcodes ?? []
     return {
       ...l,
       location: p ? p.location : null,
       bin: p ? p.bin : null,
+      barcode: barcodes.find((b) => !!l.saleCode && b.startsWith(l.saleCode)) ?? (barcodes.length === 1 ? barcodes[0] : null),
       locationRead: !!p,
       state: lotState(l.collected, p ? p.location : null),
     }

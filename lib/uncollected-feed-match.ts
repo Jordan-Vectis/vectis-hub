@@ -231,13 +231,16 @@ export function toFeedInvoice(r: Record<string, unknown>): FeedInvoice | null {
 
 // ─── Where each lot is now: Receipt_Lines_Excel ─────────────────────────────────────────────
 
-/** Fields read off Receipt_Lines_Excel for a lot's location (verified live 2026-10-23). */
-export const RECEIPT_LINE_SELECT = "EVA_UniqueID,EVA_ArticleLocationCode,EVA_ArticleBinCode"
+/** Fields read off Receipt_Lines_Excel for a lot's location (verified live 2026-10-23), and its
+ *  Internal Barcode (PTE_InternalBarcode — verified live the same day: R008018-138 → F078196; the
+ *  Hub's own BC copy and bc-sale-counts read it too). */
+export const RECEIPT_LINE_SELECT = "EVA_UniqueID,EVA_ArticleLocationCode,EVA_ArticleBinCode,PTE_InternalBarcode"
 /** Unique ids per Receipt_Lines_Excel call (`EVA_UniqueID eq '…' or …`). */
 export const PLACES_PER_CALL = 20
 
-/** A lot's location (normalised — "" when BC has none) and bin. */
-export type LotPlace = { location: string; bin: string | null }
+/** A lot's location (normalised — "" when BC has none) and bin — and the Internal Barcodes on its
+ *  receipt lines (upper case, distinct; optional: only the case page shows them). */
+export type LotPlace = { location: string; bin: string | null; barcodes?: string[] }
 
 /** The key a lot's place is kept under: its unique id, upper case. */
 export const placeKey = (uniqueId: unknown): string => str(uniqueId).toUpperCase()
@@ -252,11 +255,13 @@ export function placesFromRows(rows: Record<string, unknown>[]): { places: Map<s
   for (const r of rows) {
     const key = placeKey(r.EVA_UniqueID)
     if (!key || ambiguous.has(key)) continue
-    const p: LotPlace = { location: normaliseLocation(r.EVA_ArticleLocationCode), bin: str(r.EVA_ArticleBinCode).toUpperCase() || null }
+    const barcode = str(r.PTE_InternalBarcode).toUpperCase()
+    const p: LotPlace = { location: normaliseLocation(r.EVA_ArticleLocationCode), bin: str(r.EVA_ArticleBinCode).toUpperCase() || null, barcodes: barcode ? [barcode] : [] }
     const had = places.get(key)
     if (!had) { places.set(key, p); continue }
     if (had.location !== p.location) { places.delete(key); ambiguous.add(key); continue }
-    if (!had.bin && p.bin) places.set(key, p)
+    const barcodes = [...new Set([...(had.barcodes ?? []), ...(p.barcodes ?? [])])]
+    places.set(key, { ...(!had.bin && p.bin ? p : had), barcodes })
   }
   return { places, ambiguous }
 }

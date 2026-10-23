@@ -309,6 +309,7 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
               <div className="min-w-0">
                 <span className="font-mono font-semibold">{multi && l.saleCode ? `${l.saleCode} · ` : ""}Lot {l.lotNo}</span>
                 {l.uniqueId && <span className={`ml-2 text-xs font-mono ${muted}`}>{l.uniqueId}</span>}
+                {l.barcode && <span className="ml-2 text-xs font-mono font-semibold text-gray-700 dark:text-gray-300">{l.barcode}</span>}
               </div>
               <CollectedChip lot={l} />
             </div>
@@ -334,6 +335,7 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
             <tr>
               {multi && <th className={`${th} text-left`}>Sale</th>}
               <th className={`${th} text-left`}>Lot</th>
+              <th className={`${th} text-left`}>Barcode</th>
               <th className={`${th} text-left`}>Description</th>
               <th className={`${th} text-right`}>Hammer</th>
               <th className={`${th} text-left`}>Location</th>
@@ -348,6 +350,7 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
                   <div className="font-mono font-semibold">{l.lotNo}</div>
                   {l.uniqueId && <div className={`text-xs font-mono ${muted}`}>{l.uniqueId}</div>}
                 </td>
+                <td className={`${td} whitespace-nowrap font-mono`}>{l.barcode ?? <span className={muted} title={l.locationRead ? "BC has no Internal Barcode on its receipt line" : "Its receipt line couldn't be read in BC"}>—</span>}</td>
                 <td className={`${td} break-words min-w-[10rem]`}>{l.description ?? <span className={muted}>No description in BC</span>}</td>
                 <td className={`${td} text-right tabular-nums whitespace-nowrap`}>{formatMoney(l.hammer)}</td>
                 <td className={`${td} whitespace-nowrap`}><LocationCell lot={l} /></td>
