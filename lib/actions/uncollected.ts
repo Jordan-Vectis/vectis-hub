@@ -7,12 +7,21 @@ import { getAccountsAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
 import { bcLotsForBuyer, salesOf, startUncollectedSync, stopUncollectedSync, uncollectedSyncNow } from "@/lib/uncollected-feed"
 import {
+  countStartMoves, readCaseStorageFlags, readStorageSettings, readStorageStartOwner, saveStorageSettings as saveSettingsRow,
+  storageOwedOnOpenCases,
+  type CaseStorageFlags, type StorageSettingsSaved,
+} from "@/lib/uncollected-settings"
+import {
   AGE_BANDS, BANK_DETAILS_REFUSED, BC_OWNED_FIELDS, CLOSED_STATUSES, FIELD_LABELS, OPEN_STATUSES, REACHED_OUT_KINDS,
-  STATUS_META, UNCOLLECTED_ADMINS_ONLY, UNCOLLECTED_BC_NOT_CONNECTED, UNCOLLECTED_LIMITS, UNCOLLECTED_NOT_READY,
+  STATUS_META, STORAGE_LIMITS, STORAGE_RESUMED, STORAGE_SETTINGS_NOT_READY, STORAGE_SETTINGS_READ_FAILED, STORAGE_SWITCH_KINDS,
+  STORAGE_WAIVED,
+  UNCOLLECTED_ADMINS_ONLY, UNCOLLECTED_BC_NOT_CONNECTED, UNCOLLECTED_LIMITS, UNCOLLECTED_NOT_READY,
   UNCOLLECTED_RUN_STALE_MINUTES, UNCOLLECTED_STATUSES, UNCOLLECTED_SYNC_NOT_READY,
   ageBandFor, chaseState, dayToStored, daysWaiting, eventKindOf, formatDay, formatMoney, isAgeBandKey, isContactKind,
   isDay, isOpenRaw, isUncollectedSort, isUncollectedStatus, londonDay, looksLikeBankDetails, sentence, statusOf,
-  type AgeBandKey, type ContactKind, type LogContactInput, type UncollectedBcLots,
+  parseStorageSettingsInput, storageCharge, storageStartDay,
+  type AgeBandKey, type ContactKind, type LogContactInput, type LotState, type StorageSettings,
+  type StorageSettingsInput, type UncollectedBcLots,
   type UncollectedCase, type UncollectedCaseDetail, type UncollectedCheckState,
   type UncollectedField, type UncollectedFilter, type UncollectedInput, type UncollectedLastContact, type UncollectedList,
   type UncollectedPatch, type UncollectedResult, type UncollectedSort, type UncollectedStatus, type UncollectedSyncRunInfo,
@@ -40,6 +49,12 @@ import {
 //    15 digits).
 //  • One OPEN case per invoice, held under an advisory lock on the invoice (lockInvoice) by every
 //    write that could break it: createCase, updateCase (a new invoice number), setStatus (reopening).
+//  • Storage charges (Jack, 2026-10-23: "4 weeks after the item has been paid for … charged per lot")
+//    are worked out LIVE on every read by the rules in lib/uncollected.ts (storageCharge) with the
+//    settings and per-case flags from lib/uncollected-settings.ts — never stored as money. Here:
+//    each case's figure in listCases / getCase, the tile over every open case, waiveStorage /
+//    resumeStorage, and previewStorageSettings / saveStorageSettings (admin check first — the box asks
+//    "are you sure?" from the preview before it saves). Nothing is ever charged in BC.
 
 type Who = { id: string; name: string }
 
@@ -269,7 +284,11 @@ type CaseRow = {
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null)
 
-function toCase(r: CaseRow, last: UncollectedLastContact | null, today: string): UncollectedCase {
+/** What a case's storage is worked out with: the settings, and the case's storage switch and paid-date
+ *  kind (readCaseStorageFlags — missing = never waived, not BC's own paid date). */
+type StorageContext = { settings: StorageSettings; flags: CaseStorageFlags | undefined }
+
+function toCase(r: CaseRow, last: UncollectedLastContact | null, today: string, ctx: StorageContext): UncollectedCase {
   const status = statusOf(r.status)
   const days = daysWaiting(r.paidAt, r.closedAt, today)
   return {
@@ -298,6 +317,13 @@ function toCase(r: CaseRow, last: UncollectedLastContact | null, today: string):
     ageBand: ageBandFor(days)?.key ?? null,
     chase: chaseState(r.nextChaseAt, status, today),
     lastContact: last,
+    // Worked out live — never stored as money (it changes every day).
+    storage: storageCharge(
+      { paidAt: r.paidAt, storageFrom: r.storageFrom, closedAt: r.closedAt, lots: r.lots, waiver: ctx.flags?.waiver ?? null },
+      ctx.settings,
+      today,
+    ),
+    paidExact: r.source === "bc" && !!ctx.flags?.paidExact,
   }
 }
 
@@ -379,7 +405,7 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
     const statusWhere = Prisma.sql`b."status" IN (${Prisma.join(picked)})`
     const ageWhere = age ? Prisma.sql`b."band" = ${age}` : Prisma.sql`TRUE`
 
-    const [statusRows, ageRows, idRows, totalsRows] = await Promise.all([
+    const [statusRows, ageRows, idRows, totalsRows, settings] = await Promise.all([
       prisma.$queryRaw<{ status: string; n: number }[]>`${base}
         SELECT b."status" AS "status", COUNT(*)::int AS "n" FROM b WHERE ${ageWhere} GROUP BY b."status"`,
       prisma.$queryRaw<{ band: string; n: number }[]>`${base}
@@ -403,6 +429,8 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
                (COUNT(*) FILTER (WHERE u."nextChaseAt" IS NOT NULL AND ${londonDateOf("nextChaseAt")} < ${today}::date))::int AS "chasesOverdue"
         FROM "UncollectedPaid" u
         WHERE u."status" NOT IN (${Prisma.join(CLOSED_STATUSES)})`,
+      // How storage is charged (tolerant: the standard settings until its table is there).
+      readStorageSettings(),
     ])
 
     const statusCounts = Object.fromEntries(UNCOLLECTED_STATUSES.map((s) => [s, 0])) as Record<UncollectedStatus, number>
@@ -414,22 +442,27 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
     const truncated = idRows.length > UNCOLLECTED_LIMITS.list
     const ids = idRows.slice(0, UNCOLLECTED_LIMITS.list).map((r) => r.id)
 
-    const [rows, contacts] = ids.length
-      ? await Promise.all([
-          prisma.uncollectedPaid.findMany({ where: { id: { in: ids } } }),
-          prisma.uncollectedPaidEvent.findMany({
+    const [rows, contacts, flags, owed] = await Promise.all([
+      ids.length ? prisma.uncollectedPaid.findMany({ where: { id: { in: ids } } }) : [],
+      ids.length
+        ? prisma.uncollectedPaidEvent.findMany({
             where: { caseId: { in: ids }, kind: { in: REACHED_OUT_KINDS } },
             orderBy: [{ caseId: "asc" }, { at: "desc" }],
             distinct: ["caseId"],
             select: { caseId: true, kind: true, at: true, text: true, byName: true },
-          }),
-        ])
-      : [[], []]
+          })
+        : [],
+      // Each case's storage switch (waived?) and whether its paid date is BC's own.
+      readCaseStorageFlags(ids),
+      // Storage owed over every OPEN case, for the tile — by the same rules as each case's line.
+      storageOwedOnOpenCases(settings, today),
+    ])
     const byId = new Map(rows.map((r) => [r.id, r]))
     const lastBy = new Map(contacts.map((e) => [e.caseId, e]))
     const cases = ids.flatMap((id) => {
       const r = byId.get(id)
-      return r ? [toCase(r, lastContactOf(lastBy.get(id)), today)] : []   // deleted between the reads
+      // Deleted between the reads → left out.
+      return r ? [toCase(r, lastContactOf(lastBy.get(id)), today, { settings, flags: flags.get(id) })] : []
     })
 
     const t = totalsRows[0]
@@ -444,11 +477,15 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
       chasesOverdue: Number(t?.chasesOverdue ?? 0),
       chasesDue: Number(t?.chasesToday ?? 0) + Number(t?.chasesOverdue ?? 0),
       unknownStatus: Number(t?.unknownStatus ?? 0),
+      storage: owed,
     }
 
     return {
       ok: true,
-      data: { cases, matched, truncated, statusCounts, ageCounts, totals, today, filter: { statuses: picked, age, q, sort } },
+      data: {
+        cases, matched, truncated, statusCounts, ageCounts, totals, today, filter: { statuses: picked, age, q, sort },
+        storageSettings: settings,
+      },
     }
   } catch (e) {
     return fail(e, "list", READ_FAILED)
@@ -476,23 +513,33 @@ export async function countOpenCases(): Promise<{ open: number; ready: boolean; 
 
 // ─── One case ───────────────────────────────────────────────────────────────────────────────
 
-/** A case with its whole timeline, newest first. */
+/** A case with its whole timeline, newest first, and the storage settings its figures used. */
 export async function getCase(id: string): Promise<UncollectedResult<UncollectedCaseDetail>> {
   try {
     await requireAdmin()
     if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
-    const r = await prisma.uncollectedPaid.findUnique({
-      where: { id },
-      include: { events: { orderBy: [{ at: "desc" }, { id: "desc" }], take: 1000 } },
-    })
+    const [r, flags, settings, startOwner] = await Promise.all([
+      prisma.uncollectedPaid.findUnique({
+        where: { id },
+        include: { events: { orderBy: [{ at: "desc" }, { id: "desc" }], take: 1000 } },
+      }),
+      // The storage switch, the paid-date kind and who set the storage start on their own reads, so
+      // a long timeline can never push them out of the 1,000 events read.
+      readCaseStorageFlags([id]),
+      readStorageSettings(),
+      readStorageStartOwner(prisma, id),
+    ])
     if (!r) throw new Refusal(NOT_FOUND)
     const today = londonDay()
     const last = r.events.find((e) => (REACHED_OUT_KINDS as string[]).includes(e.kind))
     return {
       ok: true,
       data: {
-        ...toCase(r, lastContactOf(last), today),
+        ...toCase(r, lastContactOf(last), today, { settings, flags: flags.get(id) }),
         events: r.events.map((e) => ({ id: e.id, kind: eventKindOf(e.kind), text: e.text, byName: e.byName, at: e.at.toISOString() })),
+        storageSettings: settings,
+        // A start on the case with no record of the rule setting it is a person's (ruleMaySetStart).
+        storageStartBy: r.storageFrom ? (startOwner === "rule" ? "rule" : "person") : null,
       },
     }
   } catch (e) {
@@ -617,7 +664,8 @@ export async function updateCase(id: string, patch: UncollectedPatch): Promise<U
 /**
  * Moves a case to another status, on its timeline. Collected or Closed another way closes it
  * (closedAt); "Closed another way" needs a reason; going back to an open status reopens it
- * (closedAt cleared). "Storage charges apply" with no storage date yet starts the charges today.
+ * (closedAt cleared). "Storage charges apply" with no storage start yet: the storage rule's start
+ * when the case has a paid date (worked out live — nothing stored), else the charges start today.
  */
 export async function setStatus(
   id: string,
@@ -632,9 +680,12 @@ export async function setStatus(
       throw new Refusal("Say why it's being closed — for example \"Refunded\" or \"Re-offered in the next sale\".")
     }
     const today = londonDay()
+    // The free days, for "Storage charges apply" on a case with no storage start (tolerant: the
+    // standard ones until its table is there). Read before the transaction, never inside it.
+    const settings = await readStorageSettings()
 
     const result = await prisma.$transaction(async (tx) => {
-      const c = await tx.uncollectedPaid.findUnique({ where: { id }, select: { status: true, closedAt: true, storageFrom: true, invoiceNo: true } })
+      const c = await tx.uncollectedPaid.findUnique({ where: { id }, select: { status: true, closedAt: true, storageFrom: true, invoiceNo: true, paidAt: true } })
       if (!c) throw new Refusal(NOT_FOUND)
       const from = statusOf(c.status)
       if (c.status === status) return { changed: false }
@@ -654,17 +705,30 @@ export async function setStatus(
         // Switching between Collected and Closed keeps the day it first closed.
         closedAt: closing ? (c.closedAt ?? new Date()) : null,
       }
-      const startsStorage = status === "storage" && !c.storageFrom
+      // "Storage charges apply" with no storage start on the case: with a paid date the storage rule
+      // already gives the start (the day after the free days — storageCharge uses it live), so it is
+      // left to the rule and only said; with no paid date there's nothing to count from, so the
+      // charges start today (a start a person set — the timeline says "storage charges from …").
+      // ⚠ The rule's line must never contain "storage charges from": storageStartOwner would take the
+      // rule's start as one a person set.
+      const noStart = status === "storage" && !c.storageFrom
+      const ruleStart = noStart ? storageStartDay(c.paidAt, settings.graceDays) : null
+      const startsStorage = noStart && !ruleStart
       if (startsStorage) data.storageFrom = dayToStored(today)
 
-      // Only if it is still where we read it — same status AND same invoice — so two people changing
-      // it at once can't both win, and an invoice changed meanwhile isn't reopened unchecked.
-      const n = await tx.uncollectedPaid.updateMany({ where: { id, status: c.status, invoiceNo: c.invoiceNo }, data })
+      // Only if it is still where we read it — same status AND same invoice (and, when starting the
+      // charges, still no start) — so two people changing it at once can't both win, and an invoice
+      // changed meanwhile isn't reopened unchecked.
+      const n = await tx.uncollectedPaid.updateMany({
+        where: { id, status: c.status, invoiceNo: c.invoiceNo, ...(startsStorage ? { storageFrom: null } : {}) },
+        data,
+      })
       if (n.count === 0) throw new Refusal(CHANGED_MEANWHILE)
 
       const parts = [`${STATUS_META[from].label} → ${STATUS_META[status].label}`]
       if (reason) parts.push(reason)
       if (startsStorage) parts.push(`storage charges from ${formatDay(dayToStored(today))}`)
+      if (ruleStart) parts.push(`storage counted from ${formatDay(dayToStored(ruleStart))}, the day after the ${settings.graceDays} free days from when they paid`)
       await tx.uncollectedPaidEvent.create({
         data: { caseId: id, kind: "status", text: parts.join(" — "), byId: who.id, byName: who.name },
       })
@@ -753,6 +817,124 @@ export async function deleteCase(id: string): Promise<UncollectedResult> {
     return { ok: true, data: undefined }
   } catch (e) {
     return fail(e, "delete", "Something went wrong and the case wasn't deleted — please try again.")
+  }
+}
+
+// ─── Storage charges: waived on a case, and the settings ────────────────────────────────────
+// Storage is worked out LIVE (storageCharge in lib/uncollected.ts — never stored as money: it changes
+// every day). An admin can waive a case's storage with a reason: an event of kind STORAGE_WAIVED on
+// its timeline whose text IS the reason, and STORAGE_RESUMED (an optional note) to charge it again —
+// the LATEST such event is the switch (storageWaiverOf; no schema change). Both take the case's row
+// lock first, so two people pressing at once can't both write one, and say "nothing changed" when it
+// was already that way. The Hub never charges anything in BC — the figures are for raising the charge.
+
+async function setWaived(id: string, waive: boolean, note: unknown): Promise<UncollectedResult<{ changed: boolean; figurePence: number | null }>> {
+  try {
+    const who = await requireAdmin()
+    if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
+    const text = prose(note, waive ? "the reason" : "the note", STORAGE_LIMITS.reason)
+    if (waive && !text) throw new Refusal("Say why the storage is being waived — for example \"Agreed with Jordan — our delay, not theirs\".")
+    const today = londonDay()
+    const settings = await readStorageSettings()
+
+    const result = await prisma.$transaction(async (tx) => {
+      // The case's row first, so a second press waits for this one and then sees its event.
+      const [row] = await tx.$queryRaw<{ paidAt: Date | null; storageFrom: Date | null; closedAt: Date | null; lots: number | null }[]>`
+        SELECT "paidAt", "storageFrom", "closedAt", "lots" FROM "UncollectedPaid" WHERE "id" = ${id} FOR UPDATE`
+      if (!row) throw new Refusal(NOT_FOUND)
+      const last = await tx.uncollectedPaidEvent.findFirst({
+        where: { caseId: id, kind: { in: [...STORAGE_SWITCH_KINDS] } },
+        orderBy: [{ at: "desc" }, { id: "desc" }],
+        select: { kind: true },
+      })
+      if ((last?.kind === STORAGE_WAIVED) === waive) return { changed: false, figurePence: null }
+
+      // Stamped now — after the row lock — so the switch events sort in the order they were made.
+      await tx.uncollectedPaidEvent.create({
+        data: { caseId: id, kind: waive ? STORAGE_WAIVED : STORAGE_RESUMED, text, byId: who.id, byName: who.name, at: new Date() },
+      })
+      // Touch the case, so "last changed" and the list's order notice it.
+      await tx.uncollectedPaid.update({ where: { id }, data: { updatedAt: new Date() } })
+      // What it stands at today, before any waiver — for the answer ("£216.00 won't be charged").
+      const owed = storageCharge({ ...row, lots: row.lots == null ? null : Number(row.lots) }, settings, today)
+      return { changed: true, figurePence: owed.fullTotalPence }
+    })
+    if (result.changed) revalidate()
+    return { ok: true, data: result }
+  } catch (e) {
+    return fail(e, waive ? "waive storage" : "resume storage", SAVE_FAILED)
+  }
+}
+
+/** Waives a case's storage charges, with a reason (needed). Nothing changes if they're already waived.
+ *  `figurePence` = what it stood at today before the waiver (null = not known: no lots or no start). */
+export async function waiveStorage(id: string, reason: string): Promise<UncollectedResult<{ changed: boolean; figurePence: number | null }>> {
+  return setWaived(id, true, reason)
+}
+
+/** Charges a waived case's storage again (a note is optional). Nothing changes if it wasn't waived.
+ *  `figurePence` = what it stands at today. */
+export async function resumeStorage(id: string, note?: string | null): Promise<UncollectedResult<{ changed: boolean; figurePence: number | null }>> {
+  return setWaived(id, false, note)
+}
+
+/**
+ * Changes how storage is charged on every case: the free days after they paid, the charge per lot
+ * (pounds, before VAT), per day or per week, and VAT. ADMINS ONLY (checked here, first — the save
+ * itself is lib/uncollected-settings.ts, which checks every value and, when the free days change,
+ * moves the storage start of the open cases from BC whose start the rule set, never one a person
+ * set). Answers whether anything really changed, the settings now, and how many starts moved.
+ * Before Run Migrations → notReady (the standard charges are used meanwhile). Storage is worked out
+ * live, so every case's figure follows at once. Nothing is ever charged in BC.
+ */
+export async function saveStorageSettings(input: StorageSettingsInput): Promise<UncollectedResult<StorageSettingsSaved>> {
+  try {
+    const who = await requireAdmin()
+    const res = await saveSettingsRow(input, who)
+    if (res.ok && res.data.changed) {
+      // Accounts has no audit table: the change is in the server's log, with who made it (and in
+      // the settings box, "last changed by").
+      console.info(`uncollected storage settings changed: ${JSON.stringify({
+        to: { graceDays: res.data.settings.graceDays, ratePence: res.data.settings.ratePence, period: res.data.settings.period, vatPercent: res.data.settings.vatPercent },
+        startsMoved: res.data.moved, startsNotMoved: res.data.notMoved, byId: who.id, byName: who.name, at: new Date().toISOString(),
+      })}`)
+      revalidate()
+    }
+    return res
+  } catch (e) {
+    return fail(e, "storage settings", SAVE_FAILED)
+  }
+}
+
+/**
+ * The settings box's "are you sure?": what saving `input` would do, without saving anything. ADMINS
+ * ONLY. Checks the values (the same refusals as the save), says whether anything would change, and —
+ * when the free days would change — how many open cases from BC would have their storage start moved,
+ * each with a line on its timeline (countStartMoves; null = couldn't be counted). Before Run
+ * Migrations → notReady; settings that couldn't be read → refused (the box can't save then either).
+ */
+export async function previewStorageSettings(input: StorageSettingsInput): Promise<UncollectedResult<{
+  value: StorageSettings; changed: boolean; graceChanged: boolean; previousGraceDays: number; moves: number | null
+}>> {
+  try {
+    await requireAdmin()
+    const parsed = parseStorageSettingsInput(input)
+    if (!parsed.ok) throw new Refusal(parsed.error)
+    const value = parsed.value
+    const now = await readStorageSettings()
+    if (!now.ready) return { ok: false, error: STORAGE_SETTINGS_NOT_READY, notReady: true }
+    if (now.readFailed) throw new Refusal(STORAGE_SETTINGS_READ_FAILED)
+    const unchanged = now.graceDays === value.graceDays && now.ratePence === value.ratePence && now.period === value.period && now.vatPercent === value.vatPercent
+    const graceChanged = now.graceDays !== value.graceDays
+    return {
+      ok: true,
+      data: {
+        value, changed: !(now.saved && unchanged), graceChanged, previousGraceDays: now.graceDays,
+        moves: graceChanged ? await countStartMoves(value.graceDays) : 0,
+      },
+    }
+  } catch (e) {
+    return fail(e, "storage settings preview", "The storage charges couldn't be checked just now — nothing was changed. Please try again.")
   }
 }
 
@@ -912,7 +1094,9 @@ function bcFailure(e: unknown): Failure {
 
 /**
  * The lots BC shows as sold to this case's buyer in this case's sale(s) (hammer over £0, not
- * withdrawn), collected and not — read live, not collected first. Needs a buyer number and a sale.
+ * withdrawn), collected and not, each with where BC has it now (Receipt_Lines_Excel — a GONE
+ * location reads as collected, a QUERY one as "check this lot") — read live, lots to check first,
+ * then not collected. Needs a buyer number and a sale.
  * A case from BC whose invoice covered more than one sale holds them all ("F067, F068"); each is read
  * (salesOf — the feed reads the first few, and says how many it left out).
  */
@@ -940,11 +1124,13 @@ export async function bcLotsForCase(id: string): Promise<UncollectedResult<Uncol
 
   try {
     const data = await bcLotsForBuyer(token, saleCode, buyerNo)
-    // Not collected first, then sale by sale in the case's order, then by lot number (366 before
-    // 366A before 1001).
+    // Lots to check (at a QUERY location) first, then not collected, then collected (ticked, or at a
+    // GONE location) — then sale by sale in the case's order, then by lot number (366 before 366A
+    // before 1001).
+    const stateOrder: Record<LotState, number> = { query: 0, here: 1, gone: 2, collected: 2 }
     const saleOrder = (s: string | null) => { const i = data.sales.indexOf((s ?? "").toUpperCase()); return i < 0 ? data.sales.length : i }
     const lots = [...data.lots].sort((a, b) =>
-      Number(a.collected) - Number(b.collected) || saleOrder(a.saleCode) - saleOrder(b.saleCode) || a.lotNo.localeCompare(b.lotNo, "en", { numeric: true }))
+      stateOrder[a.state] - stateOrder[b.state] || saleOrder(a.saleCode) - saleOrder(b.saleCode) || a.lotNo.localeCompare(b.lotNo, "en", { numeric: true }))
     return { ok: true, data: { ...data, lots } }
   } catch (e) {
     return bcFailure(e)

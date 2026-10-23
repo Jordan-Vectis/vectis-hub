@@ -5,7 +5,9 @@
 // one sale) and hasn't collected their lots. Added by hand (source "manual"), or by the BC check
 // (source "bc", keyed on bcKey = the invoice number) — lib/uncollected-feed.ts, nightly at 08:30
 // and on "Check BC now". Jack, same day: "only paid things that haven't been collected for over
-// 4 weeks". See RULES.md → "Accounts → Paid, not collected".
+// 4 weeks". See RULES.md → "Accounts → Paid, not collected". Jack, 2026-10-23: storage is charged
+// per lot once the free days after payment are over — the maths is "Storage charges" below
+// (storageCharge), the settings are UncollectedSettings (lib/uncollected-settings.ts, server only).
 //
 // ⚠ A PLAIN module: no Prisma, no server-only imports — the panel's client components import the
 // labels, colours and date helpers from here. The server actions are lib/actions/uncollected.ts.
@@ -74,7 +76,7 @@ export const STATUS_META: Record<UncollectedStatus, StatusMeta> = {
   },
   storage: {
     label: "Storage charges apply", short: "Storage",
-    help: "They've had long enough to collect and storage charges now apply. Set the date the charges start from.",
+    help: "Their free days are over and they're being charged storage. The charges start by themselves the day after the free days end — change the start on the case only if it should be different.",
     chip: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30",
     dot: "bg-orange-500", closes: false, needsReason: false,
   },
@@ -246,6 +248,439 @@ export function formatMoney(n: number | null | undefined): string {
   return n == null || !Number.isFinite(n) ? "—" : GBP.format(n)
 }
 
+/** Whole pence as "£1,234.50". "—" for none. Storage figures are kept in pence so they add up exactly. */
+export function formatPence(p: number | null | undefined): string {
+  return p == null || !Number.isFinite(p) ? "—" : GBP.format(Math.round(p) / 100)
+}
+
+/** A YYYY-MM-DD day as "15 Nov" — with the year when it isn't `ref`'s year ("15 Nov 2025"). */
+export function shortDay(day: string, ref: string = londonDay()): string {
+  const d = new Date(`${day}T12:00:00Z`)
+  const sameYear = day.slice(0, 4) === ref.slice(0, 4)
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }), timeZone: LONDON_TZ })
+}
+
+// ─── Storage charges ────────────────────────────────────────────────────────────────────────
+// Jack, 2026-10-23: "Remember it's 4 weeks after the item has been paid for — we need to start
+// charging them for keeping the lots here. They will be charged per lot."
+//
+// The standard terms are Jack's (2026-10-23: "it's £2 per lot per week"): 28 free days after
+// payment, then £2.00 per lot per WEEK + VAT (20%), any part of a week counting as a whole week.
+// (BC's own buyer invoice, Reports/55004 AuctionInvoiceT0V, carries an old commented-out footer —
+// "£5 per lot per day + VAT" — that is NOT what Vectis charges; the defaults were that until
+// 2026-10-23.) BC has no storage logic of its own, and ⚠ the Hub never charges anything in BC: these
+// figures are for staff to raise the charge. Money is NEVER stored — it changes every day, so it is
+// worked out live from the case's storage start, its lots still uncollected and the settings
+// (UncollectedSettings, read by lib/uncollected-settings.ts; these defaults until an admin changes
+// them, or until Run Migrations — settings already saved in the table always win).
+//
+//  • Free days: storage starts the day AFTER paid day + graceDays (London days). Paid 1 Oct with 28
+//    free days → free to 29 Oct, charged from 30 Oct. storageStartDay().
+//  • The start is kept in the case's own storageFrom. The BC check writes it for cases from BC
+//    ("by the storage rule" on the timeline — STORAGE_RULE_MARK) and moves it when the paid date or
+//    the free days change, but NEVER moves a start a person set (storageStartOwner). A case with no
+//    storageFrom yet (one added by hand, or before the check has been round) uses the rule live.
+//  • Chargeable days = storage start → today (or → the day it closed), INCLUSIVE, never negative.
+//    Per week: every week started counts as a week (12 days = 2 weeks).
+//  • Lots charged = the case's lots still not collected (its `lots`). Not known → no total.
+//  • Owed = lots × rate × days (or weeks), ex VAT; VAT on top (rounded to the penny); total.
+//  • Waived: the case's latest "storage_waived" / "storage_resumed" event is the switch
+//    (storageWaiverOf). Waived → nothing owed (what it would have been is still shown).
+
+export const STORAGE_PERIODS = ["day", "week"] as const
+export type StoragePeriod = (typeof STORAGE_PERIODS)[number]
+export const isStoragePeriod = (v: unknown): v is StoragePeriod =>
+  typeof v === "string" && (STORAGE_PERIODS as readonly string[]).includes(v)
+
+export type StorageSettings = {
+  /** Free London days after the paid day before storage starts. */
+  graceDays: number
+  /** Per lot, per day or per week, ex VAT — whole pence. */
+  ratePence: number
+  period: StoragePeriod
+  /** VAT on the storage charge, as a percentage (20 = 20%). */
+  vatPercent: number
+}
+
+/** The standard charges (Jack, 2026-10-23: "it's £2 per lot per week"): 28 free days after payment,
+ *  then £2.00 (200p) per lot per WEEK + VAT at 20% — any part of a week counts as a whole week. Used
+ *  until an admin saves others (a saved row always wins; a blank column in it falls back to these). */
+export const STORAGE_DEFAULTS: StorageSettings = { graceDays: 28, ratePence: 200, period: "week", vatPercent: 20 }
+
+export const STORAGE_LIMITS = {
+  graceDaysMax: 365,
+  /** £1,000 per lot per day or week. */
+  ratePenceMax: 100_000,
+  vatPercentMax: 100,
+  /** A waive or resume reason. */
+  reason: 2000,
+} as const
+
+/** The settings as the panel and the BC check read them (readStorageSettings in lib/uncollected-settings.ts). */
+export type StorageSettingsInfo = StorageSettings & {
+  /** false = the settings table isn't there yet (Run Migrations): these are the defaults and can't be saved. */
+  ready: boolean
+  /** true = an admin has saved them; false = the standard charges (STORAGE_DEFAULTS). */
+  saved: boolean
+  updatedByName: string | null
+  /** ISO. */
+  updatedAt: string | null
+  /** true = they couldn't be read just now (not a missing table). The defaults are filled in, but the
+   *  figures may be wrong — the panel says so, and the BC check sets no storage start that run. */
+  readFailed: boolean
+}
+
+/** What a settings box sends. Pounds as typed ("2", "2.00", "£2.00"). */
+export type StorageSettingsInput = {
+  graceDays: number | string
+  ratePounds: number | string
+  period: string
+  vatPercent: number | string
+}
+
+export const STORAGE_SETTINGS_NOT_READY =
+  "Storage charge settings need Run Migrations — until an admin presses Run Migrations the standard charges are used (28 free days, then £2.00 per lot per week + VAT) and can't be changed."
+export const STORAGE_SETTINGS_READ_FAILED =
+  "The storage charge settings couldn't be read just now, so the figures use the standard charges and may be wrong — refresh to try again."
+/** Where the standard charges come from, for the settings box. */
+export const STORAGE_SOURCE_WORDS =
+  "The standard charges are £2.00 per lot per week + VAT after 28 free days from when they paid — any part of a week counts as a whole week. The Hub works the figures out for you to raise the charge — it never charges anything in BC."
+
+const plural = (n: number, one: string, more = `${one}s`) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : more}`
+
+/** One stored column read back: a valid value, or the default (a row from before a rule changed,
+ *  or a column left blank, never breaks the figures). */
+export function normaliseStorageSettings(row: {
+  graceDays?: number | null; ratePence?: number | null; period?: string | null; vatPercent?: number | null
+} | null | undefined): StorageSettings {
+  const d = STORAGE_DEFAULTS
+  const g = row?.graceDays
+  const r = row?.ratePence
+  const v = row?.vatPercent
+  return {
+    graceDays: Number.isInteger(g) && g! >= 0 && g! <= STORAGE_LIMITS.graceDaysMax ? g! : d.graceDays,
+    ratePence: Number.isInteger(r) && r! >= 0 && r! <= STORAGE_LIMITS.ratePenceMax ? r! : d.ratePence,
+    period: isStoragePeriod(row?.period) ? row!.period as StoragePeriod : d.period,
+    vatPercent: typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= STORAGE_LIMITS.vatPercentMax ? v : d.vatPercent,
+  }
+}
+
+/** Reads a settings box; plain-English refusals. */
+export function parseStorageSettingsInput(input: StorageSettingsInput | null | undefined):
+  { ok: true; value: StorageSettings } | { ok: false; error: string } {
+  if (!input || typeof input !== "object") return { ok: false, error: "Fill in the storage charges first." }
+  const text = (v: unknown) => (v == null ? "" : String(v)).replace(/[£,%\s]/g, "")
+
+  const g = text(input.graceDays)
+  if (!/^\d+$/.test(g) || Number(g) > STORAGE_LIMITS.graceDaysMax) {
+    return { ok: false, error: `Free days: a whole number of days from 0 to ${STORAGE_LIMITS.graceDaysMax}, for example 28.` }
+  }
+  const r = text(input.ratePounds)
+  if (!/^\d+(\.\d{1,2})?$/.test(r)) return { ok: false, error: "Charge per lot: pounds and pence, for example 2.00." }
+  const ratePence = Math.round(Number(r) * 100)
+  if (ratePence > STORAGE_LIMITS.ratePenceMax) {
+    return { ok: false, error: `Charge per lot: ${formatPence(STORAGE_LIMITS.ratePenceMax)} at most.` }
+  }
+  if (!isStoragePeriod(input.period)) return { ok: false, error: "Pick per day or per week." }
+  const v = text(input.vatPercent)
+  if (!/^\d+(\.\d{1,2})?$/.test(v) || Number(v) > STORAGE_LIMITS.vatPercentMax) {
+    return { ok: false, error: "VAT: a percentage from 0 to 100, for example 20." }
+  }
+  return { ok: true, value: { graceDays: Number(g), ratePence, period: input.period, vatPercent: Number(v) } }
+}
+
+/** "£2.00 per lot per week + VAT" (or "… (no VAT)" at 0%). */
+export function rateWords(s: Pick<StorageSettings, "ratePence" | "period" | "vatPercent">): string {
+  const vat = s.vatPercent > 0 ? ` + VAT${s.vatPercent === 20 ? "" : ` at ${s.vatPercent}%`}` : " (no VAT)"
+  return `${formatPence(s.ratePence)} per lot per ${s.period}${vat}`
+}
+
+/** Said beside the free days when there are fewer than the BC check waits before it adds a case
+ *  (UNCOLLECTED_AFTER_DAYS): storage then runs before the case is on the panel. Nothing is lost — a
+ *  case counts from its start once it's added — but the tile and the list can't show it until then.
+ *  null when the free days are at least that long. */
+export function storageGraceWarning(graceDays: number): string | null {
+  if (!(graceDays < UNCOLLECTED_AFTER_DAYS)) return null
+  return `The BC check only adds a case ${UNCOLLECTED_AFTER_DAYS} days after they paid, so with ${plural(graceDays, "free day")} storage is already running when a case from BC appears. It's counted from its start, so nothing is lost — but the Storage owed tile and the list can't show it until the case is added.`
+}
+
+/** "28 free days after they pay, then £2.00 per lot per week + VAT" — the settings in one line. */
+export function storageSettingsWords(s: StorageSettings): string {
+  return `${plural(s.graceDays, "free day")} after they pay, then ${rateWords(s)}`
+}
+
+/** Text colour for a storage figure that is being charged (orange, like the Storage status), light and dark. */
+export const STORAGE_TEXT = "text-orange-700 dark:text-orange-300"
+
+/** The London day a paid date (a stored date, an instant, or YYYY-MM-DD) falls on. */
+const dayOfPaid = (paidAt: Date | string): string => (typeof paidAt === "string" && isDay(paidAt) ? paidAt : londonDay(paidAt))
+
+/** The day storage charges start for a paid date: the day AFTER paid day + graceDays. null with no paid date. */
+export function storageStartDay(paidAt: Date | string | null | undefined, graceDays: number): string | null {
+  if (!paidAt) return null
+  return addDays(dayOfPaid(paidAt), Math.max(0, Math.floor(graceDays)) + 1)
+}
+
+/** What storageCharge needs from a case (UncollectedCase and a database row both fit). */
+export type StorageCase = {
+  paidAt: Date | string | null | undefined
+  storageFrom: Date | string | null | undefined
+  /** Set = the case is closed (collected or closed another way): the clock stopped on that day. */
+  closedAt?: Date | string | null
+  /** Lots still not collected; null = not known. */
+  lots: number | null | undefined
+  /** The case's storage switch (storageWaiverOf) — waived when `waiver.waived`, then nothing is owed. */
+  waiver?: StorageWaiver | null
+  /** The same as a plain flag, where only that is known (a total over many cases). */
+  waived?: boolean
+}
+
+export type StorageState =
+  /** No storage start: no paid date and no start set. */
+  | "unknown"
+  /** Starts after the end day (still in the free days, or closed before it began). */
+  | "notYet"
+  /** Open and being charged. */
+  | "running"
+  /** Closed — the clock stopped on the day it closed. */
+  | "stopped"
+
+export type StorageCharge = {
+  state: StorageState
+  /** state isn't "unknown": there is a start to count from. */
+  known: boolean
+  /** At least one day is chargeable (state "running" or "stopped"). */
+  started: boolean
+  /** YYYY-MM-DD the charges start, or null (state "unknown"). */
+  startDay: string | null
+  /** "set" = the case's own storage start (the BC check's, or a person's); "rule" = worked out from the
+   *  paid date now (no start stored yet); null = not known. */
+  startBasis: "set" | "rule" | null
+  /** The day the RULE gives from the paid date (the day after paid day + the free days), whatever the
+   *  case holds — "the standard start". null with no paid date. */
+  standardFrom: string | null
+  /** The last free day (startDay − 1), or null. */
+  freeUntil: string | null
+  /** Where the clock stops: today, or the day the case closed. */
+  endDay: string
+  /** The day the case closed, when it is closed (the clock stopped there); null while open. */
+  stoppedOn: string | null
+  /** Chargeable days, inclusive; 0 before it starts. */
+  days: number
+  /** What each lot is charged for: days, or weeks started. */
+  units: number
+  period: StoragePeriod
+  ratePence: number
+  vatPercent: number
+  lots: number | null
+  /** Owed, in pence: ex VAT, the VAT, and the total. null = it can't be worked out (the number of lots
+   *  isn't known, or there's no start). 0 when waived, and before the charges start. */
+  exVatPence: number | null
+  vatPence: number | null
+  totalPence: number | null
+  /** What it comes to before any waiver (the same as above when not waived). */
+  fullExVatPence: number | null
+  fullVatPence: number | null
+  fullTotalPence: number | null
+  waived: boolean
+  /** Who waived it, why and when (when waived and known); null otherwise. */
+  waiver: StorageWaiver | null
+  /** The whole line in words (storageWords) — "£2.00 per lot per week + VAT since 15 Nov — 3 lots ×
+   *  2 weeks (12 days — a week started counts as a week) = £12.00 + VAT £2.40 = £14.40",
+   *  "Free until 29 Oct — …", "Storage waived — …". */
+  words: string
+  /** The column's figure (storageShortWords): "£14.40", "Waived", "Free until 29 Oct", "—". */
+  shortWords: string
+}
+
+/** VAT on an ex-VAT figure in pence, to the nearest penny (a half penny rounds up). */
+export const vatOnPence = (exVatPence: number, vatPercent: number): number =>
+  Math.round((exVatPence * vatPercent) / 100 + 1e-9)
+
+/**
+ * A case's storage charge as it stands on `today` (London). Pure: no database, no clock but `today`.
+ * Start = the case's storageFrom, else the rule from its paid date. End = today, or the day it closed.
+ * Days are counted inclusively; per week, every week started counts. Never negative.
+ */
+export function storageCharge(c: StorageCase, s: StorageSettings, today: string = londonDay()): StorageCharge {
+  const stoppedOn = c.closedAt ? londonDay(c.closedAt) : null
+  const endDay = stoppedOn ?? today
+  const set = c.storageFrom ? londonDay(c.storageFrom) : null
+  const standardFrom = storageStartDay(c.paidAt, s.graceDays)
+  const startDay = set ?? standardFrom
+  const lots = c.lots == null || !Number.isFinite(c.lots) ? null : Math.max(0, Math.floor(c.lots))
+  const days = startDay ? Math.max(0, daysBetween(startDay, endDay) + 1) : 0
+  const units = s.period === "week" ? Math.ceil(days / 7) : days
+  // No start to count from, or no lot count → no figure at all (never a calm £0 — design rule 7).
+  const ex = lots == null || !startDay ? null : lots * s.ratePence * units
+  const vat = ex == null ? null : vatOnPence(ex, s.vatPercent)
+  const waived = !!c.waiver?.waived || !!c.waived
+  const state: StorageState = !startDay ? "unknown" : days === 0 ? "notYet" : stoppedOn ? "stopped" : "running"
+  const charge: StorageCharge = {
+    state, known: state !== "unknown", started: days > 0,
+    startDay,
+    startBasis: set ? "set" : startDay ? "rule" : null,
+    standardFrom,
+    freeUntil: startDay ? addDays(startDay, -1) : null,
+    endDay, stoppedOn, days, units,
+    period: s.period, ratePence: s.ratePence, vatPercent: s.vatPercent, lots,
+    exVatPence: ex == null ? null : waived ? 0 : ex,
+    vatPence: vat == null ? null : waived ? 0 : vat,
+    totalPence: ex == null || vat == null ? null : waived ? 0 : ex + vat,
+    fullExVatPence: ex, fullVatPence: vat, fullTotalPence: ex == null || vat == null ? null : ex + vat,
+    waived,
+    waiver: waived && c.waiver?.waived ? c.waiver : null,
+    words: "", shortWords: "",
+  }
+  charge.words = storageWords(charge, today)
+  charge.shortWords = storageShortWords(charge, today)
+  return charge
+}
+
+/** Storage owed over many cases (the panel's tile). */
+export type StorageTotals = {
+  exVatPence: number
+  vatPence: number
+  totalPence: number
+  /** Cases being charged (days > 0, not waived) whose figures are in the totals. */
+  charging: number
+  /** Cases being charged whose number of lots isn't known — not in the totals, so they are a minimum. */
+  lotsUnknown: number
+  /** Cases whose storage is waived. */
+  waived: number
+  /** Cases with no storage start (no paid date). */
+  noStart: number
+}
+
+export function addStorage(charges: StorageCharge[]): StorageTotals {
+  const t: StorageTotals = { exVatPence: 0, vatPence: 0, totalPence: 0, charging: 0, lotsUnknown: 0, waived: 0, noStart: 0 }
+  for (const c of charges) {
+    if (c.state === "unknown") { t.noStart++; continue }
+    if (c.days === 0) continue
+    if (c.waived) { t.waived++; continue }
+    if (c.totalPence == null) { t.lotsUnknown++; continue }
+    t.charging++
+    t.exVatPence += c.exVatPence ?? 0
+    t.vatPence += c.vatPence ?? 0
+    t.totalPence += c.totalPence
+  }
+  return t
+}
+
+/** "3 lots × 12 days" / "3 lots × 2 weeks (12 days — a week started counts as a week)". */
+function sumWords(c: StorageCharge): string {
+  const lots = plural(c.lots ?? 0, "lot")
+  if (c.period === "day") return `${lots} × ${plural(c.days, "day")}`
+  return `${lots} × ${plural(c.units, "week")} (${plural(c.days, "day")} — a week started counts as a week)`
+}
+
+/** "= £180.00 + VAT £36.00 = £216.00", from the FULL figures (before any waiver). */
+function moneyWords(c: StorageCharge): string {
+  if (c.fullExVatPence == null || c.fullTotalPence == null) return ""
+  return c.vatPercent > 0
+    ? ` = ${formatPence(c.fullExVatPence)} + VAT ${formatPence(c.fullVatPence)} = ${formatPence(c.fullTotalPence)}`
+    : ` = ${formatPence(c.fullTotalPence)}`
+}
+
+/**
+ * The storage line on a case, in words:
+ *  "£2.00 per lot per week + VAT since 15 Nov — 3 lots × 2 weeks (12 days — a week started counts as
+ *   a week) = £12.00 + VAT £2.40 = £14.40"   (per day: "… — 3 lots × 12 days = …")
+ *  "Free until 29 Oct — £2.00 per lot per week + VAT from 30 Oct"
+ *  "Storage waived — it would be £14.40 (£2.00 per lot per week + VAT since 15 Nov — 3 lots × 2 weeks (…))"
+ */
+export function storageWords(c: StorageCharge, today: string = londonDay()): string {
+  const rate = rateWords(c)
+  if (c.state === "unknown") return "Storage start not known — the case has no paid date. Set the storage start on the case."
+  const start = shortDay(c.startDay!, today)
+  if (c.state === "notYet") {
+    return c.endDay === today
+      ? `Free until ${shortDay(c.freeUntil!, today)} — ${rate} from ${start}`
+      : `Closed on ${shortDay(c.endDay, today)}, before storage charges began (they'd have started ${start})`
+  }
+  const span = c.state === "stopped" ? `from ${start} until it closed on ${shortDay(c.endDay, today)}` : `since ${start}`
+  if (c.lots == null) {
+    return `${rate} ${span} — ${plural(c.days, "day")} so far, but the number of lots isn't known, so the total can't be worked out`
+  }
+  const line = `${rate} ${span} — ${sumWords(c)}${moneyWords(c)}`
+  return c.waived ? `Storage waived — it would be ${formatPence(c.fullTotalPence)} (${rate} ${span} — ${sumWords(c)})` : line
+}
+
+/** The storage column's figure: "£14.40", "Waived", "Free until 29 Oct", "Lots not known", "—". */
+export function storageShortWords(c: StorageCharge, today: string = londonDay()): string {
+  if (c.state === "unknown") return "—"
+  if (c.state === "notYet") return c.endDay === today ? `Free until ${shortDay(c.freeUntil!, today)}` : "None"
+  if (c.waived) return "Waived"
+  if (c.totalPence == null) return "Lots not known"
+  return formatPence(c.totalPence)
+}
+
+// ─── Who set a case's storage start ─────────────────────────────────────────────────────────
+
+/** Every storage start the RULE sets (the BC check, or a change to the free days) says this on the
+ *  timeline, so a start a person set can be told apart and is never moved.
+ *  ⚠ storageStartOwner reads it — never write it in a person's words. */
+export const STORAGE_RULE_MARK = "by the storage rule"
+
+/** "storage charges from 30 Oct 2026 by the storage rule (28 free days after they paid)" —
+ *  ⚠ no "paid by" / "paid on" in it (paidExactFromText reads those). */
+export function storageRuleWords(startDay: string, graceDays: number, was?: string | null): string {
+  const day = formatDay(`${startDay}T12:00:00Z`)
+  const from = was && was !== startDay ? `${formatDay(`${was}T12:00:00Z`)} → ${day}` : day
+  return `storage charges from ${from} ${STORAGE_RULE_MARK} (${plural(graceDays, "free day")} after they paid)`
+}
+
+/** The event kinds a storage start is changed in: the check's "created" / "edit", a person's "edit"
+ *  (Changed storage charges from to …) and "status" (Storage charges apply — storage charges from …). */
+export const STORAGE_START_KINDS = ["created", "edit", "status"] as const
+
+/** Who set the case's storage start, from its timeline (newest first; only the newest event that
+ *  mentions "storage charges from" counts): "rule" (the BC check / the settings), "person", or null —
+ *  nobody has, or a person CLEARED it, which hands it back to the rule. */
+export function storageStartOwner(events: { kind: string; text: string | null }[]): "rule" | "person" | null {
+  for (const e of events) {
+    if (!(STORAGE_START_KINDS as readonly string[]).includes(e.kind)) continue
+    const t = e.text ?? ""
+    if (!/storage charges from/i.test(t)) continue
+    if (t.includes(STORAGE_RULE_MARK)) return "rule"
+    return /storage charges from cleared/i.test(t) ? null : "person"
+  }
+  return null
+}
+
+/** The rule may set (or move) the start: the rule set it last, or nobody set one and there is none.
+ *  A start with no record of who set it (typed in when the case was added) is a person's. */
+export const ruleMaySetStart = (owner: "rule" | "person" | null, storageFrom: Date | string | null | undefined) =>
+  owner === "rule" || (owner === null && !storageFrom)
+
+// ─── Waiving storage ────────────────────────────────────────────────────────────────────────
+
+/** The timeline's storage switch: the LATEST of these events decides whether storage is waived.
+ *  Its text is the reason (needed to waive). */
+export const STORAGE_WAIVED = "storage_waived"
+export const STORAGE_RESUMED = "storage_resumed"
+export const STORAGE_SWITCH_KINDS = [STORAGE_WAIVED, STORAGE_RESUMED] as const
+
+export type StorageWaiver = {
+  waived: boolean
+  /** The reason given (waive) or the note (resume), if any. */
+  reason: string | null
+  byName: string | null
+  /** ISO. */
+  at: string
+}
+
+/** The case's storage switch from its timeline (any order) — null when storage was never waived. */
+export function storageWaiverOf(events: { kind: string; text: string | null; byName: string | null; at: Date | string }[]): StorageWaiver | null {
+  let latest: (typeof events)[number] | null = null
+  for (const e of events) {
+    if (!(STORAGE_SWITCH_KINDS as readonly string[]).includes(e.kind)) continue
+    if (!latest || new Date(e.at).getTime() > new Date(latest.at).getTime()) latest = e
+  }
+  if (!latest) return null
+  return { waived: latest.kind === STORAGE_WAIVED, reason: latest.text, byName: latest.byName, at: new Date(latest.at).toISOString() }
+}
+
 // ─── Contact and the timeline ───────────────────────────────────────────────────────────────
 
 export const CONTACT_KINDS = ["call", "email", "letter", "note"] as const
@@ -260,7 +695,9 @@ export const REACHED_OUT_KINDS: ContactKind[] = ["call", "email", "letter"]
  *  adds, "edit" when BC's figures change or it takes over a case added by hand, "status" when BC
  *  shows the lots collected, "note" when BC stops showing the invoice as paid — with byId null and
  *  byName "BC check (nightly)" / "BC check (Check BC now — <name>)", so the timeline says who. */
-export type EventKind = "created" | ContactKind | "status" | "edit"
+/** "storage_waived" / "storage_resumed" are the storage switch (storageWaiverOf, below): an admin
+ *  waives a case's storage charges with a reason, and can put them back on. */
+export type EventKind = "created" | ContactKind | "status" | "edit" | "storage_waived" | "storage_resumed"
 
 /** Every symbol has its words beside it (design rule 3). */
 export const EVENT_META: Record<EventKind, { icon: string; label: string }> = {
@@ -271,6 +708,8 @@ export const EVENT_META: Record<EventKind, { icon: string; label: string }> = {
   note: { icon: "📝", label: "Note" },
   status: { icon: "🔁", label: "Status changed" },
   edit: { icon: "✏️", label: "Details changed" },
+  storage_waived: { icon: "🚫", label: "Storage charges waived" },
+  storage_resumed: { icon: "💷", label: "Storage charges back on" },
 }
 export const eventKindOf = (v: unknown): EventKind =>
   typeof v === "string" && v in EVENT_META ? (v as EventKind) : "note"
@@ -293,7 +732,8 @@ export const FIELD_LABELS: Record<UncollectedField, string> = {
  * On a case that came from BC (source "bc") these are BC's, and the BC check writes them again —
  * so they can't be changed in the Hub (the server refuses; the page shows them read-only).
  * Contact details, chase dates, storage start and notes stay the Hub's own (the check fills an
- * email or phone only while the case has none).
+ * email or phone only while the case has none, and sets the storage start by the storage rule
+ * only while no person has set it — storageStartOwner).
  */
 export const BC_OWNED_FIELDS: UncollectedField[] = ["buyerName", "buyerNo", "saleCode", "invoiceNo", "lots", "amountPaid", "paidAt"]
 
@@ -401,20 +841,45 @@ export const SOURCE_META: Record<UncollectedSource, { label: string; help: strin
 }
 
 /**
- * BC publishes no payment date, so a case from BC carries the London day BC last changed the
- * paid invoice — the day it was settled. They paid ON OR BEFORE it, hence "Paid by". A paid date
- * typed by hand is the day they paid ("Paid").
+ * BC's published feeds carry no payment date, so a case from BC carries the London day BC last
+ * changed the paid invoice — the day it was settled. They paid ON OR BEFORE it, hence "Paid by". A
+ * paid date typed by hand is the day they paid ("Paid").
+ *
+ * BC does hold the exact day: EVA_AuctionLine field 153 EVA_DatePaidByBuyer (set by codeunit 75075
+ * ReleaseForPayment from the customer ledger entry's Closed at Date). It isn't on the published
+ * Auction_Lines_Excel page yet; the BC check looks for it on every run and, once it's there, uses each
+ * lot's own paid date instead ("Paid on (BC)") — the case's timeline says which (PAID_EXACT_MARK).
  */
 export const PAID_BY_HELP = "BC's date the invoice was settled — they paid on or before this day."
+export const PAID_EXACT_HELP = "The day BC recorded the payment for these lots (BC's own paid date)."
 
-/** "Paid by 3 Jun 2026" (from BC), "Paid 3 Jun 2026" (by hand), or "Paid date not known". */
-export function paidWords(source: UncollectedSource, paidAt: Date | string | null | undefined): string {
-  if (!paidAt) return "Paid date not known"
-  return `${source === "bc" ? "Paid by" : "Paid"} ${formatDay(paidAt)}`
+/** On the check's timeline line, marks a paid date that is BC's own (EVA_DatePaidByBuyer), not the
+ *  settled-date stand-in. ⚠ paidExactFromText reads it — the check's words must keep it. */
+export const PAID_EXACT_MARK = "BC's own paid date"
+
+/** Whether the check's line (its first line only — lot lists follow it) gave BC's own paid date
+ *  (true), the settled date (false: "paid by …"), or said nothing about it (null). */
+export function paidExactFromText(text: string | null | undefined): boolean | null {
+  const head = (text ?? "").split("\n", 1)[0]
+  if (head.includes(PAID_EXACT_MARK)) return true
+  return /\bpaid by\b/i.test(head) ? false : null
 }
 
-/** What a paid date is called on a case: "Paid by" from BC, "Paid on" by hand. */
-export const paidTerm = (source: UncollectedSource) => (source === "bc" ? "Paid by" : "Paid on")
+/** "Paid by 3 Jun 2026" (from BC, settled date), "Paid on 3 Jun 2026" (BC's own paid date),
+ *  "Paid 3 Jun 2026" (by hand), or "Paid date not known". */
+export function paidWords(source: UncollectedSource, paidAt: Date | string | null | undefined, exact = false): string {
+  if (!paidAt) return "Paid date not known"
+  return `${source === "bc" ? (exact ? "Paid on" : "Paid by") : "Paid"} ${formatDay(paidAt)}`
+}
+
+/** What a paid date is called on a case: "Paid on (BC)" when BC gave its own paid date, "Paid by
+ *  (BC settled date)" when it is the settled-date stand-in, "Paid on" by hand. */
+export const paidTerm = (source: UncollectedSource, exact = false) =>
+  source === "bc" ? (exact ? "Paid on (BC)" : "Paid by (BC settled date)") : "Paid on"
+
+/** The help beside a paid date. */
+export const paidHelp = (source: UncollectedSource, exact = false) =>
+  source === "bc" ? (exact ? PAID_EXACT_HELP : PAID_BY_HELP) : "The day they paid, as typed in."
 
 // ─── The BC check's runs (UncollectedSyncRun) ───────────────────────────────────────────────
 
@@ -496,6 +961,73 @@ export const isStoppedRun = (r: Pick<UncollectedSyncRunInfo, "ok" | "error"> | n
 export const sentence = (s: string | null | undefined, fallback = "no reason was given") =>
   `${(s || fallback).trim().replace(/[.\s]+$/, "")}.`
 
+// ─── Where a lot is in BC: its location as well as the Collected tick ───────────────────────
+// Jack, 2026-10-23 (on sandbox): "This first one is wrong — lot 513 has been collected and so has
+// 551." BC's Collected tick (Auction_Lines_Excel.EVA_Collected) is a FlowField: it is set only once
+// the lot's collection docket is POSTED. Staff often hand lots over and scan them to location
+// COLLECTED without posting the docket — the docket stays open in CollectionList ("Awaiting
+// Release") while the lot's receipt line says EVA_ArticleLocationCode = "COLLECTED". So the tick
+// alone said lots were still here that had gone. The BC check and the case page also read each
+// lot's CURRENT location (Receipt_Lines_Excel.EVA_ArticleLocationCode, live, ≤ 20 ids a call):
+//  • GONE_LOCATIONS — the lot has left us: treated EXACTLY like the Collected tick (not charged, not
+//    counted in a case's lots, and a case whose lots have all gone closes as Collected).
+//  • QUERY_LOCATIONS — something needs looking at: not charged, not counted in a case's lots or its
+//    storage, and flagged on the case ("Lot 513 is at MISSING in BC — check it before chasing").
+//  • anything else (a shelf, a bench, a cage, SANDOWN, blank) — still here.
+// A lot whose receipt line can't be read (no unique ID, not found, lines that disagree, or BC refusing
+// locations outright) is judged on the tick alone, as before, and the run's notes say how many; a
+// buyer whose locations BC didn't ANSWER for isn't judged by the check that run at all (the case page
+// still shows its lots on the tick, saying so). A tick always wins over a location.
+// Codes are compared upper case with spaces taken out (normaliseLocation; "-" and "_" are ignored
+// too, so "RE LOTTED" and "RELOTTED" read as RE-LOTTED). ⚠ The panel's "How cases are added" note
+// and the case page's key show these two lists from here — change them here only.
+
+/** Locations that mean the lot has LEFT us — exactly like BC's Collected tick. */
+export const GONE_LOCATIONS = ["COLLECTED", "SHIPPED", "RETURNED", "DISPOSAL", "CHARITY"] as const
+/** Locations that mean the lot needs checking — not charged, not counted, flagged on the case. */
+export const QUERY_LOCATIONS = ["MISSING", "QUERY", "RE-LOTTED", "RE-AUCTION"] as const
+
+/** A BC location code as compared and shown: upper case, no spaces ("" for none). */
+export const normaliseLocation = (v: unknown): string => (v == null ? "" : String(v)).toUpperCase().replace(/\s+/g, "")
+const locationKey = (v: unknown) => normaliseLocation(v).replace(/[-_]/g, "")
+const GONE_KEYS = new Set<string>(GONE_LOCATIONS.map(locationKey))
+const QUERY_KEYS = new Set<string>(QUERY_LOCATIONS.map(locationKey))
+
+export type LocationKind = "gone" | "query" | "here"
+
+/** What a location says about a lot: "gone", "query", or "here" (any other code, or none). */
+export function locationKind(location: string | null | undefined): LocationKind {
+  const k = locationKey(location)
+  return !k ? "here" : GONE_KEYS.has(k) ? "gone" : QUERY_KEYS.has(k) ? "query" : "here"
+}
+
+/**
+ * Where a lot stands, from BC's Collected tick and its location (null = the location wasn't read —
+ * the tick alone decides): "collected" (the tick), "gone" (a GONE location, no tick — treated exactly
+ * as collected), "query" (a QUERY location — check it), "here" (still with us).
+ */
+export type LotState = "collected" | "gone" | "query" | "here"
+export function lotState(ticked: boolean, location: string | null | undefined): LotState {
+  if (ticked) return "collected"
+  if (location == null) return "here"
+  const kind = locationKind(location)
+  return kind === "gone" ? "gone" : kind === "query" ? "query" : "here"
+}
+/** Collected by the tick or by a GONE location. */
+export const isGoneState = (s: LotState) => s === "collected" || s === "gone"
+
+/** "COLLECTED, SHIPPED, RETURNED, DISPOSAL or CHARITY" ("and" with joiner "and"). */
+export function locationListWords(codes: readonly string[], joiner: "or" | "and" = "or"): string {
+  if (codes.length <= 1) return codes.join("")
+  return `${codes.slice(0, -1).join(", ")} ${joiner} ${codes[codes.length - 1]}`
+}
+
+/** The flag for a lot at a QUERY location: "Lot 513 is at MISSING in BC — check it before chasing"
+ *  ("Lot 513 (F084) …" when the case covers more than one sale). No full stop. */
+export function queryLotWords(lot: { lotNo: string; saleCode?: string | null; location: string }, withSale = false): string {
+  return `Lot ${lot.lotNo}${withSale && lot.saleCode ? ` (${lot.saleCode})` : ""} is at ${normaliseLocation(lot.location)} in BC — check it before chasing`
+}
+
 // ─── A buyer's lots, read live from BC on the case page ─────────────────────────────────────
 
 /** One lot from BC's Auction_Lines_Excel, as the case page lists it. */
@@ -505,7 +1037,18 @@ export type UncollectedBcLot = {
   lotNo: string
   description: string | null
   hammer: number | null
+  /** BC's Collected tick (EVA_Collected — the lot's collection docket was posted). */
   collected: boolean
+  /** Where BC has the lot now (Receipt_Lines_Excel EVA_ArticleLocationCode, normalised — "" when BC
+   *  has none); null when it wasn't read (locationRead false). */
+  location: string | null
+  /** Its bin there (EVA_ArticleBinCode), or null. */
+  bin: string | null
+  /** false = the lot's receipt line couldn't be read (no unique ID, not found, or BC didn't answer),
+   *  so its location isn't known and BC's Collected tick alone decides. */
+  locationRead: boolean
+  /** The tick and the location together (lotState): collected · gone (by location) · query · here. */
+  state: LotState
   saleCode: string | null
   saleName: string | null
   /** YYYY-MM-DD as BC gives it. */
@@ -525,6 +1068,10 @@ export type UncollectedBcLots = {
   lots: UncollectedBcLot[]
   /** true = BC had more than the page asked for; only the first ones are listed. */
   more: boolean
+  /** How many of the listed lots' locations couldn't be read (judged on the tick alone), and why —
+   *  null when every location was read. */
+  locationsUnread: number
+  locationError: string | null
   /** ISO — when BC was read. */
   readAt: string
 }
@@ -565,6 +1112,12 @@ export type UncollectedCase = {
   chase: ChaseState | null
   /** The latest call, email or letter (notes don't count). */
   lastContact: UncollectedLastContact | null
+  /** Storage as it stands today: storageCharge(case, settings, today) with the case's storage switch
+   *  (readCaseStorageFlags → waiver). Never stored — worked out on every read. */
+  storage: StorageCharge
+  /** true = paidAt is BC's own paid date ("Paid on (BC)"); false = the settled-date stand-in
+   *  ("Paid by (BC settled date)") or typed by hand. readCaseStorageFlags in lib/uncollected-settings.ts. */
+  paidExact: boolean
 }
 
 export type UncollectedEvent = {
@@ -578,6 +1131,13 @@ export type UncollectedEvent = {
 export type UncollectedCaseDetail = UncollectedCase & {
   /** Newest first. */
   events: UncollectedEvent[]
+  /** The storage settings `storage` was worked out with (readStorageSettings). */
+  storageSettings: StorageSettingsInfo
+  /** Who set the case's own storage start (storageFrom), from its timeline (readStorageStartOwner):
+   *  "rule" = the storage rule (the BC check, or a change to the free days) — the check keeps it in
+   *  step with the paid date; "person" = a person (typed, or "Storage charges apply" with no paid
+   *  date) — the check never moves it; null = no start on the case, so the rule works it out live. */
+  storageStartBy: "rule" | "person" | null
 }
 
 export const UNCOLLECTED_SORTS = ["waiting", "recent", "chase", "amount", "name", "added"] as const
@@ -624,6 +1184,8 @@ export type UncollectedTotals = {
   /** Cases whose status isn't one of the six (a future feed's typo). They are listed, counted and
    *  chased as "waiting" (statusOf), and the panel says how many there are so they get put right. */
   unknownStatus: number
+  /** Storage owed over every OPEN case today (storageOwedOnOpenCases in lib/uncollected-settings.ts). */
+  storage: StorageTotals
 }
 
 export type UncollectedList = {
@@ -640,6 +1202,8 @@ export type UncollectedList = {
   totals: UncollectedTotals
   /** The London day the figures were worked out for (YYYY-MM-DD). */
   today: string
+  /** The storage settings the figures used (readStorageSettings). */
+  storageSettings: StorageSettingsInfo
   /** The filter as the server read it (defaults filled in). */
   filter: Required<Omit<UncollectedFilter, "age">> & { age: AgeBandKey | null }
 }

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import { useState, useTransition, type ReactNode } from "react"
 import { updateCase } from "@/lib/actions/uncollected"
 import {
-  BC_OWNED_FIELDS, FIELD_LABELS, PAID_BY_HELP, UNCOLLECTED_LIMITS, dateInputValue, formatDay, formatMoney, paidTerm,
+  BC_OWNED_FIELDS, FIELD_LABELS, UNCOLLECTED_LIMITS, dateInputValue, formatDay, formatMoney, paidHelp, paidTerm,
   type UncollectedCaseDetail, type UncollectedField, type UncollectedPatch,
 } from "@/lib/uncollected"
 import { ChaseDate } from "../bits"
@@ -115,9 +115,9 @@ export default function DetailsCard({ c, today, caseHref }: { c: UncollectedCase
           <Item term="Invoice number">{c.invoiceNo ? <span className="font-mono">{c.invoiceNo}</span> : <Blank />}</Item>
           <Item term="Number of lots">{c.lots ?? <Blank />}</Item>
           <Item term="Amount paid">{c.amountPaid == null ? <Blank /> : formatMoney(c.amountPaid)}</Item>
-          <Item term={paidTerm(c.source)}>
+          <Item term={paidTerm(c.source, c.paidExact)}>
             {c.paidAt ? formatDay(c.paidAt) : <Blank />}
-            {fromBc && c.paidAt && <span className={`block text-xs ${muted}`}>{PAID_BY_HELP}</span>}
+            {fromBc && c.paidAt && <span className={`block text-xs ${muted}`}>{paidHelp(c.source, c.paidExact)}</span>}
           </Item>
           <Item term="Next chase"><ChaseDate at={c.nextChaseAt} chase={c.chase} /></Item>
           <div className="sm:col-span-2">
@@ -129,7 +129,7 @@ export default function DetailsCard({ c, today, caseHref }: { c: UncollectedCase
         <form onSubmit={e => { e.preventDefault(); save() }}>
           {fromBc && (
             <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-              This case came from BC, so the name, buyer number, sale, invoice, lots, amount and paid-by date are BC&apos;s — the BC
+              This case came from BC, so the name, buyer number, sale, invoice, lots, amount and paid date are BC&apos;s — the BC
               check keeps them up to date, so change them in BC. Email, phone, next chase and notes are yours.
             </p>
           )}
@@ -142,7 +142,7 @@ export default function DetailsCard({ c, today, caseHref }: { c: UncollectedCase
             <Box label="Invoice number"><input value={form.invoiceNo} onChange={set("invoiceNo")} disabled={locked("invoiceNo")} maxLength={UNCOLLECTED_LIMITS.invoiceNo} className={`${input} font-mono`} /></Box>
             <Box label="Number of lots"><input value={form.lots} onChange={set("lots")} disabled={locked("lots")} inputMode="numeric" className={input} /></Box>
             <Box label="Amount paid (£)"><input value={form.amountPaid} onChange={set("amountPaid")} disabled={locked("amountPaid")} inputMode="decimal" className={input} /></Box>
-            <Box label={paidTerm(c.source)}><input type="date" value={form.paidAt} onChange={set("paidAt")} disabled={locked("paidAt")} max={today} className={input} /></Box>
+            <Box label={paidTerm(c.source, c.paidExact)}><input type="date" value={form.paidAt} onChange={set("paidAt")} disabled={locked("paidAt")} max={today} className={input} /></Box>
             <Box label="Next chase"><input type="date" value={form.nextChaseAt} onChange={set("nextChaseAt")} className={input} /></Box>
             <label className="block sm:col-span-2">
               <span className={label}>Notes</span>

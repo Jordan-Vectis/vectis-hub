@@ -2,14 +2,15 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState, useTransition } from "react"
-import { deleteCase, updateCase } from "@/lib/actions/uncollected"
+import { useState, useTransition, type ReactNode } from "react"
+import { deleteCase, resumeStorage, updateCase, waiveStorage } from "@/lib/actions/uncollected"
 import {
-  EVENT_META, STATUS_META, dateInputValue, daysBetween, formatDateTime, formatDay,
+  EVENT_META, STATUS_META, STORAGE_LIMITS, STORAGE_SETTINGS_READ_FAILED, dateInputValue, formatDateTime, formatDay, formatPence,
+  STORAGE_TEXT, storageSettingsWords,
   type UncollectedCaseDetail,
 } from "@/lib/uncollected"
-import { DaysWaiting, LastContact, PaidWhen, SourceBadge, StatusChip } from "../bits"
-import { BackLink, Flash, NO_ANSWER, PANEL_PATH, btn, btnDanger, btnGo, card, cardTitle, field, label, plural, type CaseHref, type FlashMessage } from "../ui"
+import { DaysWaiting, LastContact, PaidWhen, SourceBadge, StatusChip, StorageOwed } from "../bits"
+import { BackLink, Flash, NO_ANSWER, PANEL_PATH, btn, btnDanger, btnGo, card, cardTitle, field, input, label, plural, type CaseHref, type FlashMessage } from "../ui"
 import BcLots from "./bc-lots"
 import ContactCard from "./contact-card"
 import DetailsCard from "./details-card"
@@ -46,9 +47,10 @@ export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDet
                 ? "— paid date not known"
                 : c.closedAt
                   ? `waited · closed ${formatDay(c.closedAt)}`
-                  : c.source === "bc" ? "since BC settled the invoice — they've waited at least this long" : "waiting since they paid"}
+                  : c.source === "bc" && !c.paidExact ? "since BC settled the invoice — they've waited at least this long" : "waiting since they paid"}
             </span>
-            <PaidWhen source={c.source} paidAt={c.paidAt} />
+            <PaidWhen source={c.source} paidAt={c.paidAt} exact={c.paidExact} />
+            <span>Storage owed: <StorageOwed s={c.storage} inline /></span>
           </div>
         </div>
         {c.customerId && (
@@ -67,7 +69,7 @@ export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDet
         <div className="contents lg:block lg:order-1 lg:min-w-0 lg:space-y-4">
           <div className="order-3 min-w-0"><DetailsCard c={c} today={today} caseHref={caseHref} /></div>
           <div className="order-4 min-w-0"><BcLots c={c} /></div>
-          <div className="order-5 min-w-0"><StorageCard c={c} today={today} /></div>
+          <div className="order-5 min-w-0"><StorageCard c={c} /></div>
         </div>
       </div>
 
@@ -77,29 +79,90 @@ export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDet
 }
 
 // ─── Storage charges ─────────────────────────────────────────────────────────────────────────
+// The running total, worked out live on the server by the rules in lib/uncollected.ts (storageCharge
+// — never stored as money: it changes every day), in words and as the figures to raise the charge;
+// the day the charges start, which can be changed; and Waive / Charge again (admins — the server
+// re-checks), each confirmed in the page, waiving with a reason. The Hub never charges anything in
+// BC — these figures are for staff to raise the charge.
 
-function StorageCard({ c, today }: { c: UncollectedCaseDetail; today: string }) {
+function StorageCard({ c }: { c: UncollectedCaseDetail }) {
   const router = useRouter()
+  const s = c.storage
+  const settings = c.storageSettings
+  const waiver = s.waived ? s.waiver : null
   const current = dateInputValue(c.storageFrom)
   const [day, setDay] = useState(current)
   // The date box follows the saved date when something else changes it (choosing "Storage charges
-  // apply" starts the charges today on the server).
+  // apply", the BC check filling it from the paid date, or the free days being changed).
   const [seen, setSeen] = useState(current)
   if (seen !== current) { setSeen(current); setDay(current) }
   const [msg, setMsg] = useState<FlashMessage | null>(null)
   const [saving, startSaving] = useTransition()
-  const daysSoFar = current ? daysBetween(current, today) : null
+  /** The waive / charge-again confirm that's open, and what's typed in it. */
+  const [asking, setAsking] = useState<"waive" | "resume" | null>(null)
+  const [note, setNote] = useState("")
+  /** The start the storage rule gives from the paid date (the day after the free days). */
+  const standard = s.standardFrom
+  /** Who set the start on the case (from its timeline, not by comparing dates): the rule, a person, or
+   *  nobody (no start on the case — the rule works it out live). */
+  const by = c.storageStartBy
+  const differs = !!current && current !== standard
+  const free = plural(settings.graceDays, "free day")
+  const figures = s.started && s.fullTotalPence != null
+  const day0 = (d: string) => formatDay(`${d}T12:00:00Z`)
+  /** "Use the standard date" — or, for a person's start on a case from BC that already matches it,
+   *  hand it back to the rule (the BC check then keeps it in step again). */
+  const showReset = !!current && (differs || (by === "person" && c.source === "bc"))
+  const resetLabel = differs ? (standard ? "Use the standard date" : "Clear it") : "Hand it back to the storage rule"
+  const whereFrom = !current
+    ? standard
+      ? `No start date is set on the case, so it starts the day after the ${free} from when they paid.`
+      : "There's no paid date — add it, or set the day the charges start."
+    : by === "rule"
+      ? !differs
+        ? `Set by the storage rule — the day after the ${free} from when they paid.`
+        : c.closedAt
+          ? `Set by the storage rule while the case was open${standard ? ` — by today's free days it would be ${day0(standard)}` : ""}.`
+          : `Set by the storage rule${standard ? ` — by today's free days it would be ${day0(standard)}; the BC check brings it into line when it next looks at the case` : ""}.`
+      : differs
+        ? `Set on this case by a person${standard ? ` — the standard start would be ${day0(standard)}` : ""}.`
+        : "Set on this case by a person — the same day as the standard start."
 
-  function save(next: string) {
+  function saveDay(next: string) {
     if (next === current) { setMsg({ tone: "info", text: "That's the date it already has — nothing changed." }); return }
     startSaving(async () => {
       try {
         const res = await updateCase(c.id, { storageFrom: next || null })
         if (!res.ok) { setMsg({ tone: "error", text: res.error }); return }
         setMsg(res.data.changed.length
-          ? { tone: "ok", text: next ? `Storage charges now start from ${formatDay(`${next}T12:00:00Z`)}.` : "Storage start date cleared." }
+          ? { tone: "ok", text: next
+              ? `Storage charges now start from ${formatDay(`${next}T12:00:00Z`)}.`
+              : standard ? `The start date is cleared — the standard one is used: ${formatDay(`${standard}T12:00:00Z`)}.` : "The start date is cleared." }
           : { tone: "info", text: "That's the date it already has — nothing changed." })
         setDay(next)
+        router.refresh()
+      } catch {
+        setMsg({ tone: "error", text: NO_ANSWER })
+      }
+    })
+  }
+
+  function switchIt() {
+    const which = asking
+    if (!which || saving) return
+    if (which === "waive" && !note.trim()) return
+    startSaving(async () => {
+      try {
+        const res = which === "waive" ? await waiveStorage(c.id, note.trim()) : await resumeStorage(c.id, note.trim() || null)
+        if (!res.ok) { setMsg({ tone: "error", text: res.error }); return }
+        const fig = res.data.figurePence
+        setMsg(!res.data.changed
+          ? { tone: "info", text: which === "waive" ? "Storage was already waived on this case — nothing changed." : "Storage wasn't waived on this case — nothing changed." }
+          : which === "waive"
+            ? { tone: "ok", text: `Storage waived on this case${fig ? ` — the ${formatPence(fig)} so far won't be charged` : ""}. It's on the timeline.` }
+            : { tone: "ok", text: `Storage is charged on this case again${fig ? ` — ${formatPence(fig)} so far, inc VAT` : ""}. It's on the timeline.` })
+        setAsking(null)
+        setNote("")
         router.refresh()
       } catch {
         setMsg({ tone: "error", text: NO_ANSWER })
@@ -110,24 +173,121 @@ function StorageCard({ c, today }: { c: UncollectedCaseDetail; today: string }) 
   return (
     <section className={`${card} p-4 sm:p-5`} aria-labelledby="storage-title">
       <h2 id="storage-title" className={`${cardTitle} mb-2`}>Storage charges</h2>
-      <p className="text-sm text-gray-800 dark:text-gray-200">
-        {current ? (
-          <>From <b>{formatDay(c.storageFrom)}</b>
-            {daysSoFar != null && (daysSoFar >= 0 ? <> — {plural(daysSoFar, "day")} so far</> : <> — starts in {plural(-daysSoFar, "day")}</>)}
-          </>
-        ) : "Not started — no storage charges on this case yet."}
+
+      {settings.readFailed && (
+        <p role="alert" className="mb-3 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-3 py-2 text-sm">
+          {STORAGE_SETTINGS_READ_FAILED}
+        </p>
+      )}
+
+      {waiver && (
+        <div className="mb-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+          <p className="font-semibold">Waived — no storage is charged on this case.</p>
+          {waiver.reason && <p className="mt-0.5 whitespace-pre-wrap break-words">{waiver.reason}</p>}
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{waiver.byName ? `By ${waiver.byName}, ` : ""}{formatDateTime(waiver.at)}</p>
+        </div>
+      )}
+
+      <p className={`text-sm ${s.waived ? "text-gray-600 dark:text-gray-300" : s.started && s.totalPence != null ? `font-semibold ${STORAGE_TEXT}` : "text-gray-800 dark:text-gray-200"}`}>
+        {s.words}
       </p>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{STATUS_META.storage.help}</p>
-      <form onSubmit={e => { e.preventDefault(); save(day) }} className="mt-3">
+
+      {figures && (
+        // Two to a row while the card is half the page (lg — an iPad in landscape), four when there's room.
+        <dl className={`grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-2 mt-3 text-sm ${s.waived ? "opacity-70" : ""}`}>
+          <Figure term="Charged for">{s.period === "week" ? `${plural(s.units, "week")} (${plural(s.days, "day")})` : plural(s.days, "day")}</Figure>
+          <Figure term="Lots still here">{s.lots ?? "—"}</Figure>
+          <Figure term={s.vatPercent > 0 ? `VAT (${s.vatPercent}%)` : "VAT"}>{formatPence(s.fullVatPence)}</Figure>
+          <Figure term={s.waived ? "Would be, inc VAT" : "Owed, inc VAT"}>
+            {formatPence(s.fullTotalPence)}
+            <span className="block text-xs font-normal text-gray-500 dark:text-gray-400">{formatPence(s.fullExVatPence)} before VAT</span>
+          </Figure>
+        </dl>
+      )}
+
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+        {storageSettingsWords(settings)}. {whereFrom}{" "}
+        It&apos;s charged on the lots still here today, for every day since the start — a lot collected part-way through isn&apos;t
+        charged for the days it was here. The Hub never charges anything in BC — these figures are for raising the charge.
+      </p>
+
+      <form onSubmit={e => { e.preventDefault(); saveDay(day) }} className="mt-3">
         <label htmlFor={`storage-${c.id}`} className={label}>Charges start from</label>
         <div className="flex flex-wrap items-center gap-2">
           <input id={`storage-${c.id}`} type="date" value={day} onChange={e => setDay(e.target.value)} className={field} />
           <button type="submit" disabled={saving || !day || day === current} className={btnGo}>{saving ? "Saving…" : "Save date"}</button>
-          {current && <button type="button" disabled={saving} onClick={() => save("")} className={btn}>Clear it</button>}
+          {showReset && (
+            <button type="button" disabled={saving} onClick={() => saveDay("")} className={btn}>{resetLabel}</button>
+          )}
         </div>
+        {c.source === "bc" && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {c.closedAt
+              ? "The case is closed, so the BC check no longer changes it."
+              : by === "person"
+                ? `A person set this start, so the BC check leaves it alone — press ${resetLabel} ${differs ? "to hand it back to the storage rule" : "to let the check keep it in step with the paid date again"}.`
+                : "The BC check keeps the start in step with the paid date. Change it only if the charges really started another day — the check then leaves it alone."}
+          </p>
+        )}
       </form>
+
+      {/* Waive / charge again — confirmed underneath, so a stray tap on an iPad changes nothing. */}
+      <div className="mt-4">
+        {!asking ? (
+          waiver ? (
+            <button type="button" onClick={() => { setAsking("resume"); setNote(""); setMsg(null) }} disabled={saving} className={btn}>
+              <span aria-hidden>💷</span> Charge storage again…
+            </button>
+          ) : (
+            <button type="button" onClick={() => { setAsking("waive"); setNote(""); setMsg(null) }} disabled={saving} className={btn}>
+              <span aria-hidden>🚫</span> Waive storage…
+            </button>
+          )
+        ) : (
+          <div className="rounded-xl border border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-500/5 p-4">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              {asking === "waive" ? "Waive the storage charges on this case?" : "Charge storage on this case again?"}
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+              {asking === "waive"
+                ? "Nothing is charged on it while it's waived, and it leaves the Storage owed tile. It can be charged again later — the figure carries on from the same start date."
+                : "Its storage is worked out from its start date again, as if it had never been waived."}
+            </p>
+            <label className="block mt-3">
+              <span className={label}>
+                {asking === "waive" ? <>Why is it being waived? <span className="text-red-600 dark:text-red-400">*</span></> : "A note for the timeline (optional)"}
+              </span>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                maxLength={STORAGE_LIMITS.reason}
+                rows={2}
+                placeholder={asking === "waive" ? "e.g. Agreed with Jordan — our delay, not theirs" : ""}
+                className={input}
+              />
+              <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">Never type bank or card details here.</span>
+            </label>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button type="button" onClick={switchIt} disabled={saving || (asking === "waive" && !note.trim())} className={btnGo}>
+                {saving ? "Saving…" : asking === "waive" ? "Waive storage" : "Charge storage again"}
+              </button>
+              <button type="button" onClick={() => setAsking(null)} disabled={saving} className={btn}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <Flash msg={msg} />
     </section>
+  )
+}
+
+function Figure({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-gray-50 dark:bg-gray-800/60 px-3 py-2">
+      <dt className="text-xs text-gray-500 dark:text-gray-400">{term}</dt>
+      <dd className="font-semibold tabular-nums text-gray-900 dark:text-white">{children}</dd>
+    </div>
   )
 }
 

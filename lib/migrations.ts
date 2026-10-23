@@ -2516,6 +2516,17 @@ export const MIGRATIONS = [
     CONSTRAINT "UncollectedSyncRun_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "UncollectedSyncRun_startedAt_idx" ON "UncollectedSyncRun"("startedAt")`,
+  // Accounts → Paid, not collected: storage charge settings, one row (2026-10-23). New table only.
+  `CREATE TABLE IF NOT EXISTS "UncollectedSettings" (
+    "id"            TEXT NOT NULL,
+    "graceDays"     INTEGER,
+    "ratePence"     INTEGER,
+    "period"        TEXT,
+    "vatPercent"    DOUBLE PRECISION,
+    "updatedByName" TEXT,
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "UncollectedSettings_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

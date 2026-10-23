@@ -2520,6 +2520,20 @@ model UncollectedPaid {
   @@index([nextChaseAt])
 }
 
+/// Accounts → Paid, not collected: how storage is charged (one row, id "default"). Storage starts the
+/// day after graceDays from payment and is charged per lot still here, until it is collected.
+/// Defaults (STORAGE_DEFAULTS in lib/uncollected.ts, Jack 2026-10-23): 28 free days, then £2.00 per lot
+/// per week + VAT at 20%, any part of a week counting as a week; an admin can change them on the panel.
+model UncollectedSettings {
+  id            String   @id
+  graceDays     Int?
+  ratePence     Int?
+  period        String?
+  vatPercent    Float?
+  updatedByName String?
+  updatedAt     DateTime @updatedAt
+}
+
 /// One run of the BC check that fills Accounts → Paid, not collected (nightly, or "Check BC now"):
 /// when it ran, who or what started it, what it found and changed, and any error — for the panel's
 /// "last checked" line and for working out what went wrong.

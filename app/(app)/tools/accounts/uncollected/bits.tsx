@@ -1,6 +1,7 @@
 import {
-  AGE_BANDS, EVENT_META, PAID_BY_HELP, SOURCE_META, STATUS_META, UNCOLLECTED_STATUSES, ageBandFor, formatDateTime, formatDay,
-  paidWords, type ChaseState, type UncollectedLastContact, type UncollectedSource, type UncollectedStatus,
+  AGE_BANDS, EVENT_META, SOURCE_META, STATUS_META, STORAGE_TEXT, UNCOLLECTED_STATUSES, ageBandFor, formatDateTime, formatDay,
+  formatPence, paidHelp, paidWords,
+  type ChaseState, type StorageCharge, type UncollectedLastContact, type UncollectedSource, type UncollectedStatus,
 } from "@/lib/uncollected"
 import { muted } from "./ui"
 
@@ -66,10 +67,50 @@ export function SourceBadge({ source }: { source: UncollectedSource }) {
   )
 }
 
-/** "Paid by 3 Jun 2026" (from BC — BC's settled date, explained on hover) or "Paid 3 Jun 2026". */
-export function PaidWhen({ source, paidAt }: { source: UncollectedSource; paidAt: string | null }) {
+/** "Paid by 3 Jun 2026" (from BC — BC's settled date, explained on hover), "Paid on 3 Jun 2026"
+ *  (BC's own paid date — `exact`), or "Paid 3 Jun 2026" (by hand). */
+export function PaidWhen({ source, paidAt, exact = false }: { source: UncollectedSource; paidAt: string | null; exact?: boolean }) {
   if (!paidAt) return <span className={muted}>Paid date not known</span>
-  return <span title={source === "bc" ? PAID_BY_HELP : undefined}>{paidWords(source, paidAt)}</span>
+  return <span title={source === "bc" ? paidHelp(source, exact) : undefined}>{paidWords(source, paidAt, exact)}</span>
+}
+
+/**
+ * A case's storage in a narrow cell: "£180.00 + VAT" over "£216.00 inc VAT"; "Waived"; "Free until
+ * 29 Oct"; "Lots not known"; or "—" when there's no storage start (no paid date). The whole line in
+ * words (the charge's `words`) is on hover. `inline` puts it on one line (the phone cards, the case
+ * page's header). Orange = being charged (STORAGE_TEXT — in ColourKey).
+ */
+export function StorageOwed({ s, inline = false }: { s: StorageCharge; inline?: boolean }) {
+  const words = s.words
+  if (!s.known) return <span className={muted} title={words}>—</span>
+  if (s.started && s.waived) {
+    return (
+      <span title={words} className="inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap bg-gray-100 text-gray-700 border-gray-200 dark:bg-white/10 dark:text-gray-300 dark:border-white/15">
+        Waived
+      </span>
+    )
+  }
+  if (!s.started || s.totalPence == null || s.exVatPence == null) {
+    return <span className={`whitespace-nowrap ${muted}`} title={words}>{s.shortWords}</span>
+  }
+  const ex = formatPence(s.exVatPence)
+  const inc = formatPence(s.totalPence)
+  if (s.vatPercent <= 0) {
+    return <span className={`font-semibold tabular-nums whitespace-nowrap ${STORAGE_TEXT}`} title={words}>{inc} <span className="font-normal text-xs text-gray-500 dark:text-gray-400">no VAT</span></span>
+  }
+  if (inline) {
+    return (
+      <span className={`font-semibold tabular-nums ${STORAGE_TEXT}`} title={words}>
+        {ex} + VAT <span className="font-normal text-gray-600 dark:text-gray-300">({inc} inc VAT)</span>
+      </span>
+    )
+  }
+  return (
+    <span title={words} className="whitespace-nowrap">
+      <span className={`block font-semibold tabular-nums ${STORAGE_TEXT}`}>{ex} + VAT</span>
+      <span className="block text-xs text-gray-500 dark:text-gray-400 tabular-nums">{inc} inc VAT</span>
+    </span>
+  )
 }
 
 /** What every colour and chip on the panel means. */
@@ -102,11 +143,21 @@ export function ColourKey() {
           </ul>
           <p className="text-gray-600 dark:text-gray-300 mt-2">
             Counted in London days from the day they paid — for a case from BC, from the day BC settled the
-            invoice (&ldquo;Paid by&rdquo;), so they have waited at least that long. Once a case is closed it stops counting.
+            invoice (&ldquo;Paid by&rdquo;), so they have waited at least that long; once BC publishes its own paid date the case
+            says &ldquo;Paid on&rdquo; and counts from that. Once a case is closed it stops counting.
           </p>
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-4 mb-1">Next chase</p>
           <p className="text-gray-600 dark:text-gray-300">
             <span className="font-semibold text-red-600 dark:text-red-400">Red</span> means it&apos;s due today or overdue — time to get in touch.
+          </p>
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-4 mb-1">Storage owed</p>
+          <p className="text-gray-600 dark:text-gray-300">
+            <span className={`font-semibold ${STORAGE_TEXT}`}>Orange</span> is the storage charged so far, before VAT, with the total
+            including VAT under it (hover for how it&apos;s worked out). <b className="font-semibold">Free until</b> means the free days
+            haven&apos;t run out yet; <b className="font-semibold">Waived</b> means an admin has waived it on that case;{" "}
+            <b className="font-semibold">Lots not known</b> means the case has no number of lots; <b className="font-semibold">—</b> means
+            there&apos;s no paid date or storage start to count from. <b className="font-semibold">None</b> means the case closed before
+            its storage would have started; <b className="font-semibold">no VAT</b> appears beside the figure when VAT is set to 0%.
           </p>
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-4 mb-2">Where it came from</p>
           <ul className="space-y-2">

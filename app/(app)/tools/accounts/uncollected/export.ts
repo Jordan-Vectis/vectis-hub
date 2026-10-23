@@ -25,20 +25,49 @@ const contactWords = (kind: string) =>
 
 const HEAD = [
   // "Paid on / by": a case from BC carries the day BC settled the invoice — they paid on or before it.
-  "Buyer", "Buyer no", "Email", "Phone", "Sale", "Invoice", "Lots", "Paid £", "Paid on / by", "Days waiting",
-  "Status", "Next chase", "Last contact", "Last contact by", "Storage charges from", "Entered", "Notes",
+  "Buyer", "Buyer no", "Email", "Phone", "Sale", "Invoice", "Lots", "Paid £", "Paid on / by", "Paid date is", "Days waiting",
+  "Status", "Next chase", "Last contact", "Last contact by",
+  // Storage as worked out on the day of the export (it changes daily) — the figures to raise the
+  // charge (the Hub never charges anything in BC).
+  // Days and weeks in their own columns, as plain numbers ("Storage weeks charged" only when it's
+  // charged per week — every week started counts), so a spreadsheet can add them up.
+  "Storage charges from", "Storage days charged", "Storage weeks charged", "Lots charged", "Storage £ ex VAT", "Storage VAT £", "Storage £ inc VAT", "Storage waived",
+  "Entered", "Notes",
 ]
+
+/** What the paid date is: BC's own, BC's settled date (they paid on or before it), or typed in. */
+const paidKind = (c: UncollectedCase) =>
+  !c.paidAt ? "" : c.source === "bc" ? (c.paidExact ? "BC's own paid date" : "BC settled date — paid on or before") : "Typed in"
+
+/** Pence as pounds with two places ("" for none). */
+const pounds = (pence: number | null | undefined) => (pence == null ? "" : (pence / 100).toFixed(2))
+
+/** The storage cells, as worked out on the day of the export: "Storage charges from" (the case's
+ *  start, or the rule's from the paid date), the days charged, the weeks charged (per week only —
+ *  blank per day), the lots charged and the money — blank where it can't be worked out, 0.00 when
+ *  waived (what it would have been is in the "Storage waived" column, with the reason, who and when). */
+function storageCells(c: UncollectedCase): unknown[] {
+  const s = c.storage
+  const w = s.waived ? s.waiver : null
+  const waived = s.waived
+    ? `Yes — ${w?.reason ?? "no reason recorded"}${w ? ` (${[w.byName, dateInputValue(w.at)].filter(Boolean).join(", ")})` : ""}${s.fullTotalPence ? `; would be £${pounds(s.fullTotalPence)} inc VAT` : ""}`
+    : "No"
+  const days = s.startDay ? s.days : ""
+  const weeks = s.startDay && s.period === "week" ? s.units : ""
+  return [s.startDay ?? "", days, weeks, s.lots ?? "", pounds(s.exVatPence), pounds(s.vatPence), pounds(s.totalPence), waived]
+}
 
 export function casesCsv(cases: UncollectedCase[]): string {
   const lines: unknown[][] = [
     HEAD,
     ...cases.map(c => [
       c.buyerName, c.buyerNo ?? "", c.email ?? "", c.phone ?? "", c.saleCode ?? "", c.invoiceNo ?? "",
-      c.lots ?? "", c.amountPaid == null ? "" : c.amountPaid.toFixed(2), dateInputValue(c.paidAt), c.daysWaiting ?? "",
+      c.lots ?? "", c.amountPaid == null ? "" : c.amountPaid.toFixed(2), dateInputValue(c.paidAt), paidKind(c), c.daysWaiting ?? "",
       STATUS_META[c.status]?.label ?? c.status, dateInputValue(c.nextChaseAt),
       c.lastContact ? `${contactWords(c.lastContact.kind)} ${londonStamp(c.lastContact.at)}` : "",
       c.lastContact?.byName ?? "",
-      dateInputValue(c.storageFrom), (SOURCE_META[c.source] ?? SOURCE_META.manual).label, c.notes ?? "",
+      ...storageCells(c),
+      (SOURCE_META[c.source] ?? SOURCE_META.manual).label, c.notes ?? "",
     ]),
   ]
   return BOM + lines.map(cells => cells.map(csvCell).join(",")).join("\r\n") + "\r\n"

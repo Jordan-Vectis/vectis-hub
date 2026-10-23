@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 import { setStatus } from "@/lib/actions/uncollected"
-import { CLOSED_STATUSES, STATUS_META, UNCOLLECTED_LIMITS, UNCOLLECTED_STATUSES, type UncollectedCaseDetail, type UncollectedStatus } from "@/lib/uncollected"
+import { CLOSED_STATUSES, STATUS_META, UNCOLLECTED_LIMITS, UNCOLLECTED_STATUSES, formatDay, type UncollectedCaseDetail, type UncollectedStatus } from "@/lib/uncollected"
 import { Flash, NO_ANSWER, btn, btnGo, card, cardTitle, input, label, type CaseHref, type FlashMessage } from "../ui"
 
 // The status buttons. A tap never changes anything by itself: it opens a small confirm underneath
@@ -90,7 +90,9 @@ export default function StatusCard({ c, caseHref }: { c: UncollectedCaseDetail; 
             {meta.closes
               ? isClosed ? "It stays closed, on the day it first closed." : "This closes the case — it leaves the open list."
               : isClosed ? "This reopens the case — it goes back on the open list." : "It stays on the open list."}
-            {picked === "storage" && !c.storageFrom && " Storage charges will start from today — change the date under Storage charges if they started another day."}
+            {picked === "storage" && !c.storageFrom && (c.storage.standardFrom
+              ? ` Storage is counted from ${formatDay(`${c.storage.standardFrom}T12:00:00Z`)} — the day after the free days from when they paid. Change the date under Storage charges if they started another day.`
+              : " There's no paid date, so storage charges will start from today — change the date under Storage charges if they started another day.")}
           </p>
           <label className="block mt-3">
             <span className={label}>

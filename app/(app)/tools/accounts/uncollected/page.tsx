@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { lastSyncRun, listCases } from "@/lib/actions/uncollected"
-import { UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LOOKBACK_MONTHS, UNCOLLECTED_NIGHTLY_AT, parseUncollectedFilter } from "@/lib/uncollected"
+import {
+  GONE_LOCATIONS, QUERY_LOCATIONS, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LOOKBACK_MONTHS, UNCOLLECTED_NIGHTLY_AT, locationListWords,
+  parseUncollectedFilter,
+} from "@/lib/uncollected"
 import BcCheck from "./bc-check"
 import UncollectedPanel from "./panel-client"
+import StorageSettingsBox from "./storage-settings"
 import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 
 // Accounts → Paid, not collected: buyers who have paid but haven't collected their lots.
@@ -50,6 +54,7 @@ export default async function UncollectedPage({ searchParams }: { searchParams: 
             readError={check.ok || check.notReady ? null : check.error}
           />
           <UncollectedPanel list={res.data} />
+          <StorageSettingsBox settings={res.data.storageSettings} />
         </>
       ) : res.notReady ? (
         <NeedsMigrations />
@@ -76,8 +81,23 @@ function HowCasesAreAdded() {
           set to the day it&apos;s added. Sales from the last {UNCOLLECTED_LOOKBACK_MONTHS} months are looked at.
         </li>
         <li>
-          <b>&ldquo;Paid by&rdquo;</b> — BC doesn&apos;t publish the day the money arrived, so a case from BC shows the day BC settled the
-          invoice. They paid on or before that day, so they&apos;ve waited at least as long as it says.
+          <b>Collected — BC&apos;s tick or the lot&apos;s location.</b> BC only ticks a lot Collected once its collection docket is posted,
+          and lots are often handed over and scanned to COLLECTED without that. So the check also reads where BC has each lot now, and
+          a lot at <b>{locationListWords(GONE_LOCATIONS)}</b> counts as collected, exactly as if it were ticked. A lot
+          at <b>{locationListWords(QUERY_LOCATIONS)}</b> isn&apos;t charged or counted in the case&apos;s lots, and the case says to
+          check it before chasing. A lot BC has no location for is judged on BC&apos;s tick alone; when BC doesn&apos;t answer for a
+          buyer&apos;s lots, that buyer is left as they were until the next check rather than judged on half the picture.
+        </li>
+        <li>
+          <b>&ldquo;Paid by&rdquo;</b> — BC doesn&apos;t publish the day the money arrived yet, so a case from BC shows the day BC settled the
+          invoice (&ldquo;Paid by (BC settled date)&rdquo;). They paid on or before that day, so they&apos;ve waited at least as long as it says.
+          BC does keep each lot&apos;s own paid date; once it&apos;s published the check uses it and the case says <b>&ldquo;Paid on (BC)&rdquo;</b>.
+        </li>
+        <li>
+          <b>Storage charges</b> start the day after the free days run out (see <b>Storage charges</b> above), per lot still here, and
+          stop the day a case is closed. They&apos;re worked out live — the figures go up each day — and can be waived on a case, with
+          a reason. A lot collected part-way through isn&apos;t charged for the days it was here: the figure is the lots still here
+          today, for every day since the start. The Hub never charges anything in BC: the figures are for raising the charge.
         </li>
         <li>
           <b>Already added by hand?</b> The check takes over the open case for the same invoice (or the same buyer and sale, when it
@@ -89,9 +109,11 @@ function HowCasesAreAdded() {
           closed here, the check doesn&apos;t add it again.
         </li>
         <li>
-          <b>Collected:</b> a case <b>from BC</b> is closed as Collected when BC shows all its lots collected. A case added by hand is
-          only closed that way once the check has matched it to its invoice. If BC stops showing the invoice as paid, the case stays
-          open and its timeline says to check it.
+          <b>Collected:</b> a case <b>from BC</b> is closed as Collected when BC shows all its lots collected — ticked, or at one of
+          those locations; while only some have gone, it carries on with the rest. BC doesn&apos;t say which
+          day they went, so the case closes — and its storage stops — on the day of the check before, the last day they could have
+          been seen still here. A case added by hand is only closed that way once the check has matched it to its invoice. If BC
+          stops showing the invoice as paid, the case stays open and its timeline says to check it.
         </li>
         <li>
           <b>Check BC now</b> runs the same check straight away with your own BC sign-in, and <b>Stop</b> stops it part-way, keeping

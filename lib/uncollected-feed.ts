@@ -4,10 +4,20 @@
 // they paid for us to chase … only paid things that haven't been collected for over 4 weeks."
 //
 // A case is due when a lot was SOLD (hammer > 0, not withdrawn), its buyer's invoice covering it is
-// PAID with nothing remaining, the lot is NOT COLLECTED (EVA_Collected), and at least
-// UNCOLLECTED_AFTER_DAYS London days have passed since the paid day. One case per invoice
-// (bcKey = the invoice number). The matching rules are lib/uncollected-feed-match.ts (pure, and
-// re-exported from here); this file reads BC and writes the cases.
+// PAID with nothing remaining, the lot is NOT GONE, and at least UNCOLLECTED_AFTER_DAYS London days
+// have passed since the paid day. One case per invoice (bcKey = the invoice number). The matching
+// rules are lib/uncollected-feed-match.ts (pure, and re-exported from here); this file reads BC and
+// writes the cases.
+//
+// ⚠ GONE = BC's Collected tick (EVA_Collected) OR the lot's current location is one of
+// GONE_LOCATIONS (lib/uncollected.ts). The tick is a FlowField set only when the lot's collection
+// docket is POSTED, and staff often scan lots to COLLECTED without posting it (Jack, 2026-10-23:
+// "lot 513 has been collected and so has 551"). So the check also reads each lot's location from
+// Receipt_Lines_Excel (≤ 20 unique ids a call) and treats a GONE location exactly like the tick; a
+// QUERY_LOCATIONS lot isn't charged or counted and is flagged on its case. A lot with no receipt line
+// (or no unique id, or lines that disagree), and every lot once BC refuses locations outright, is
+// judged on the tick alone (the run's notes say how many). A buyer whose locations BC didn't answer
+// for, or weren't read before the time ran out, isn't judged that run at all (never on a half-read).
 //
 //  • ⚠⚠ BC IS READ ONLY. Every call here is a GET through lib/bc.ts (bcPageWithNext, bcApiUrl,
 //    bcODataUrl). Nothing is ever written to Business Central.
@@ -17,15 +27,32 @@
 //      2. salesInvoices (api/v2.0): those buyers' invoices, ≤ 20 buyers a call.
 //      3. salesInvoiceLines (api/v2.0): the lines of the invoices that matter, ≤ 20 invoices a call
 //         (one at a time if BC refuses the batch) — "Buyer Premium for Lot No 366" names a lot.
+//      4. Receipt_Lines_Excel (ODataV4): where those buyers' lots are now (EVA_ArticleLocationCode,
+//         EVA_ArticleBinCode), `EVA_UniqueID eq '…' or …`, ≤ 20 a call (one at a time if BC refuses
+//         the batch) — read for each buyer straight after the last of its invoice lines
+//         (readLinesThenPlaces), so a run that runs out of time still judges the buyers it got
+//         through. Also read for the cases it re-checks, and for the case page's lot list.
 //    At most 3 calls at once, backing off on 429/503, inside a whole-run time budget (25 minutes for
 //    the nightly run, 12 for Check BC now). Each run starts at a different buyer (the run's sequence
 //    number moves the start), so runs that keep running out of time still reach every buyer in turn.
-//  • The PAID DATE is a proxy: BC publishes no payment date (Customer Ledger Entries isn't published),
-//    so a paid invoice's lastModifiedDateTime — BC's settling run, ~07:54 the morning after — gives
-//    the London day it was settled. They paid ON OR BEFORE it: "Paid by".
-//  • The feed writes only BC_OWNED_FIELDS, plus email / phone when the case has none. A case's status,
-//    notes, chase date (except a new case's first one), storage date and timeline are the staff's.
-//    It takes the SAME invoice lock as lib/actions/uncollected.ts before it adds or takes over a case.
+//  • The PAID DATE: BC's published feeds carry no payment date (Customer Ledger Entries isn't
+//    published), so a paid invoice's lastModifiedDateTime — BC's settling run, ~07:54 the morning
+//    after — gives the London day it was settled. They paid ON OR BEFORE it: "Paid by". BC does hold
+//    the exact day per lot (EVA_AuctionLine field 153 EVA_DatePaidByBuyer); once per run the check
+//    reads ONE Auction_Lines_Excel row with no $select and, if the key is there, asks for it and uses
+//    the lots' own paid date (the latest of the invoice's lots) instead: "Paid on (BC)". ⚠ Never put
+//    a field in a $select before a row has shown it — BC refuses the whole request (400).
+//  • The feed writes only BC_OWNED_FIELDS, plus email / phone when the case has none, plus the
+//    STORAGE START by the rule (the day after paid day + the free days in UncollectedSettings) — only
+//    while no person has set it (storageStartOwner; "by the storage rule" on the timeline). A case's
+//    status, notes, chase date (except a new case's first one), a storage start a person set and
+//    timeline are the staff's. Storage MONEY is never written anywhere — it is worked out live.
+//    It takes the SAME invoice lock as lib/actions/uncollected.ts before it adds or takes over a case,
+//    then the storage settings lock (shared) and reads the free days inside that same transaction
+//    (lib/uncollected-settings.ts), so an admin changing them mid-run is followed, never undone.
+//  • A case it closes as COLLECTED is closed on the day of the check's previous full read of BC — the
+//    last day the lots could have been seen still here — not the moment it noticed (collectedStopOf):
+//    BC keeps no collected date, and storage counts the day a case closes.
 //  • Idempotent: a second run straight after changes nothing. One run at a time (a lock on globalThis,
 //    and a run the database shows started under UNCOLLECTED_RUN_STALE_MINUTES ago and unfinished).
 //  • Every run is an UncollectedSyncRun row: start, finish, ok, counts, notes, error. A run that ran
@@ -37,15 +64,23 @@ import { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { bcApiUrl, bcODataUrl, bcPageWithNext } from "@/lib/bc"
 import {
-  CLOSED_STATUSES, STATUS_META, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LOOKBACK_MONTHS, UNCOLLECTED_RUN_STALE_MINUTES,
-  UNCOLLECTED_STOPPED_PREFIX, dayToStored, isOpenRaw, londonDay, statusOf, syncResultWords,
-  type UncollectedBcLots, type UncollectedSyncTrigger,
+  CLOSED_STATUSES, STATUS_META, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LOOKBACK_MONTHS,
+  UNCOLLECTED_RUN_STALE_MINUTES, UNCOLLECTED_STOPPED_PREFIX, dayToStored, isOpenRaw, londonDay, lotState, statusOf,
+  syncResultWords,
+  type UncollectedBcLot, type UncollectedBcLots, type UncollectedSyncTrigger,
 } from "@/lib/uncollected"
 import {
-  addedText, bcDay, bcTrue, chunk, cleanEmail, cleanPhone, droppedVerdict, feedChanges, invoicesNeedingLines,
-  isNoLongerPaidText, isPaidInFull, lotNoOf, lotRefsFromLines, matchBuyer, matchedText, noLongerPaidText, odataString,
-  ownedValues, pickDropped, rotate, saleWindow, salesLeftOff, salesOf, toFeedInvoice, toFeedLot, updatedText,
-  type Candidate, type FeedChange, type FeedInvoice, type FeedLot, type InvoiceLines, type LotRef,
+  graceDaysInTx, lockStorageSettingsShared, readPaidExact, readStorageSettings, readStorageStartOwner,
+} from "@/lib/uncollected-settings"
+import {
+  BC_PAID_DATE_FIELD, PLACES_PER_CALL, QUERY_CLEAR_START, QUERY_FLAG_START, RECEIPT_LINE_SELECT, addedText, bcDay, bcTrue, chunk,
+  cleanEmail, closedByLocation, collectedCloseText, collectedStopFrom, cleanPhone, droppedEvidence, droppedLots, eachLimit, feedChanges,
+  hasPaidDateField, invoicesNeedingLines, isNoLongerPaidText, isPaidInFull, isQueryClearText, isQueryFlagText, locationCounts,
+  lotNoOf, lotRefsFromLines, matchBuyer, matchedText, nextQueryFlag, noLongerPaidText, noPlacesRead, odataString, ownedValues, pickDropped,
+  placeKey, placesFromRows, readLinesThenPlaces, rotate, saleWindow, salesLeftOff, salesOf, splitByPlace, storageStamp, toFeedInvoice, toFeedLot,
+  updatedText, withPlaces,
+  type BuyerToRead, type Candidate, type FeedChange, type FeedChangeOptions, type FeedInvoice, type FeedLot, type InvoiceLines, type LotPlace,
+  type LotRef, type PlacesRead,
 } from "@/lib/uncollected-feed-match"
 
 export * from "@/lib/uncollected-feed-match"
@@ -74,7 +109,8 @@ const SAVE_STOP_MS = Math.max(MAX_BUDGET_MS, (UNCOLLECTED_RUN_STALE_MINUTES - 2)
 const DROPPED_CHECK_LIMIT = 60
 const NOTE_MAX = 4000
 
-/** ⚠ Only fields verified on Auction_Lines_Excel (2026-10-22). */
+/** ⚠ Only fields verified on Auction_Lines_Excel (2026-10-22). BC_PAID_DATE_FIELD is added for a run
+ *  only once that run's probe row has shown it (find → paidDatesPublished). */
 const LOT_SELECT = [
   "EVA_AuctionNo", "EVA_AuctionName", "EVA_AuctionDate", "EVA_UniqueID", "EVA_LotNo", "EVA_LotSuffix",
   "EVA_ShortDescription", "EVA_HammerPrice", "EVA_BuyerNo", "EVA_BuyerSearchName", "EVA_Collected", "EVA_WithdrawLot",
@@ -87,7 +123,7 @@ const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // ─── Reading BC: retries, the time budget, paging ───────────────────────────────────────────
 
-export type FeedStage = "lots" | "invoices" | "lines" | "saving" | "checking"
+export type FeedStage = "lots" | "invoices" | "lines" | "locations" | "saving" | "checking"
 
 /** Where a run is, for the panel ("Reading invoices — 120 of 312 buyers"). Counts only — no names. */
 export type FeedProgress = { stage: FeedStage; done: number; total: number | null; words: string }
@@ -99,6 +135,10 @@ type Ctx = {
   outOfTime: boolean
   /** BC refused a batched documentId filter once — read lines one invoice at a time from then on. */
   linesOneByOne: boolean
+  /** BC refused a batched EVA_UniqueID filter on Receipt_Lines_Excel once — one id at a time from then on. */
+  placesOneByOne: boolean
+  /** BC refused even one id on its own (400) — locations can't be read this run; why. */
+  placesBroken: string | null
   refreshToken?: () => Promise<string | null>
   lastRefresh: number
   onProgress?: (p: FeedProgress) => void
@@ -212,14 +252,6 @@ async function readAll(
   return out
 }
 
-/** Runs `fn` over the items, `limit` at a time. `fn` handles its own errors. */
-async function eachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
-  let next = 0
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) await fn(items[next++])
-  }))
-}
-
 function makeCtx(token: string, opts: {
   budgetMs?: number
   refreshToken?: () => Promise<string | null>
@@ -228,7 +260,7 @@ function makeCtx(token: string, opts: {
 }): Ctx {
   const budget = Math.min(MAX_BUDGET_MS, Math.max(30_000, opts.budgetMs ?? DEFAULT_BUDGET_MS))
   return {
-    token, deadline: Date.now() + budget, calls: 0, outOfTime: false, linesOneByOne: false,
+    token, deadline: Date.now() + budget, calls: 0, outOfTime: false, linesOneByOne: false, placesOneByOne: false, placesBroken: null,
     refreshToken: opts.refreshToken, lastRefresh: 0, onProgress: opts.onProgress,
     isStopped: opts.isStopped, stopped: false,
   }
@@ -312,6 +344,78 @@ async function readBuyerSaleRows(ctx: Ctx, saleCode: string, buyerNo: string): P
   }
 }
 
+/**
+ * Where each lot is now: Receipt_Lines_Excel's location and bin for up to PLACES_PER_CALL unique
+ * ids (`EVA_UniqueID eq '…' or …`). An id with no row isn't in the answer (no receipt line — the
+ * caller judges it on the Collected tick alone). Throws on failure (BcError, OutOfTime / Stopped).
+ * BC refusing the batched filter (400) → one id at a time from then on; refusing ONE id on its own as
+ * well → locations can't be read at all this run (ctx.placesBroken), so no more calls are spent on it.
+ */
+async function readPlaces(ctx: Ctx, ids: string[]): Promise<{ places: Map<string, LotPlace>; ambiguous: Set<string> }> {
+  if (ctx.placesBroken) throw new BcError(ctx.placesBroken, 400)
+  const base = bcODataUrl("Receipt_Lines_Excel")
+  const ask = (part: string[]) => readAll(ctx, base, {
+    $filter: part.map((id) => `EVA_UniqueID eq ${odataString(id)}`).join(" or "),
+    $select: RECEIPT_LINE_SELECT,
+  })
+  const rows: Record<string, unknown>[] = []
+  const one = async (id: string) => {
+    try {
+      rows.push(...await ask([id]))
+    } catch (e) {
+      if (e instanceof BcError && e.status === 400) ctx.placesBroken = e.message
+      throw e
+    }
+  }
+  try {
+    if (ctx.placesOneByOne || ids.length === 1) {
+      for (const id of ids) await one(id)
+    } else {
+      try {
+        rows.push(...await ask(ids))
+      } catch (e) {
+        if (!(e instanceof BcError) || e.status !== 400) throw e
+        ctx.placesOneByOne = true   // BC won't take a batched filter here — one at a time from now on
+        for (const id of ids) await one(id)
+      }
+    }
+  } catch (e) {
+    // Refused outright (the sign-in can't read the page, or it isn't published): every other batch
+    // would be refused the same way — stop asking this run.
+    if (e instanceof BcError && (e.status === 401 || e.status === 403 || e.status === 404)) ctx.placesBroken = e.message
+    throw e
+  }
+  return placesFromRows(rows)
+}
+
+/** readPlaces over any number of unique ids, PLACES_PER_CALL a call, `limit` calls at once (at most
+ *  BC_CONCURRENCY — pass 1 from inside work that already runs BC_CONCURRENCY at once). Never throws:
+ *  a batch that couldn't be read leaves its ids in `timedOut` (the time ran out, or a Stop), `refused`
+ *  (BC refuses locations outright this run — ctx.placesBroken) or `failed` (BC didn't answer) —
+ *  PlacesRead (lib/uncollected-feed-match.ts) says what each means for the lots. */
+async function placesFor(
+  ctx: Ctx, uniqueIds: string[], onDone?: (done: number, total: number) => void, limit = BC_CONCURRENCY,
+): Promise<PlacesRead> {
+  const ids = [...new Map(uniqueIds.map((id) => [placeKey(id), id.trim()] as const)).values()].filter(Boolean)
+  const out = noPlacesRead()
+  let done = 0
+  await eachLimit(chunk(ids, PLACES_PER_CALL), Math.max(1, Math.min(BC_CONCURRENCY, limit)), async (batch) => {
+    try {
+      if (ctx.outOfTime) throw ctx.stopped ? new Stopped() : new OutOfTime()
+      const r = await readPlaces(ctx, batch)
+      for (const [k, p] of r.places) out.places.set(k, p)
+      for (const k of r.ambiguous) out.ambiguous.add(k)
+    } catch (e) {
+      const into = e instanceof OutOfTime ? out.timedOut : ctx.placesBroken ? out.refused : out.failed
+      for (const id of batch) into.add(placeKey(id))
+      if (!(e instanceof OutOfTime) && !out.error) out.error = whyNot(e)
+    }
+    done += batch.length
+    try { onDone?.(done, ids.length) } catch { /* the screen's problem */ }
+  })
+  return out
+}
+
 // ─── Find: which paid invoices have lots still not collected ────────────────────────────────
 
 export type FindOptions = {
@@ -338,8 +442,13 @@ export type FindResult = {
   lotsSeen: number
   /** Buyers those lots belong to. */
   buyers: number
-  /** Their buyer numbers (upper case) — a buyer NOT here has no uncollected lot left in the window. */
+  /** Buyers with a lot still not gone (upper case) — a buyer NOT here has no lot left in the window
+   *  that BC hasn't ticked collected or that isn't at a GONE location (the likely collected ones). */
   buyerNos: string[]
+  /** Lots whose location was read (Receipt_Lines_Excel), how many of those are at a GONE location
+   *  (treated as collected) or a QUERY one (not charged, flagged), and how many couldn't be read
+   *  (judged on BC's Collected tick alone). */
+  locations: { read: number; gone: number; query: number; unread: number }
   /** true = something wasn't read (an error, the time ran out, a Stop) — see notes and uncheckedBuyers. */
   partial: boolean
   /** Plain sentences for the run's record. Counts and invoice numbers only — never a name. */
@@ -357,6 +466,24 @@ export type FindResult = {
   calls: number
   /** The first reason something couldn't be read, if any. */
   firstError: string | null
+  /** "exact" = BC publishes each lot's own paid date (EVA_DatePaidByBuyer) and the candidates use it;
+   *  "settled" = a row showed it isn't published, and the day BC settled each invoice stands in;
+   *  "unknown" = it couldn't be told this run (the one-row probe failed, or BC showed the field but
+   *  refused to send it): the candidates carry the settled date, and ⚠ the save leaves the paid date
+   *  (and the storage start) of a case already on BC's own paid date alone — a passing fault must
+   *  never flip cases from "Paid on" to "Paid by" and back (SaveCtx.holdExact). */
+  paidDates: "exact" | "settled" | "unknown"
+}
+
+/**
+ * Does BC publish each lot's own paid date yet? ONE row of Auction_Lines_Excel with no $select (all
+ * 59-odd fields), and whether BC_PAID_DATE_FIELD is among its keys. Answers false when it isn't, or
+ * when BC sent no row; throws when BC couldn't be read (the caller says so and carries on without it).
+ */
+async function paidDatesPublished(ctx: Ctx): Promise<boolean> {
+  const url = withQuery(bcODataUrl("Auction_Lines_Excel"), { $top: "1" })
+  const page = await withRetry(ctx, () => bcPageWithNext(ctx.token, url))
+  return hasPaidDateField(((page.rows ?? []) as unknown[])[0])
 }
 
 /**
@@ -375,18 +502,44 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
   const win = saleWindow(today, afterDays, lookback)
   const notes: string[] = []
   const progress = (p: FeedProgress) => { try { ctx.onProgress?.(p) } catch { /* the screen's problem, not the run's */ } }
+  let paidDates: FindResult["paidDates"] = "settled"
   const result = (over: Partial<FindResult>): FindResult => ({
-    candidates: [], lotsSeen: 0, buyers: 0, buyerNos: [], partial: true, notes, lotsComplete: false, uncheckedBuyers: [],
-    today, window: win, invoicesRead: 0, calls: ctx.calls, firstError: null, ...over,
+    candidates: [], lotsSeen: 0, buyers: 0, buyerNos: [], locations: { read: 0, gone: 0, query: 0, unread: 0 }, partial: true, notes,
+    lotsComplete: false, uncheckedBuyers: [], today, window: win, invoicesRead: 0, calls: ctx.calls, firstError: null, paidDates, ...over,
   })
+
+  // 0. Does BC publish each lot's own paid date yet? (Asked once a run — Jordan can add it to the
+  // Auction_Lines_Excel page at any time; until then the settled date stands in.) ⚠ "Couldn't tell" is
+  // NOT "not published": it is "unknown", and the save then leaves cases already on BC's own paid date
+  // as they are rather than flipping them to the settled date for a run.
+  try {
+    paidDates = (await paidDatesPublished(ctx)) ? "exact" : "settled"
+  } catch (e) {
+    if (e instanceof OutOfTime) {
+      notes.push(`BC's list of uncollected lots couldn't be read (${whyNot(e)}) — nothing was decided.`)
+      return result({})
+    }
+    paidDates = "unknown"
+    notes.push(`Couldn't tell whether BC publishes each lot's own paid date (${whyNot(e)}) — new cases used the day BC settled the invoice, and cases already on BC's own paid date were left on it.`)
+  }
 
   // 1. The uncollected sold lots of the window.
   let rows: Record<string, unknown>[]
+  const readLots = () => readAll(ctx, bcODataUrl("Auction_Lines_Excel"), {
+    $filter: `EVA_Collected eq false and EVA_HammerPrice gt 0 and EVA_AuctionDate le ${win.to} and EVA_AuctionDate ge ${win.from}`,
+    $select: paidDates === "exact" ? `${LOT_SELECT},${BC_PAID_DATE_FIELD}` : LOT_SELECT,
+  }, (n) => progress({ stage: "lots", done: n, total: null, words: `Reading uncollected lots from BC — ${n0(n)} so far` }))
   try {
-    rows = await readAll(ctx, bcODataUrl("Auction_Lines_Excel"), {
-      $filter: `EVA_Collected eq false and EVA_HammerPrice gt 0 and EVA_AuctionDate le ${win.to} and EVA_AuctionDate ge ${win.from}`,
-      $select: LOT_SELECT,
-    }, (n) => progress({ stage: "lots", done: n, total: null, words: `Reading uncollected lots from BC — ${n0(n)} so far` }))
+    try {
+      rows = await readLots()
+    } catch (e) {
+      // BC showed the paid date's key but won't take it in a $select: read as before, without it,
+      // rather than fail every run until someone looks.
+      if (paidDates !== "exact" || !(e instanceof BcError) || e.status !== 400) throw e
+      paidDates = "unknown"
+      notes.push(`BC shows each lot's own paid date (${BC_PAID_DATE_FIELD}) but refused to send it (${whyNot(e)}) — new cases used the day BC settled the invoice, and cases already on BC's own paid date were left on it.`)
+      rows = await readLots()
+    }
   } catch (e) {
     const why = whyNot(e)
     notes.push(`BC's list of uncollected lots couldn't be read in full (${why}) — nothing was decided.`)
@@ -472,44 +625,112 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
     progress({ stage: "invoices", done: doneBuyers, total: buyers.length, words: `Reading invoices — ${n0(doneBuyers)} of ${n0(buyers.length)} buyers` })
   })
 
-  // 4. The lines of every invoice that could matter (see invoicesNeedingLines).
-  const owner = new Map<string, string>()   // invoice id → buyer
+  // 4. The lines of every invoice that could matter (see invoicesNeedingLines), and — straight after
+  // the last of a buyer's invoices is read — where that buyer's lots are now (Receipt_Lines_Excel):
+  // readLinesThenPlaces, buyer by buyer in the run's turn order. ⚠ Interleaved on purpose: with every
+  // location read after every invoice's lines, a run whose time ran out during the lines judged no
+  // buyer at all, and runs that kept running out never reached anyone. Now each buyer whose lines
+  // and locations were both read is judged, and the rotation moves the start on.
+  // Locations are read only for the buyers who could have a case. A lot at a GONE location counts
+  // exactly like BC's Collected tick (the docket is often never posted); one at a QUERY location
+  // isn't charged. A lot with no unique id, no receipt line, or receipt lines that disagree is judged
+  // on the tick alone, as before; so is every lot once BC refuses locations outright this run
+  // (`refused`). But a buyer whose locations BC didn't answer for (`failed`), or weren't read because
+  // the time ran out or a Stop came (`timedOut`), isn't judged this run at all — on the tick alone its
+  // cases would count lots that have gone, and the next good run would take them off again.
+  const toRead: BuyerToRead[] = []
   for (const b of buyers) {
     if (unchecked.has(b)) continue
-    for (const inv of invoicesNeedingLines(invoicesOf.get(b) ?? [], today, afterDays)) {
-      if (!GUID.test(inv.id)) { miss([b], new Error(`invoice ${inv.number} has an id BC's lines can't be asked for`)); break }
-      owner.set(inv.id, b)
-    }
+    const need = invoicesNeedingLines(invoicesOf.get(b) ?? [], today, afterDays, byBuyer.get(b))
+    if (!need.length) continue
+    const bad = need.find((inv) => !GUID.test(inv.id))
+    if (bad) { miss([b], new Error(`invoice ${bad.number} has an id BC's lines can't be asked for`)); continue }
+    const ids = new Map<string, string>()   // placeKey → the unique id as BC wrote it
+    for (const l of byBuyer.get(b)!) if (l.uniqueId) ids.set(placeKey(l.uniqueId), l.uniqueId)
+    toRead.push({ buyer: b, invoiceIds: need.map((i) => i.id), uniqueIds: [...ids.values()] })
   }
-  const needIds = [...owner.keys()].filter((id) => !unchecked.has(owner.get(id)!))
-  const lines = new Map<string, InvoiceLines>()
-  let doneLines = 0
-  await eachLimit(chunk(needIds, INVOICES_PER_CALL), BC_CONCURRENCY, async (batch) => {
-    try {
+  const idOwner = new Map<string, string>()   // placeKey → buyer
+  for (const t of toRead) for (const id of t.uniqueIds) idOwner.set(placeKey(id), t.buyer)
+  const read = await readLinesThenPlaces(toRead, {
+    readLines: async (ids) => {
       if (ctx.outOfTime) throw ctx.stopped ? new Stopped() : new OutOfTime()
-      for (const [id, l] of await readLines(ctx, linesUrl, batch)) lines.set(id, l)
-    } catch (e) {
-      miss([...new Set(batch.map((id) => owner.get(id)!))], e)
-    }
-    doneLines += batch.length
-    progress({ stage: "lines", done: doneLines, total: needIds.length, words: `Reading invoice lines — ${n0(doneLines)} of ${n0(needIds.length)} invoices` })
-  })
+      return readLines(ctx, linesUrl, ids)
+    },
+    // One call at a time: the line batches are already read BC_CONCURRENCY at once.
+    readPlaces: (ids) => placesFor(ctx, ids, undefined, 1),
+    linesFailed: (bs, e) => miss(bs, e),
+    progress: (p) => progress({
+      stage: "lines", done: p.invoicesDone, total: p.invoices,
+      words: `Reading invoice lines and where the lots are — ${n0(p.invoicesDone)} of ${n0(p.invoices)} invoices, ${n0(p.buyersPlaced)} of ${n0(p.buyers)} buyers done`,
+    }),
+  }, { perCall: INVOICES_PER_CALL, concurrency: BC_CONCURRENCY })
+  const lines: Map<string, InvoiceLines> = read.lines
+  const pr: PlacesRead = read.places
+  const ownersOf = (keys: Set<string>) => [...new Set([...keys].map((k) => idOwner.get(k)).filter((b): b is string => !!b))]
+  if (pr.timedOut.size) miss(ownersOf(pr.timedOut), ctx.stopped ? new Stopped() : new OutOfTime())
+  if (pr.failed.size) miss(ownersOf(pr.failed), new Error(`where their lots are couldn't be read in BC${pr.error ? ` (${pr.error})` : ""}`))
+  if (pr.refused.size && !firstError) firstError = `where the lots are couldn't be read (${ctx.placesBroken ?? pr.error ?? "BC refused"})`
+  const placed = read.placed
 
-  // 5–6. Match, buyer by buyer.
+  // 5–6. Match, buyer by buyer — with the GONE lots taken out first (splitByPlace).
   const candidates: Candidate[] = []
   const fallback: string[] = []
   let notLotInvoices = 0
+  let settledFallback = 0
+  const goneLots: FeedLot[] = []
+  const queryLots: FeedLot[] = []
+  const unread = { noId: 0, refused: 0, notFound: 0, ambiguous: 0 }
+  let placesRead = 0
+  const stillHere = new Set(buyers)
   for (const b of buyers) {
     if (unchecked.has(b)) continue
     const invs = invoicesOf.get(b) ?? []
-    if (invoicesNeedingLines(invs, today, afterDays).some((i) => !lines.has(i.id))) {
+    if (invoicesNeedingLines(invs, today, afterDays, byBuyer.get(b)).some((i) => !lines.has(i.id))) {
       miss([b], new Error("some of their invoice lines weren't read"))
       continue
     }
-    const m = matchBuyer(byBuyer.get(b)!, invs, lines, { today, afterDays })
+    let lotsNow = byBuyer.get(b)!
+    if (placed.has(b)) {
+      lotsNow = withPlaces(lotsNow, pr.places)
+      for (const l of lotsNow) {
+        if (l.location != null) { placesRead++; continue }
+        const k = placeKey(l.uniqueId)
+        if (!k) unread.noId++
+        else if (pr.refused.has(k)) unread.refused++
+        else if (pr.ambiguous.has(k)) unread.ambiguous++
+        else unread.notFound++
+      }
+    }
+    const split = splitByPlace(lotsNow)
+    goneLots.push(...split.gone)
+    queryLots.push(...split.query)
+    if (!split.kept.length) stillHere.delete(b)
+    // The gone lots only help choose the sale of an invoice with no lot numbers (matchBuyer).
+    const m = matchBuyer(split.kept, invs, lines, { today, afterDays, gone: split.gone })
     candidates.push(...m.candidates)
     fallback.push(...m.fallback.map((f) => `${f.invoiceNo} (${f.saleCode})`))
     notLotInvoices += m.notLotInvoices
+    settledFallback += m.settledFallback
+  }
+  const unreadLots = unread.noId + unread.refused + unread.notFound + unread.ambiguous
+  if (goneLots.length) {
+    notes.push(`${many(goneLots.length, "lot")} BC hasn't ticked as collected ${goneLots.length === 1 ? "is" : "are"} at a location that means ${goneLots.length === 1 ? "it has" : "they have"} gone (${locationCounts(goneLots)}) — counted as collected, the same as the tick.`)
+  }
+  if (queryLots.length) {
+    notes.push(`${many(queryLots.length, "lot")} ${queryLots.length === 1 ? "is" : "are"} at a query location in BC (${locationCounts(queryLots)}) — not charged or counted, and ${queryLots.length === 1 ? "its case says" : "their cases say"} to check ${queryLots.length === 1 ? "it" : "them"} before chasing.`)
+  }
+  if (unreadLots) {
+    const why = [
+      unread.noId && `${n0(unread.noId)} with no unique ID`,
+      unread.notFound && `${n0(unread.notFound)} with no receipt line in BC`,
+      unread.ambiguous && `${n0(unread.ambiguous)} whose receipt lines disagree`,
+      unread.refused && `${n0(unread.refused)} because BC refused to give locations this time — ${ctx.placesBroken ?? pr.error ?? "no reason given"}`,
+    ].filter(Boolean).join("; ")
+    notes.push(`Where ${many(unreadLots, "lot")} ${unreadLots === 1 ? "is" : "are"} couldn't be read in BC, so BC's Collected tick alone was used for ${unreadLots === 1 ? "it" : "them"} (${why}).`)
+  }
+  if (paidDates === "exact") {
+    const exact = candidates.filter((c) => c.paidExact).length
+    notes.push(`BC publishes each lot's own paid date (${BC_PAID_DATE_FIELD}), so ${many(exact, "case")} ${exact === 1 ? "uses" : "use"} it ("Paid on")${settledFallback ? `; ${many(settledFallback, "invoice")} whose lots had none in BC used the day BC settled the invoice ("Paid by")` : ""}.`)
   }
   candidates.sort((a, b) => (a.paidOn < b.paidOn ? -1 : a.paidOn > b.paidOn ? 1 : a.invoiceNo.localeCompare(b.invoiceNo)))
 
@@ -523,8 +744,12 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
   }
 
   return {
-    candidates, lotsSeen, buyers: buyers.length, buyerNos, partial: unchecked.size > 0, notes, lotsComplete: true,
-    uncheckedBuyers: [...unchecked.keys()], today, window: win, invoicesRead, calls: ctx.calls, firstError,
+    candidates, lotsSeen, buyers: buyers.length, buyerNos: buyerNos.filter((b) => stillHere.has(b)),
+    locations: { read: placesRead, gone: goneLots.length, query: queryLots.length, unread: unreadLots },
+    // Locations BC refused to give mean part of the check wasn't done properly — said, not hidden.
+    // (A buyer whose locations BC didn't answer for isn't judged at all — it is in `unchecked`.)
+    partial: unchecked.size > 0 || unread.refused > 0, notes, lotsComplete: true,
+    uncheckedBuyers: [...unchecked.keys()], today, window: win, invoicesRead, calls: ctx.calls, firstError, paidDates,
   }
 }
 
@@ -670,6 +895,8 @@ function toData(set: FeedChange["set"]): Prisma.UncollectedPaidUpdateInput {
   if (has("paidAt")) d.paidAt = set.paidAt ? dayToStored(String(set.paidAt)) : null
   if (has("email")) d.email = (set.email as string | null) ?? null
   if (has("phone")) d.phone = (set.phone as string | null) ?? null
+  // Only ever by the storage rule, and only while no person set it (storageStamp).
+  if (has("storageFrom")) d.storageFrom = set.storageFrom ? dayToStored(String(set.storageFrom)) : null
   return d
 }
 
@@ -687,6 +914,22 @@ type SaveCtx = {
   lastFeedText: Map<string, string | null>
   /** Manual cases taken over in this run (a buyer + sale case is taken over once). */
   adoptedIds: Set<string>
+  /** true = the settings table is there: each save reads the free days INSIDE its own transaction,
+   *  under the settings lock (lockStorageSettingsShared + graceDaysInTx), so a change an admin saves
+   *  part-way through a run is followed, never undone. false = `graceDays` below is used. */
+  settingsInTx: boolean
+  /** The free days when settingsInTx is false: the standard ones before Run Migrations, or null when
+   *  the settings couldn't be read this run (then no storage start is set or moved). */
+  graceDays: number | null
+  /** Whether each open case from BC's paid date is BC's own now (readPaidExact; missing = not said).
+   *  null = it couldn't be read this run — then a switch isn't said (rather than said on every case). */
+  paidExactOf: Map<string, boolean> | null
+  /** The paid-date probe couldn't tell this run (FindResult.paidDates "unknown"): a case already on BC's
+   *  own paid date — or one whose kind couldn't be read — keeps its paid date and the storage start
+   *  that hangs on it (FeedChangeOptions.holdPaid). */
+  holdExact: boolean
+  /** Where the clock stops on a case closed because BC shows its lots collected (collectedStopOf). */
+  collectedStop: { day: string; closedAt: Date }
 }
 
 type SaveOutcome = "added" | "adopted" | "updated" | "same" | "leftClosed"
@@ -698,7 +941,8 @@ type SaveOutcome = "added" | "adopted" | "updated" | "same" | "leftClosed"
  *  4. else an OPEN case added by hand for the same buyer + sale with no invoice number → taken over;
  *     else a CLOSED one like that → left alone, the same rule as 3 (a hand case with no invoice
  *     number stands for the buyer's whole sale);
- *  5. else a new case, waiting, first chase today.
+ *  5. else a new case, waiting, first chase today, storage from the rule's day.
+ *  In 1, 2 and 4 the storage start is set (or moved) by the rule only while no person has set it.
  *  ⚠ 3 and 4's "closed by hand → left alone" waits on Jack's confirmation (RULES.md); change both together. */
 async function saveCandidate(c: Candidate, s: SaveCtx): Promise<SaveOutcome> {
   const v = ownedValues(c)
@@ -708,6 +952,32 @@ async function saveCandidate(c: Candidate, s: SaveCtx): Promise<SaveOutcome> {
 
   return prisma.$transaction(async (tx) => {
     await lockInvoice(tx, v.invoiceNo)
+    // The settings lock, shared, and the free days as they stand NOW (lib/uncollected-settings.ts) —
+    // a change saved part-way through the run is followed, never undone by this save.
+    await lockStorageSettingsShared(tx)
+    const graceDays = s.settingsInTx ? await graceDaysInTx(tx) : s.graceDays
+    const storageFor = async (caseId: string): Promise<FeedChangeOptions["storage"]> =>
+      graceDays == null ? null : { owner: await readStorageStartOwner(tx, caseId), graceDays }
+    /** The case's lots at a QUERY location, flagged on its timeline — only when they changed since the
+     *  check's last flag (or all-clear) line on it (nextQueryFlag), so a second run writes nothing.
+     *  Answers whether a line was written. */
+    const flagQuery = async (caseId: string): Promise<boolean> => {
+      const prev = await tx.uncollectedPaidEvent.findFirst({
+        where: {
+          caseId, byId: null, kind: "note",
+          OR: [{ text: { startsWith: QUERY_FLAG_START } }, { text: { startsWith: QUERY_CLEAR_START } }],
+        },
+        orderBy: [{ at: "desc" }, { id: "desc" }],
+        select: { text: true },
+      })
+      const last = prev && (isQueryFlagText(prev.text) || isQueryClearText(prev.text)) ? prev.text : null
+      const text = nextQueryFlag(last, c)
+      if (!text) return false
+      // Stamped now, so it sorts after the line this save just wrote.
+      await tx.uncollectedPaidEvent.create({ data: { caseId, kind: "note", text, byId: null, byName: s.byName, at: new Date() } })
+      s.lastFeedText.set(caseId, text)
+      return true
+    }
 
     // 1. Ours already.
     const [own] = await tx.$queryRaw<{ id: string }[]>`
@@ -717,25 +987,35 @@ async function saveCandidate(c: Candidate, s: SaveCtx): Promise<SaveOutcome> {
       const row = await tx.uncollectedPaid.findUnique({ where: { id: own.id } })
       if (!row) return "same"
       if (!isOpenRaw(row.status)) return "leftClosed"
-      const ch = feedChanges(row, c)
+      const currentExact = s.paidExactOf ? (s.paidExactOf.get(row.id) ?? null) : undefined
+      const ch = feedChanges(row, c, {
+        currentExact,
+        storage: await storageFor(row.id),
+        // BC's own paid date couldn't be read this run: a case on it (or one we can't tell) keeps it.
+        holdPaid: s.holdExact && currentExact !== false && currentExact !== null,
+      })
       const paidAgain = isNoLongerPaidText(s.lastFeedText.get(row.id))
       const data: Prisma.UncollectedPaidUpdateInput = { ...toData(ch.set), ...customerLink(row.customerId, customerId, ch) }
       if (Object.keys(data).length) await tx.uncollectedPaid.update({ where: { id: row.id }, data })
-      if (!ch.phrases.length && !paidAgain) return "same"
-      await tx.uncollectedPaidEvent.create({ data: { caseId: row.id, kind: "edit", text: updatedText(c, ch, paidAgain), byId: null, byName: s.byName } })
-      return "updated"
+      const changed = ch.phrases.length > 0 || paidAgain
+      if (changed) {
+        await tx.uncollectedPaidEvent.create({ data: { caseId: row.id, kind: "edit", text: updatedText(c, ch, paidAgain), byId: null, byName: s.byName } })
+      }
+      const flagged = await flagQuery(row.id)
+      return changed || flagged ? "updated" : "same"
     }
 
     // 2 / 4. A case added by hand to take over.
     const adopt = async (id: string): Promise<SaveOutcome> => {
       const row = await tx.uncollectedPaid.findUnique({ where: { id } })
       if (!row) return "same"
-      const ch = feedChanges(row, c)
+      const ch = feedChanges(row, c, { storage: await storageFor(id) })
       const data: Prisma.UncollectedPaidUpdateInput = {
         ...toData(ch.set), ...customerLink(row.customerId, customerId, ch), source: "bc", bcKey: v.invoiceNo,
       }
       await tx.uncollectedPaid.update({ where: { id }, data })
       await tx.uncollectedPaidEvent.create({ data: { caseId: id, kind: "edit", text: matchedText(c, ch.phrases), byId: null, byName: s.byName } })
+      await flagQuery(id)
       s.adoptedIds.add(id)
       return "adopted"
     }
@@ -772,7 +1052,8 @@ async function saveCandidate(c: Candidate, s: SaveCtx): Promise<SaveOutcome> {
       if (closedBuyerSale) return "leftClosed"
     }
 
-    // 5. New.
+    // 5. New — its storage start by the rule (nobody can have set one yet).
+    const stamp = storageStamp(null, v.paidOn, graceDays == null ? null : { owner: null, graceDays })
     const created = await tx.uncollectedPaid.create({
       data: {
         source: "bc",
@@ -789,12 +1070,19 @@ async function saveCandidate(c: Candidate, s: SaveCtx): Promise<SaveOutcome> {
         paidAt: dayToStored(v.paidOn),
         status: "waiting",
         nextChaseAt: dayToStored(s.today),
+        storageFrom: stamp ? dayToStored(stamp.day) : null,
         createdById: null,
         createdByName: FEED_CREATOR,
       },
       select: { id: true },
     })
-    await tx.uncollectedPaidEvent.create({ data: { caseId: created.id, kind: "created", text: addedText(c), byId: null, byName: s.byName } })
+    await tx.uncollectedPaidEvent.create({
+      data: {
+        caseId: created.id, kind: "created", byId: null, byName: s.byName,
+        text: addedText(c, stamp && graceDays != null ? { day: stamp.day, graceDays } : null),
+      },
+    })
+    await flagQuery(created.id)
     return "added"
   }, { maxWait: 10_000, timeout: 20_000 })
 }
@@ -804,11 +1092,15 @@ type OpenBcCase = { id: string; bcKey: string | null; invoiceNo: string | null; 
 /**
  * Open cases from BC the check no longer found. Each is judged against BC only on positive evidence:
  *  • its invoice isn't paid in full any more → said once on the case ("check it"), left open;
- *  • still paid, and every lot of theirs on it that BC still shows is collected → closed as collected;
- *  • anything else (lots still waiting, nothing to be found, couldn't be read) → left as it is.
+ *  • still paid, and every lot of theirs on it that BC still shows is gone — ticked collected, or at a
+ *    GONE location (Receipt_Lines_Excel, read for the lots BC hasn't ticked) → closed as collected,
+ *    the event naming the locations seen ("BC shows the lots collected (location COLLECTED)");
+ *  • anything else (lots still waiting, some at a QUERY location, nothing to be found, couldn't be
+ *    read — a lot BC hasn't ticked whose location BC didn't give included) → left as it is.
+ * A close a GONE location decided says the storage figure may be too high (collectedCloseText).
  */
 async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: string[]) {
-  const out = { closed: 0, flagged: 0, waiting: 0, unknown: 0, notInBc: 0, unread: 0, failed: 0, tooManySales: 0 }
+  const out = { closed: 0, byLocation: 0, flagged: 0, waiting: 0, query: 0, unknown: 0, notInBc: 0, unread: 0, failed: 0, tooManySales: 0, placesUnread: 0 }
   if (!cases.length) return out
   const progress = (done: number) => {
     try { ctx.onProgress?.({ stage: "checking", done, total: cases.length, words: `Checking cases BC no longer lists — ${n0(done)} of ${n0(cases.length)}` }) } catch { /* ignore */ }
@@ -867,25 +1159,45 @@ async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: st
       if (!refs || !sales.length || !c.buyerNo) { out.unread++; return }
       const rows: Record<string, unknown>[] = []
       for (const sale of sales) rows.push(...await readBuyerSaleRows(ctx, sale, c.buyerNo.trim().toUpperCase()))
-      const verdict = droppedVerdict(refs, rows, c.buyerNo)
-      if (verdict === "waiting") { out.waiting++; return }
-      if (verdict === "unknown") { out.unknown++; return }
+      // Where the lots BC hasn't ticked are now — a GONE location counts as collected. Couldn't be
+      // read → the tick alone decides (as before); the time running out → this case isn't judged.
+      const notTicked = droppedLots(refs, rows, c.buyerNo).filter((r) => !bcTrue(r.EVA_Collected))
+        .map((r) => String(r.EVA_UniqueID ?? "").trim()).filter(Boolean)
+      let places: Map<string, LotPlace> | undefined
+      if (notTicked.length) {
+        // One call at a time: the cases themselves are already checked BC_CONCURRENCY at once.
+        const pr = await placesFor(ctx, notTicked, undefined, 1)
+        if (pr.timedOut.size) throw ctx.stopped ? new Stopped() : new OutOfTime()
+        // A lot BC hasn't ticked whose location couldn't be read can only be "still here" on the tick
+        // alone, so the case can't be closed — left as it is and counted as such (not as "waiting").
+        if (pr.failed.size || pr.refused.size) { out.placesUnread++; return }
+        places = pr.places
+      }
+      const ev = droppedEvidence(refs, rows, c.buyerNo, places)
+      if (ev.verdict === "waiting") { out.waiting++; return }
+      if (ev.verdict === "query") { out.query++; return }
+      if (ev.verdict === "unknown") { out.unknown++; return }
 
+      // ⚠ closedAt is the STOP DAY (collectedStopOf), not the moment this check noticed: storage
+      // counts the day a case closes, so "now" charged every case the check closes a day too many.
+      // A close a GONE location decided says the storage figure may be too high (collectedCloseText).
+      const stop = s.collectedStop
       const closedNow = await prisma.$transaction(async (tx) => {
         const n = await tx.uncollectedPaid.updateMany({
           where: { id: c.id, source: "bc", status: c.status },
-          data: { status: "collected", closedAt: new Date() },
+          data: { status: "collected", closedAt: stop.closedAt },
         })
         if (n.count !== 1) return false   // someone changed it meanwhile — theirs wins
         await tx.uncollectedPaidEvent.create({
           data: {
             caseId: c.id, kind: "status", byId: null, byName: s.byName,
-            text: `${STATUS_META[statusOf(c.status)].label} → ${STATUS_META.collected.label} — BC shows the lots collected`,
+            // ⚠ Never "storage charges from" here (storageStartOwner reads status lines).
+            text: collectedCloseText(STATUS_META[statusOf(c.status)].label, STATUS_META.collected.label, ev, stop.day),
           },
         })
         return true
       })
-      if (closedNow) out.closed++
+      if (closedNow) { out.closed++; if (closedByLocation(ev)) out.byLocation++ }
     } catch (e) {
       if (e instanceof OutOfTime || e instanceof BcError) out.unread++
       else { out.failed++; console.error("uncollected feed: a case couldn't be checked:", e) }
@@ -894,7 +1206,10 @@ async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: st
     }
   })
 
+  if (out.byLocation) notes.push(`${many(out.byLocation, "case")} closed as collected ${out.byLocation === 1 ? "was" : "were"} closed because BC has ${out.byLocation === 1 ? "its" : "their"} lots at a location that means they've gone (COLLECTED and the like), not only because BC ticked them collected. BC keeps no date for that scan, so if the lots had gone before a case was added its storage figure is too high — ${out.byLocation === 1 ? "the case says" : "each case says"} to check it.`)
   if (out.flagged) notes.push(`${many(out.flagged, "case")} from BC: the invoice no longer shows as paid in BC — said on the case, left open.`)
+  if (out.query) notes.push(`${many(out.query, "case")} from BC: none of ${out.query === 1 ? "its" : "their"} lots is still here, but some are at a query location in BC (MISSING and the like) — left open to check.`)
+  if (out.placesUnread) notes.push(`${many(out.placesUnread, "case")} from BC: where some of ${out.placesUnread === 1 ? "its" : "their"} lots are couldn't be read in BC, so ${out.placesUnread === 1 ? "it was" : "they were"} left as ${out.placesUnread === 1 ? "it is" : "they are"} — the next check tries again.`)
   if (out.waiting) notes.push(`${many(out.waiting, "case")} from BC still ${out.waiting === 1 ? "has" : "have"} lots waiting but no longer ${out.waiting === 1 ? "meets" : "meet"} the rule today (BC changed the invoice recently, or the sale is over ${UNCOLLECTED_LOOKBACK_MONTHS} months old) — left as ${out.waiting === 1 ? "it is" : "they are"}.`)
   if (out.unknown) notes.push(`${many(out.unknown, "case")} from BC: none of ${out.unknown === 1 ? "its" : "their"} lots could be found under the buyer in BC any more (re-sold or renumbered?) — left open to check by hand.`)
   if (out.notInBc) notes.push(`${many(out.notInBc, "case")} from BC: the invoice couldn't be found in BC — left as ${out.notInBc === 1 ? "it is" : "they are"}.`)
@@ -902,6 +1217,26 @@ async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: st
   if (out.unread) notes.push(`${many(out.unread, "case")} from BC couldn't be re-checked this time (BC didn't answer, or the check ran out of time or was stopped) — the next check tries again.`)
   if (out.failed) notes.push(`${many(out.failed, "case")} couldn't be updated — see the server's log.`)
   return out
+}
+
+/**
+ * Where the clock stops on a case this run closes because BC shows its lots collected. BC keeps no
+ * collected date, so the honest stop is the LAST DAY THE LOTS COULD HAVE BEEN SEEN STILL HERE: the
+ * London day of the check's previous run that read BC's lot list in full (lotsSeen over 0) — normally
+ * yesterday's nightly check, or today's when Check BC now runs after it. Never later than today; the
+ * day before today when there's no earlier read (or it can't be found). closedAt is that day stored
+ * the date-only way (12:00 UTC), or now when the stop day is today.
+ * ⚠ Not "now": storage counts the day a case closes, so closing at the moment of the check charged
+ * every case it closes at least a day too many. A case that waited more than a run to be re-checked
+ * (DROPPED_CHECK_LIMIT) can still have gone before the stop day — RULES.md says so.
+ */
+async function collectedStopOf(runStarted: Date, today: string): Promise<{ day: string; closedAt: Date }> {
+  const prev = await prisma.uncollectedSyncRun.findFirst({
+    where: { startedAt: { lt: runStarted }, lotsSeen: { gt: 0 } },
+    orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+    select: { startedAt: true },
+  }).catch((e) => { console.error("uncollected feed: the previous check couldn't be read:", e); return null })
+  return collectedStopFrom(prev?.startedAt ?? null, today)
 }
 
 /**
@@ -1043,7 +1378,37 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
       })
       for (const e of evs) lastFeedText.set(e.caseId, e.text)
     }
-    const s: SaveCtx = { today: f.today, byName: feedName(trigger, byName), lastFeedText, adoptedIds: new Set() }
+    // Whether each one's paid date is BC's own now (so a switch is said on the case), and the free
+    // days for the storage rule. Settings that couldn't be read → no storage start set this run.
+    let paidExactOf: Map<string, boolean> | null = null
+    try {
+      paidExactOf = await readPaidExact(openBc.map((c) => c.id))
+    } catch (e) {
+      console.error("uncollected feed: which paid dates are BC's own couldn't be read:", e)
+      notes.push("Which cases already carry BC's own paid date couldn't be read, so a change between it and the settled date wasn't said on the cases this time.")
+    }
+    // The storage settings. With the table there, each save reads the free days inside its own
+    // transaction under the settings lock (saveCandidate), so a change an admin saves mid-run is
+    // followed and never undone. Before Run Migrations, the standard ones (and this run looks again
+    // now and then, so pressing Run Migrations part-way through is picked up). Couldn't be read → no
+    // storage start is set or moved this run.
+    const storage = await readStorageSettings()
+    if (storage.readFailed) notes.push("The storage charge settings couldn't be read, so no storage start dates were set or moved this time — the next check tries again.")
+    const s: SaveCtx = {
+      today: f.today, byName: feedName(trigger, byName), lastFeedText, adoptedIds: new Set(),
+      settingsInTx: storage.ready && !storage.readFailed,
+      graceDays: storage.readFailed ? null : storage.graceDays,
+      paidExactOf,
+      holdExact: f.paidDates === "unknown",
+      collectedStop: await collectedStopOf(started, f.today),
+    }
+    let readyCheckedAt = Date.now()
+    const checkReady = async () => {
+      if (s.settingsInTx || storage.readFailed || Date.now() - readyCheckedAt < 10_000) return
+      readyCheckedAt = Date.now()
+      const now = await readStorageSettings()
+      if (now.ready && !now.readFailed) s.settingsInTx = true
+    }
 
     // ── Save every candidate — until a Stop, or the run has gone on so long that a second one
     // could be let in (SAVE_STOP_MS); either way what's saved stays saved.
@@ -1057,6 +1422,7 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
         break
       }
       try {
+        await checkReady()
         tally[await saveCandidate(f.candidates[i], s)]++
       } catch (e) {
         tally.failed++
@@ -1086,7 +1452,8 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
       checked.closed = d.closed
       checked.flagged = d.flagged
       tally.failed += d.failed
-      unreadDropped = d.unread
+      // A case whose lots' locations BC didn't answer for was judged on the tick alone — not a full check.
+      unreadDropped = d.unread + d.placesUnread
     }
 
     if (stopBy() || ctx.stopped) {
@@ -1156,7 +1523,11 @@ const CASE_PAGE_MAX_SALES = 4
  * one sale ("F067"), or several when one invoice covered more than one ("F067, F068" — split with
  * salesOf; a "+N more" the box had to leave off is counted in salesLeftOut). At most
  * CASE_PAGE_MAX_SALES sales are read, one after another inside one 45-second budget, and at most
- * `limit` lots (default 300) are answered. Read only. Throws a plain message if BC can't be read
+ * `limit` lots (default 300) are answered. Each listed lot's location is read too (Receipt_Lines_Excel,
+ * ≤ 20 a call, in the same budget): its `state` is lotState(tick, location) — a GONE location reads as
+ * collected, a QUERY one as "check this lot". A location that can't be read leaves the lot judged on
+ * the tick alone (locationRead false; locationsUnread / locationError say how many and why) — the
+ * lots are still answered. Read only. Throws a plain message if the lots themselves can't be read
  * (BC's own status — 401, 403, 429, 503 — stays in it, for the page to put into words).
  */
 export async function bcLotsForBuyer(token: string, saleCode: string, buyerNo: string, limit = 300): Promise<UncollectedBcLots> {
@@ -1188,8 +1559,42 @@ export async function bcLotsForBuyer(token: string, saleCode: string, buyerNo: s
     // The same lot twice (a page boundary that moved under us) is listed once.
     .filter((l) => { const k = l.uniqueId ? `u:${l.uniqueId.toUpperCase()}` : `l:${l.saleCode}:${l.lotNo}`; if (seen.has(k)) return false; seen.add(k); return true })
     .sort((a, b) => order(a.saleCode) - order(b.saleCode) || a.lotNo.localeCompare(b.lotNo, "en", { numeric: true }))
+  const listed = sold.slice(0, limit)
+
+  // Where each listed lot is now — every one, collected or not, for the page's Location column.
+  const pr = await placesFor(ctx, listed.map((l) => l.uniqueId ?? "").filter(Boolean))
+  const miss = { noId: 0, noLine: 0, ambiguous: 0, failed: 0, refused: 0 }
+  const lots: UncollectedBcLot[] = listed.map((l) => {
+    const k = placeKey(l.uniqueId)
+    const p = k ? pr.places.get(k) : undefined
+    if (!p) {
+      if (!k) miss.noId++
+      else if (pr.failed.has(k) || pr.timedOut.has(k)) miss.failed++
+      else if (pr.refused.has(k)) miss.refused++
+      else if (pr.ambiguous.has(k)) miss.ambiguous++
+      else miss.noLine++
+    }
+    return {
+      ...l,
+      location: p ? p.location : null,
+      bin: p ? p.bin : null,
+      locationRead: !!p,
+      state: lotState(l.collected, p ? p.location : null),
+    }
+  })
+  const locationsUnread = miss.noId + miss.noLine + miss.ambiguous + miss.failed + miss.refused
+  const why = [
+    miss.failed > 0 && (pr.timedOut.size
+      ? `BC took too long to answer for ${many(miss.failed, "lot")}`
+      : `BC didn't answer for ${many(miss.failed, "lot")}${pr.error ? ` (${pr.error})` : ""}`),
+    miss.refused > 0 && `BC refused to give where ${many(miss.refused, "lot")} ${miss.refused === 1 ? "is" : "are"}${(ctx.placesBroken ?? pr.error) ? ` (${ctx.placesBroken ?? pr.error})` : ""}`,
+    miss.noLine > 0 && `${many(miss.noLine, "lot")} ${miss.noLine === 1 ? "has" : "have"} no receipt line in BC`,
+    miss.ambiguous > 0 && `the receipt lines of ${many(miss.ambiguous, "lot")} disagree about where ${miss.ambiguous === 1 ? "it is" : "they are"}`,
+    miss.noId > 0 && `${many(miss.noId, "lot")} ${miss.noId === 1 ? "has" : "have"} no unique ID`,
+  ].filter(Boolean).join("; ")
   return {
     buyerNo: buyer, saleCode: sales.join(", "), sales, salesLeftOut,
-    lots: sold.slice(0, limit), more: sold.length > limit, readAt: new Date().toISOString(),
+    lots, more: sold.length > limit, readAt: new Date().toISOString(),
+    locationsUnread, locationError: locationsUnread ? why : null,
   }
 }

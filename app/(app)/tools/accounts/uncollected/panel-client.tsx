@@ -7,10 +7,11 @@ import { listCases } from "@/lib/actions/uncollected"
 import {
   AGE_BANDS, CLOSED_STATUSES, OPEN_STATUSES, SORT_LABELS, STATUS_META, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LIMITS, UNCOLLECTED_SORTS,
   UNCOLLECTED_STATUSES, ageBandFor, formatMoney, isUncollectedSort, uncollectedFilterQuery,
-  type AgeBandKey, type UncollectedFilter, type UncollectedList, type UncollectedStatus,
+  STORAGE_SETTINGS_READ_FAILED, STORAGE_TEXT, formatPence,
+  type AgeBandKey, type StorageTotals, type UncollectedFilter, type UncollectedList, type UncollectedStatus,
 } from "@/lib/uncollected"
 import AddBuyer from "./add-buyer"
-import { ChaseDate, ColourKey, DaysWaiting, LastContact, PaidWhen, SourceBadge, StatusChip } from "./bits"
+import { ChaseDate, ColourKey, DaysWaiting, LastContact, PaidWhen, SourceBadge, StatusChip, StorageOwed } from "./bits"
 import { casesCsv, downloadCsv } from "./export"
 import { PANEL_PATH, btn, btnGo, card, cardTitle, inlineLink, input, plural, td, th } from "./ui"
 
@@ -63,6 +64,8 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
   const router = useRouter()
   const [navigating, startTransition] = useTransition()
   const { filter, totals } = list
+  /** Storage owed on every open case (the tile), whatever the filters. */
+  const owed = totals.storage
   /** Status, age band and order as the address has them — never the search. */
   const filterKey = uncollectedFilterQuery(filter)
   const [q, setQ] = useState("")
@@ -142,7 +145,7 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
   return (
     <div>
       {/* ── Tiles: every OPEN case, whatever the filters ─────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <Tile label="Open cases" value={totals.open.toLocaleString("en-GB")} sub={totals.open === 0 ? "Nobody waiting" : "Paid, not collected yet"} />
         <Tile
           label="Lots waiting"
@@ -166,7 +169,18 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
           valueClass={totals.chasesDue ? "text-red-600 dark:text-red-400" : undefined}
           sub={totals.chasesDue ? `${totals.chasesOverdue} overdue · ${totals.chasesToday} today` : "Nothing due today"}
         />
+        <Tile
+          label="Storage owed"
+          value={storageTileValue(owed)}
+          valueClass={owed.totalPence > 0 ? STORAGE_TEXT : undefined}
+          sub={storageTileWords(owed)}
+        />
       </div>
+      {list.storageSettings.readFailed && (
+        <p role="alert" className="mt-2 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-sm">
+          {STORAGE_SETTINGS_READ_FAILED}
+        </p>
+      )}
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">The tiles count every open case, whatever the filters below.</p>
       {totals.unknownStatus > 0 && (
         <p role="status" className="mt-2 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-sm">
@@ -321,9 +335,9 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
         </div>
       ) : (
         <div className={stale ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          {/* Wide screens (lg and up — an iPad in landscape too): a table. Seven columns, so it fits
-              without scrolling sideways: "paid on" sits under the amount, the last contact under
-              the next chase. */}
+          {/* Wide screens (lg and up — an iPad in landscape too): a table. Eight columns, so it fits
+              without scrolling sideways: "paid on" sits under the amount, storage inc VAT under
+              storage before VAT, the last contact under the next chase. */}
           <div className={`${card} hidden lg:block overflow-x-auto`}>
             <table className="w-full">
               <thead className="border-b border-gray-200 dark:border-gray-800">
@@ -332,6 +346,7 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                   <th className={`${th} text-left`}>Sale / invoice</th>
                   <th className={`${th} text-right`}>Lots</th>
                   <th className={`${th} text-right`}>Paid</th>
+                  <th className={`${th} text-right`}>Storage owed</th>
                   <th className={`${th} text-left`}>Waiting</th>
                   <th className={`${th} text-left`}>Status</th>
                   <th className={`${th} text-left`}>Next chase · last contact</th>
@@ -364,8 +379,9 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                     <td className={`${td} text-right tabular-nums`}>{c.lots ?? "—"}</td>
                     <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
                       <div>{formatMoney(c.amountPaid)}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400"><PaidWhen source={c.source} paidAt={c.paidAt} /></div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400"><PaidWhen source={c.source} paidAt={c.paidAt} exact={c.paidExact} /></div>
                     </td>
+                    <td className={`${td} text-right`}><StorageOwed s={c.storage} /></td>
                     <td className={`${td} whitespace-nowrap`}><DaysWaiting days={c.daysWaiting} closed={!!c.closedAt} /></td>
                     <td className={td}><StatusChip status={c.status} /></td>
                     <td className={td}>
@@ -400,8 +416,9 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                   </dl>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-600 dark:text-gray-300">
                     <SourceBadge source={c.source} />
-                    <PaidWhen source={c.source} paidAt={c.paidAt} />
+                    <PaidWhen source={c.source} paidAt={c.paidAt} exact={c.paidExact} />
                   </div>
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Storage owed: <StorageOwed s={c.storage} inline /></p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-600 dark:text-gray-300">
                     <span>Next chase: <ChaseDate at={c.nextChaseAt} chase={c.chase} /></span>
                     <span>Last contact: <LastContact last={c.lastContact} compact /></span>
@@ -414,6 +431,42 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
       )}
     </div>
   )
+}
+
+/** The Storage owed tile's figure. "—" when cases ARE being charged but none of them can be added up
+ *  (every one has no lot count) — never a calm £0.00 that means "couldn't tell" (design rule 7). */
+function storageTileValue(t: StorageTotals): string {
+  return !t.charging && t.lotsUnknown ? "—" : formatPence(t.totalPence)
+}
+
+/** Under the Storage owed tile: "inc VAT — £180.00 + VAT on 3 cases · 1 waived · at least — 2 with no
+ *  lot count". Cases with no lot count or no paid date can't be added in, so the figure is a minimum.
+ *  "No open case is being charged yet" only when nothing is being charged, waived or left uncounted. */
+function storageTileWords(t: StorageTotals): string {
+  const n = (k: number) => k.toLocaleString("en-GB")
+  const waived = t.waived ? `${n(t.waived)} waived` : null
+  const noStart = t.noStart ? `${n(t.noStart)} with no paid date to count from` : null
+  if (!t.charging) {
+    if (t.lotsUnknown) {
+      return [`${plural(t.lotsUnknown, "case")} being charged — no lot count, so no total yet`, waived, noStart].filter(Boolean).join(" · ")
+    }
+    if (t.waived) return [`Nothing owed — ${plural(t.waived, "case")} waived`, noStart].filter(Boolean).join(" · ")
+    return [noStart ? "Nothing owed on the cases it can count" : "No open case is being charged yet", noStart].filter(Boolean).join(" · ")
+  }
+  const missing = t.lotsUnknown + t.noStart
+  const parts = [
+    t.vatPence > 0
+      ? `inc VAT — ${formatPence(t.exVatPence)} + VAT on ${plural(t.charging, "case")}`
+      : `on ${plural(t.charging, "case")} (no VAT)`,
+    waived,
+    missing
+      ? `at least — ${[
+          t.lotsUnknown ? `${n(t.lotsUnknown)} with no lot count` : null,
+          t.noStart ? `${n(t.noStart)} with no paid date` : null,
+        ].filter(Boolean).join(", ")}`
+      : null,
+  ]
+  return parts.filter(Boolean).join(" · ")
 }
 
 function Tile({ label, value, sub, valueClass }: { label: string; value: string; sub?: string; valueClass?: string }) {

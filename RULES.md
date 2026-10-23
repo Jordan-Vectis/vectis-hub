@@ -2538,8 +2538,10 @@ storage charges start, and a timeline of every call, email, letter, note and cha
 - **Statuses:** `waiting` (Paid — waiting to collect) · `contacted` (We've been in touch) ·
   `arranged` (Collection or delivery arranged) · `storage` (Storage charges apply) · `collected`
   (closes the case) · `closed` (Closed another way — refunded, re-offered — **needs a reason**).
-  Collected/closed set `closedAt`; going back to an open status clears it. Choosing Storage with no
-  storage date yet starts the charges today. A call, email or letter logged on a `waiting` case moves
+  Collected/closed set `closedAt`; going back to an open status clears it. Choosing Storage on a case
+  with no storage start leaves it to the storage rule when there's a paid date (the status line says
+  "storage counted from …", ⚠ never "storage charges from" — see Storage charges below), and starts
+  the charges today only when there's no paid date to count from. A call, email or letter logged on a `waiting` case moves
   it to `contacted` (said on the timeline). A status change only wins if the case is still where it
   was read, so two people changing it at once can't both win.
   - A status in the table that isn't one of the six (a future feed's typo) **reads as `waiting`
@@ -2570,11 +2572,61 @@ storage charges start, and a timeline of every call, email, letter, note and cha
   no BC, no database). Every BC call is a GET through `lib/bc.ts`. **Nothing is ever written to BC.**
   Cases can still be added by hand (`source "manual"`).
   - **The rule.** A case is due when ALL hold: a lot was **sold** (hammer > 0, not withdrawn); the
-    buyer's **invoice covering it is Paid with nothing remaining**; the lot is **not collected**
-    (`EVA_Collected` false — trustworthy: those lots' collection dockets sit "Awaiting Release" in
-    `CollectionList`); and at least **`UNCOLLECTED_AFTER_DAYS` (28) London days** have passed since the
+    buyer's **invoice covering it is Paid with nothing remaining**; the lot is **not gone** (next
+    point); and at least **`UNCOLLECTED_AFTER_DAYS` (28) London days** have passed since the
     paid day. **One case per invoice**, `bcKey` = the invoice number (SI167361). Sales of the last
     `UNCOLLECTED_LOOKBACK_MONTHS` (12) are read. Both constants are in `lib/uncollected.ts`.
+  - ⚠⚠ **"Gone" = BC's Collected tick OR the lot's LOCATION** (2026-10-23 — Jack, on sandbox: *"This
+    first one is wrong — lot 513 has been collected and so has 551"*). `Auction_Lines_Excel.EVA_Collected`
+    is a FlowField on the lot's `EVA_CollectionLine."EVA_Posted"` (not reversed) — it is ticked ONLY
+    when the collection docket is **posted**. In practice staff often hand the lots over and **scan
+    them to location `COLLECTED` without posting the docket**: the dockets (COL034753, COL039287,
+    COL049651…) stay open in `CollectionList` as "Awaiting Release", never posted, while the lots'
+    receipt lines say `EVA_ArticleLocationCode = "COLLECTED"`. So the tick alone is NOT trustworthy,
+    and the check also reads each lot's current location live from **`Receipt_Lines_Excel`**
+    (`EVA_UniqueID`, `EVA_ArticleLocationCode`, `EVA_ArticleBinCode`; `EVA_UniqueID eq '…' or …`, ≤ 20
+    ids a call). The lists are constants in `lib/uncollected.ts`, compared upper case with spaces out
+    (`normaliseLocation`; "-" and "_" ignored too):
+    - **`GONE_LOCATIONS` = COLLECTED, SHIPPED, RETURNED, DISPOSAL, CHARITY** — treated **exactly like
+      the tick**: the lot is taken out before matching (`splitByPlace`), so it isn't charged or
+      counted; a case with some gone keeps the rest ("lots not collected 2 → 1"); a case whose lots
+      have ALL gone drops out and is closed as collected by the re-check below, its event naming the
+      locations seen ("BC shows the lots collected (location COLLECTED)" — `collectedWhyWords`).
+    - **`QUERY_LOCATIONS` = MISSING, QUERY, RE-LOTTED, RE-AUCTION** — **not charged and not counted** in
+      the case's lots or storage, but the lot still finds its invoice (`Candidate.queryLots`; a case
+      may have only these — then `lots` is 0) and the case is **flagged** on its timeline: a note from
+      the check, *"⚠ Lot 513 is at MISSING in BC — check it before chasing. …"* (`queryFlagText`),
+      written only when the lots to check change (`nextQueryFlag` reads the check's last flag line —
+      one starting "⚠ " — or its all-clear, "✓ No lot on this case is at a query location in BC now …",
+      written once when they've all moved on). ⚠ Those lines must never contain "storage charges
+      from", "paid by" or "BC no longer shows invoice" (other readers of the timeline look for them).
+    - Anything else (a shelf like 12F1, a bench, SANDOWN, blank) — still here. **A tick always wins**
+      over a location.
+    - ⚠ **A lot whose receipt line can't be read** (no unique ID, no receipt line, rows that disagree)
+      **is judged on the tick alone, as before**, and the run's notes say how many and why. So is every
+      lot once BC **refuses** locations outright (400 to a single id, 401/403/404): that stops the
+      location reads for the rest of the run (`placesBroken`, `PlacesRead.refused`) and makes the run
+      `ok` false ("didn't check everything").
+    - ⚠⚠ **But a buyer whose locations BC didn't ANSWER for** (no answer, 5xx / 429 after the retries —
+      `PlacesRead.failed`), **or weren't read because the time ran out or a Stop came** (`timedOut`),
+      **isn't judged that run at all** (like an unread invoice: no candidates, its dropped cases not
+      re-checked, the run's notes say so) — never judged on a half-read. (2026-10-23, the review:) on the
+      tick alone a passing fault flipped cases — "lots not collected 1 → 2" with a higher storage figure
+      on the bad night and "2 → 1" the next, and a buyer whose lots were all at COLLECTED got a case the
+      next run closed — Jack's bug back on any night BC stumbles. Holding the buyer keeps each case's
+      last known state. ⚠ **A decision for Jack** — the brief said "can't be read → trust the tick";
+      this applies that only to a lot BC really has no location for, or a run where BC refuses them.
+      If he'd rather a failed read fell back to the tick too, put those ids in `refused` (placesFor).
+    - ⚠ **Locations are read buyer by buyer, straight after the last of that buyer's invoice lines**
+      (`readLinesThenPlaces` in lib/uncollected-feed-match.ts — never all the lines first, then all the
+      locations). With them read after every invoice's lines, a run whose time ran out during the lines
+      had no time left for any location, so it judged no buyer at all, and runs that kept running out
+      never added, updated or closed a case. Now every buyer whose lines and locations were both read
+      is judged, and the rotation (below) moves the start on. Still at most 3 BC calls at once.
+    - Locations are read only for buyers with an invoice that could give a case
+      (`invoicesNeedingLines`), for the lots BC hasn't ticked on each case the check re-checks, and for
+      every lot on the case page's list. The run's notes count the lots found gone by location and at a
+      query location ("COLLECTED 120, SHIPPED 3").
   - **What BC is asked** (all verified live 2026-10-22 with the BC API viewer): (1) `Auction_Lines_Excel`
     — `EVA_Collected eq false and EVA_HammerPrice gt 0` with `EVA_AuctionDate` from 12 months ago to
     28 days ago (a lot paid 28 days ago was sold at least that long ago), `$select` of verified fields
@@ -2582,7 +2634,9 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     (`customerNumber` = `EVA_BuyerNo`; ≤ 20 buyers a call, dated from their earliest uncollected
     lot's sale); (3) **`salesInvoiceLines`** (`documentId eq …`, ≤ 20 invoices a call — one at a time
     if BC refuses the batch, and any invoice a batch answered with no lines is asked again on its
-    own) for the invoices that matter. ≤ 3 calls at once, backoff on 429 / 502 / 503 / 504, a 401
+    own) for the invoices that matter; (4) **`Receipt_Lines_Excel`** for where those buyers' lots are
+    now (verified live 2026-10-23 — above; one at a time if BC refuses the batch; each buyer's read
+    straight after its invoice lines). ≤ 3 calls at once, backoff on 429 / 502 / 503 / 504, a 401
     renews the sign-in once (the company lookup's "BC API companies 401" too), and a time budget for
     reading BC: **25 minutes for the nightly run, 12 for Check BC now** — never more, under the
     30-minute stale rule below; saving stops 28 minutes in (`SAVE_STOP_MS`), whatever is left, so a
@@ -2591,7 +2645,8 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     `UncollectedSyncRun` rows, kept in the database so a restart doesn't reset it). A run that runs out
     of time leaves a different stretch unread, so runs that keep running out still reach every buyer.
   - **Which lots are on which invoice.** A buyer invoice has a line per lot (its description) followed
-    by **"Buyer Premium for Lot No 366"**, so its lots are the numbers in those premium lines (suffix
+    by **"Buyer Premium for Lot No 366"** (codeunit 75003 CreateSalesInvoice's `BuyersPremiumTxt =
+    'Buyer Premium for Lot No %1'` — checked in the BC source 2026-10-23), so its lots are the numbers in those premium lines (suffix
     tolerant: 366 matches 366A unless both carry different suffixes). ⚠ **Lot numbers repeat between
     sales**, so each uncollected lot has ONE home: the buyer's **earliest** posted invoice dated on or
     after its sale that lists its number. A dealer's lot 366 left in F066 must never also hang on
@@ -2603,14 +2658,48 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     cancelled invoices are never a home. A paid lot invoice whose lines carry no readable lot numbers
     falls back to the buyer's unhomed uncollected lots from their latest sale on or before it (named
     in the run's notes and on the case's first event); an invoice with no lot lines at all (postage,
-    storage) is skipped.
-  - ⚠ **The paid date is a PROXY.** BC publishes no payment date. On a paid invoice
-    `lastModifiedDateTime` matches BC's settling run (a batch at ~07:54 the morning after), so that
-    London day is stored as `paidAt` and shown as **"Paid by <date>"** — they paid on or before it
-    (`PAID_BY_HELP`, "BC's date the invoice was settled"). Caveat: anything else that changes a posted
-    invoice later moves the day later, so a case can be added late, never early. **Follow-up for
-    Jack / Jordan:** publishing BC's **Customer Ledger Entries** (Closed at Date) would give the exact
-    payment date.
+    storage) is skipped. ⚠ That "latest sale" is chosen over the buyer's lots at a GONE location too
+    (`matchBuyer`'s `opts.gone` — only to choose the sale, never matched): when that sale's lots have
+    all gone, the invoice gives **no case**, never a walk back to an older sale's lots (an unpaid
+    earlier invoice's, say). Lots BC TICKED collected aren't in the feed at all, so a sale whose lots
+    are all ticked can still be walked past — known, as before.
+  - ⚠ **The paid date is a PROXY until BC publishes its own.** BC's published feeds carry no payment
+    date. On a paid invoice `lastModifiedDateTime` matches BC's settling run (a batch at ~07:54 the
+    morning after), so that London day is stored as `paidAt` and shown as **"Paid by (BC settled
+    date)"** — they paid on or before it (`PAID_BY_HELP`). Caveat: anything else that changes a posted
+    invoice later moves the day later, so a case can be added late, never early.
+  - **The exact paid date — the upgrade path (verified in the BC source code on the Hub, 2026-10-23).**
+    BC holds it per lot: table 75004 `EVA_AuctionLine` **field 153 `EVA_DatePaidByBuyer`** (Date), set
+    by codeunit 75075 ReleaseForPayment from the customer ledger entry's "Closed at Date" and cleared if
+    the payment is reversed. It is **not on any published feed** (`Auction_Lines_Excel` / `EVA_AuctionLine`
+    have 59 fields, none of them a paid date), and the pages that show it (75063 Auction Reconciliation,
+    75050 Editable Auction Lines, 75096 ClientAccMgtAuctionLines, 75014) aren't published. **What
+    Jordan needs to do:** add `EVA_DatePaidByBuyer` to the `Auction_Lines_Excel` web-service page (or
+    publish one of those pages and tell us which). Nothing in the Hub needs changing when he does:
+    - Once per run the check reads **one** `Auction_Lines_Excel` row **with no `$select`** and looks
+      for the key (`paidDatesPublished` / `hasPaidDateField`). Only if it is there is it added to that
+      run's `$select`. ⚠⚠ **Never put a field in a `$select` before a row has shown it** — BC answers
+      400 to the WHOLE request over one unknown field, and the check would read nothing.
+    - With it, a case's paid date is **the latest of its lots' own paid dates** (`paidDayFor` — the day
+      the invoice was paid in full), and the 28 days count from that (`couldQualify` lets an invoice
+      whose lots' own date is old enough be read even when its settled date isn't yet; `matchBuyer`
+      then checks again on the lots really on it). Lots with no paid date of BC's own (BC's blank
+      `0001-01-01`, or paid before BC kept it) fall back to the settled date, counted in the run's notes.
+    - The panel says **"Paid on (BC)"** (`PAID_EXACT_HELP`) or **"Paid by (BC settled date)"** per
+      case (`paidTerm(source, exact)`), read from the check's own timeline line: its FIRST line says
+      "paid on … (BC's own paid date)" (`PAID_EXACT_MARK`) or "paid by …" (`paidExactFromText`,
+      `readPaidExact` in lib/uncollected-settings.ts). A case BC already holds is told when it
+      switches either way, even when the day is the same, so the label never goes stale. ⚠ Keep those
+      words in the check's lines (`dueWords`, `feedChanges`) — and never "paid by" / "paid on" in any
+      other line the check writes as its first line.
+    - ⚠ **"Couldn't tell" is not "not published"** (`FindResult.paidDates`: `"exact"` · `"settled"` ·
+      `"unknown"`). Only a probe row that really lacks the key makes a run `"settled"` — then a case on
+      BC's own date is switched back, and says so. When the probe FAILS (BC didn't answer), or BC showed
+      the key but refused it in a `$select` (400), the run is `"unknown"`: the lots are read without the
+      field, new cases take the settled date, and every case BC already holds that is — or may be —
+      on BC's own paid date keeps its paid date, its "Paid on" and the storage start that hangs on it
+      (`SaveCtx.holdExact` → `feedChanges(…, { holdPaid })`). A passing fault must never flip cases to
+      "Paid by" and back, rewriting their timelines and moving their storage each time.
   - **Writing the cases** — per invoice, ONE transaction under the SAME invoice lock as the Hub's own
     writes (`lockInvoice`, advisory lock first, then row locks — the SQL is repeated in the feed;
     change both together): (1) the case BC already holds for that invoice → its BC fields brought up
@@ -2620,17 +2709,19 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     a case for that invoice that was CLOSED by hand → left alone — never re-added behind the staff's
     back; (4) else an OPEN hand case with the same buyer number + sale and no invoice number → taken
     over — and a CLOSED one like that → left alone, as in (3) (a hand case with no invoice number stands
-    for the buyer's whole sale); (5) else a **new case**: `waiting`, next chase today, event "Added
-    from BC: paid by 3 Jun 2026, 2 lots not collected after 49 days" with the lot list. Taking a case
-    over keeps its status, notes, chase dates, storage date and timeline. Invoices left closed are
-    counted in the run's notes.
+    for the buyer's whole sale); (5) else a **new case**: `waiting`, next chase today, storage from the
+    rule's day, event "Added from BC: paid by 3 Jun 2026, 2 lots not collected after 49 days. Invoice
+    SI…. Storage charges from 2 Jul 2026 by the storage rule (28 free days after they paid)." with the
+    lot list. Taking a case over keeps its status, notes, chase dates, a storage start a person set,
+    and timeline. Invoices left closed are counted in the run's notes.
     ⚠ **A decision waiting on Jack:** "closed by hand → left alone" (3, and 4's closed half) wasn't in
     the brief — it was chosen so the staff's decision stands. If he'd rather such an invoice came back
     as a new case, change both together (`saveCandidate`).
   - ⚠ **The feed writes only `BC_OWNED_FIELDS`** (name, buyer number, sale, invoice, lots still
     waiting, amount paid, paid by) **plus email / phone where the case has none**, put through the
-    Hub's own rules (no bank or card shapes, at most 15 phone digits). A case's status, notes, chase
-    date (except a new case's first one), storage date and timeline are the staff's. The only status
+    Hub's own rules (no bank or card shapes, at most 15 phone digits), **plus the storage start by the
+    storage rule while no person has set it** (Storage charges, below). A case's status, notes, chase
+    date (except a new case's first one), a storage start a person set, and timeline are the staff's. The only status
     it ever sets is `collected` (next point). Its events have no `byId` and are signed "BC check
     (nightly)" or "BC check (Check BC now — <name>)"; new cases say "BC check" as who added them.
   - **The lot list lives on the timeline, not in the notes** (notes are the staff's): the "Added" /
@@ -2643,17 +2734,31 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     sale codes (split on commas; "+4 more" or words typed by hand are not sales). The case page reads
     each sale (up to 4, `CASE_PAGE_MAX_SALES`) and says how many it didn't.
   - **An open case from BC the check no longer finds** is judged on POSITIVE evidence only, and only
-    for buyers it fully checked — at most 60 a run (`pickDropped`): cases whose buyer has no uncollected
-    lot left in the window (the likely collected ones) first, with at least half the places; each group
+    for buyers it fully checked — at most 60 a run (`pickDropped`): cases whose buyer has no lot left
+    in the window that isn't gone (ticked, or at a GONE location — the likely collected ones) first,
+    with at least half the places; each group
     turns round by the run's sequence number, so every case is reached in turn and one left open on
     purpose (lots still waiting, not paid any more) never holds a place for ever. None of it after a
     Stop or once saving ran out of time. Its invoice isn't paid in full any more
     → said ONCE on the case ("BC no longer shows invoice SI… as paid — check it") and left open; still
-    paid and every lot of theirs on it that BC still shows is collected → **closed as `collected`**
-    ("BC shows the lots collected"); anything else (lots still waiting, nothing to be found under the
-    buyer, couldn't be read) → left as it is and counted in the run's notes. ⚠ A case whose sale box
+    paid and every lot of theirs on it that BC still shows is gone — ticked collected, or at a GONE
+    location (its lots' receipt lines are read for the ones BC hasn't ticked; `droppedEvidence`) →
+    **closed as `collected`** ("BC shows the lots collected" — with the locations when they decided it:
+    "(location COLLECTED)", "(1 ticked as collected; 1 at location SHIPPED)"), ⚠ with `closedAt` = the **stop day** (`collectedStopFrom`, below
+    under Storage charges), never the moment the check noticed; anything else (lots still waiting, the
+    rest at a QUERY location, nothing to be found under the buyer, couldn't be read) → left as it is and
+    counted in the run's notes. A lot BC hasn't ticked whose location couldn't be read there leaves the
+    case as it is (counted as "couldn't be read", never as "still waiting"). ⚠ A case whose sale box
     had to leave sales off ("+N more") is NEVER closed this way — not every lot of theirs can be looked
     at — and the notes say so.
+    - ⚠ **A close a GONE location decided says the storage figure may be too high**
+      (`collectedCloseText`): BC keeps no date for the scan to COLLECTED either, and many such cases
+      were opened in error — the lots were already scanned out (docket never posted) before the case
+      was added, as with E100's lots 513/551 — so their figure can run weeks past the day the lots
+      left. The line names the locations and says to check the figure and waive the storage if so; the
+      run's notes say it too. ⚠ **A decision for Jack:** whether such cases should stop the clock
+      earlier (at the case's `createdAt`, say, or charge nothing) instead of only saying so — then
+      change `closedAt` for location closes in `checkDropped`, never in a page.
   - **Idempotent**: run twice, the second run changes nothing. **One at a time**: a lock on
     `globalThis`, and a refusal while the database shows a run started under
     `UNCOLLECTED_RUN_STALE_MINUTES` (30) ago and unfinished (one from before this server started is
@@ -2698,14 +2803,25 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     guard).
   - **Every case says where it came from** — "From BC" / "Added by hand" on every row, phone card,
     case page and CSV (`SOURCE_META`; the colour key explains both, and a hand case the check took
-    over shows From BC). Cases from BC say "Paid by"; hand ones "Paid" / "Paid on".
+    over shows From BC). Cases from BC say "Paid by (BC settled date)", or "Paid on (BC)" once BC
+    publishes its own paid date (above); hand ones "Paid" / "Paid on".
   - **The case page's "Lots in BC" card** (`[id]/bc-lots.tsx`) reads the lots live (above) as the
     case opens for a case from BC, and on a press for one added by hand — chosen over storing a lot
     list (the timeline keeps the snapshot). With several sales each lot says its sale. Below `sm` it
-    is stacked rows, not a table.
+    is stacked rows, not a table. Columns LOT · DESCRIPTION · HAMMER · **LOCATION** · COLLECTED?
+    (2026-10-23 — Jack: *"can you also add the location in here please"*): Location is the lot's live
+    BC location code (and bin), "—" for none, "Not read" when its receipt line couldn't be read. The
+    COLLECTED? chip follows the check's own rule (`lotState`): green **Collected** when BC ticked it or
+    its location is a GONE one (with a small "by location" under it when only the location says so),
+    amber outlined **⚠ Check this lot** at a QUERY location (and an amber box listing them — "Lot 513 is
+    at MISSING in BC — check it before chasing"), amber **Not collected** otherwise; the headline count
+    ("2 not collected, 1 to check, 3 collected") follows the same rule, and a key under the list
+    explains the chips. Lots to check are listed first, then not collected. A location read that fails
+    still shows the lots (judged on the tick) and says how many couldn't be read and why.
 - On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses Delete
   (the feed would bring it back — close it instead). A manual case can be deleted, confirmed in the
-  page. Contact details, chase dates, storage start and notes stay the Hub's own.
+  page. Contact details, chase dates, storage start and notes stay the Hub's own (a storage start a
+  person sets is never moved by the check — Storage charges, below).
 - ⚠ **One OPEN case per invoice** (case-insensitive) — the feed's "adopt the open manual case"
   depends on it. Enforced by every write that could break it: adding a case, giving an open case a
   new invoice number, and reopening a closed case whose invoice has had another case opened since.
@@ -2738,6 +2854,155 @@ storage charges start, and a timeline of every call, email, letter, note and cha
 - Registered in `lib/help-map.ts` as **"Paid, not collected (Accounts)"** — ⚠ never "Accounts → …":
   with "Accounts" as a name part, any question mentioning accounts would score against this
   admin-only entry and refuse a Simple-mode user about their own screens.
+
+### 💷 Paid, not collected → storage charges per lot after the free days (2026-10-23)
+
+Jack: *"remember its 4 weeks after the item has been paid for we need to start charging them for
+keeping the lots here they will be charged per lot"*.
+
+- ⚠⚠ **The Hub never charges anything in BC, and never stores money.** The figures are worked out live
+  (they change every day) for staff to raise the charge. BC has **no storage logic** of its own (checked
+  in the BC source on the Hub).
+- **The standard charges are Jack's: £2.00 per lot per WEEK** (2026-10-23 — *"it's £2 per lot per
+  week"*). So the defaults (`STORAGE_DEFAULTS`) are **28 free days after payment, then £2.00 (200p) per
+  lot per WEEK + 20% VAT on top, any part of a week counting as a whole week**. ⚠ Settings already
+  saved in `UncollectedSettings` still win (a saved row is never overwritten by a change of
+  defaults; a blank column in it falls back to the new default). Until 2026-10-23 the defaults were
+  £5.00 per lot per DAY, taken from an old commented-out footer on BC's own buyer invoice (Reports/55004
+  AuctionInvoiceT0V: *"Storage charges of £5 per lot per day + VAT will be strictly enforced
+  thereafter"*) — that is NOT what Vectis charges, so it must never be put back as the default. The
+  same footer's *"an additional charge of £10 + VAT per lot … on larger lots where they have to be
+  removed to our warehouse"* is **not built** — ask Jack before adding it.
+- **The maths is one pure function, `storageCharge()` in lib/uncollected.ts** (no Prisma — the panel's
+  client parts use the same words). Change it there, never in a page, and re-run the made-up-date
+  checks (BST changes, the grace boundary, collected stops the clock, week rounding, waived):
+  - **Storage starts the day AFTER paid day + the free days**, in London days (`storageStartDay`):
+    paid 1 Oct with 28 free days → free to 29 Oct, charged from 30 Oct. The case appears on the panel
+    on day 28 (`UNCOLLECTED_AFTER_DAYS`, a separate constant), the last free day. ⚠ With FEWER free
+    days than that, storage is already running when a case from BC appears: nothing is lost (it counts
+    from its start), but the tile and the list can't show it until day 28. The settings box says so
+    (`storageGraceWarning`) rather than refusing — the check's wait was deliberately left at 28 (Jack's
+    "over 4 weeks" chase rule); ask Jack before tying it to the free days.
+  - **Chargeable days = storage start → today, or → the day the case closed, both ends INCLUSIVE**,
+    never negative. Collected or closed another way stops the clock on that day (`closedAt`).
+    - Closed BY HAND (a status change): `closedAt` is the moment it was pressed — staff press it on
+      the day the lots go, and that day is charged.
+    - ⚠⚠ **Closed by the BC check** (BC shows the lots collected): BC keeps **no collected date**, so
+      `closedAt` is the **stop day** — the London day of the check's PREVIOUS run that read BC's lot
+      list in full (`lotsSeen` over 0), the last day the lots could have been seen still here
+      (normally yesterday's nightly check; today's when Check BC now runs after it; the day before
+      today when there's none) — `collectedStopFrom` in lib/uncollected-feed-match.ts, stored at 12:00
+      UTC that day. Its timeline line says so. Never the moment the check noticed: at 08:30 that
+      charged every case it closed at least a day too many. Known limit: a case that waited more than
+      one run to be re-checked (60 a run, `DROPPED_CHECK_LIMIT`) may have gone before the stop day, so
+      it can still be over by those days — the line says "the last day they could have been seen".
+      ⚠ Worse when a GONE **location** decided the close (scanned to COLLECTED, docket not posted): the
+      lots may have gone before the case was even added, so the line says to check the figure and waive
+      it if so — a decision for Jack whether to stop the clock earlier ("An open case from BC the check
+      no longer finds", above).
+  - **Per lot still uncollected** — the case's `lots` (for a case from BC, never a lot that is ticked
+    collected, at a GONE location, or at a QUERY location — "Gone" above). Not known → no total ("Lots not known"),
+    never a calm £0; no start (no paid date, none set) → no figure either (design rule 7).
+    - ⚠ **A lot collected part-way through is NOT charged for the days it was here**: the figure is
+      the lots still here TODAY × every day since the start (the brief's rule), so when the check
+      lowers `lots` ("lots not collected 3 → 2") the storage those lots built up drops out of the
+      figure. The case's storage card and "How cases are added" say so. ⚠ **A decision waiting on
+      Jack:** if he wants them charged until they went, work lot-days out from the timeline's lot-count
+      changes instead of the current count — in `storageCharge`'s inputs, never in a page.
+  - **Owed = lots × rate × days**, or × **whole weeks started** for "per week" (12 days = 2 weeks), ex
+    VAT; VAT on the total, to the nearest penny (half up, `vatOnPence`); and the total. All in PENCE.
+  - The words are `storageWords` ("£2.00 per lot per week + VAT since 15 Nov — 3 lots × 2 weeks (12
+    days — a week started counts as a week) = £12.00 + VAT £2.40 = £14.40"; per day: "… — 3 lots × 12
+    days = …"), `storageShortWords` for a column, `rateWords`,
+    `storageSettingsWords`; `addStorage` sums many (the tile: open cases only, inc VAT — a minimum when
+    some have no lot count, which it counts).
+- **The settings are `UncollectedSettings`** — one row, id `"default"` (graceDays, ratePence, period
+  `day`/`week`, vatPercent, who last changed it) — **NEEDS Run Migrations**. `lib/uncollected-settings.ts`
+  (server only, NOT a `"use server"` file) reads it tolerantly: a missing table → the defaults with
+  `ready: false` (the panel says they can't be changed yet); any other fault → the defaults with
+  `readFailed: true` (the panel says the figures may be wrong, and the BC check sets or moves NO storage
+  start that run). A blank or out-of-range column falls back to its default (`normaliseStorageSettings`).
+  Saving is **admins only** (the panel's `saveStorageSettings` action checks `getAccountsAccess()` first,
+  then calls the helper, which checks every value in plain English — 0–365 free days, up to £1,000 a
+  lot, 0–100% VAT — and writes nothing when nothing changed, so "last changed by" stays true). The
+  change is also written to the server's log (`console.info "uncollected storage settings changed"`).
+  - **Save asks first, in the page** (`previewStorageSettings`, admins only, read only): what the new
+    charges are, that EVERY case's figure changes at once — collected and closed ones too, since money
+    is never stored, so a figure already used to raise a charge will read differently — and, when the
+    free days change, how many open cases from BC will have their start moved, each with a timeline
+    line (`countStartMoves`, the same rule as the move itself — `restampDay`). "Saving and moving start
+    dates…" while it runs; the answer says how many moved, how many couldn't be, and — when the cases
+    couldn't even be read (`startsUnread`) — that the BC check moves them when it next looks at each.
+  - ⚠⚠ **The settings lock.** `saveStorageSettings` writes the row inside a transaction holding
+    `pg_advisory_xact_lock(hashtext('uncollected-storage-settings'))` EXCLUSIVELY; every case the BC
+    check saves takes the same lock SHARED (`lockStorageSettingsShared`) after the invoice lock and
+    reads the free days inside that transaction (`graceDaysInTx`). So a check part-way through a run
+    can't save a case on the old free days after the restamp has looked at the cases (it finished
+    first, so the restamp moves it — or it waits and reads the new ones), and a case it adds after the
+    change starts on the new ones. ⚠ `graceDaysInTx` only when the table is known to be there
+    (`settingsInTx`): a missing table would abort the whole transaction. Before Run Migrations the
+    check uses the standard free days, and looks again now and then during the run.
+  - The box is **admins only** (the panel is) and its Change button is **disabled** before Run
+    Migrations (`STORAGE_SETTINGS_NOT_READY`) and while the settings couldn't be read
+    (`STORAGE_SETTINGS_READ_FAILED`), saying which underneath.
+- **Where the storage start lives: the case's own `storageFrom`** (no new column). For a case from BC the
+  check writes it (new cases, cases it holds, cases it takes over) and **moves it when the paid date or
+  the free days change** — but ⚠⚠ **never a start a person set**. Who set it is read from the timeline
+  (`storageStartOwner`): the newest `created` / `edit` / `status` event mentioning "storage charges
+  from" decides — with `STORAGE_RULE_MARK` ("by the storage rule") it's the rule's; otherwise a
+  person's (Changed storage charges from to …, or Storage charges apply — storage charges from …);
+  "storage charges from cleared" hands it back to the rule. A start with no such event but a date on
+  the case (typed when a case was added by hand) is a person's (`ruleMaySetStart`).
+  - ⚠ Those words are load-bearing: `FIELD_LABELS.storageFrom` ("storage charges from"), the rule's
+    `storageRuleWords`, and the Storage status line's "storage counted from …" (deliberately NOT
+    "storage charges from", or the rule's start would read as a person's). Change them together.
+  - **Changing the free days** moves the start of every OPEN case from BC whose start the rule owns
+    (`restampStorageStarts`, run by the save): each move is its own small write, only if the start is
+    still what was read, with a line on the case signed by the admin and carrying the rule's mark.
+    The rate, per day/week and VAT need nothing moved — every figure follows at once.
+  - A case added by hand with no storage start uses the rule live from its paid date (`startBasis:
+    "rule"`); the check never writes to a hand case it hasn't taken over.
+  - The first BC check after this shipped gives every open case from BC its start, with ONE "BC
+    update: storage charges from … by the storage rule" line on each timeline — expected, not a fault.
+  - **The case page says who set the start from the timeline, never by comparing dates**
+    (`UncollectedCaseDetail.storageStartBy`, read by `readStorageStartOwner` — its own small read, so a
+    long timeline can't hide it): "Set by the storage rule" (with what today's free days would give,
+    when it differs — a closed case keeps the start it had), "Set on this case by a person" (the check
+    leaves it alone; **Use the standard date** / **Hand it back to the storage rule** clears it, which
+    hands it back), or "No start date is set". "The BC check keeps the start in step" is said only when
+    the rule owns it.
+  - **"Storage charges apply" with no start** (`setStatus`): with a paid date, nothing is stored — the
+    rule's start already applies (the line says "storage counted from …", ⚠ never "storage charges
+    from"), which can be EARLIER than the day the status was picked (an old hand case charges back to
+    its standard start). With no paid date it starts today (a person's start), written only if the case
+    still has no start. ⚠ **A decision waiting on Jack** (the old behaviour was "charges start the day
+    the status is picked"): if he wants that back, set `storageFrom = today` with the "storage charges
+    from …" line for every case with no start, and drop the rule branch and the status card's words.
+- **Waiving storage** (admins only, a reason needed): an event of kind **`storage_waived`** whose text
+  IS the reason, and **`storage_resumed`** (an optional note) to charge it again. The **latest** of the
+  two is the switch (`storageWaiverOf`, `readCaseStorageFlags`) — no schema change. Waived → nothing
+  owed and not in the tile, but the case still shows what it would have been. `EVENT_META` gives both
+  their words and symbols on the timeline.
+  - `waiveStorage(id, reason)` / `resumeStorage(id, note?)`: the event's text is ONLY the reason or
+    note (bank and card shapes refused, `STORAGE_LIMITS.reason`). Each locks the case's row
+    (`FOR UPDATE`) first, reads the latest switch event, answers "nothing changed" when it is already
+    that way, and stamps the event's `at` after the lock, so two presses can't both write one and the
+    switch events sort in the order they were made. Confirmed in the page; the answer gives the figure.
+- **The panel** (`app/(app)/tools/accounts/uncollected/**`, actions in `lib/actions/uncollected.ts`):
+  - A **"Storage owed" tile** — `storageOwedOnOpenCases` over EVERY open case whatever the filters,
+    inc VAT, with "£X + VAT on N cases · N waived · at least — N with no lot count / no paid date"
+    under it. ⚠ When cases ARE being charged but none can be added up (every one has no lot count) it
+    shows "—" and says so — never a calm £0.00 (design rule 7); "No open case is being charged yet"
+    only when nothing is charged, waived or uncounted. An amber note when the settings couldn't be read.
+  - A **"Storage owed" column** (ex VAT, inc VAT under it, the whole sentence on hover; Waived · Free
+    until … · Lots not known · None · —, with "no VAT" at 0%) — the colour key explains every one.
+  - The case's **Storage card**: the sentence, the figures (two to a row while the card is half the
+    page), where the start came from (above), the start-date box, Waive / Charge again.
+  - **CSV** columns (worked out on the day of the export): Paid date is · Storage charges from ·
+    Storage days charged · Storage weeks charged (per week only — blank per day) · Lots charged ·
+    Storage £ ex VAT · Storage VAT £ · Storage £ inc VAT · Storage waived (reason, who, date and what
+    it would be). Numbers stay numbers, so a spreadsheet can add them up.
+  - The **"Storage charges" settings box** (above).
 
 ---
 ## 🔐 Two-factor login (2026-10-22)
