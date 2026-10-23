@@ -19,6 +19,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a13268317aa75bbd73e3be5c094868f5ce74bd44","author":"Jordan Orange","date":"2026-10-23T11:21:20+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"399770142d3ee8ee4217244b7ab6e5039cc5af6b","author":"Jordan Orange","date":"2026-10-23T11:21:19+01:00","subject":"Lot wizard: remember tote/vendor/receipt on Start cataloguing, so a restart brings back the current tote, not the last saved batch"},
+  {"sha":"5f3f23f04d8a51b947bfb3429e924a05175de8fb","author":"jack-vectis","date":"2026-10-23T10:25:51+01:00","subject":"Paid, not collected gets its own tile in Admin & Operations on the Hub home (admins only, like the panel)"},
   {"sha":"805424dfbfe455dfb02064a67db7a667d84b0f08","author":"jack-vectis","date":"2026-10-23T09:32:50+01:00","subject":"Accounts: Paid, not collected now fills itself from BC"},
   {"sha":"f1406e691592f670ac07d7696ab88b0c72d89183","author":"jack-vectis","date":"2026-10-22T15:22:51+01:00","subject":"Accounts: Paid, not collected — track buyers who have paid but not collected"},
   {"sha":"c68903999150e5c8c9dbde3e025e2fbdcb3a4618","author":"Jordan Orange","date":"2026-10-22T15:01:54+01:00","subject":"Redeploy: Railway's build service failed on the last push (no code change)"},
