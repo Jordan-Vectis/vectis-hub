@@ -2518,7 +2518,9 @@ redirects here; the `Contact` table itself stays — Submissions use it.
 
 Jack: *"a new panel inside the Accounts section to track people who pay and are not collecting —
 make the framework for now"*. `/tools/accounts/uncollected` (the 📦 card under Reserves on the
-Accounts page), a case page per buyer at `/tools/accounts/uncollected/<id>`. One case = one buyer
+Accounts page, and — since 2026-10-23 — its own **"Paid, not collected" tile in Admin & Operations**
+on the Hub home, card key `UNCOLLECTED` in lib/app-cards.ts, admin-only like the panel: no appKey),
+a case page per buyer at `/tools/accounts/uncollected/<id>`. One case = one buyer
 who has paid (an invoice, or a sale's worth) and hasn't collected their lots: who they are, the
 sale and invoice, lots and £ paid, when they paid, where it stands, the next chase date, when
 storage charges start, and a timeline of every call, email, letter, note and change.
