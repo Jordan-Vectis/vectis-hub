@@ -773,26 +773,36 @@ export function droppedVerdict(refs: LotRef[], rows: Record<string, unknown>[], 
  *  when that invoice's lines weren't read. */
 export type JudgedBuyer = { lots: FeedLot[]; invoices: Map<string, { invoice: FeedInvoice; refs: LotRef[] | null }> }
 
+/** A lot BC has TICKED collected (its collection docket was posted), as the quick re-check's batched
+ *  read of a case's sales gives it (Auction_Lines_Excel, EVA_Collected true). */
+export type TickedLot = Pick<FeedLot, "saleCode" | "lotNum" | "lotSuffix">
+
 /**
  * The QUICK re-check of an open case from BC that the run didn't find — from what the run already
- * read for its buyer, so no BC call and no limit a run (2026-10-23 — Jack: "things are scanned as
- * collected and still showing"). The cases added before the check read locations, whose lots were
- * scanned to COLLECTED without the docket being posted, close on the first check that reads their
- * buyer, instead of 60 a run — and on a run that ran out of time too.
- * Positive evidence only: the invoice is paid in full and its lines were read; the case's sale box
- * holds all its sales and nothing else; EVERY sale in it has at least one lot BC hasn't ticked on the
- * invoice (`refs` empty = the invoice had no readable lot numbers: every such lot in the sale counts);
- * each of those lots was sold safely inside the run's window (`windowFrom` + QUICK_WINDOW_MARGIN_DAYS);
- * and EVERY one of them had its location read and it is a GONE one. Anything else → null, and the
- * case goes to the slow re-check (checkDropped) as before — so do cases whose lots BC ticked.
- * ⚠⚠ Why every sale, and the window: the run's lots are only those of sales inside the 12-month
- * window (the feed's $filter on EVA_AuctionDate). A lot NOT among them is not proof it went — its sale
- * may simply have aged out of the window (an invoice covering F050 and F051, with F050 past it and its
- * lots still on a shelf). The slow re-check reads each sale whole, with no date filter (review of
- * 2026-10-23). Never relax this to "the lots the run saw are gone".
+ * read for its buyer (and, optionally, `ticked`: their lots BC ticked collected in the case's sales,
+ * read for many buyers a call), so no limit a run (2026-10-23 — Jack: "things are scanned as collected
+ * and still showing"). The cases added before the check read locations, whose lots were scanned to
+ * COLLECTED without the docket being posted, close on the first check that reads their buyer, instead
+ * of 60 a run — and on a run that ran out of time too.
+ * Positive evidence only:
+ *  • the invoice is paid in full and its lines were read, with lot numbers on them;
+ *  • the case's sale box holds all its sales and nothing else;
+ *  • every lot of theirs BC HASN'T ticked in those sales that any of the invoice's lot numbers fits
+ *    (suffix-tolerant) was sold safely inside the run's window (`windowFrom` +
+ *    QUICK_WINDOW_MARGIN_DAYS) and had its location read, and it is a GONE one;
+ *  • EVERY "Buyer Premium for Lot No N" line on the invoice is matched to a DIFFERENT lot of theirs in
+ *    those sales — one of those gone ones, or one BC ticked (`ticked`) — exact number + suffix first;
+ *  • every sale in the box has one of the matched lots.
+ * Anything else → null, and the case goes to the slow re-check (checkDropped) as before.
+ * ⚠⚠ A lot missing from the run is NOT proof it went (two reviews, 2026-10-23): the run only holds
+ * lots BC hasn't ticked, of sales inside the 12-month window, as BC's paging gave them. An invoice lot
+ * matched to nothing the run (or the ticked read) saw — its sale aged out of the window, dropped from
+ * the box by an earlier save, or its row skipped by paging — always sends the case to the slow
+ * re-check, which reads each sale whole. Never relax this to "the lots the run saw are gone".
  */
 export function droppedFromRun(
   c: { saleCode: string | null; invoiceKey: string }, buyer: JudgedBuyer | undefined, windowFrom: string,
+  ticked?: TickedLot[],
 ): DroppedEvidence | null {
   if (!buyer) return null
   const got = buyer.invoices.get(c.invoiceKey.trim().toUpperCase())
@@ -802,24 +812,11 @@ export function droppedFromRun(
   const sales = new Set(salesOf(c.saleCode))
   if (!sales.size) return null
   const refs = got.refs
-  const mine = buyer.lots.filter((l) => sales.has(l.saleCode.trim().toUpperCase()) && refs.some((r) => refMatchesLot(r, l)))
-  if (!mine.length) return null
-  const seenSales = new Set(mine.map((l) => l.saleCode.trim().toUpperCase()))
-  for (const sale of sales) if (!seenSales.has(sale)) return null
-  // ⚠⚠ EVERY lot on the invoice must be one the run saw (second review, 2026-10-23): each "Buyer Premium
-  // for Lot No N" line is matched to a DIFFERENT lot of theirs in the box's sales. One with no lot to
-  // match is a lot the run didn't see — BC ticked it, or its sale isn't in the box (aged out of the
-  // window, or dropped from the box by an earlier save), or BC's paging skipped its row — and only the
-  // first of those is "gone": leave the case to the slow re-check.
-  // Exact matches first (suffixed refs before plain ones), then the suffix-tolerant match, so a lot
-  // isn't taken by a looser ref that another lot would have fitted. A miss only ever means "slow path".
-  const used = new Set<FeedLot>()
-  for (const r of [...refs].sort((a, b) => Number(!a.suffix) - Number(!b.suffix))) {
-    const free = mine.filter((m) => !used.has(m))
-    const l = free.find((m) => refIsExactly(r, m)) ?? free.find((m) => refMatchesLot(r, m))
-    if (!l) return null
-    used.add(l)
-  }
+  const inSales = (l: { saleCode: string }) => sales.has(l.saleCode.trim().toUpperCase())
+  const fits = (l: Pick<FeedLot, "lotNum" | "lotSuffix">) => refs.some((r) => refMatchesLot(r, l))
+  // Every unticked lot of theirs any invoice lot number fits must have gone — even one the matching
+  // below doesn't pick (a premium line may leave the suffix off, so 366 could be 366A).
+  const mine = buyer.lots.filter((l) => inSales(l) && fits(l))
   const safeFrom = addDays(windowFrom, QUICK_WINDOW_MARGIN_DAYS)
   const gone: Record<string, number> = {}
   for (const l of mine) {
@@ -827,7 +824,56 @@ export function droppedFromRun(
     if (l.location == null || locationKind(l.location) !== "gone") return null
     gone[l.location] = (gone[l.location] ?? 0) + 1
   }
-  return { verdict: "collected", ticked: 0, gone, query: [], unread: 0 }
+  // One entry per lot (sale + number + suffix): a lot ticked between the run's read and the ticked
+  // read would otherwise be in both, and could stand in for two of the invoice's lines.
+  const pool: { saleCode: string; lotNum: string; lotSuffix: string; ticked: boolean }[] = []
+  const inPool = new Set<string>()
+  for (const [l, isTicked] of [...mine.map((m) => [m, false] as const), ...(ticked ?? []).filter((t) => inSales(t) && fits(t)).map((t) => [t, true] as const)]) {
+    const k = `${l.saleCode.trim().toUpperCase()}:${l.lotNum}:${l.lotSuffix}`
+    if (inPool.has(k)) continue
+    inPool.add(k)
+    pool.push({ saleCode: l.saleCode, lotNum: l.lotNum, lotSuffix: l.lotSuffix, ticked: isTicked })
+  }
+  // ⚠⚠ EVERY lot on the invoice must be one that was seen: each premium line matched to a DIFFERENT
+  // lot. Exact matches first (suffixed refs before plain ones), then the suffix-tolerant match, so a
+  // lot isn't taken by a looser ref that another lot would have fitted. A miss only ever means "slow path".
+  const used = new Set<(typeof pool)[number]>()
+  for (const r of [...refs].sort((a, b) => Number(!a.suffix) - Number(!b.suffix))) {
+    const free = pool.filter((m) => !used.has(m))
+    const l = free.find((m) => refIsExactly(r, m)) ?? free.find((m) => refMatchesLot(r, m))
+    if (!l) return null
+    used.add(l)
+  }
+  const matchedSales = new Set([...used].map((m) => m.saleCode.trim().toUpperCase()))
+  for (const sale of sales) if (!matchedSales.has(sale)) return null
+  return { verdict: "collected", ticked: [...used].filter((m) => m.ticked).length, gone, query: [], unread: 0 }
+}
+
+/** An Auction_Lines_Excel row as a lot BC TICKED collected and sold to someone (hammer over £0, not
+ *  withdrawn) — or null. With its buyer (upper case), for sorting a batched read back to each buyer. */
+export function toTickedLot(r: Record<string, unknown>): (TickedLot & { buyerNo: string }) | null {
+  if (!bcTrue(r.EVA_Collected) || !((num(r.EVA_HammerPrice) ?? 0) > 0) || bcTrue(r.EVA_WithdrawLot)) return null
+  const saleCode = str(r.EVA_AuctionNo).toUpperCase()
+  const buyerNo = str(r.EVA_BuyerNo).toUpperCase()
+  const lotNum = lotNumber(r.EVA_LotNo)
+  if (!saleCode || !buyerNo || !lotNum) return null
+  return { saleCode, lotNum, lotSuffix: str(r.EVA_LotSuffix).toUpperCase(), buyerNo }
+}
+
+/** Could `ticked` (the batched read of lots BC ticked) let droppedFromRun close this case? — the
+ *  invoice is paid with lot numbers, the box is clean, and every unticked lot of theirs the invoice's
+ *  numbers fit has gone. Only for these is the ticked read worth its BC calls. */
+export function droppedNeedsTicked(c: { saleCode: string | null; invoiceKey: string }, buyer: JudgedBuyer | undefined, windowFrom: string): boolean {
+  if (!buyer) return false
+  const got = buyer.invoices.get(c.invoiceKey.trim().toUpperCase())
+  if (!got || !got.refs || !got.refs.length || !isPaidInFull(got.invoice)) return false
+  if (salesLeftOff(c.saleCode) > 0 || salesUnparsed(c.saleCode) > 0 || !salesOf(c.saleCode).length) return false
+  const sales = new Set(salesOf(c.saleCode))
+  const refs = got.refs
+  const safeFrom = addDays(windowFrom, QUICK_WINDOW_MARGIN_DAYS)
+  return buyer.lots
+    .filter((l) => sales.has(l.saleCode.trim().toUpperCase()) && refs.some((r) => refMatchesLot(r, l)))
+    .every((l) => !!l.saleDate && l.saleDate >= safeFrom && l.location != null && locationKind(l.location) === "gone")
 }
 
 /** droppedFromRun leaves a case to the slow re-check when any of its lots was sold within this many

@@ -2799,6 +2799,14 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     aged out of the window — or the buyer not judged this run) goes to the slow re-check below, as
     before. Saving's own time limit and a Stop still stop it; what's left is said in the run's notes
     (by its cause) and closed next run.
+    - **Invoices with ticked lots too** (2026-10-23 — sandbox had 4,408 such cases waiting, 60 a run:
+      26,842 of 37,015 unticked lots were at COLLECTED or SHIPPED). Before saving, the check reads the
+      lots BC TICKED in those cases' sales, up to 20 buyers a call per sale (`readTickedFor`, only for
+      cases where every unticked lot the invoice's numbers fit has gone — `droppedNeedsTicked`), and
+      `droppedFromRun` takes them as its 4th argument: an invoice line may then be matched to a ticked
+      lot as well as a gone one. A (sale, buyer) the read didn't get → that case has no ticked list and
+      goes to the slow re-check. Every unticked lot the invoice's numbers fit must STILL have gone, and
+      every line must still be matched to a different lot (one lot seen by both reads counts once).
     - ⚠⚠ **A lot missing from the run is NOT proof it went.** The run only holds lots BC hasn't ticked,
       of sales inside the 12-month window, as BC's paging gave them. The reviews of 2026-10-23 found
       the first version closing an invoice over F050 + F051 once F050 aged out with its lots still on

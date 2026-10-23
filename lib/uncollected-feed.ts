@@ -74,13 +74,13 @@ import {
 } from "@/lib/uncollected-settings"
 import {
   BC_PAID_DATE_FIELD, PLACES_PER_CALL, QUERY_CLEAR_START, QUERY_FLAG_START, RECEIPT_LINE_SELECT, addedText, bcDay, bcTrue, chunk,
-  cleanEmail, closedByLocation, collectedCloseText, collectedStopFrom, cleanPhone, droppedEvidence, droppedFromRun, droppedLots, eachLimit, feedChanges,
+  cleanEmail, closedByLocation, collectedCloseText, collectedStopFrom, cleanPhone, droppedEvidence, droppedFromRun, droppedLots, droppedNeedsTicked, eachLimit, feedChanges,
   hasPaidDateField, invoicesNeedingLines, isNoLongerPaidText, isPaidInFull, isQueryClearText, isQueryFlagText, locationCounts,
   lotNoOf, lotRefsFromLines, matchBuyer, matchedText, nextQueryFlag, noLongerPaidText, noPlacesRead, odataString, ownedValues, pickDropped,
   placeKey, placesFromRows, readLinesThenPlaces, rotate, saleWindow, salesLeftOff, salesOf, salesUnparsed, splitByPlace, storageStamp, toFeedInvoice, toFeedLot,
-  updatedText, withPlaces,
+  toTickedLot, updatedText, withPlaces,
   type BuyerToRead, type Candidate, type DroppedEvidence, type FeedChange, type FeedChangeOptions, type FeedInvoice, type FeedLot, type InvoiceLines,
-  type JudgedBuyer, type LotPlace, type LotRef, type PlacesRead,
+  type JudgedBuyer, type LotPlace, type LotRef, type PlacesRead, type TickedLot,
 } from "@/lib/uncollected-feed-match"
 
 export * from "@/lib/uncollected-feed-match"
@@ -341,6 +341,28 @@ async function readBuyerSaleRows(ctx: Ctx, saleCode: string, buyerNo: string): P
     if (!(e instanceof BcError) || e.status !== 400) throw e
     const rows = await readAll(ctx, base, { $filter: `EVA_AuctionNo eq ${odataString(saleCode)}`, $select: LOT_SELECT })
     return rows.filter((r) => String(r.EVA_BuyerNo ?? "").trim().toUpperCase() === buyerNo.toUpperCase())
+  }
+}
+
+/**
+ * Lots BC TICKED collected in one sale, sold to any of `buyers` (up to BUYERS_PER_CALL) — ONE call,
+ * for the quick re-check (droppedFromRun): a case whose invoice has lots ticked as well as lots scanned
+ * out can then close without its own re-check. BC refusing the batched filter (400) → one buyer at a
+ * time (readBuyerSaleRows). Throws on failure (BcError, OutOfTime / Stopped).
+ */
+async function readTickedFor(ctx: Ctx, sale: string, buyers: string[]): Promise<Record<string, unknown>[]> {
+  const base = bcODataUrl("Auction_Lines_Excel")
+  const anyOf = buyers.map((b) => `EVA_BuyerNo eq ${odataString(b)}`).join(" or ")
+  try {
+    return await readAll(ctx, base, {
+      $filter: `EVA_AuctionNo eq ${odataString(sale)} and EVA_Collected eq true and (${anyOf})`,
+      $select: LOT_SELECT,
+    })
+  } catch (e) {
+    if (!(e instanceof BcError) || e.status !== 400) throw e
+    const out: Record<string, unknown>[] = []
+    for (const b of buyers) out.push(...(await readBuyerSaleRows(ctx, sale, b)).filter((r) => bcTrue(r.EVA_Collected)))
+    return out
   }
 }
 
@@ -1440,6 +1462,63 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
       if (now.ready && !now.readFailed) s.settingsInTx = true
     }
 
+    // ── Open cases from BC it didn't find this time — judged only for buyers it fully checked (see the
+    // re-checks after saving). Worked out here, before saving, so the quick re-check's one BC read — the
+    // lots BC TICKED in those cases' sales, many buyers a call (readTickedFor) — is made while the time
+    // for reading BC is still there. Only for cases that read could close (droppedNeedsTicked).
+    const foundKeys = new Set(f.candidates.map((c) => c.invoiceNo.toUpperCase()))
+    const uncheckedNow = new Set(f.uncheckedBuyers.map((b) => b.toUpperCase()))
+    const dropped = openBc.filter((c) => {
+      const k = (c.bcKey ?? c.invoiceNo ?? "").toUpperCase()
+      return k && !foundKeys.has(k) && !uncheckedNow.has((c.buyerNo ?? "").trim().toUpperCase())
+    })
+    const buyerOf = (c: OpenBcCase) => (c.buyerNo ?? "").trim().toUpperCase()
+    const keyOfCase = (c: OpenBcCase) => c.bcKey ?? c.invoiceNo ?? ""
+    /** "SALE|BUYER" → the lots BC ticked for that buyer in that sale — present only when read. */
+    const tickedOf = new Map<string, TickedLot[]>()
+    const needTicked = new Map<string, Set<string>>()   // sale → buyers
+    for (const c of dropped) {
+      const judged = f.judged.get(buyerOf(c))
+      if (droppedFromRun({ saleCode: c.saleCode, invoiceKey: keyOfCase(c) }, judged, f.window.from)) continue
+      if (!droppedNeedsTicked({ saleCode: c.saleCode, invoiceKey: keyOfCase(c) }, judged, f.window.from)) continue
+      for (const sale of salesOf(c.saleCode)) {
+        if (!needTicked.has(sale)) needTicked.set(sale, new Set())
+        needTicked.get(sale)!.add(buyerOf(c))
+      }
+    }
+    if (needTicked.size && !ctx.outOfTime && !stopBy()) {
+      const batches = [...needTicked].flatMap(([sale, bs]) => chunk([...bs].sort(), BUYERS_PER_CALL).map((buyers) => ({ sale, buyers })))
+      let doneBatches = 0
+      let unreadBatches = 0
+      await eachLimit(batches, BC_CONCURRENCY, async ({ sale, buyers }) => {
+        try {
+          if (ctx.outOfTime) throw ctx.stopped ? new Stopped() : new OutOfTime()
+          const rows = await readTickedFor(ctx, sale, buyers)
+          const got = new Map<string, TickedLot[]>(buyers.map((b) => [b, []]))
+          for (const r of rows) {
+            const t = toTickedLot(r)
+            if (t && t.saleCode === sale) got.get(t.buyerNo)?.push(t)
+          }
+          for (const [b, ts] of got) tickedOf.set(`${sale}|${b}`, ts)
+        } catch {
+          unreadBatches++   // those cases go to the slow re-check, as before
+        }
+        doneBatches++
+        setProgress({ stage: "checking", done: doneBatches, total: batches.length, words: `Reading which lots BC ticked collected, for the cases to re-check — ${n0(doneBatches)} of ${n0(batches.length)}` })
+      })
+      if (unreadBatches) notes.push(`Which lots BC ticked collected couldn't be read for ${many(unreadBatches, "group")} of buyers (BC didn't answer, or the time ran out) — their cases were left to the slow re-check, or the next check.`)
+    }
+    /** The lots BC ticked in every sale of a case — undefined unless every one of its sales was read. */
+    const tickedForCase = (c: OpenBcCase): TickedLot[] | undefined => {
+      const out: TickedLot[] = []
+      for (const sale of salesOf(c.saleCode)) {
+        const got = tickedOf.get(`${sale}|${buyerOf(c)}`)
+        if (!got) return undefined
+        out.push(...got)
+      }
+      return out
+    }
+
     // ── Save every candidate — until a Stop, or the run has gone on so long that a second one
     // could be let in (SAVE_STOP_MS); either way what's saved stays saved.
     const saveStopAt = started.getTime() + SAVE_STOP_MS
@@ -1476,17 +1555,10 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
     //     turning round from run to run (pickDropped) so every one is reached in turn.
     let unreadDropped = 0
     if (!stopBy() && !ctx.stopped && !outOfSaveTime) {
-      const foundKeys = new Set(f.candidates.map((c) => c.invoiceNo.toUpperCase()))
-      const unchecked = new Set(f.uncheckedBuyers.map((b) => b.toUpperCase()))
-      const dropped = openBc.filter((c) => {
-        const k = (c.bcKey ?? c.invoiceNo ?? "").toUpperCase()
-        return k && !foundKeys.has(k) && !unchecked.has((c.buyerNo ?? "").trim().toUpperCase())
-      })
-
       const quick: { c: OpenBcCase; ev: DroppedEvidence }[] = []
       const slow: OpenBcCase[] = []
       for (const c of dropped) {
-        const ev = droppedFromRun({ saleCode: c.saleCode, invoiceKey: c.bcKey ?? c.invoiceNo ?? "" }, f.judged.get((c.buyerNo ?? "").trim().toUpperCase()), f.window.from)
+        const ev = droppedFromRun({ saleCode: c.saleCode, invoiceKey: keyOfCase(c) }, f.judged.get(buyerOf(c)), f.window.from, tickedForCase(c))
         if (ev) quick.push({ c, ev })
         else slow.push(c)
       }
@@ -1511,7 +1583,7 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
       checked.closed += quickClosed
       if (quickClosed) {
         const where = Object.entries(quickGone).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `${k} ${n0(n)}`).join(", ")
-        notes.push(`${many(quickClosed, "case")} from BC closed as collected straight from this check's own read: every lot of theirs on the invoice is at a location that means it has gone (lots at ${where}), though BC hasn't ticked them collected because the collection docket wasn't posted. BC keeps no date for that scan, so if the lots had gone before a case was added its storage figure is too high — ${quickClosed === 1 ? "the case says" : "each case says"} to check it.`)
+        notes.push(`${many(quickClosed, "case")} from BC closed as collected straight from this check's own read: every lot on the invoice is ticked collected in BC or at a location that means it has gone${where ? ` (lots at ${where})` : ""} — the collection docket often isn't posted. BC keeps no date for that scan, so if the lots had gone before a case was added its storage figure is too high — ${quickClosed === 1 ? "the case says" : "each case says"} to check it.`)
       }
       if (quickFailed) notes.push(`${many(quickFailed, "case")} whose lots have all gone couldn't be closed — see the server's log. The next check tries again.`)
       if (quickLeft) {
