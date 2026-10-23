@@ -2497,6 +2497,25 @@ export const MIGRATIONS = [
   `DO $$ BEGIN
     ALTER TABLE "UncollectedPaidEvent" ADD CONSTRAINT "UncollectedPaidEvent_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "UncollectedPaid"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Accounts → Paid, not collected: each run of the BC check that fills it (2026-10-22). New table only.
+  `CREATE TABLE IF NOT EXISTS "UncollectedSyncRun" (
+    "id"         TEXT NOT NULL,
+    "startedAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" TIMESTAMP(3),
+    "trigger"    TEXT NOT NULL,
+    "byName"     TEXT,
+    "ok"         BOOLEAN,
+    "lotsSeen"   INTEGER,
+    "buyers"     INTEGER,
+    "found"      INTEGER,
+    "added"      INTEGER,
+    "updated"    INTEGER,
+    "closed"     INTEGER,
+    "note"       TEXT,
+    "error"      TEXT,
+    CONSTRAINT "UncollectedSyncRun_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedSyncRun_startedAt_idx" ON "UncollectedSyncRun"("startedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

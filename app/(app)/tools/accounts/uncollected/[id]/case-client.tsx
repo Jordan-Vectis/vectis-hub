@@ -8,8 +8,9 @@ import {
   EVENT_META, STATUS_META, dateInputValue, daysBetween, formatDateTime, formatDay,
   type UncollectedCaseDetail,
 } from "@/lib/uncollected"
-import { DaysWaiting, LastContact, SourceBadge, StatusChip } from "../bits"
+import { DaysWaiting, LastContact, PaidWhen, SourceBadge, StatusChip } from "../bits"
 import { BackLink, Flash, NO_ANSWER, PANEL_PATH, btn, btnDanger, btnGo, card, cardTitle, field, label, plural, type CaseHref, type FlashMessage } from "../ui"
+import BcLots from "./bc-lots"
 import ContactCard from "./contact-card"
 import DetailsCard from "./details-card"
 import StatusCard from "./status-card"
@@ -17,9 +18,9 @@ import StatusCard from "./status-card"
 // One Paid, not collected case. Every card writes through lib/actions/uncollected.ts (admins only,
 // re-checked there) and then refreshes the page from the server, so what's shown is what's saved.
 //
-// Layout: on a wide screen (lg) Details + Storage on the left, Status + Log contact + Timeline on
-// the right. Narrower — a phone, an iPad in portrait — one column with what's done most FIRST:
-// Status, Log contact, Details, Storage, Timeline. The two column wrappers are `display: contents`
+// Layout: on a wide screen (lg) Details + Lots in BC + Storage on the left, Status + Log contact +
+// Timeline on the right. Narrower — a phone, an iPad in portrait — one column with what's done most
+// FIRST: Status, Log contact, Details, Lots in BC, Storage, Timeline. The two column wrappers are `display: contents`
 // below lg, so each card takes its own `order` in the one column. The right-hand column comes first
 // in the page, so on the iPads the order you tab through matches what's shown (only the Timeline,
 // with nothing to tap, sits elsewhere in the page); on a wide screen the keyboard reaches Status and
@@ -41,8 +42,13 @@ export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDet
             <SourceBadge source={c.source} />
             <span>
               <DaysWaiting days={c.daysWaiting} closed={!!c.closedAt} />{" "}
-              {c.daysWaiting == null ? "— paid date not known" : c.closedAt ? `waited · closed ${formatDay(c.closedAt)}` : "waiting since they paid"}
+              {c.daysWaiting == null
+                ? "— paid date not known"
+                : c.closedAt
+                  ? `waited · closed ${formatDay(c.closedAt)}`
+                  : c.source === "bc" ? "since BC settled the invoice — they've waited at least this long" : "waiting since they paid"}
             </span>
+            <PaidWhen source={c.source} paidAt={c.paidAt} />
           </div>
         </div>
         {c.customerId && (
@@ -56,11 +62,12 @@ export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDet
         <div className="contents lg:block lg:order-2 lg:min-w-0 lg:space-y-4">
           <div className="order-1 min-w-0"><StatusCard c={c} caseHref={caseHref} /></div>
           <div className="order-2 min-w-0"><ContactCard c={c} today={today} /></div>
-          <div className="order-5 min-w-0"><Timeline c={c} /></div>
+          <div className="order-6 min-w-0"><Timeline c={c} /></div>
         </div>
         <div className="contents lg:block lg:order-1 lg:min-w-0 lg:space-y-4">
           <div className="order-3 min-w-0"><DetailsCard c={c} today={today} caseHref={caseHref} /></div>
-          <div className="order-4 min-w-0"><StorageCard c={c} today={today} /></div>
+          <div className="order-4 min-w-0"><BcLots c={c} /></div>
+          <div className="order-5 min-w-0"><StorageCard c={c} today={today} /></div>
         </div>
       </div>
 

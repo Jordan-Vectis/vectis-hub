@@ -1,6 +1,6 @@
 import {
-  AGE_BANDS, EVENT_META, STATUS_META, UNCOLLECTED_STATUSES, ageBandFor, formatDateTime, formatDay,
-  type ChaseState, type UncollectedLastContact, type UncollectedStatus,
+  AGE_BANDS, EVENT_META, PAID_BY_HELP, SOURCE_META, STATUS_META, UNCOLLECTED_STATUSES, ageBandFor, formatDateTime, formatDay,
+  paidWords, type ChaseState, type UncollectedLastContact, type UncollectedSource, type UncollectedStatus,
 } from "@/lib/uncollected"
 import { muted } from "./ui"
 
@@ -56,13 +56,20 @@ export function LastContact({ last, compact = false }: { last: UncollectedLastCo
   )
 }
 
-export function SourceBadge({ source }: { source: "manual" | "bc" }) {
-  if (source !== "bc") return null
+/** "From BC" or "Added by hand" — every case says which (the key is in ColourKey). */
+export function SourceBadge({ source }: { source: UncollectedSource }) {
+  const m = SOURCE_META[source] ?? SOURCE_META.manual
   return (
-    <span title="Filled in from Business Central's paid invoices" className="inline-flex items-center rounded border border-sky-300 dark:border-sky-700 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
-      From BC
+    <span title={m.help} className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${m.chip}`}>
+      {m.label}
     </span>
   )
+}
+
+/** "Paid by 3 Jun 2026" (from BC — BC's settled date, explained on hover) or "Paid 3 Jun 2026". */
+export function PaidWhen({ source, paidAt }: { source: UncollectedSource; paidAt: string | null }) {
+  if (!paidAt) return <span className={muted}>Paid date not known</span>
+  return <span title={source === "bc" ? PAID_BY_HELP : undefined}>{paidWords(source, paidAt)}</span>
 }
 
 /** What every colour and chip on the panel means. */
@@ -94,12 +101,22 @@ export function ColourKey() {
             ))}
           </ul>
           <p className="text-gray-600 dark:text-gray-300 mt-2">
-            Counted in London days from the day they paid. Once a case is closed it stops counting.
+            Counted in London days from the day they paid — for a case from BC, from the day BC settled the
+            invoice (&ldquo;Paid by&rdquo;), so they have waited at least that long. Once a case is closed it stops counting.
           </p>
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-4 mb-1">Next chase</p>
           <p className="text-gray-600 dark:text-gray-300">
             <span className="font-semibold text-red-600 dark:text-red-400">Red</span> means it&apos;s due today or overdue — time to get in touch.
           </p>
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-4 mb-2">Where it came from</p>
+          <ul className="space-y-2">
+            {(["bc", "manual"] as const).map(s => (
+              <li key={s} className="flex items-start gap-2">
+                <SourceBadge source={s} />
+                <span className="text-gray-600 dark:text-gray-300">{SOURCE_META[s].help}.</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </details>

@@ -343,13 +343,14 @@ export const DESTINATIONS: Destination[] = [
   // No `ask`, so the suggestions stay as they were. Apostrophes are spaces in matchScore ("haven t").
   {
     name: "Paid, not collected (Accounts)", href: "/tools/accounts/uncollected", app: "ACCOUNTS", adminOnly: true,
-    what: "Accounts → 📦 Paid, not collected (admins only): the buyers who have paid for their lots but haven't collected them. Tiles show the open cases, lots and money waiting, the longest wait and the chases due; filter by status and by how long they've waited, search by name, buyer number, sale or invoice, and export the list. Add a buyer by hand, then open them to change their details, log a call, email, letter or note with the next chase date, set the date storage charges start from, and move them on — waiting, been in touch, collection or delivery arranged, storage charges apply, collected (which closes it), or closed another way (with a reason). Entered by hand for now; filling it automatically from BC's paid invoices is the next step.",
+    what: "Accounts → 📦 Paid, not collected (admins only): the buyers who have paid for their lots but haven't collected them. Filled automatically from BC every morning at 08:30 — a lot sold to them, on an invoice BC shows as paid in full, still not collected 28 days (4 weeks) after it was paid, one case per invoice, marked From BC — and 🔄 Check BC now runs the same check straight away with your own BC sign-in (it only reads BC, and Stop stops it part-way, keeping what it saved); the line at the top says when BC was last checked and what it found. A case from BC shows 'Paid by' (the day BC settled the invoice) and lists its lots live from BC, and closes itself when BC shows them collected. Tiles show the open cases, lots and money waiting, the longest wait and the chases due; filter by status and by how long they've waited, search by name, buyer number, sale or invoice, and export the list. Add a buyer by hand too, then open any case to change its details, log a call, email, letter or note with the next chase date, set the date storage charges start from, and move it on — waiting, been in touch, collection or delivery arranged, storage charges apply, collected (which closes it), or closed another way (with a reason).",
     also: [
       "paid not collected", "paid but not collected", "paid and not collected", "paid but uncollected",
       "paid not collecting", "paid but not collecting", "paid and not collecting", "paid but haven t collected",
       "uncollected lots", "uncollected paid lots", "paid uncollected lots", "uncollected buyers", "uncollected purchases",
       "buyers not collecting", "buyers who haven t collected", "chase uncollected buyers", "chasing uncollected buyers",
       "storage charges for uncollected lots",
+      "paid over 4 weeks not collected", "paid 4 weeks ago not collected", "check bc for uncollected buyers",
     ],
   },
 

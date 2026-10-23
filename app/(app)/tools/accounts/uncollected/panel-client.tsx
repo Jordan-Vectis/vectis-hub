@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react"
 import { listCases } from "@/lib/actions/uncollected"
 import {
-  AGE_BANDS, CLOSED_STATUSES, OPEN_STATUSES, SORT_LABELS, STATUS_META, UNCOLLECTED_LIMITS, UNCOLLECTED_SORTS, UNCOLLECTED_STATUSES,
-  ageBandFor, formatDay, formatMoney, isUncollectedSort, uncollectedFilterQuery,
+  AGE_BANDS, CLOSED_STATUSES, OPEN_STATUSES, SORT_LABELS, STATUS_META, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LIMITS, UNCOLLECTED_SORTS,
+  UNCOLLECTED_STATUSES, ageBandFor, formatMoney, isUncollectedSort, uncollectedFilterQuery,
   type AgeBandKey, type UncollectedFilter, type UncollectedList, type UncollectedStatus,
 } from "@/lib/uncollected"
 import AddBuyer from "./add-buyer"
-import { ChaseDate, ColourKey, DaysWaiting, LastContact, SourceBadge, StatusChip } from "./bits"
+import { ChaseDate, ColourKey, DaysWaiting, LastContact, PaidWhen, SourceBadge, StatusChip } from "./bits"
 import { casesCsv, downloadCsv } from "./export"
 import { PANEL_PATH, btn, btnGo, card, cardTitle, inlineLink, input, plural, td, th } from "./ui"
 
@@ -307,9 +307,9 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
         <div className={`${card} px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400 ${stale ? "opacity-60" : ""}`}>
           {totals.open === 0 && isDefault ? (
             statusTotal(CLOSED_STATUSES) > 0 ? (
-              <>Nobody is waiting right now — {plural(statusTotal(CLOSED_STATUSES), "case")} collected or closed (see <b>Everything</b>). When a buyer has paid but not collected, press <b>＋ Add a buyer</b>.</>
+              <>Nobody is waiting right now — {plural(statusTotal(CLOSED_STATUSES), "case")} collected or closed (see <b>Everything</b>). The BC check adds anyone who qualifies; for anyone else, press <b>＋ Add a buyer</b>.</>
             ) : (
-              <>Nobody is on the list yet. When a buyer has paid but not collected, press <b>＋ Add a buyer</b>.</>
+              <>Nobody is on the list yet. The BC check adds buyers whose paid lots are still here after {UNCOLLECTED_AFTER_DAYS} days — press <b>Check BC now</b> above, or <b>＋ Add a buyer</b> by hand.</>
             )
           ) : (
             <>Nothing matches these filters.{" "}
@@ -364,7 +364,7 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                     <td className={`${td} text-right tabular-nums`}>{c.lots ?? "—"}</td>
                     <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
                       <div>{formatMoney(c.amountPaid)}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{c.paidAt ? `paid ${formatDay(c.paidAt)}` : "paid date not known"}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400"><PaidWhen source={c.source} paidAt={c.paidAt} /></div>
                     </td>
                     <td className={`${td} whitespace-nowrap`}><DaysWaiting days={c.daysWaiting} closed={!!c.closedAt} /></td>
                     <td className={td}><StatusChip status={c.status} /></td>
@@ -398,7 +398,11 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                     <div><dt className="text-xs text-gray-500 dark:text-gray-400">Paid</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{formatMoney(c.amountPaid)}</dd></div>
                     <div><dt className="text-xs text-gray-500 dark:text-gray-400">Lots</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{c.lots ?? "—"}</dd></div>
                   </dl>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-600 dark:text-gray-300">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-600 dark:text-gray-300">
+                    <SourceBadge source={c.source} />
+                    <PaidWhen source={c.source} paidAt={c.paidAt} />
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-600 dark:text-gray-300">
                     <span>Next chase: <ChaseDate at={c.nextChaseAt} chase={c.chase} /></span>
                     <span>Last contact: <LastContact last={c.lastContact} compact /></span>
                   </div>

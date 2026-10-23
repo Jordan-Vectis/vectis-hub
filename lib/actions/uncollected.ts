@@ -4,14 +4,19 @@ import { revalidatePath } from "next/cache"
 import { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getAccountsAccess } from "@/lib/accounts-auth"
+import { getBCToken } from "@/lib/bc"
+import { bcLotsForBuyer, salesOf, startUncollectedSync, stopUncollectedSync, uncollectedSyncNow } from "@/lib/uncollected-feed"
 import {
   AGE_BANDS, BANK_DETAILS_REFUSED, BC_OWNED_FIELDS, CLOSED_STATUSES, FIELD_LABELS, OPEN_STATUSES, REACHED_OUT_KINDS,
-  STATUS_META, UNCOLLECTED_ADMINS_ONLY, UNCOLLECTED_LIMITS, UNCOLLECTED_NOT_READY, UNCOLLECTED_STATUSES,
+  STATUS_META, UNCOLLECTED_ADMINS_ONLY, UNCOLLECTED_BC_NOT_CONNECTED, UNCOLLECTED_LIMITS, UNCOLLECTED_NOT_READY,
+  UNCOLLECTED_RUN_STALE_MINUTES, UNCOLLECTED_STATUSES, UNCOLLECTED_SYNC_NOT_READY,
   ageBandFor, chaseState, dayToStored, daysWaiting, eventKindOf, formatDay, formatMoney, isAgeBandKey, isContactKind,
-  isDay, isOpenRaw, isUncollectedSort, isUncollectedStatus, londonDay, looksLikeBankDetails, statusOf,
-  type AgeBandKey, type ContactKind, type LogContactInput, type UncollectedCase, type UncollectedCaseDetail,
+  isDay, isOpenRaw, isUncollectedSort, isUncollectedStatus, londonDay, looksLikeBankDetails, sentence, statusOf,
+  type AgeBandKey, type ContactKind, type LogContactInput, type UncollectedBcLots,
+  type UncollectedCase, type UncollectedCaseDetail, type UncollectedCheckState,
   type UncollectedField, type UncollectedFilter, type UncollectedInput, type UncollectedLastContact, type UncollectedList,
-  type UncollectedPatch, type UncollectedResult, type UncollectedSort, type UncollectedStatus, type UncollectedTotals,
+  type UncollectedPatch, type UncollectedResult, type UncollectedSort, type UncollectedStatus, type UncollectedSyncRunInfo,
+  type UncollectedTotals,
 } from "@/lib/uncollected"
 
 // Accounts → Paid, not collected — every read and write. SERVER ONLY.
@@ -23,11 +28,16 @@ import {
 //    error: UNCOLLECTED_NOT_READY } until Run Migrations.
 //  • Every write records who did it (byId/byName from the session) on the case's timeline
 //    (UncollectedPaidEvent) and revalidates the whole Accounts section.
-//  • Manual entry only for now. A future BC feed writes source "bc" rows keyed by bcKey; the fields
-//    BC owns (BC_OWNED_FIELDS) can't be changed here on such a row, and a BC row can't be deleted.
-//  • ⚠ Nothing here calls or touches Business Central. ⚠ Customer personal data — never bank or
-//    card details (looksLikeBankDetails refuses the obvious shapes in every box: names, numbers,
-//    notes, timeline text; the phone box takes at most 15 digits).
+//  • Cases are added by hand here, or by the BC check (lib/uncollected-feed.ts → syncUncollected:
+//    nightly from server.js, or "Check BC now" — checkBcNow below), which writes source "bc" rows
+//    keyed by bcKey; the fields BC owns (BC_OWNED_FIELDS) can't be changed here on such a row, and a
+//    BC row can't be deleted.
+//  • ⚠ Business Central is READ ONLY. Only two things here go near it, both through the feed and
+//    with the person's OWN BC sign-in (getBCToken): checkBcNow (starts the read-only check) and
+//    bcLotsForCase (reads a buyer's lots in a sale for the case page). Nothing is written to BC.
+//    ⚠ Customer personal data — never bank or card details (looksLikeBankDetails refuses the
+//    obvious shapes in every box: names, numbers, notes, timeline text; the phone box takes at most
+//    15 digits).
 //  • One OPEN case per invoice, held under an advisory lock on the invoice (lockInvoice) by every
 //    write that could break it: createCase, updateCase (a new invoice number), setStatus (reopening).
 
@@ -51,7 +61,7 @@ async function requireAdmin(): Promise<Who> {
 function isMissingUncollected(e: unknown): boolean {
   const err = e as { code?: string; message?: string; meta?: { code?: string; message?: string } } | null
   if (err?.code === "P2021" || err?.code === "42P01" || err?.meta?.code === "42P01") return true
-  return /UncollectedPaid(Event)?\W{0,3}\s*does not exist/i.test(`${err?.message ?? ""} ${err?.meta?.message ?? ""}`)
+  return /Uncollected(Paid|PaidEvent|SyncRun)\W{0,3}\s*does not exist/i.test(`${err?.message ?? ""} ${err?.meta?.message ?? ""}`)
 }
 
 type Failure = Extract<UncollectedResult, { ok: false }>
@@ -743,5 +753,200 @@ export async function deleteCase(id: string): Promise<UncollectedResult> {
     return { ok: true, data: undefined }
   } catch (e) {
     return fail(e, "delete", "Something went wrong and the case wasn't deleted — please try again.")
+  }
+}
+
+// ─── The BC check: Check BC now, and where it stands ────────────────────────────────────────
+// The check is the feed's (lib/uncollected-feed.ts) — the same one the nightly run uses, with its own
+// one-at-a-time lock and its own UncollectedSyncRun row. A run takes minutes, longer than Railway's
+// proxy lets a request live, so Check BC now STARTS it (startUncollectedSync answers once the run's
+// row is written, or with why it couldn't start) and answers at once, as the database backup does.
+// The panel then asks lastSyncRun() every couple of seconds and shows what the check says it is
+// doing (uncollectedSyncNow: "Reading invoices — 120 of 312 buyers") with the time so far (design
+// rule 7b), and the result in numbers from the run's row when it finishes.
+// ⚠ Check BC now reads BC with the ADMIN'S OWN BC sign-in (getBCToken), never the background one.
+// Read only — nothing is written to BC.
+
+type SyncRunRow = {
+  id: string; startedAt: Date; finishedAt: Date | null; trigger: string; byName: string | null; ok: boolean | null
+  lotsSeen: number | null; buyers: number | null; found: number | null; added: number | null; updated: number | null
+  closed: number | null; note: string | null; error: string | null
+}
+
+const runInfo = (r: SyncRunRow): UncollectedSyncRunInfo => ({
+  id: r.id, startedAt: r.startedAt.toISOString(), finishedAt: iso(r.finishedAt), trigger: r.trigger, byName: r.byName,
+  ok: r.ok, lotsSeen: r.lotsSeen, buyers: r.buyers, found: r.found, added: r.added, updated: r.updated, closed: r.closed,
+  note: r.note, error: r.error,
+})
+
+/** Where the BC check stands. Throws when its table isn't there (the callers say "Run Migrations"). */
+async function readCheckState(): Promise<UncollectedCheckState> {
+  const [latest, lastOk, openFromBc] = await Promise.all([
+    prisma.uncollectedSyncRun.findFirst({ orderBy: [{ startedAt: "desc" }, { id: "desc" }] }),
+    prisma.uncollectedSyncRun.findFirst({ where: { ok: true, finishedAt: { not: null } }, orderBy: [{ startedAt: "desc" }, { id: "desc" }] }),
+    prisma.uncollectedPaid.count({ where: { source: "bc", status: { notIn: CLOSED_STATUSES } } }).catch(() => null),
+  ])
+  const now = Date.now()
+  // ⚠ RUNNING = this server holds the run's lock. One instance on Railway, and the nightly run (the
+  // cron route) and Check BC now both run inside it, so a check that is really going is always here.
+  const live = uncollectedSyncNow()
+  // An unfinished row from since this server started, under UNCOLLECTED_RUN_STALE_MINUTES old, with
+  // no lock held: a run whose end couldn't be recorded — NOT running (no ticking spinner for half an
+  // hour over nothing). The feed still won't start another until it's stale (its own guard).
+  const bootedAt = now - process.uptime() * 1000
+  const unfinished = !live && !!latest && !latest.finishedAt
+    && latest.startedAt.getTime() >= Math.max(now - UNCOLLECTED_RUN_STALE_MINUTES * 60_000, bootedAt)
+  return {
+    running: !!live,
+    startedAt: live?.startedAt ?? null,
+    trigger: live?.trigger ?? null,
+    byName: live?.byName ?? null,
+    progress: live?.progress ?? null,
+    stopBy: live?.stopBy ?? null,
+    stuckSince: unfinished ? latest!.startedAt.toISOString() : null,
+    openFromBc,
+    latest: latest ? runInfo(latest) : null,
+    lastOk: lastOk ? runInfo(lastOk) : null,
+    now: new Date(now).toISOString(),
+  }
+}
+
+/**
+ * Where the BC check stands: is one running (and what it's doing), the newest run, and the newest
+ * one that worked — for the panel's "Last checked from BC" line, asked every couple of seconds while
+ * a check runs. Admins only. Before Run Migrations → notReady with UNCOLLECTED_SYNC_NOT_READY.
+ */
+export async function lastSyncRun(): Promise<UncollectedResult<UncollectedCheckState>> {
+  try {
+    await requireAdmin()
+    return { ok: true, data: await readCheckState() }
+  } catch (e) {
+    if (isMissingUncollected(e)) return { ok: false, error: UNCOLLECTED_SYNC_NOT_READY, notReady: true }
+    return fail(e, "sync state", "Couldn't read when BC was last checked — please try again.")
+  }
+}
+
+/**
+ * Check BC now: starts the BC check straight away with the admin's own BC sign-in and answers as
+ * soon as it is under way, with where it stands. `started` false = a check was already running (the
+ * nightly one, or another admin's) — the panel follows that one instead. Not connected to BC →
+ * needsBc. Nothing is written to BC.
+ */
+export async function checkBcNow(): Promise<UncollectedResult<{ started: boolean; state: UncollectedCheckState }>> {
+  try {
+    const who = await requireAdmin()
+    // The free step first: the run table must be there before BC is asked anything.
+    const before = await readCheckState()
+    if (before.running) return { ok: true, data: { started: false, state: before } }
+
+    const token = await getBCToken()
+    if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
+
+    const start = await startUncollectedSync({
+      trigger: "manual",
+      byName: who.name,
+      token,
+      // Renews the admin's own sign-in if BC answers 401 part-way. It may run after this request has
+      // answered, where reading the session can fail — that just means no renewal.
+      refreshToken: () => getBCToken().catch(() => null),
+    })
+    if (!start.started) {
+      const r = start.result
+      if (r.busy) {
+        // Two admins pressing at once, or the nightly run just begun: follow that one.
+        const state = await readCheckState()
+        if (state.running) return { ok: true, data: { started: false, state } }
+        // Refused over a run that never recorded its end (see readCheckState) — say so, and when.
+        const from = state.stuckSince ? new Date(Date.parse(state.stuckSince) + UNCOLLECTED_RUN_STALE_MINUTES * 60_000) : null
+        return {
+          ok: false,
+          error: `${sentence(r.error)} It looks to have stopped without recording its end${from ? ` — Check BC now can run again from ${from.toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" })}` : ""}.`,
+        }
+      }
+      if (r.notReady) return { ok: false, error: UNCOLLECTED_SYNC_NOT_READY, notReady: true }
+      return { ok: false, error: r.error || "The BC check couldn't be started — please try again." }
+    }
+    // It carries on after this answer. `done` never rejects, and the run's row says how it went.
+    void start.done
+    return { ok: true, data: { started: true, state: await readCheckState() } }
+  } catch (e) {
+    if (isMissingUncollected(e)) return { ok: false, error: UNCOLLECTED_SYNC_NOT_READY, notReady: true }
+    return fail(e, "check BC now", "The BC check couldn't be started — please try again.")
+  }
+}
+
+/**
+ * Stop (design rule 7b): asks the running BC check — Check BC now or the nightly one — to stop. It
+ * stops within seconds, keeps every case it has already saved, and its run says "Stopped by <name>"
+ * with what it kept. Admins only. Nothing is written to BC.
+ */
+export async function stopBcCheck(): Promise<UncollectedResult<{ stopping: boolean; state: UncollectedCheckState }>> {
+  try {
+    const who = await requireAdmin()
+    const stopping = stopUncollectedSync(who.name)
+    return { ok: true, data: { stopping, state: await readCheckState() } }
+  } catch (e) {
+    if (isMissingUncollected(e)) return { ok: false, error: UNCOLLECTED_SYNC_NOT_READY, notReady: true }
+    return fail(e, "stop BC check", "The check couldn't be asked to stop — please try again.")
+  }
+}
+
+// ─── A case's lots, read live from BC ───────────────────────────────────────────────────────
+// The simplest honest way to list a case's lots: ask BC when the case is opened, rather than keep a
+// copy that goes stale (notes stay the staff's; the timeline keeps what the check found on the day).
+// The feed's bcLotsForBuyer — the buyer's lots in the case's sale from BC's auction lines, with its
+// retries — read with the admin's own BC sign-in. Read only.
+
+/** A buyer or sale number fit to ask BC about (BC's numbers are letters, digits, - _ / .). */
+const BC_CODE_RE = /^[A-Za-z0-9][A-Za-z0-9\-_/.]{0,39}$/
+
+/** What a failed BC read means, in words. The feed's message is already short and plain. */
+function bcFailure(e: unknown): Failure {
+  const m = String((e as { message?: string })?.message ?? "")
+  if (/\b401\b/.test(m)) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
+  if (/\b403\b/.test(m)) return { ok: false, error: "Your BC sign-in isn't allowed to read the auction lines — ask whoever looks after BC permissions." }
+  if (/\b(429|503)\b/.test(m)) return { ok: false, error: "BC is busy just now — try again in a minute." }
+  console.error("uncollected BC lots error:", e)
+  return { ok: false, error: m ? `BC couldn't be read — ${m.slice(0, 200)}` : "BC couldn't be read just now — try again in a minute." }
+}
+
+/**
+ * The lots BC shows as sold to this case's buyer in this case's sale(s) (hammer over £0, not
+ * withdrawn), collected and not — read live, not collected first. Needs a buyer number and a sale.
+ * A case from BC whose invoice covered more than one sale holds them all ("F067, F068"); each is read
+ * (salesOf — the feed reads the first few, and says how many it left out).
+ */
+export async function bcLotsForCase(id: string): Promise<UncollectedResult<UncollectedBcLots>> {
+  let buyerNo: string
+  let saleCode: string
+  try {
+    await requireAdmin()
+    if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
+    const c = await prisma.uncollectedPaid.findUnique({ where: { id }, select: { buyerNo: true, saleCode: true } })
+    if (!c) throw new Refusal(NOT_FOUND)
+    if (!c.buyerNo || !c.saleCode) throw new Refusal("This case needs a buyer number and a sale before its lots can be looked up in BC.")
+    const sales = salesOf(c.saleCode)
+    if (!BC_CODE_RE.test(c.buyerNo.trim()) || !sales.length || !sales.every((s) => BC_CODE_RE.test(s))) {
+      throw new Refusal("The buyer number or sale on this case doesn't look like BC's, so BC can't be asked for its lots.")
+    }
+    buyerNo = c.buyerNo.trim()
+    saleCode = c.saleCode.trim()
+  } catch (e) {
+    return fail(e, "bc lots", "That case couldn't be read just now — please try again.")
+  }
+
+  const token = await getBCToken().catch(() => null)
+  if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
+
+  try {
+    const data = await bcLotsForBuyer(token, saleCode, buyerNo)
+    // Not collected first, then sale by sale in the case's order, then by lot number (366 before
+    // 366A before 1001).
+    const saleOrder = (s: string | null) => { const i = data.sales.indexOf((s ?? "").toUpperCase()); return i < 0 ? data.sales.length : i }
+    const lots = [...data.lots].sort((a, b) =>
+      Number(a.collected) - Number(b.collected) || saleOrder(a.saleCode) - saleOrder(b.saleCode) || a.lotNo.localeCompare(b.lotNo, "en", { numeric: true }))
+    return { ok: true, data: { ...data, lots } }
+  } catch (e) {
+    return bcFailure(e)
   }
 }

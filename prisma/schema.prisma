@@ -2520,6 +2520,28 @@ model UncollectedPaid {
   @@index([nextChaseAt])
 }
 
+/// One run of the BC check that fills Accounts → Paid, not collected (nightly, or "Check BC now"):
+/// when it ran, who or what started it, what it found and changed, and any error — for the panel's
+/// "last checked" line and for working out what went wrong.
+model UncollectedSyncRun {
+  id         String    @id @default(cuid())
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  trigger    String
+  byName     String?
+  ok         Boolean?
+  lotsSeen   Int?
+  buyers     Int?
+  found      Int?
+  added      Int?
+  updated    Int?
+  closed     Int?
+  note       String?
+  error      String?
+
+  @@index([startedAt])
+}
+
 /// Everything that happened on an UncollectedPaid case — a call, an email, a letter, a note, a change
 /// of status, collected — with who and when.
 model UncollectedPaidEvent {

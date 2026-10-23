@@ -1,5 +1,5 @@
 import { csvCell } from "@/lib/goods-in/location-codes"
-import { CONTACT_KINDS, EVENT_META, STATUS_META, dateInputValue, type UncollectedCase } from "@/lib/uncollected"
+import { CONTACT_KINDS, EVENT_META, SOURCE_META, STATUS_META, dateInputValue, type UncollectedCase } from "@/lib/uncollected"
 
 // Paid, not collected → Export CSV: the list as it is on screen (same filters, same order), made in
 // the BROWSER from what the page already holds — nothing is fetched again and there's no export
@@ -24,7 +24,8 @@ const contactWords = (kind: string) =>
   (CONTACT_KINDS as readonly string[]).includes(kind) ? EVENT_META[kind as (typeof CONTACT_KINDS)[number]].label : kind
 
 const HEAD = [
-  "Buyer", "Buyer no", "Email", "Phone", "Sale", "Invoice", "Lots", "Paid £", "Paid on", "Days waiting",
+  // "Paid on / by": a case from BC carries the day BC settled the invoice — they paid on or before it.
+  "Buyer", "Buyer no", "Email", "Phone", "Sale", "Invoice", "Lots", "Paid £", "Paid on / by", "Days waiting",
   "Status", "Next chase", "Last contact", "Last contact by", "Storage charges from", "Entered", "Notes",
 ]
 
@@ -37,7 +38,7 @@ export function casesCsv(cases: UncollectedCase[]): string {
       STATUS_META[c.status]?.label ?? c.status, dateInputValue(c.nextChaseAt),
       c.lastContact ? `${contactWords(c.lastContact.kind)} ${londonStamp(c.lastContact.at)}` : "",
       c.lastContact?.byName ?? "",
-      dateInputValue(c.storageFrom), c.source === "bc" ? "From BC" : "By hand", c.notes ?? "",
+      dateInputValue(c.storageFrom), (SOURCE_META[c.source] ?? SOURCE_META.manual).label, c.notes ?? "",
     ]),
   ]
   return BOM + lines.map(cells => cells.map(csvCell).join(",")).join("\r\n") + "\r\n"
