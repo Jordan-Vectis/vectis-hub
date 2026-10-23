@@ -2791,7 +2791,8 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     nothing else (no "+N more", no words typed by hand — `salesUnparsed`); **every "Buyer Premium for
     Lot No N" line on the invoice is matched to a different lot of theirs the run saw** in the box's
     sales (exact number + suffix first, then suffix-tolerant); **every sale in the box** has one of
-    them; each was sold more than `QUICK_WINDOW_MARGIN_DAYS` (7) after the window's start; and **every
+    them; each was sold inside the window (no margin since 2026-10-23: every E100 case, sold on the
+    window's first day, sat open — a lot sold before the window can't match a line, so it goes slow anyway); and **every
     one of them had its location read and it is a GONE one** → closed as
     collected right there (`closeAsCollected`, the same stop day and words as below), with no BC call,
     however many there are, even when the time for reading ran out. Anything else (a lot still on a

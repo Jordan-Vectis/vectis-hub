@@ -788,8 +788,8 @@ export type TickedLot = Pick<FeedLot, "saleCode" | "lotNum" | "lotSuffix">
  *  • the invoice is paid in full and its lines were read, with lot numbers on them;
  *  • the case's sale box holds all its sales and nothing else;
  *  • every lot of theirs BC HASN'T ticked in those sales that any of the invoice's lot numbers fits
- *    (suffix-tolerant) was sold safely inside the run's window (`windowFrom` +
- *    QUICK_WINDOW_MARGIN_DAYS) and had its location read, and it is a GONE one;
+ *    (suffix-tolerant) was sold inside the run's window (from `windowFrom`) and had its location
+ *    read, and it is a GONE one;
  *  • EVERY "Buyer Premium for Lot No N" line on the invoice is matched to a DIFFERENT lot of theirs in
  *    those sales — one of those gone ones, or one BC ticked (`ticked`) — exact number + suffix first;
  *  • every sale in the box has one of the matched lots.
@@ -817,10 +817,12 @@ export function droppedFromRun(
   // Every unticked lot of theirs any invoice lot number fits must have gone — even one the matching
   // below doesn't pick (a premium line may leave the suffix off, so 366 could be 366A).
   const mine = buyer.lots.filter((l) => inSales(l) && fits(l))
-  const safeFrom = addDays(windowFrom, QUICK_WINDOW_MARGIN_DAYS)
+  // ⚠ No margin past the window's start here (2026-10-23 — every E100 case, sold on the window's very
+  // first day, sat open on Jack's list): a lot of the invoice sold before the window is in neither the
+  // run nor `ticked`-as-unticked, so its line is left unmatched below and the case goes slow anyway.
   const gone: Record<string, number> = {}
   for (const l of mine) {
-    if (!l.saleDate || l.saleDate < safeFrom) return null
+    if (!l.saleDate || l.saleDate < windowFrom) return null
     if (l.location == null || locationKind(l.location) !== "gone") return null
     gone[l.location] = (gone[l.location] ?? 0) + 1
   }
@@ -870,14 +872,14 @@ export function droppedNeedsTicked(c: { saleCode: string | null; invoiceKey: str
   if (salesLeftOff(c.saleCode) > 0 || salesUnparsed(c.saleCode) > 0 || !salesOf(c.saleCode).length) return false
   const sales = new Set(salesOf(c.saleCode))
   const refs = got.refs
-  const safeFrom = addDays(windowFrom, QUICK_WINDOW_MARGIN_DAYS)
   return buyer.lots
     .filter((l) => sales.has(l.saleCode.trim().toUpperCase()) && refs.some((r) => refMatchesLot(r, l)))
-    .every((l) => !!l.saleDate && l.saleDate >= safeFrom && l.location != null && locationKind(l.location) === "gone")
+    .every((l) => !!l.saleDate && l.saleDate >= windowFrom && l.location != null && locationKind(l.location) === "gone")
 }
 
-/** droppedFromRun leaves a case to the slow re-check when any of its lots was sold within this many
- *  days of the window's start — a sale held over more than one day could have lots either side of it. */
+/** A sale held over more than one day could have lots either side of the window's start: within this
+ *  many days of it, a sale isn't taken as read whole. (droppedFromRun no longer uses it — every line of
+ *  the invoice must be matched to a lot seen, which already catches that — 2026-10-23.) */
 export const QUICK_WINDOW_MARGIN_DAYS = 7
 
 /**
