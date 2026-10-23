@@ -2513,6 +2513,54 @@ redirects here; the `Contact` table itself stays — Submissions use it.
 - **Data check** tab: counts, likely duplicates (same email on several records), missing email /
   postcode, delivery addresses with no buyer here — the tidying to do before anything depends on it.
 
+### The customer section as the admins' central hub (2026-10-23)
+
+Jordan: *"this is a very important part of the hub for admins — a central hub, CRM type notes, find
+everything from this one customer section"*. He picked, from four mock-ups: the list with **side
+filters and a preview drawer** (the filter panel collapsible), and the customer page with **tabs**.
+
+- ⚠ **A person has ONE number.** BC's contact no. IS the vendor no. and the customer no. for all but
+  a few dozen of 208,000 people. The list shows one "No." column (the contact no.; a different
+  seller or buyer number is named under it), the page shows it once in the header. Don't bring back
+  separate Seller no. / Buyer no. columns. (They had also been INVISIBLE on the dark theme — cells
+  with no text colour — which is what "always blank" turned out to be.)
+- **The list** (`page.tsx` → `customers-list.tsx`, client): every filter is in the URL
+  (`lib/customers/filters.ts` parses and writes it), so Back and a shared link keep it; the server
+  runs the query (`lib/customers/queries.ts`). The filter panel's open/closed state is per device
+  (localStorage). Tapping a row previews the person on the right — row data plus
+  `/api/customers/[id]/summary` (latest notes, ID status) — without leaving the list. Default
+  sort: newest customer number first. Sorting by a COUNT (lots, receipts, activity) groups the whole
+  table once, never a count per row; the page's own counts are read for its 100 rows only.
+  - ⚠ **Measured before building (production, 2026-10-23):** the per-row receipt and lot counts were
+    **7.9 s a page** without indexes on the vendor-number columns — hence
+    `WarehouseItem(vendorNo)`, `WarehouseReceiptTote(vendorNo)`, `WarehouseTote(vendorNo)`,
+    `CatalogueLot(vendor)` and `Customer(contactNo / vendorNo / buyerNo)` in the migration. And
+    scanning BC's card JSON for a flag (`"contactCard"->>'EVA_HighRisk'`) took **2.8 s**, so there is
+    NO high-risk / trusted-seller / ID-not-checked filter yet — those wait until the flags are copied
+    into columns. Department-they-sell-in and saved views are also later steps.
+- **Notes & calls — `CustomerNote`** (**NEEDS Run Migrations**; its own table, cascade). Kinds note /
+  call / email / visit, an optional follow-up date (stored at 12:00 UTC on its London day), who wrote
+  it. Anyone with CUSTOMERS may add; delete is the author's or an admin's. Actions in
+  `lib/actions/customer-notes.ts` return `{ ok, error, notReady }`. ⚠ Bank or card details are
+  refused (`looksLikeBankDetails`) — the standing rule. Until Run Migrations every screen says notes
+  need it; the list's notes filters are disabled; nothing crashes.
+- **Access** is `getCustomersUser()` / `requireCustomers()` in `lib/customers/access.ts`: the
+  EFFECTIVE session, permissions read fresh from the database — the Help box's three guards. The
+  summary API route checks it itself (the proxy skips `/api`).
+- **The customer page** (`[id]/page.tsx`): header (name, the number, Seller / Buyer / Website /
+  Blocked badges, contact line), key figures (receipts, totes, lots in BC + lots in the Hub not yet
+  in BC, hammer total, paid-not-collected, last contact), then tabs by `?tab=`: Overview (contact,
+  latest notes with a composer, **Needs attention**, recent receipts and lots) · Notes & calls ·
+  Receipts & totes · Lots (by sale, paged) · Buying · Website account · ID checks & terms ·
+  Everything BC sent. "Needs attention" is worked out, never stored: blocked, open paid-not-collected
+  cases, unsold lots still here after their sale (`hammerPrice` 0, `collected` false, sale date
+  past), follow-ups due, lots in a sale to come, Hub lots not yet in BC, an ID status other than
+  Valid, screening expiry.
+- ⚠ **"What they have bought" isn't here yet**: the BC lot copy (`WarehouseItem`) carries no buyer
+  number. The Buying tab says so. Adding `EVA_BuyerNo` to that copy is the next copy change.
+- Nothing on these screens writes to BC or edits a BC-owned detail; the page says details change in
+  BC until switch day.
+
 ---
 ## 📦 Accounts → Paid, not collected (2026-10-22)
 

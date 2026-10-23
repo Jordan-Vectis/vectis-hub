@@ -738,6 +738,7 @@ model CatalogueLot {
   auction        CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   commissionBids CommissionBid[]
   parcelLots     ParcelLot[]
+  @@index([vendor])
 }
 
 // ── BC source code browser (IT Tools → BC Source) ───────────────────────────
@@ -1527,6 +1528,7 @@ model WarehouseItem {
   @@index([toteNo])
   @@index([barcode])
   @@index([collectionNo])
+  @@index([vendorNo])
 }
 
 model WarehouseSyncLog {
@@ -1974,10 +1976,14 @@ model Customer {
   updatedAt                  DateTime  @default(now()) @updatedAt
   shipTo                     CustomerShipTo[]
   bcCard                     CustomerBcCard?
+  notes                      CustomerNote[]
 
   @@index([email])
   @@index([postCode])
   @@index([name])
+  @@index([contactNo])
+  @@index([vendorNo])
+  @@index([buyerNo])
 }
 
 // BC's two big cards for a person, kept whole: the Contact Card (ID / anti-money-laundering checks,
@@ -2008,6 +2014,24 @@ model CustomerSyncState {
 }
 
 // Delivery addresses a buyer has on file in BC (Ship-to Address).
+// Customers → Notes & calls (2026-10-23): the Hub's own CRM record on a person — notes, calls, emails
+// and visits, with an optional follow-up date. Lives in the Hub only; nothing here goes to BC.
+model CustomerNote {
+  id           String    @id @default(cuid())
+  customerId   String
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  kind         String    @default("note") // note | call | email | visit
+  text         String
+  followUpAt   DateTime?
+  followUpDone Boolean   @default(false)
+  byId         String?
+  byName       String?
+  createdAt    DateTime  @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([followUpAt])
+}
+
 model CustomerShipTo {
   id          String    @id @default(cuid())
   bcSystemId  String    @unique
@@ -2081,6 +2105,7 @@ model WarehouseReceiptTote {
   @@index([toteNo])
   @@index([receiptNo])
   @@index([toteNo, catalogued])
+  @@index([vendorNo])
 }
 
 model WarehouseTote {
@@ -2111,6 +2136,7 @@ model WarehouseTote {
   @@index([location])
   @@index([toteNo])
   @@index([catalogued])
+  @@index([vendorNo])
 }
 
 model WebDescription {

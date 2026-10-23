@@ -181,8 +181,8 @@ export const DESTINATIONS: Destination[] = [
   // about their own customer screens isn't refused with this one.
   {
     name: "Customers", href: "/tools/customers", app: "CUSTOMERS",
-    what: "The customer database — everyone who sells or buys with Vectis, one record per person, copied from Business Central every night. Search by name, email, postcode, phone, seller (C…) or buyer number; open someone to see their details, buyer settings, delivery addresses and the receipts and lots they've consigned. The Data check tab lists likely duplicates and missing details.",
-    also: ["customer database", "seller number", "buyer number", "customer s details", "customer s address", "customer s email", "duplicate customers", "bc customers", "bc contacts"],
+    what: "The customer database — everyone who sells or buys with Vectis, one record per person with one customer number (C…), copied from Business Central every night. Search by name, email, postcode, phone or number; filter down the side (sellers, buyers, lots in a current sale, paid not collected, follow-ups due, blocked, no email) and tap a row to preview the person. Open someone for their receipts, totes, lots, buyer settings, ID checks, seller terms, website account, and the Hub's own notes and calls with follow-up dates. The Data check tab lists likely duplicates and missing details.",
+    also: ["customer database", "customer number", "seller number", "buyer number", "customer s details", "customer s address", "customer s email", "duplicate customers", "bc customers", "bc contacts", "customer notes", "log a call with a customer", "customer follow up", "what has a customer consigned", "customer s receipts", "customer s totes", "customer s lots"],
   },
 
   // ── Goods In ────────────────────────────────────────────────────────────────
