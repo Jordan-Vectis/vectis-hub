@@ -1199,8 +1199,25 @@ export default function LotWizardTab({
 
   // ── "Start cataloguing" — lock the tote/vendor/receipt in for the batch ──────
   // Commit the current (or a confirmed) identity and advance to the barcode step.
+  // Remember Tote / Vendor / Receipt for this sale on the user's account (any device). A failure
+  // says so on screen rather than vanishing — the next visit would otherwise restore older numbers.
+  function rememberBatch(fields: { tote: string; vendor: string; receipt: string }) {
+    saveLastLotFields({ ...fields, auctionId })
+      .then(r => {
+        // ⚠ A read-only database is not "could not remember these numbers" — it is the same
+        // stop as a refused lot. This write failing is what made vendors appear to revert.
+        if (r && (r as { dbReadOnly?: boolean }).dbReadOnly) { setDbReadOnly(true); setDbRecheck("idle"); return }
+        if (!r?.ok) setRememberFailed(true)
+      })
+      .catch(() => setRememberFailed(true))
+  }
+
   function commitStart(id?: { tote: string; vendor: string; receipt: string; vendorName: string }) {
     const next = id ?? { tote: tote.trim(), vendor: vendor.trim(), receipt: receipt.trim(), vendorName: vendorHint ?? toteInfo?.vendorName ?? "" }
+    // Remembered NOW, not only after the first save (2026-10-23): Peter Morris started tote
+    // P006930, the wizard restarted before his first save, and it brought back yesterday's
+    // T027782 — five lots went in under the wrong vendor. A restart now restores the tote in hand.
+    rememberBatch(next)
     setLocked(next)
     setChangeConfirm(null)
     setStep1LengthWarning(false)
@@ -1503,14 +1520,7 @@ export default function LotWizardTab({
       // connection, a backgrounded iPad tab — nothing was recorded and the next visit restored
       // older numbers with no sign anything had gone wrong. Scoped to THIS sale now, and a failure
       // says so on screen instead of vanishing.
-      saveLastLotFields({ vendor, tote, receipt, auctionId })
-        .then(r => {
-          // ⚠ A read-only database is not "could not remember these numbers" — it is the same
-          // stop as a refused lot. This write failing is what made vendors appear to revert.
-          if (r && (r as { dbReadOnly?: boolean }).dbReadOnly) { setDbReadOnly(true); setDbRecheck("idle"); return }
-          if (!r?.ok) setRememberFailed(true)
-        })
-        .catch(() => setRememberFailed(true))
+      rememberBatch({ vendor, tote, receipt })
       setSaveStatus(`✓ Lot #${n} saved — ${vendor} / ${tote} / ${barcode}`)
       // Tote / Vendor / Receipt stay locked for the whole batch — leave them (and the
       // vendor name hint) as-is so the next lot keeps the same identity.
@@ -2814,7 +2824,7 @@ export default function LotWizardTab({
       {rememberFailed && !staleDeploy && !hidden.remember && (
         <div className="mt-4 max-w-lg desk:max-w-none flex items-start gap-2 rounded-xl border border-amber-500/60 bg-amber-500/10 px-4 py-2.5">
           <p className="text-sm text-amber-700 dark:text-amber-300 flex-1">
-            Your lot saved. The tote and vendor could not be remembered for next time, so check them when you come back.
+            The tote and vendor could not be remembered for next time, so check them when you come back. Lots you save are not affected.
           </p>
           <Dismiss k="remember" />
         </div>
