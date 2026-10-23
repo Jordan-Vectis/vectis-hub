@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getCustomersUser } from "@/lib/customers/access"
+import { customerNumber } from "@/lib/customers/filters"
 import { sellerFigures, receiptsFor, totesFor, lotsFor, hubOnlyLotsFor, notesFor, uncollectedFor, type Lot } from "@/lib/customers/queries"
 import { NoteComposer, NotesList, NotesFilter, type NoteDTO } from "./notes"
 
@@ -164,7 +165,8 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const openCases = cases.filter(x => !["collected", "closed"].includes(x.status))
   const followUps = (notes ?? []).filter(n => n.followUpAt && !n.followUpDone && n.followUpAt.getTime() < Date.now() + 86_400_000)
   const lastNote = notes?.[0] ?? null
-  const customerNo = c.contactNo ?? c.vendorNo ?? c.buyerNo
+  const num = customerNumber(c)
+  const customerNo = num.main
   const name = c.name || c.name2 || "(no name)"
   const screenExp = typeof cc?.EVA_SCN_ScreenExpDate === "string" && !/^0001/.test(cc.EVA_SCN_ScreenExpDate) ? new Date(cc.EVA_SCN_ScreenExpDate) : null
   const idStatus = typeof cc?.EVA_IDCheckedStatus === "string" && cc.EVA_IDCheckedStatus ? cc.EVA_IDCheckedStatus : null
@@ -423,8 +425,9 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{name}</h1>
             {customerNo && <span className="font-mono text-base text-indigo-700 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-950 rounded-lg px-2.5 py-1">{customerNo}</span>}
-            {c.vendorNo && <span className={SELLER}>Seller{c.vendorNo !== c.contactNo ? ` ${c.vendorNo}` : ""}</span>}
-            {c.buyerNo && <span className={BUYER}>Buyer{c.buyerNo !== c.contactNo ? ` ${c.buyerNo}` : ""}</span>}
+            {c.vendorNo && <span className={SELLER}>Seller{num.alsoSeller ? ` ${num.alsoSeller}` : ""}</span>}
+            {c.buyerNo && <span className={BUYER}>Buyer{num.alsoBuyer ? ` ${num.alsoBuyer}` : ""}</span>}
+            {num.odd && <span className={pill("bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200")} title="BC's contact “No.” field holds this instead of a C-number — fix it in BC">Odd contact no. in BC: {c.contactNo}</span>}
             {c.websiteId && <span className={WEB}>Website account</span>}
             {c.blocked && <span className={BLOCK}>Blocked: {c.blocked}</span>}
           </div>

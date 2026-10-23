@@ -78,7 +78,7 @@ async function CopyTab() {
 // What needs tidying before anything depends on this data. Every figure links to the people behind it.
 async function DataCheck() {
   const notBlank = (f: "email" | "postCode") => ({ AND: [{ [f]: { not: null } }, { NOT: { [f]: "" } }] })
-  const [total, sellers, buyers, both, web, noEmail, noPostcode, blocked, orphanAddr, dupEmails, dupTotals] = await Promise.all([
+  const [total, sellers, buyers, both, web, noEmail, noPostcode, blocked, orphanAddr, dupEmails, dupTotals, oddNos] = await Promise.all([
     prisma.customer.count(),
     prisma.customer.count({ where: { vendorNo: { not: null } } }),
     prisma.customer.count({ where: { buyerNo: { not: null } } }),
@@ -93,6 +93,9 @@ async function DataCheck() {
     // The true totals — the list above is only the first 200.
     prisma.$queryRawUnsafe<{ emails: bigint; records: bigint }[]>(
       `SELECT count(*) AS emails, coalesce(sum(n), 0) AS records FROM (SELECT count(*) AS n FROM "Customer" WHERE coalesce(trim("email"), '') <> '' GROUP BY lower(trim("email")) HAVING count(*) > 1) d`),
+    // BC's contact "No." is free text — on a handful of records it holds a name or an email, not a C-number.
+    prisma.$queryRawUnsafe<{ id: string; name: string | null; contactNo: string }[]>(
+      `SELECT id, name, "contactNo" FROM "Customer" WHERE "contactNo" IS NOT NULL AND "contactNo" !~ '^C[0-9]+$' ORDER BY name LIMIT 50`),
   ])
   const dupEmailCount = Number(dupTotals[0]?.emails ?? 0)
   const dupPeople = Number(dupTotals[0]?.records ?? 0)
@@ -126,8 +129,23 @@ async function DataCheck() {
           <Tile label="No postcode" value={noPostcode} warn />
           <Tile label="Blocked in BC" value={blocked} href="/tools/customers?blocked=1" />
           <Tile label="Delivery addresses whose buyer isn't here" value={orphanAddr} warn />
+          <Tile label="Contact no. in BC isn't a C-number" value={oddNos.length} warn />
         </div>
       </div>
+      {oddNos.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Odd contact numbers — fix these in BC</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">BC&apos;s contact &ldquo;No.&rdquo; field is free text, and on these records it holds a name or an email instead of a C-number. The Hub shows their seller or buyer C-number instead until BC is corrected.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
+            {oddNos.map(o => (
+              <Link key={o.id} href={`/tools/customers/${o.id}`} className="flex justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm hover:border-indigo-400">
+                <span className="truncate text-gray-800 dark:text-gray-200">{o.name ?? "(no name)"}</span>
+                <span className="shrink-0 font-mono text-xs text-amber-600 dark:text-amber-400 truncate max-w-[50%]">{o.contactNo}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
       {dupEmails.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Likely duplicates — the same email on more than one record</h2>

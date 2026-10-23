@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  TYPES, TOGGLES, SORTS, QUICK_VIEWS, filtersToHref, quickViewHref, activeFilterCount,
+  TYPES, TOGGLES, SORTS, QUICK_VIEWS, filtersToHref, quickViewHref, activeFilterCount, customerNumber,
   type ListFilters, type ToggleKey, type SortKey, type TypeKey, type FilterChange,
 } from "@/lib/customers/filters"
 import type { Facets, ListRow } from "@/lib/customers/queries"
@@ -187,9 +187,12 @@ export default function CustomersList({ rows, total, pages, filters, facets, not
                           <div className={`text-xs ${r.email ? "text-gray-500 dark:text-gray-400" : "text-amber-600 dark:text-amber-400"}`}>{r.email ?? "No email address"}</div>
                         </td>
                         <td className="px-3 py-2 font-mono text-xs text-gray-800 dark:text-gray-200">
-                          {r.contactNo ?? r.vendorNo ?? r.buyerNo ?? "—"}
-                          {r.vendorNo && r.vendorNo !== r.contactNo && <span className="block text-gray-500 dark:text-gray-400">seller {r.vendorNo}</span>}
-                          {r.buyerNo && r.buyerNo !== r.contactNo && <span className="block text-gray-500 dark:text-gray-400">buyer {r.buyerNo}</span>}
+                          {(() => { const n = customerNumber(r); return (<>
+                            {n.main ?? "—"}
+                            {n.alsoSeller && <span className="block text-gray-500 dark:text-gray-400">also seller {n.alsoSeller}</span>}
+                            {n.alsoBuyer && <span className="block text-gray-500 dark:text-gray-400">also buyer {n.alsoBuyer}</span>}
+                            {n.odd && <span className="block text-amber-600 dark:text-amber-400 font-sans" title={`BC's contact no. is “${r.contactNo}” — fix it in BC`}>odd contact no. in BC</span>}
+                          </>) })()}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap space-x-1">
                           {r.vendorNo && <span className={SELLER}>S</span>}{r.buyerNo && <span className={BUYER}>B</span>}{r.websiteId && <span className={WEB}>W</span>}{r.blocked && <span className={BLOCK} title={`Blocked: ${r.blocked}`}>!</span>}
@@ -225,7 +228,7 @@ export default function CustomersList({ rows, total, pages, filters, facets, not
               {filters.page < pages && <Link href={filtersToHref(filters, { page: filters.page + 1 })} className={btn}>Next →</Link>}
             </div>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400">No. = the person&apos;s BC customer number, the same for selling and buying · S seller · B buyer · W website account · ! blocked in BC · receipts, totes and lots are from the Hub&apos;s own BC copies, plus lots catalogued in the Hub not yet in BC.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">No. = the person&apos;s BC customer number, the same for selling and buying; a few people have a separate buyer or seller account, named underneath · S seller · B buyer · W website account · ! blocked in BC · receipts, totes and lots are from the Hub&apos;s own BC copies, plus lots catalogued in the Hub not yet in BC.</p>
         </div>
 
         {/* Preview */}
@@ -236,7 +239,7 @@ export default function CustomersList({ rows, total, pages, filters, facets, not
                 <p className="text-xs text-gray-500 dark:text-gray-400">Selected</p>
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white truncate">{selected.name || selected.name2 || "(no name)"}</h2>
                 <p className="flex flex-wrap gap-1.5 items-center mt-1">
-                  <span className="font-mono text-sm text-indigo-700 dark:text-indigo-300">{selected.contactNo ?? selected.vendorNo ?? selected.buyerNo}</span>
+                  <span className="font-mono text-sm text-indigo-700 dark:text-indigo-300">{customerNumber(selected).main}</span>
                   {selected.vendorNo && <span className={SELLER}>Seller</span>}{selected.buyerNo && <span className={BUYER}>Buyer</span>}{selected.websiteId && <span className={WEB}>Website</span>}{selected.blocked && <span className={BLOCK}>Blocked</span>}
                 </p>
               </div>

@@ -84,6 +84,23 @@ export function activeFilterCount(f: ListFilters): number {
   return (f.type !== "all" ? 1 : 0) + TOGGLES.filter(t => f.toggles[t.key]).length
 }
 
+// ── The customer number ──
+// BC gives a person ONE C-number — the contact no. is the vendor no. and the customer no. for all but
+// ~60 of 208,000. But BC's contact "No." field is free text, and on 4 records it holds a name or an
+// email instead (measured 2026-10-23). So the number shown is always a real C-number, and a second,
+// DIFFERENT C-number (43 people have a separate buyer account) is named under it.
+const C_NUMBER = /^C\d+$/i
+export function customerNumber(c: { contactNo: string | null; vendorNo: string | null; buyerNo: string | null }): { main: string | null; odd: boolean; alsoSeller: string | null; alsoBuyer: string | null } {
+  const isC = (v: string | null): v is string => !!v && C_NUMBER.test(v)
+  const main = [c.contactNo, c.vendorNo, c.buyerNo].find(isC) ?? c.contactNo ?? c.vendorNo ?? c.buyerNo ?? null
+  return {
+    main,
+    odd: !!c.contactNo && !isC(c.contactNo),
+    alsoSeller: isC(c.vendorNo) && c.vendorNo !== main ? c.vendorNo : null,
+    alsoBuyer: isC(c.buyerNo) && c.buyerNo !== main ? c.buyerNo : null,
+  }
+}
+
 // ── Notes ──
 export const NOTE_KINDS = [
   { key: "note",  label: "Note" },
