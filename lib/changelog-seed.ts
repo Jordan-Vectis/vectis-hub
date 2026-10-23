@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"033ef5bfffa1d4bf0f94ad35034ba071257c3081","author":"Jordan Orange","date":"2026-10-23T14:54:47+01:00","subject":"Customers: side filters with a preview drawer, a tabbed customer page with key figures, and the Hub's own notes & calls"},
   {"sha":"8ed2ea125e90e393a833432c54724124680c42f4","author":"Jordan Orange","date":"2026-10-23T14:25:46+01:00","subject":"Customers list: newest customer number first"},
   {"sha":"9bf6b93d428ba98434f031590375451f84c544d5","author":"Jordan Orange","date":"2026-10-23T14:23:30+01:00","subject":"Customers list: the numbers were invisible on the dark theme; one Customer no. column (BC gives a person one number) with a Sells / buys column"},
   {"sha":"f451cf95dbcc529839e8d1827c02973ca63a11d9","author":"jack-vectis","date":"2026-10-23T14:16:18+01:00","subject":"Paid, not collected: close every case whose lots are all scanned out, and a Close as collected button"},

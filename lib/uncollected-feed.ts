@@ -77,7 +77,7 @@ import {
   cleanEmail, closedByLocation, collectedCloseText, collectedStopFrom, cleanPhone, droppedEvidence, droppedFromRun, droppedLots, eachLimit, feedChanges,
   hasPaidDateField, invoicesNeedingLines, isNoLongerPaidText, isPaidInFull, isQueryClearText, isQueryFlagText, locationCounts,
   lotNoOf, lotRefsFromLines, matchBuyer, matchedText, nextQueryFlag, noLongerPaidText, noPlacesRead, odataString, ownedValues, pickDropped,
-  placeKey, placesFromRows, readLinesThenPlaces, rotate, saleWindow, salesLeftOff, salesOf, splitByPlace, storageStamp, toFeedInvoice, toFeedLot,
+  placeKey, placesFromRows, readLinesThenPlaces, rotate, saleWindow, salesLeftOff, salesOf, salesUnparsed, splitByPlace, storageStamp, toFeedInvoice, toFeedLot,
   updatedText, withPlaces,
   type BuyerToRead, type Candidate, type DroppedEvidence, type FeedChange, type FeedChangeOptions, type FeedInvoice, type FeedLot, type InvoiceLines,
   type JudgedBuyer, type LotPlace, type LotRef, type PlacesRead,
@@ -561,7 +561,10 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
       if (sold && !String(r.EVA_BuyerNo ?? "").trim()) noBuyer++
       continue
     }
-    const key = lot.uniqueId ? `u:${lot.uniqueId.toUpperCase()}` : `l:${lot.saleCode}:${lot.lotNo}:${lot.buyerNo}`
+    // ⚠ The whole lot line, never the unique id alone: an item re-entered and sold again keeps its
+    // unique id, so two real lines can share one — dropping one hid a lot that was still here and let
+    // the quick re-check close its buyer's case (review of 2026-10-23).
+    const key = `${lot.uniqueId ? `u:${lot.uniqueId.toUpperCase()}` : "l"}:${lot.saleCode.toUpperCase()}:${lot.lotNo}:${lot.buyerNo}`
     if (seen.has(key)) continue   // a page boundary that moved under us
     seen.add(key)
     lots.push(lot)
@@ -653,8 +656,14 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
     for (const l of byBuyer.get(b)!) if (l.uniqueId) ids.set(placeKey(l.uniqueId), l.uniqueId)
     toRead.push({ buyer: b, invoiceIds: need.map((i) => i.id), uniqueIds: [...ids.values()] })
   }
-  const idOwner = new Map<string, string>()   // placeKey → buyer
-  for (const t of toRead) for (const id of t.uniqueIds) idOwner.set(placeKey(id), t.buyer)
+  // placeKey → every buyer with a lot carrying it (an item re-entered and sold again keeps its unique
+  // id, so two buyers can share one — a failed read of it must hold back both).
+  const idOwner = new Map<string, Set<string>>()
+  for (const t of toRead) for (const id of t.uniqueIds) {
+    const k = placeKey(id)
+    if (!idOwner.has(k)) idOwner.set(k, new Set())
+    idOwner.get(k)!.add(t.buyer)
+  }
   const read = await readLinesThenPlaces(toRead, {
     readLines: async (ids) => {
       if (ctx.outOfTime) throw ctx.stopped ? new Stopped() : new OutOfTime()
@@ -670,7 +679,7 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
   }, { perCall: INVOICES_PER_CALL, concurrency: BC_CONCURRENCY })
   const lines: Map<string, InvoiceLines> = read.lines
   const pr: PlacesRead = read.places
-  const ownersOf = (keys: Set<string>) => [...new Set([...keys].map((k) => idOwner.get(k)).filter((b): b is string => !!b))]
+  const ownersOf = (keys: Set<string>) => [...new Set([...keys].flatMap((k) => [...(idOwner.get(k) ?? [])]))]
   if (pr.timedOut.size) miss(ownersOf(pr.timedOut), ctx.stopped ? new Stopped() : new OutOfTime())
   if (pr.failed.size) miss(ownersOf(pr.failed), new Error(`where their lots are couldn't be read in BC${pr.error ? ` (${pr.error})` : ""}`))
   if (pr.refused.size && !firstError) firstError = `where the lots are couldn't be read (${ctx.placesBroken ?? pr.error ?? "BC refused"})`
@@ -1164,7 +1173,8 @@ async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: st
       const refs = refsOf.get(inv.id)
       // ⚠ A sale box that had to leave sales off ("+2 more") can't show every lot of theirs on the
       // invoice, so "all collected" could never be proved from it — never closed by the check.
-      if (salesLeftOff(c.saleCode) > 0) { out.tooManySales++; return }
+      // So can a box holding words that aren't a sale code (typed by hand — salesUnparsed).
+      if (salesLeftOff(c.saleCode) > 0 || salesUnparsed(c.saleCode) > 0) { out.tooManySales++; return }
       const sales = salesOf(c.saleCode)
       if (!refs || !sales.length || !c.buyerNo) { out.unread++; return }
       const rows: Record<string, unknown>[] = []
@@ -1365,8 +1375,11 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
     /** "Stopped by Sam — 3 cases were saved before it stopped (1 new, 2 updated); 9 cases it had found
      *  weren't saved. The next check reads BC again." (UNCOLLECTED_STOPPED_PREFIX starts it.) */
     const stoppedWords = (unsaved: number) => {
-      const saved = tally.added + tally.adopted + tally.updated
-      const what = [tally.added && `${n0(tally.added)} new`, tally.adopted && `${n0(tally.adopted)} taken over`, tally.updated && `${n0(tally.updated)} updated`].filter(Boolean).join(", ")
+      const saved = tally.added + tally.adopted + tally.updated + checked.closed + checked.flagged
+      const what = [
+        tally.added && `${n0(tally.added)} new`, tally.adopted && `${n0(tally.adopted)} taken over`, tally.updated && `${n0(tally.updated)} updated`,
+        checked.closed && `${n0(checked.closed)} closed as collected`, checked.flagged && `${n0(checked.flagged)} noted as no longer paid`,
+      ].filter(Boolean).join(", ")
       return `${UNCOLLECTED_STOPPED_PREFIX} ${stopBy() ?? "someone"} — ${saved ? `${many(saved, "case")} ${saved === 1 ? "was" : "were"} saved before it stopped (${what})` : "nothing was changed"}${unsaved ? `; ${many(unsaved, "case")} it had found ${unsaved === 1 ? "wasn't" : "weren't"} saved` : ""}. The next check reads BC again.`
     }
 
@@ -1473,13 +1486,14 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
       const quick: { c: OpenBcCase; ev: DroppedEvidence }[] = []
       const slow: OpenBcCase[] = []
       for (const c of dropped) {
-        const ev = droppedFromRun({ saleCode: c.saleCode, invoiceKey: c.bcKey ?? c.invoiceNo ?? "" }, f.judged.get((c.buyerNo ?? "").trim().toUpperCase()))
+        const ev = droppedFromRun({ saleCode: c.saleCode, invoiceKey: c.bcKey ?? c.invoiceNo ?? "" }, f.judged.get((c.buyerNo ?? "").trim().toUpperCase()), f.window.from)
         if (ev) quick.push({ c, ev })
         else slow.push(c)
       }
       const quickGone: Record<string, number> = {}
       let quickClosed = 0
       let quickLeft = 0
+      let quickFailed = 0
       for (let i = 0; i < quick.length; i++) {
         if (stopBy() || Date.now() > saveStopAt) { quickLeft = quick.length - i; break }
         try {
@@ -1488,6 +1502,7 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
             for (const [loc, n] of Object.entries(quick[i].ev.gone)) quickGone[loc] = (quickGone[loc] ?? 0) + n
           }
         } catch (e) {
+          quickFailed++
           tally.failed++
           console.error("uncollected feed: a case couldn't be closed as collected:", e)
         }
@@ -1498,8 +1513,11 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
         const where = Object.entries(quickGone).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `${k} ${n0(n)}`).join(", ")
         notes.push(`${many(quickClosed, "case")} from BC closed as collected straight from this check's own read: every lot of theirs on the invoice is at a location that means it has gone (lots at ${where}), though BC hasn't ticked them collected because the collection docket wasn't posted. BC keeps no date for that scan, so if the lots had gone before a case was added its storage figure is too high — ${quickClosed === 1 ? "the case says" : "each case says"} to check it.`)
       }
+      if (quickFailed) notes.push(`${many(quickFailed, "case")} whose lots have all gone couldn't be closed — see the server's log. The next check tries again.`)
       if (quickLeft) {
-        notes.push(`The check ran so long that ${many(quickLeft, "case")} whose lots have all gone ${quickLeft === 1 ? "wasn't" : "weren't"} closed — the next check closes ${quickLeft === 1 ? "it" : "them"}.`)
+        notes.push(stopBy()
+          ? `It was stopped before ${many(quickLeft, "case")} whose lots have all gone ${quickLeft === 1 ? "was" : "were"} closed — the next check closes ${quickLeft === 1 ? "it" : "them"}.`
+          : `The check ran so long that ${many(quickLeft, "case")} whose lots have all gone ${quickLeft === 1 ? "wasn't" : "weren't"} closed — the next check closes ${quickLeft === 1 ? "it" : "them"}.`)
         unreadDropped += quickLeft
       } else if (!stopBy() && !ctx.stopped) {
         const { pick, later } = pickDropped(slow, new Set(f.buyerNos), seq, DROPPED_CHECK_LIMIT)
@@ -1590,7 +1608,9 @@ const CASE_PAGE_MAX_SALES = 4
 export async function bcLotsForBuyer(token: string, saleCode: string, buyerNo: string, limit = 300): Promise<UncollectedBcLots> {
   const all = salesOf(saleCode)
   const sales = all.slice(0, CASE_PAGE_MAX_SALES)
-  const salesLeftOut = all.length - sales.length + salesLeftOff(saleCode)
+  // A part of the box that isn't a sale code (typed by hand) is a sale not read, too — so the page
+  // never says "all collected" from only the sales it could make out (review of 2026-10-23).
+  const salesLeftOut = all.length - sales.length + salesLeftOff(saleCode) + salesUnparsed(saleCode)
   const buyer = buyerNo.trim().toUpperCase()
   const ctx = makeCtx(token, { budgetMs: 45_000 })
   const rows: Record<string, unknown>[] = []
@@ -1613,10 +1633,14 @@ export async function bcLotsForBuyer(token: string, saleCode: string, buyerNo: s
       saleName: String(r.EVA_AuctionName ?? "").trim() || null,
       saleDate: bcDay(r.EVA_AuctionDate) || null,
     }))
-    // The same lot twice (a page boundary that moved under us) is listed once.
-    .filter((l) => { const k = l.uniqueId ? `u:${l.uniqueId.toUpperCase()}` : `l:${l.saleCode}:${l.lotNo}`; if (seen.has(k)) return false; seen.add(k); return true })
+    // The same lot twice (a page boundary that moved under us) is listed once — told apart by the
+    // whole line, never the unique id alone (an item re-entered and sold again keeps it; as find()).
+    .filter((l) => { const k = `${l.uniqueId ? `u:${l.uniqueId.toUpperCase()}` : "l"}:${l.saleCode}:${l.lotNo}`; if (seen.has(k)) return false; seen.add(k); return true })
     .sort((a, b) => order(a.saleCode) - order(b.saleCode) || a.lotNo.localeCompare(b.lotNo, "en", { numeric: true }))
   const listed = sold.slice(0, limit)
+  // A sale read that gave no lot sold to them: a sale they didn't buy in, or a code that isn't a real
+  // sale ("F068-2" typed on a hand case). Never "all collected" while there is one (collectedFromLiveLots).
+  const emptySales = sales.filter((s) => !sold.some((l) => l.saleCode === s))
 
   // Where each listed lot is now — every one, collected or not, for the page's Location column.
   const pr = await placesFor(ctx, listed.map((l) => l.uniqueId ?? "").filter(Boolean))
@@ -1650,7 +1674,7 @@ export async function bcLotsForBuyer(token: string, saleCode: string, buyerNo: s
     miss.noId > 0 && `${many(miss.noId, "lot")} ${miss.noId === 1 ? "has" : "have"} no unique ID`,
   ].filter(Boolean).join("; ")
   return {
-    buyerNo: buyer, saleCode: sales.join(", "), sales, salesLeftOut,
+    buyerNo: buyer, saleCode: sales.join(", "), sales, salesLeftOut, emptySales,
     lots, more: sold.length > limit, readAt: new Date().toISOString(),
     locationsUnread, locationError: locationsUnread ? why : null,
   }

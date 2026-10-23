@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
 import {
-  bcLotsForBuyer, collectedCloseText, collectedFromLiveLots, collectedStopOf, salesOf, startUncollectedSync, stopUncollectedSync,
-  uncollectedSyncNow,
+  bcLotsForBuyer, collectedCloseText, collectedFromLiveLots, collectedStopOf, salesOf, salesUnparsed, startUncollectedSync,
+  stopUncollectedSync, uncollectedSyncNow,
 } from "@/lib/uncollected-feed"
 import {
   countStartMoves, readCaseStorageFlags, readStorageSettings, readStorageStartOwner, saveStorageSettings as saveSettingsRow,
@@ -1159,8 +1159,13 @@ export async function closeCollectedFromBc(id: string): Promise<UncollectedResul
     if (!row) throw new Refusal(NOT_FOUND)
     if (!isOpenRaw(row.status) || row.closedAt) throw new Refusal("This case is already closed.")
     const sales = salesOf(row.saleCode)
-    if (!row.buyerNo || !BC_CODE_RE.test(row.buyerNo.trim()) || !sales.length || !sales.every((s) => BC_CODE_RE.test(s))) {
+    if (!row.buyerNo || !BC_CODE_RE.test(row.buyerNo.trim()) || !sales.length) {
       throw new Refusal("The buyer number or sale on this case doesn't look like BC's, so BC can't be asked for its lots.")
+    }
+    // ⚠ A part of the sale box that isn't a sale code (typed by hand: "F068 day 2") would go unread —
+    // never close from the sales that could be made out (review of 2026-10-23).
+    if (salesUnparsed(row.saleCode) > 0) {
+      throw new Refusal("The sale box on this case holds something that isn't a sale code — put just the sale codes in it, separated by commas (\"F067, F068\"), then try again.")
     }
     c = row
   } catch (e) {
@@ -1181,8 +1186,9 @@ export async function closeCollectedFromBc(id: string): Promise<UncollectedResul
   try {
     const stop = await collectedStopOf(new Date(), londonDay())
     const closed = await prisma.$transaction(async (tx) => {
+      // Still as read — status, and the buyer and sale BC was asked about (an edit while BC was read wins).
       const n = await tx.uncollectedPaid.updateMany({
-        where: { id, status: c.status, closedAt: null },
+        where: { id, status: c.status, closedAt: null, buyerNo: c.buyerNo, saleCode: c.saleCode },
         data: { status: "collected", closedAt: stop.closedAt },
       })
       if (n.count !== 1) return false   // someone changed it meanwhile — theirs wins

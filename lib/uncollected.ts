@@ -1064,6 +1064,9 @@ export type UncollectedBcLots = {
   /** Sales on the case that weren't read: past the few a case page reads, or left off the case's
    *  sale box ("+N more"). 0 = every sale of the case was read. */
   salesLeftOut: number
+  /** Sales read that gave NO lot sold to them — a sale they didn't buy in, or a code that isn't a real
+   *  sale (typed by hand). The case is never "all collected" while there is one. */
+  emptySales: string[]
   /** Sold to them in those sales (hammer over £0, not withdrawn) — collected and not. */
   lots: UncollectedBcLot[]
   /** true = BC had more than the page asked for; only the first ones are listed. */

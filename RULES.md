@@ -2787,13 +2787,33 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     run, and **none at all on a run whose time for reading BC ran out**. So an open case from BC the
     check no longer finds is first judged from what THIS run already read for its buyer
     (`FindResult.judged`, `droppedFromRun` in lib/uncollected-feed-match.ts): its invoice is paid in
-    full and its lines were read, its sale box holds all its sales, at least one lot BC hasn't ticked is
-    on the invoice in those sales, and **every one of them had its location read and it is a GONE
-    one** → closed as collected right there (`closeAsCollected`, the same stop day and words as below),
-    with no BC call, however many there are, even when the time for reading ran out. Anything else
-    (a lot still on a shelf, at a QUERY location, its location not read, lots BC ticked — they aren't
-    in the feed — or the buyer not judged this run) goes to the slow re-check below, as before. Saving's
-    own time limit and a Stop still stop it; what's left is said in the run's notes and closed next run.
+    full and its lines were read, with lot numbers on them; its sale box holds all its sales and
+    nothing else (no "+N more", no words typed by hand — `salesUnparsed`); **every "Buyer Premium for
+    Lot No N" line on the invoice is matched to a different lot of theirs the run saw** in the box's
+    sales (exact number + suffix first, then suffix-tolerant); **every sale in the box** has one of
+    them; each was sold more than `QUICK_WINDOW_MARGIN_DAYS` (7) after the window's start; and **every
+    one of them had its location read and it is a GONE one** → closed as
+    collected right there (`closeAsCollected`, the same stop day and words as below), with no BC call,
+    however many there are, even when the time for reading ran out. Anything else (a lot still on a
+    shelf, at a QUERY location, its location not read, a sale with no lot in the run — all ticked, or
+    aged out of the window — or the buyer not judged this run) goes to the slow re-check below, as
+    before. Saving's own time limit and a Stop still stop it; what's left is said in the run's notes
+    (by its cause) and closed next run.
+    - ⚠⚠ **A lot missing from the run is NOT proof it went.** The run only holds lots BC hasn't ticked,
+      of sales inside the 12-month window, as BC's paging gave them. The reviews of 2026-10-23 found
+      the first version closing an invoice over F050 + F051 once F050 aged out with its lots still on
+      a shelf — whether or not the box still named F050 — and the same for a row BC's paging skipped.
+      Hence "every lot on the invoice matched", "every sale" and the margin: an invoice lot the run
+      didn't see (ticked, aged out, skipped) always sends the case to the slow re-check, which reads
+      each sale whole with no date filter. Never relax it to "the lots the run saw are gone".
+    - The feed's lots are told apart by the WHOLE line (unique id + sale + lot + buyer), never the
+      unique id alone: an item re-entered and sold again keeps its unique id, and dropping one of the
+      two lines hid a lot that was still here. A failed location read of a shared unique id holds back
+      every buyer with it.
+    - ⚠ Known, older and NOT fixed by this: when a sale ages out of the window while its lots are still
+      here, the next save rewrites the case's sale box and lot count from the lots the run still sees,
+      so those lots drop off the case — and the SLOW re-check, and Close as collected, which read only
+      the box's sales, can then close it on the rest (the quick one can't: it matches every invoice lot).
   - **An open case from BC the check no longer finds** (the quick re-check didn't settle) is judged on
     POSITIVE evidence only, and only
     for buyers it fully checked — at most 60 a run (`pickDropped`): cases whose buyer has no lot left
@@ -2885,10 +2905,19 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     a green box under the headline offers to close it. ⚠ It never trusts the page's read:
     `closeCollectedFromBc` (admins, the admin's own BC sign-in) reads BC AGAIN and closes only if
     `collectedFromLiveLots` still says every lot has gone — a lot still here, at a QUERY location, a
-    sale not read or a list cut short is refused in plain words. It closes the way the check does:
-    Collected, `closedAt` = the stop day (`collectedStopOf` — the last full BC check), only if the case
-    is still where it was read, and a status line (`collectedCloseText(…, "page")`) naming the
-    locations and the storage warning, signed by the admin. A case added by hand can be closed this way too.
+    sale not read or a list cut short is refused in plain words, and a lot whose location BC didn't
+    give says THAT ("couldn't be read from BC just now — try again"), never "still here". A sale box
+    holding anything that isn't a sale code ("F067, F068 day 2" on a hand case) is refused up front
+    (`salesUnparsed`), and counted as a sale not read on the card, so the box never shows for it; so is
+    a sale that reads NO lots of theirs (`emptySales` — "F068-2", a typo), named on the card. It
+    closes the way the check does: Collected, `closedAt` = the stop day (`collectedStopOf` — the last
+    full BC check), only if the case still has the status, buyer number and sale it was read with, and
+    a status line (`collectedCloseText(…, "page")`) naming the locations and the storage warning,
+    signed by the admin. A refusal stays on the card (until the card's own Read again) and the list is
+    read again, so it shows what the server saw; a lost answer says it may or may not have closed and
+    refreshes the page. The card lists lots by the whole line (sale + lot + unique id), never the
+    unique id alone, like the check. A case added by hand can be closed this way too — and its box says the BC check
+    WON'T close it (the check only touches cases from BC).
 - On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses Delete
   (the feed would bring it back — close it instead). A manual case can be deleted, confirmed in the
   page. Contact details, chase dates, storage start and notes stay the Hub's own (a storage start a

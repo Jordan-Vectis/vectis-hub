@@ -691,6 +691,15 @@ export function salesLeftOff(saleCode: string | null | undefined): number {
   return m ? Number(m[1]) : 0
 }
 
+/** How many parts of a case's "sale" box (split on commas or semicolons) AREN'T a sale code — words
+ *  typed by hand on a case added by hand ("F068 day 2", "and F069"), not counting joinSales's own
+ *  "+N more" (salesLeftOff). salesOf leaves them out, so a box with any can't be read in full:
+ *  ⚠ never judge such a case "all collected" from the sales salesOf did find. */
+export function salesUnparsed(saleCode: string | null | undefined): number {
+  const parts = (saleCode ?? "").split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+  return Math.max(0, parts.length - salesOf(saleCode).length - (salesLeftOff(saleCode) > 0 ? 1 : 0))
+}
+
 // ─── A case that dropped out: are its lots collected? ───────────────────────────────────────
 
 /**
@@ -770,29 +779,60 @@ export type JudgedBuyer = { lots: FeedLot[]; invoices: Map<string, { invoice: Fe
  * collected and still showing"). The cases added before the check read locations, whose lots were
  * scanned to COLLECTED without the docket being posted, close on the first check that reads their
  * buyer, instead of 60 a run — and on a run that ran out of time too.
- * Positive evidence only: the invoice is paid in full and its lines were read, the case's sale box
- * holds all its sales, at least one lot BC hasn't ticked is on the invoice in those sales (`refs`
- * empty = the invoice had no readable lot numbers: every such lot in the sales counts), and EVERY one
- * of them had its location read and it is a GONE one. Anything else → null, and the case goes to the
- * slow re-check (checkDropped) as before — so do cases whose lots BC ticked (they aren't in the feed).
+ * Positive evidence only: the invoice is paid in full and its lines were read; the case's sale box
+ * holds all its sales and nothing else; EVERY sale in it has at least one lot BC hasn't ticked on the
+ * invoice (`refs` empty = the invoice had no readable lot numbers: every such lot in the sale counts);
+ * each of those lots was sold safely inside the run's window (`windowFrom` + QUICK_WINDOW_MARGIN_DAYS);
+ * and EVERY one of them had its location read and it is a GONE one. Anything else → null, and the
+ * case goes to the slow re-check (checkDropped) as before — so do cases whose lots BC ticked.
+ * ⚠⚠ Why every sale, and the window: the run's lots are only those of sales inside the 12-month
+ * window (the feed's $filter on EVA_AuctionDate). A lot NOT among them is not proof it went — its sale
+ * may simply have aged out of the window (an invoice covering F050 and F051, with F050 past it and its
+ * lots still on a shelf). The slow re-check reads each sale whole, with no date filter (review of
+ * 2026-10-23). Never relax this to "the lots the run saw are gone".
  */
-export function droppedFromRun(c: { saleCode: string | null; invoiceKey: string }, buyer: JudgedBuyer | undefined): DroppedEvidence | null {
+export function droppedFromRun(
+  c: { saleCode: string | null; invoiceKey: string }, buyer: JudgedBuyer | undefined, windowFrom: string,
+): DroppedEvidence | null {
   if (!buyer) return null
   const got = buyer.invoices.get(c.invoiceKey.trim().toUpperCase())
-  if (!got || !got.refs || !isPaidInFull(got.invoice)) return null
-  if (salesLeftOff(c.saleCode) > 0) return null
+  // No readable lot numbers on the invoice → nothing to account for every lot by: the slow re-check.
+  if (!got || !got.refs || !got.refs.length || !isPaidInFull(got.invoice)) return null
+  if (salesLeftOff(c.saleCode) > 0 || salesUnparsed(c.saleCode) > 0) return null
   const sales = new Set(salesOf(c.saleCode))
   if (!sales.size) return null
   const refs = got.refs
-  const mine = buyer.lots.filter((l) => sales.has(l.saleCode.trim().toUpperCase()) && (!refs.length || refs.some((r) => refMatchesLot(r, l))))
+  const mine = buyer.lots.filter((l) => sales.has(l.saleCode.trim().toUpperCase()) && refs.some((r) => refMatchesLot(r, l)))
   if (!mine.length) return null
+  const seenSales = new Set(mine.map((l) => l.saleCode.trim().toUpperCase()))
+  for (const sale of sales) if (!seenSales.has(sale)) return null
+  // ⚠⚠ EVERY lot on the invoice must be one the run saw (second review, 2026-10-23): each "Buyer Premium
+  // for Lot No N" line is matched to a DIFFERENT lot of theirs in the box's sales. One with no lot to
+  // match is a lot the run didn't see — BC ticked it, or its sale isn't in the box (aged out of the
+  // window, or dropped from the box by an earlier save), or BC's paging skipped its row — and only the
+  // first of those is "gone": leave the case to the slow re-check.
+  // Exact matches first (suffixed refs before plain ones), then the suffix-tolerant match, so a lot
+  // isn't taken by a looser ref that another lot would have fitted. A miss only ever means "slow path".
+  const used = new Set<FeedLot>()
+  for (const r of [...refs].sort((a, b) => Number(!a.suffix) - Number(!b.suffix))) {
+    const free = mine.filter((m) => !used.has(m))
+    const l = free.find((m) => refIsExactly(r, m)) ?? free.find((m) => refMatchesLot(r, m))
+    if (!l) return null
+    used.add(l)
+  }
+  const safeFrom = addDays(windowFrom, QUICK_WINDOW_MARGIN_DAYS)
   const gone: Record<string, number> = {}
   for (const l of mine) {
+    if (!l.saleDate || l.saleDate < safeFrom) return null
     if (l.location == null || locationKind(l.location) !== "gone") return null
     gone[l.location] = (gone[l.location] ?? 0) + 1
   }
   return { verdict: "collected", ticked: 0, gone, query: [], unread: 0 }
 }
+
+/** droppedFromRun leaves a case to the slow re-check when any of its lots was sold within this many
+ *  days of the window's start — a sale held over more than one day could have lots either side of it. */
+export const QUICK_WINDOW_MARGIN_DAYS = 7
 
 /**
  * The case page's "Close as collected", from the lots read live there (bcLotsForBuyer): every lot BC
@@ -800,15 +840,25 @@ export function droppedFromRun(c: { saleCode: string | null; invoiceKey: string 
  * every sale read and the list complete. The evidence, or why not in plain words.
  */
 export function collectedFromLiveLots(d: {
-  lots: { state: LotState; location: string | null }[]
+  lots: { state: LotState; location: string | null; locationRead?: boolean }[]
   salesLeftOut: number
   more: boolean
+  locationError?: string | null
+  /** Sales read that gave no lot sold to them (bcLotsForBuyer). */
+  emptySales?: string[]
 }): { ok: true; evidence: DroppedEvidence } | { ok: false; why: string } {
-  if (d.salesLeftOut > 0) return { ok: false, why: "This case covers more sales than the case page reads, so the Hub can't tell every lot has gone — check them in BC, then change its status to Collected." }
+  if (d.salesLeftOut > 0) return { ok: false, why: "This case covers more sales than the case page reads (or its sale box holds something that isn't a sale code), so the Hub can't tell every lot has gone — check them in BC, then change its status to Collected." }
+  // Every sale on the case must show lots of theirs (second review, 2026-10-23): a code that reads
+  // nothing ("F068-2", a typo) is a sale whose lots were never looked at.
+  if (d.emptySales?.length) return { ok: false, why: `BC shows no lots sold to them in ${locationListWords(d.emptySales, "or")} — check the sale box on this case, so every sale's lots can be looked at.` }
   if (d.more) return { ok: false, why: "BC has more lots for them than the case page reads, so the Hub can't tell every lot has gone — check them in BC, then change its status to Collected." }
   if (!d.lots.length) return { ok: false, why: "BC shows no lots sold to them in this sale — check the buyer number and sale on this case." }
-  const here = d.lots.filter((l) => l.state === "here").length
+  // A lot BC hasn't ticked whose location wasn't read is "here" on the tick alone — but BC didn't say
+  // it's here, it didn't answer: say that, so the admin tries again rather than chases the buyer.
+  const here = d.lots.filter((l) => l.state === "here" && l.locationRead !== false).length
   if (here) return { ok: false, why: `BC shows ${here === 1 ? "1 lot" : `${here} lots`} still here, so the case stays open.` }
+  const unread = d.lots.filter((l) => l.state === "here").length
+  if (unread) return { ok: false, why: `Where ${unread === 1 ? "1 lot is" : `${unread} lots are`} couldn't be read from BC just now${d.locationError ? ` (${d.locationError})` : ""}, so nothing was closed — try again in a minute.` }
   const query = d.lots.filter((l) => l.state === "query")
   if (query.length) return { ok: false, why: `${query.length === 1 ? "1 lot is" : `${query.length} lots are`} at a query location in BC (${locationListWords([...new Set(query.map((l) => l.location ?? ""))].sort(), "and")}) — check ${query.length === 1 ? "it" : "them"} before closing the case.` }
   const ev: DroppedEvidence = { verdict: "collected", ticked: 0, gone: {}, query: [], unread: 0 }

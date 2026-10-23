@@ -7,7 +7,7 @@ import {
   GONE_LOCATIONS, QUERY_LOCATIONS, bcConnectHref, formatDateTime, formatDay, formatMoney, isGoneState, locationListWords, queryLotWords,
   type UncollectedBcLot, type UncollectedBcLots, type UncollectedCaseDetail,
 } from "@/lib/uncollected"
-import { NO_ANSWER, PANEL_PATH, btn, btnGo, card, cardTitle, inlineLink, muted, plural, td, th } from "../ui"
+import { PANEL_PATH, btn, btnGo, card, cardTitle, inlineLink, muted, plural, td, th } from "../ui"
 
 // The case's lots, read LIVE from BC when the case is opened — the simplest honest option: no copy
 // kept in the Hub to go stale, and the notes stay the staff's. A read of BC's auction lines with
@@ -58,10 +58,21 @@ export default function BcLots({ c }: { c: UncollectedCaseDetail }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, c.id])
 
-  function again() {
+  // Why Close as collected was refused — kept on the card, under the list, because the list is read
+  // again straight after (so it shows what the server saw) and the box itself may then go. A read
+  // started from the card's own buttons clears it: its answer is the newer one.
+  const [closeNote, setCloseNote] = useState<{ text: string; connect: boolean } | null>(null)
+
+  function again(keepNote = false) {
     if (shown.kind === "loading") return
+    if (!keepNote) setCloseNote(null)
     setShown({ kind: "loading" })
     read().then(setShown)
+  }
+
+  function refused(text: string, connect: boolean) {
+    setCloseNote({ text, connect })
+    again(true)
   }
 
   return (
@@ -69,7 +80,7 @@ export default function BcLots({ c }: { c: UncollectedCaseDetail }) {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <h2 id="bc-lots-title" className={cardTitle}>Lots in BC</h2>
         {canAsk && shown.kind !== "idle" && (
-          <button type="button" onClick={again} disabled={shown.kind === "loading"} className={btn}>
+          <button type="button" onClick={() => again()} disabled={shown.kind === "loading"} className={btn}>
             {shown.kind === "loading" ? "Reading BC…" : "Read again"}
           </button>
         )}
@@ -84,7 +95,7 @@ export default function BcLots({ c }: { c: UncollectedCaseDetail }) {
           <p className="text-sm text-gray-600 dark:text-gray-300">
             See every lot BC shows as bought by <span className="font-mono">{c.buyerNo}</span> in <span className="font-mono">{c.saleCode}</span>, and which are still here.
           </p>
-          <button type="button" onClick={again} className={`${btn} mt-3`}>Look up their lots in BC</button>
+          <button type="button" onClick={() => again()} className={`${btn} mt-3`}>Look up their lots in BC</button>
         </div>
       ) : shown.kind === "loading" ? (
         <p className="text-sm text-gray-600 dark:text-gray-300 inline-flex items-center gap-2" role="status">
@@ -97,37 +108,62 @@ export default function BcLots({ c }: { c: UncollectedCaseDetail }) {
           {shown.connect && <> <a href={bcConnectHref(`${PANEL_PATH}/${c.id}`)} className={inlineLink}>Sign in to BC →</a></>}
         </p>
       ) : (
-        <LotList data={shown.data} close={!c.closedAt && <CloseCollected caseId={c.id} />} />
+        <LotList
+          data={shown.data}
+          close={!c.closedAt && (
+            <CloseCollected caseId={c.id} fromBc={c.source === "bc"} onStart={() => setCloseNote(null)} onRefused={refused} />
+          )}
+        />
+      )}
+      {closeNote && (
+        <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">
+          {closeNote.text}
+          {closeNote.connect && <> <a href={bcConnectHref(`${PANEL_PATH}/${c.id}`)} className={inlineLink}>Sign in to BC →</a></>}
+        </p>
       )}
     </section>
   )
 }
 
-/** "Close as collected" — shown only when the list reads all collected and the case is open. */
-function CloseCollected({ caseId }: { caseId: string }) {
+/** "Close as collected" — shown only when the list reads all collected and the case is open. A
+ *  refusal goes to the card (onRefused), which reads the list again so it shows what the server saw. */
+function CloseCollected({ caseId, fromBc, onStart, onRefused }: {
+  caseId: string
+  fromBc: boolean
+  onStart: () => void
+  onRefused: (text: string, connect: boolean) => void
+}) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<{ text: string; connect: boolean } | null>(null)
 
   async function close() {
     if (busy) return
     setBusy(true)
-    setError(null)
+    onStart()
     try {
       const res = await closeCollectedFromBc(caseId)
-      if (!res.ok) { setError({ text: res.error, connect: !!res.needsBc }); setBusy(false); return }
+      if (!res.ok) {
+        setBusy(false)
+        onRefused(res.error, !!res.needsBc)
+        router.refresh()   // closed meanwhile (by the check, say)? the page then says so
+        return
+      }
       router.refresh()   // the page shows it closed; keep the button down until it does
     } catch {
-      setError({ text: NO_ANSWER, connect: false })
       setBusy(false)
+      // The answer was lost — it may have closed. Say so, and let the page show where it stands.
+      onRefused("The Hub didn't answer, so it may or may not have closed — the page is being checked.", false)
+      router.refresh()
     }
   }
 
   return (
     <div className="mt-3 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3">
       <p className="text-sm text-emerald-900 dark:text-emerald-200">
-        <b>BC shows every lot on this case collected</b>, so it shouldn&apos;t be on the list. The BC check closes cases like
-        this by itself, or you can close it now.
+        <b>BC shows every lot on this case collected</b>, so it shouldn&apos;t be on the list.{" "}
+        {fromBc
+          ? "The BC check closes cases like this by itself, or you can close it now."
+          : "This case was added by hand, so the BC check won't close it — close it here."}
       </p>
       <button type="button" onClick={close} disabled={busy} className={`${btnGo} mt-2`}>
         {busy ? "Checking BC and closing…" : "✓ Close as collected"}
@@ -136,12 +172,6 @@ function CloseCollected({ caseId }: { caseId: string }) {
         BC is read again first, and the case closes only if every lot has still gone. It closes on the day of the last BC
         check, so storage stops then, the same as when the check closes it.
       </p>
-      {error && (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-300 mt-2">
-          {error.text}
-          {error.connect && <> <a href={bcConnectHref(`${PANEL_PATH}/${caseId}`)} className={inlineLink}>Sign in to BC →</a></>}
-        </p>
-      )}
     </div>
   )
 }
@@ -201,6 +231,11 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
   const sale = multi
     ? `sales ${data.saleCode}`
     : first ? [first.saleCode ?? data.saleCode, first.saleName, first.saleDate ? formatDay(`${first.saleDate}T12:00:00Z`) : null].filter(Boolean).join(" · ") : data.saleCode
+  const emptySales = data.emptySales.length > 0 && (
+    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+      BC shows no lots sold to them in <span className="font-mono">{data.emptySales.join(", ")}</span> — check the sale box on this case.
+    </p>
+  )
   const leftOut = data.salesLeftOut > 0 && (
     <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
       This case covers {plural(data.salesLeftOut, "more sale")} that {data.salesLeftOut === 1 ? "wasn't" : "weren't"} read here — look {data.salesLeftOut === 1 ? "it" : "them"} up
@@ -245,15 +280,16 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
         {byLocation > 0 && <> {plural(byLocation, "lot")} {byLocation === 1 ? "counts" : "count"} as collected by {byLocation === 1 ? "its" : "their"} location only — BC hasn&apos;t ticked {byLocation === 1 ? "it" : "them"}, as the collection docket wasn&apos;t posted.</>}
       </p>
       {leftOut}
+      {emptySales}
       {unread}
       {/* Every lot gone, the whole list read, every sale of the case read: offer to close it. */}
-      {!waiting.length && !toCheck.length && !data.more && data.salesLeftOut === 0 && close}
+      {!waiting.length && !toCheck.length && !data.more && data.salesLeftOut === 0 && !data.emptySales.length && close}
 
       {toCheck.length > 0 && (
         <div role="status" className="mt-3 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-sm">
           <ul className="space-y-0.5">
             {toCheck.map((l, i) => (
-              <li key={l.uniqueId ?? `${l.saleCode}-${l.lotNo}-${i}`}>
+              <li key={`${l.saleCode}-${l.lotNo}-${l.uniqueId ?? i}`}>
                 ⚠ {queryLotWords({ lotNo: l.lotNo, saleCode: l.saleCode, location: l.location ?? "" }, multi)}.
               </li>
             ))}
@@ -268,7 +304,7 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
       {/* A phone (below sm): one stacked row per lot — the table would need sideways scrolling. */}
       <ul className="sm:hidden mt-3 divide-y divide-gray-100 dark:divide-gray-800">
         {lots.map((l, i) => (
-          <li key={l.uniqueId ?? `${l.saleCode}-${l.lotNo}-${i}`} className={`py-3 ${isGoneState(l.state) ? "opacity-70" : ""}`}>
+          <li key={`${l.saleCode}-${l.lotNo}-${l.uniqueId ?? i}`} className={`py-3 ${isGoneState(l.state) ? "opacity-70" : ""}`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <span className="font-mono font-semibold">{multi && l.saleCode ? `${l.saleCode} · ` : ""}Lot {l.lotNo}</span>
@@ -306,7 +342,7 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {lots.map((l, i) => (
-              <tr key={l.uniqueId ?? `${l.saleCode}-${l.lotNo}-${i}`} className={isGoneState(l.state) ? "opacity-70" : undefined}>
+              <tr key={`${l.saleCode}-${l.lotNo}-${l.uniqueId ?? i}`} className={isGoneState(l.state) ? "opacity-70" : undefined}>
                 {multi && <td className={`${td} whitespace-nowrap font-mono`}>{l.saleCode ?? "—"}</td>}
                 <td className={`${td} whitespace-nowrap`}>
                   <div className="font-mono font-semibold">{l.lotNo}</div>
