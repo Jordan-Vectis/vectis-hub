@@ -2041,6 +2041,16 @@ and the Hub's together. Migration `20261023170000_goods_in_bc_source` (**NEEDS R
   "booked today" and the status tiles — with one line under them saying how many came from BC and
   when; Settings' "last given" numbers read Hub-made rows too. The Customers hub's Receipts tab lists
   Goods In's receipts with a From BC badge beside the BC-copy receipts it already showed.
+- **Goods In → Totes & pallets** (`/tools/warehouse/totes`, 2026-10-23 — Jordan: *"I want to see that
+  warehouse database fully filterable editable and searchable"*): every tote and pallet, Hub and BC, in
+  one list. The filter lives in the URL and is read, written and turned into the Prisma query by ONE
+  module, `lib/goods-in/tote-list.ts`, which the page AND the CSV export (`/api/goods-in/totes/export`,
+  streamed 2,000 rows at a time, ≤ 50,000) share — so the export is exactly what's on screen. Side
+  filters with counts ("what you'd get if you picked this": each facet counted with its own choice
+  cleared), sortable columns, 100 a page. Rows are edited in place through `updateContainer` — so a BC
+  row is editable only when `HUB_OWNS_WAREHOUSE`, and the row says why not. Totes on voided receipts
+  and unfinished check-ins are left out unless "Include voided and unfinished" is ticked. Help box:
+  "Goods In → Tote list" (never "Warehouse" or "Stock" in the name).
 - Known limits: a BC tote's location can be a day old (the copy is nightly), so a location holding
   only BC totes can't be removed until the next copy agrees it is empty; movements aren't mirrored
   (BC Warehouse → Location History still answers); lots are untouched by this (WarehouseItem,

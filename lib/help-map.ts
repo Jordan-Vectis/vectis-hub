@@ -204,6 +204,13 @@ export const DESTINATIONS: Destination[] = [
     what: "Book a customer's goods in at the counter, in three steps — Customer, What they've brought, Check & book in. Find the customer in the customer database (or add them), then list their goods as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote. Each tote and pallet gets its number as soon as its row is added, so its barcode label can be printed right there on the goods step (Print labels prints every one not printed yet; each row has its own Print / Reprint). The customer's usual commission, fees and reserve are used automatically, and any special arrangement agreed with them is shown on the last step; change the terms for one receipt there, or for good on the customer's Fees & agreement tab. Press Book in, then print or email the receipt. A check-in left part-way is kept as \"not booked in yet\" — carry on with it from Check in, the Receipts list, the Goods In dashboard or the customer's page, or throw it away.",
     also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "customer bringing in", "print tote labels at check in", "tote number at check in", "unfinished check in", "carry on checking in", "check in not booked in", "not booked in yet", "throw away a check in"],
   },
+  // The warehouse database (2026-10-23). ⚠ Named "Tote list", never "Warehouse" or "Stock": a BC
+  // Warehouse user asking about "the warehouse" must not be refused with Goods In.
+  {
+    name: "Goods In → Tote list", href: "/tools/warehouse/totes", app: "WAREHOUSE",
+    what: "Every tote and pallet the Hub holds in one list — the Hub's own and Business Central's, copied in nightly. Search by number, receipt, customer, category, description or location; filter by status, tote or pallet, booked in the Hub or BC, location, location kind, receipt, booked dates and label not printed; sort any column; export exactly what's filtered as a CSV. Edit a tote's category, description or status in place — a BC tote only once the Hub has taken over the warehouse records.",
+    also: ["list of totes", "every tote", "all the totes", "filter totes", "tote database", "export totes", "totes csv", "which totes are in storage", "totes not put away", "tote labels not printed", "bc totes in goods in"],
+  },
   {
     ask: "How do I reprint or email a receipt?",
     name: "Goods In → Receipt list", href: "/tools/warehouse/receipts", app: "WAREHOUSE",

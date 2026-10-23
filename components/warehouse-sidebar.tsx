@@ -29,6 +29,7 @@ const NAV: NavItem[] = [
   { href: "/tools/warehouse", label: "Dashboard", exact: true, icon: <Icon><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></Icon> },
   { href: "/tools/warehouse/check-in", label: "Check in", primary: true, icon: <Icon><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" /></Icon> },
   { href: "/tools/warehouse/receipts", label: "Receipts", icon: <Icon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8" /></Icon> },
+  { href: "/tools/warehouse/totes", label: "Totes & pallets", icon: <Icon><path d="M3 7l9-4 9 4v10l-9 4-9-4z" /><path d="M3 7l9 4 9-4M12 11v10" /></Icon> },
   { href: "/tools/warehouse/customers", label: "Customers", icon: <Icon><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></Icon> },
   { href: "/tools/warehouse/move", label: "Move", icon: <Icon><path d="M17 3l4 4-4 4" /><path d="M3 7h18" /><path d="M7 21l-4-4 4-4" /><path d="M21 17H3" /></Icon> },
   { href: "/tools/warehouse/bench", label: "Bench", icon: <Icon><rect x="2" y="7" width="20" height="4" rx="1" /><path d="M5 11v9M19 11v9M5 16h14" /></Icon> },
