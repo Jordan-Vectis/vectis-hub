@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { auctionTypeEmoji, auctionTypeLabel, AUCTION_TYPES } from "@/lib/auction-types"
@@ -108,11 +108,121 @@ function AuctionCard({ a, onStart, onView }: {
   )
 }
 
+// List view (the default since 2026-10-23 — Jordan: "have it have a list view as default then have
+// a toggle to change it back"). One row per sale, the same figures and buttons as a card.
+function AuctionTable({ rows, onStart, onView }: {
+  rows: PhotographyAuctionRow[]
+  onStart: (id: string) => void
+  onView:  (id: string) => void
+}) {
+  return (
+    <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-gray-600 dark:text-gray-400 border-b border-gray-300 dark:border-gray-700">
+            <th className="px-4 py-3 font-medium">Sale</th>
+            <th className="px-4 py-3 font-medium">Name</th>
+            <th className="px-4 py-3 font-medium whitespace-nowrap">Date</th>
+            <th className="px-4 py-3 font-medium min-w-[14rem]">Photos</th>
+            <th className="px-4 py-3 font-medium whitespace-nowrap">Still need</th>
+            <th className="px-4 py-3"><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(a => <AuctionRow key={a.id} a={a} onStart={onStart} onView={onView} />)}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function AuctionRow({ a, onStart, onView }: {
+  a: PhotographyAuctionRow
+  onStart: (id: string) => void
+  onView:  (id: string) => void
+}) {
+  const [going, setGoing] = useState(false)
+  const [viewing, setViewing] = useState(false)
+  const pct  = a.lots > 0 ? Math.round((a.lotsWithPhotos / a.lots) * 100) : 0
+  const done = a.lots > 0 && a.lotsWithPhotos === a.lots
+  const none = a.lotsWithPhotos === 0
+  const left = a.lots - a.lotsWithPhotos
+
+  return (
+    <tr className="border-b last:border-b-0 border-gray-200 dark:border-gray-800 hover:bg-purple-50/50 dark:hover:bg-purple-900/10">
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        <span className="font-mono font-semibold text-purple-700 dark:text-purple-400">{a.code}</span>
+        <span className="block text-xs text-gray-600 dark:text-gray-400">{auctionTypeEmoji(a.auctionType)} {auctionTypeLabel(a.auctionType)}</span>
+      </td>
+      <td className="px-4 py-2.5 font-semibold text-gray-900 dark:text-white">{a.name}</td>
+      <td className="px-4 py-2.5 whitespace-nowrap text-gray-600 dark:text-gray-400">{fmtDate(a.auctionDate)}</td>
+      <td className="px-4 py-2.5">
+        {a.lots === 0 ? (
+          <span className="text-xs text-gray-600 dark:text-gray-400">No lots yet</span>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-gray-200 dark:bg-gray-800 rounded-full h-2 overflow-hidden min-w-[6rem]">
+              <div className={`h-2 rounded-full ${done ? "bg-green-500" : "bg-purple-500"}`} style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
+              <span className="font-semibold text-gray-900 dark:text-white">{a.lotsWithPhotos}</span> / {a.lots}
+            </span>
+            <span className={`text-xs font-semibold w-10 text-right ${done ? "text-green-700 dark:text-green-400" : none ? "text-gray-500" : "text-purple-700 dark:text-purple-400"}`}>{pct}%</span>
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        {done
+          ? <span className="text-xs bg-green-200 text-green-800 dark:bg-green-900/40 dark:text-green-400 rounded-full px-2 py-0.5">✓ All photographed</span>
+          : a.lots > 0 ? <span className="text-gray-900 dark:text-white">{left}</span> : <span className="text-gray-500">—</span>}
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => { setGoing(true); onStart(a.id) }}
+            disabled={going || a.lots === 0}
+            className="min-h-11 px-4 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold whitespace-nowrap transition-colors"
+          >
+            {going ? "Opening…" : "📷 Start"}
+          </button>
+          <button
+            onClick={() => { setViewing(true); onView(a.id) }}
+            disabled={viewing || a.lots === 0}
+            className="min-h-11 px-4 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-purple-400 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 text-sm font-medium whitespace-nowrap transition-colors"
+          >
+            {viewing ? "Opening…" : "🔍 View lots"}
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+type View = "list" | "cards"
+const VIEW_KEY = "photography_view"
+
 export default function PhotographyAuctionList({ active, completed }: Props) {
   const router = useRouter()
   const [search, setSearch]   = useState("")
   const [type, setType]       = useState("")
   const [showDone, setShowDone] = useState(false)
+  // List by default; each device remembers its own choice (read after mount, so the server's first
+  // render matches).
+  const [view, setView] = useState<View>("list")
+  useEffect(() => {
+    try { if (localStorage.getItem(VIEW_KEY) === "cards") setView("cards") } catch { /* private mode */ }
+  }, [])
+  const chooseView = (v: View) => {
+    setView(v)
+    try { localStorage.setItem(VIEW_KEY, v) } catch { /* private mode */ }
+  }
+  const showRows = (rows: PhotographyAuctionRow[]) => view === "list"
+    ? <AuctionTable rows={rows} onStart={start} onView={view_} />
+    : (
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+        {rows.map(a => <AuctionCard key={a.id} a={a} onStart={start} onView={view_} />)}
+      </div>
+    )
 
   const filter = (rows: PhotographyAuctionRow[]) => rows.filter(a => {
     const q = search.trim().toLowerCase()
@@ -125,7 +235,7 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
   const shownCompleted = useMemo(() => filter(completed), [completed, search, type])
 
   const start = (id: string) => router.push(`/tools/cataloguing/photography/${id}`)
-  const view  = (id: string) => router.push(`/tools/cataloguing/photography/${id}?tab=view`)
+  const view_ = (id: string) => router.push(`/tools/cataloguing/photography/${id}?tab=view`)
 
   const totalNeeding = active.reduce((n, a) => n + (a.lots - a.lotsWithPhotos), 0)
 
@@ -191,6 +301,16 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
             ✕ Clear
           </button>
         )}
+        <div className="ml-auto inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden" role="group" aria-label="How to show the sales">
+          {([["list", "☰ List"], ["cards", "▦ Cards"]] as const).map(([v, label]) => (
+            <button key={v} onClick={() => chooseView(v)} aria-pressed={view === v}
+              className={`min-h-11 px-4 text-sm font-medium transition-colors ${view === v
+                ? "bg-purple-600 text-white"
+                : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Active */}
@@ -201,9 +321,7 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-          {shownActive.map(a => <AuctionCard key={a.id} a={a} onStart={start} onView={view} />)}
-        </div>
+        showRows(shownActive)
       )}
 
       {/* Completed sales, tucked away */}
@@ -216,9 +334,7 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
             {showDone ? "▾" : "▸"} Completed sales ({shownCompleted.length})
           </button>
           {showDone && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 mt-4">
-              {shownCompleted.map(a => <AuctionCard key={a.id} a={a} onStart={start} onView={view} />)}
-            </div>
+            <div className="mt-4">{showRows(shownCompleted)}</div>
           )}
         </div>
       )}
