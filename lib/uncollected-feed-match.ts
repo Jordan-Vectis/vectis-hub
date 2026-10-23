@@ -759,6 +759,66 @@ export function droppedVerdict(refs: LotRef[], rows: Record<string, unknown>[], 
   return droppedEvidence(refs, rows, buyerNo, places).verdict
 }
 
+/** What a run read for one buyer it judged in full: their lots BC hasn't ticked (with where each is,
+ *  once read), and their invoices by number (upper case) with the lot numbers on each — `refs` null
+ *  when that invoice's lines weren't read. */
+export type JudgedBuyer = { lots: FeedLot[]; invoices: Map<string, { invoice: FeedInvoice; refs: LotRef[] | null }> }
+
+/**
+ * The QUICK re-check of an open case from BC that the run didn't find — from what the run already
+ * read for its buyer, so no BC call and no limit a run (2026-10-23 — Jack: "things are scanned as
+ * collected and still showing"). The cases added before the check read locations, whose lots were
+ * scanned to COLLECTED without the docket being posted, close on the first check that reads their
+ * buyer, instead of 60 a run — and on a run that ran out of time too.
+ * Positive evidence only: the invoice is paid in full and its lines were read, the case's sale box
+ * holds all its sales, at least one lot BC hasn't ticked is on the invoice in those sales (`refs`
+ * empty = the invoice had no readable lot numbers: every such lot in the sales counts), and EVERY one
+ * of them had its location read and it is a GONE one. Anything else → null, and the case goes to the
+ * slow re-check (checkDropped) as before — so do cases whose lots BC ticked (they aren't in the feed).
+ */
+export function droppedFromRun(c: { saleCode: string | null; invoiceKey: string }, buyer: JudgedBuyer | undefined): DroppedEvidence | null {
+  if (!buyer) return null
+  const got = buyer.invoices.get(c.invoiceKey.trim().toUpperCase())
+  if (!got || !got.refs || !isPaidInFull(got.invoice)) return null
+  if (salesLeftOff(c.saleCode) > 0) return null
+  const sales = new Set(salesOf(c.saleCode))
+  if (!sales.size) return null
+  const refs = got.refs
+  const mine = buyer.lots.filter((l) => sales.has(l.saleCode.trim().toUpperCase()) && (!refs.length || refs.some((r) => refMatchesLot(r, l))))
+  if (!mine.length) return null
+  const gone: Record<string, number> = {}
+  for (const l of mine) {
+    if (l.location == null || locationKind(l.location) !== "gone") return null
+    gone[l.location] = (gone[l.location] ?? 0) + 1
+  }
+  return { verdict: "collected", ticked: 0, gone, query: [], unread: 0 }
+}
+
+/**
+ * The case page's "Close as collected", from the lots read live there (bcLotsForBuyer): every lot BC
+ * shows as sold to the buyer in the case's sale(s) must be gone — ticked, or at a GONE location — with
+ * every sale read and the list complete. The evidence, or why not in plain words.
+ */
+export function collectedFromLiveLots(d: {
+  lots: { state: LotState; location: string | null }[]
+  salesLeftOut: number
+  more: boolean
+}): { ok: true; evidence: DroppedEvidence } | { ok: false; why: string } {
+  if (d.salesLeftOut > 0) return { ok: false, why: "This case covers more sales than the case page reads, so the Hub can't tell every lot has gone — check them in BC, then change its status to Collected." }
+  if (d.more) return { ok: false, why: "BC has more lots for them than the case page reads, so the Hub can't tell every lot has gone — check them in BC, then change its status to Collected." }
+  if (!d.lots.length) return { ok: false, why: "BC shows no lots sold to them in this sale — check the buyer number and sale on this case." }
+  const here = d.lots.filter((l) => l.state === "here").length
+  if (here) return { ok: false, why: `BC shows ${here === 1 ? "1 lot" : `${here} lots`} still here, so the case stays open.` }
+  const query = d.lots.filter((l) => l.state === "query")
+  if (query.length) return { ok: false, why: `${query.length === 1 ? "1 lot is" : `${query.length} lots are`} at a query location in BC (${locationListWords([...new Set(query.map((l) => l.location ?? ""))].sort(), "and")}) — check ${query.length === 1 ? "it" : "them"} before closing the case.` }
+  const ev: DroppedEvidence = { verdict: "collected", ticked: 0, gone: {}, query: [], unread: 0 }
+  for (const l of d.lots) {
+    if (l.state === "gone" && l.location) ev.gone[l.location] = (ev.gone[l.location] ?? 0) + 1
+    else ev.ticked++
+  }
+  return { ok: true, evidence: ev }
+}
+
 /**
  * Why the check closes a case as collected, naming the locations it saw:
  *  "BC shows the lots collected" (every one ticked) ·
@@ -785,10 +845,15 @@ export const closedByLocation = (e: Pick<DroppedEvidence, "gone">): boolean => O
  * ⚠ Never "storage charges from", "paid by" / "paid on" or "BC no longer shows invoice" in it (other
  * readers of the timeline look for those).
  */
-export function collectedCloseText(fromLabel: string, toLabel: string, e: Pick<DroppedEvidence, "ticked" | "gone">, stopDay: string): string {
+export function collectedCloseText(
+  fromLabel: string, toLabel: string, e: Pick<DroppedEvidence, "ticked" | "gone">, stopDay: string, by: "check" | "page" = "check",
+): string {
   const day = dayWords(stopDay)
-  const head = `${fromLabel} → ${toLabel} — ${collectedWhyWords(e)}.`
-  const stop = `the day of the check before this one, the last day they could have been seen still here — and storage stops then.`
+  // "page" = Close as collected on the case page, from the lots read live there (collectedFromLiveLots).
+  const head = `${fromLabel} → ${toLabel} — ${collectedWhyWords(e)}${by === "page" ? ", read live from BC on the case page" : ""}.`
+  const stop = by === "page"
+    ? `the day of the last BC check, the last day they could have been seen still here — and storage stops then.`
+    : `the day of the check before this one, the last day they could have been seen still here — and storage stops then.`
   if (!closedByLocation(e)) return `${head} BC doesn't say which day they went, so the case is closed on ${day} — ${stop}`
   const locs = locationListWords(Object.keys(e.gone).sort(), "or")
   return `${head} BC doesn't say which day they went, or when they were scanned to ${locs}, so the case is closed on ${day} — ${stop}` +

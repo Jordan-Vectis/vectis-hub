@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"94f9a59919d7872c538f60554b07015b8a7921c3","author":"jack-vectis","date":"2026-10-23T12:33:57+01:00","subject":"Paid, not collected: storage charges, and lots scanned to COLLECTED count as collected"},
   {"sha":"ba6432cfbd6c77a9ae7b21a0e5589b2e920ba959","author":"Jordan Orange","date":"2026-10-23T12:11:11+01:00","subject":"Photography: soonest sales first, with a Sort by choice remembered per device"},
   {"sha":"d98297f774f6c679bca5471a3742a849c969e5b4","author":"Jordan Orange","date":"2026-10-23T11:54:30+01:00","subject":"Photography: list view by default, with a List / Cards switch remembered per device"},
   {"sha":"811f382849451d529668f079b99253b2ac00b46e","author":"Jordan Orange","date":"2026-10-23T11:21:32+01:00","subject":"Refresh changelog seed"},

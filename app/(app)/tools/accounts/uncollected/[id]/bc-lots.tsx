@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { bcLotsForCase } from "@/lib/actions/uncollected"
+import { useRouter } from "next/navigation"
+import { bcLotsForCase, closeCollectedFromBc } from "@/lib/actions/uncollected"
 import {
   GONE_LOCATIONS, QUERY_LOCATIONS, bcConnectHref, formatDateTime, formatDay, formatMoney, isGoneState, locationListWords, queryLotWords,
   type UncollectedBcLot, type UncollectedBcLots, type UncollectedCaseDetail,
 } from "@/lib/uncollected"
-import { PANEL_PATH, btn, card, cardTitle, inlineLink, muted, plural, td, th } from "../ui"
+import { NO_ANSWER, PANEL_PATH, btn, btnGo, card, cardTitle, inlineLink, muted, plural, td, th } from "../ui"
 
 // The case's lots, read LIVE from BC when the case is opened — the simplest honest option: no copy
 // kept in the Hub to go stale, and the notes stay the staff's. A read of BC's auction lines with
@@ -21,6 +22,11 @@ import { PANEL_PATH, btn, card, cardTitle, inlineLink, muted, plural, td, th } f
 // lib/uncollected.ts): "Collected" when BC ticked it OR its location is a GONE one ("by location"
 // when only the location says so — the docket was never posted), "⚠ Check this lot" at a QUERY
 // location, "Not collected" otherwise. The headline count follows the same rule.
+//
+// When every lot reads as collected and the case is still open, a green box offers "Close as
+// collected" (Jack, 2026-10-23: "things are scanned as collected and still showing"). It doesn't
+// trust this read: closeCollectedFromBc reads BC again on the server and closes the case only if
+// every lot has still gone, the same way the BC check closes one (closed on the last check's day).
 
 type Shown =
   | { kind: "idle" }
@@ -91,9 +97,52 @@ export default function BcLots({ c }: { c: UncollectedCaseDetail }) {
           {shown.connect && <> <a href={bcConnectHref(`${PANEL_PATH}/${c.id}`)} className={inlineLink}>Sign in to BC →</a></>}
         </p>
       ) : (
-        <LotList data={shown.data} />
+        <LotList data={shown.data} close={!c.closedAt && <CloseCollected caseId={c.id} />} />
       )}
     </section>
+  )
+}
+
+/** "Close as collected" — shown only when the list reads all collected and the case is open. */
+function CloseCollected({ caseId }: { caseId: string }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<{ text: string; connect: boolean } | null>(null)
+
+  async function close() {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await closeCollectedFromBc(caseId)
+      if (!res.ok) { setError({ text: res.error, connect: !!res.needsBc }); setBusy(false); return }
+      router.refresh()   // the page shows it closed; keep the button down until it does
+    } catch {
+      setError({ text: NO_ANSWER, connect: false })
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3">
+      <p className="text-sm text-emerald-900 dark:text-emerald-200">
+        <b>BC shows every lot on this case collected</b>, so it shouldn&apos;t be on the list. The BC check closes cases like
+        this by itself, or you can close it now.
+      </p>
+      <button type="button" onClick={close} disabled={busy} className={`${btnGo} mt-2`}>
+        {busy ? "Checking BC and closing…" : "✓ Close as collected"}
+      </button>
+      <p className={`text-xs ${muted} mt-1.5`}>
+        BC is read again first, and the case closes only if every lot has still gone. It closes on the day of the last BC
+        check, so storage stops then, the same as when the check closes it.
+      </p>
+      {error && (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300 mt-2">
+          {error.text}
+          {error.connect && <> <a href={bcConnectHref(`${PANEL_PATH}/${caseId}`)} className={inlineLink}>Sign in to BC →</a></>}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -140,7 +189,7 @@ function LocationCell({ lot }: { lot: UncollectedBcLot }) {
   )
 }
 
-function LotList({ data }: { data: UncollectedBcLots }) {
+function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode }) {
   const { lots } = data
   const waiting = lots.filter(l => l.state === "here")
   const toCheck = lots.filter(l => l.state === "query")
@@ -197,6 +246,8 @@ function LotList({ data }: { data: UncollectedBcLots }) {
       </p>
       {leftOut}
       {unread}
+      {/* Every lot gone, the whole list read, every sale of the case read: offer to close it. */}
+      {!waiting.length && !toCheck.length && !data.more && data.salesLeftOut === 0 && close}
 
       {toCheck.length > 0 && (
         <div role="status" className="mt-3 rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-sm">

@@ -2733,7 +2733,21 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     left off — "F061, F062, F063, F064, F065, +4 more" (`salesLeftOff`) — and `salesOf` reads only the
     sale codes (split on commas; "+4 more" or words typed by hand are not sales). The case page reads
     each sale (up to 4, `CASE_PAGE_MAX_SALES`) and says how many it didn't.
-  - **An open case from BC the check no longer finds** is judged on POSITIVE evidence only, and only
+  - ⚠⚠ **The QUICK re-check comes first, with no limit** (2026-10-23 — Jack, on sandbox after the
+    location fix: *"things are scanned as collected and still showing"*). The cases the 08:30 run had
+    added that morning, before the check read locations, sat open: the re-check below takes only 60 a
+    run, and **none at all on a run whose time for reading BC ran out**. So an open case from BC the
+    check no longer finds is first judged from what THIS run already read for its buyer
+    (`FindResult.judged`, `droppedFromRun` in lib/uncollected-feed-match.ts): its invoice is paid in
+    full and its lines were read, its sale box holds all its sales, at least one lot BC hasn't ticked is
+    on the invoice in those sales, and **every one of them had its location read and it is a GONE
+    one** → closed as collected right there (`closeAsCollected`, the same stop day and words as below),
+    with no BC call, however many there are, even when the time for reading ran out. Anything else
+    (a lot still on a shelf, at a QUERY location, its location not read, lots BC ticked — they aren't
+    in the feed — or the buyer not judged this run) goes to the slow re-check below, as before. Saving's
+    own time limit and a Stop still stop it; what's left is said in the run's notes and closed next run.
+  - **An open case from BC the check no longer finds** (the quick re-check didn't settle) is judged on
+    POSITIVE evidence only, and only
     for buyers it fully checked — at most 60 a run (`pickDropped`): cases whose buyer has no lot left
     in the window that isn't gone (ticked, or at a GONE location — the likely collected ones) first,
     with at least half the places; each group
@@ -2818,6 +2832,15 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     ("2 not collected, 1 to check, 3 collected") follows the same rule, and a key under the list
     explains the chips. Lots to check are listed first, then not collected. A location read that fails
     still shows the lots (judged on the tick) and says how many couldn't be read and why.
+  - **"✓ Close as collected"** (2026-10-23): when that list reads every lot collected (ticked or at a
+    GONE location), every sale of the case was read and the list isn't cut short, and the case is open,
+    a green box under the headline offers to close it. ⚠ It never trusts the page's read:
+    `closeCollectedFromBc` (admins, the admin's own BC sign-in) reads BC AGAIN and closes only if
+    `collectedFromLiveLots` still says every lot has gone — a lot still here, at a QUERY location, a
+    sale not read or a list cut short is refused in plain words. It closes the way the check does:
+    Collected, `closedAt` = the stop day (`collectedStopOf` — the last full BC check), only if the case
+    is still where it was read, and a status line (`collectedCloseText(…, "page")`) naming the
+    locations and the storage warning, signed by the admin. A case added by hand can be closed this way too.
 - On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses Delete
   (the feed would bring it back — close it instead). A manual case can be deleted, confirmed in the
   page. Contact details, chase dates, storage start and notes stay the Hub's own (a storage start a

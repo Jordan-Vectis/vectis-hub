@@ -5,7 +5,10 @@ import { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
-import { bcLotsForBuyer, salesOf, startUncollectedSync, stopUncollectedSync, uncollectedSyncNow } from "@/lib/uncollected-feed"
+import {
+  bcLotsForBuyer, collectedCloseText, collectedFromLiveLots, collectedStopOf, salesOf, startUncollectedSync, stopUncollectedSync,
+  uncollectedSyncNow,
+} from "@/lib/uncollected-feed"
 import {
   countStartMoves, readCaseStorageFlags, readStorageSettings, readStorageStartOwner, saveStorageSettings as saveSettingsRow,
   storageOwedOnOpenCases,
@@ -1134,5 +1137,68 @@ export async function bcLotsForCase(id: string): Promise<UncollectedResult<Uncol
     return { ok: true, data: { ...data, lots } }
   } catch (e) {
     return bcFailure(e)
+  }
+}
+
+/**
+ * The case page's "Close as collected" (2026-10-23 — Jack: "things are scanned as collected and still
+ * showing"): BC is read AGAIN here, live, with the admin's own sign-in — never the page's word for it —
+ * and the case is closed only when every lot BC shows as sold to the buyer in the case's sale(s) is
+ * gone (ticked, or at a GONE location; collectedFromLiveLots). Closed the way the BC check closes one:
+ * status Collected, closedAt the STOP DAY (the last full BC check — the last day the lots could have
+ * been seen still here; collectedStopOf), and a status line naming the locations, signed by the admin.
+ * Only if the case is still where it was read. Answers the London day the case closed on.
+ */
+export async function closeCollectedFromBc(id: string): Promise<UncollectedResult<{ closedOn: string }>> {
+  let who: Who
+  let c: { status: string; buyerNo: string | null; saleCode: string | null; closedAt: Date | null }
+  try {
+    who = await requireAdmin()
+    if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
+    const row = await prisma.uncollectedPaid.findUnique({ where: { id }, select: { status: true, buyerNo: true, saleCode: true, closedAt: true } })
+    if (!row) throw new Refusal(NOT_FOUND)
+    if (!isOpenRaw(row.status) || row.closedAt) throw new Refusal("This case is already closed.")
+    const sales = salesOf(row.saleCode)
+    if (!row.buyerNo || !BC_CODE_RE.test(row.buyerNo.trim()) || !sales.length || !sales.every((s) => BC_CODE_RE.test(s))) {
+      throw new Refusal("The buyer number or sale on this case doesn't look like BC's, so BC can't be asked for its lots.")
+    }
+    c = row
+  } catch (e) {
+    return fail(e, "close collected", "That case couldn't be read just now — please try again.")
+  }
+
+  const token = await getBCToken().catch(() => null)
+  if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
+  let live: UncollectedBcLots
+  try {
+    live = await bcLotsForBuyer(token, c.saleCode!.trim(), c.buyerNo!.trim())
+  } catch (e) {
+    return bcFailure(e)
+  }
+  const judged = collectedFromLiveLots(live)
+  if (!judged.ok) return { ok: false, error: judged.why }
+
+  try {
+    const stop = await collectedStopOf(new Date(), londonDay())
+    const closed = await prisma.$transaction(async (tx) => {
+      const n = await tx.uncollectedPaid.updateMany({
+        where: { id, status: c.status, closedAt: null },
+        data: { status: "collected", closedAt: stop.closedAt },
+      })
+      if (n.count !== 1) return false   // someone changed it meanwhile — theirs wins
+      await tx.uncollectedPaidEvent.create({
+        data: {
+          caseId: id, kind: "status", byId: who.id, byName: who.name,
+          // ⚠ Never "storage charges from" here (storageStartOwner reads status lines).
+          text: collectedCloseText(STATUS_META[statusOf(c.status)].label, STATUS_META.collected.label, judged.evidence, stop.day, "page"),
+        },
+      })
+      return true
+    })
+    if (!closed) throw new Refusal(CHANGED_MEANWHILE)
+    revalidate()
+    return { ok: true, data: { closedOn: stop.day } }
+  } catch (e) {
+    return fail(e, "close collected", SAVE_FAILED)
   }
 }

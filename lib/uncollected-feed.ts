@@ -74,13 +74,13 @@ import {
 } from "@/lib/uncollected-settings"
 import {
   BC_PAID_DATE_FIELD, PLACES_PER_CALL, QUERY_CLEAR_START, QUERY_FLAG_START, RECEIPT_LINE_SELECT, addedText, bcDay, bcTrue, chunk,
-  cleanEmail, closedByLocation, collectedCloseText, collectedStopFrom, cleanPhone, droppedEvidence, droppedLots, eachLimit, feedChanges,
+  cleanEmail, closedByLocation, collectedCloseText, collectedStopFrom, cleanPhone, droppedEvidence, droppedFromRun, droppedLots, eachLimit, feedChanges,
   hasPaidDateField, invoicesNeedingLines, isNoLongerPaidText, isPaidInFull, isQueryClearText, isQueryFlagText, locationCounts,
   lotNoOf, lotRefsFromLines, matchBuyer, matchedText, nextQueryFlag, noLongerPaidText, noPlacesRead, odataString, ownedValues, pickDropped,
   placeKey, placesFromRows, readLinesThenPlaces, rotate, saleWindow, salesLeftOff, salesOf, splitByPlace, storageStamp, toFeedInvoice, toFeedLot,
   updatedText, withPlaces,
-  type BuyerToRead, type Candidate, type FeedChange, type FeedChangeOptions, type FeedInvoice, type FeedLot, type InvoiceLines, type LotPlace,
-  type LotRef, type PlacesRead,
+  type BuyerToRead, type Candidate, type DroppedEvidence, type FeedChange, type FeedChangeOptions, type FeedInvoice, type FeedLot, type InvoiceLines,
+  type JudgedBuyer, type LotPlace, type LotRef, type PlacesRead,
 } from "@/lib/uncollected-feed-match"
 
 export * from "@/lib/uncollected-feed-match"
@@ -473,6 +473,10 @@ export type FindResult = {
    *  (and the storage start) of a case already on BC's own paid date alone — a passing fault must
    *  never flip cases from "Paid on" to "Paid by" and back (SaveCtx.holdExact). */
   paidDates: "exact" | "settled" | "unknown"
+  /** Every buyer judged in full this run (upper case) → what was read for them: their lots BC hasn't
+   *  ticked, with where each is, and their invoices with the lot numbers on each — so the sync can
+   *  close an open case whose lots have all gone without asking BC again (droppedFromRun). */
+  judged: Map<string, JudgedBuyer>
 }
 
 /**
@@ -505,7 +509,7 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
   let paidDates: FindResult["paidDates"] = "settled"
   const result = (over: Partial<FindResult>): FindResult => ({
     candidates: [], lotsSeen: 0, buyers: 0, buyerNos: [], locations: { read: 0, gone: 0, query: 0, unread: 0 }, partial: true, notes,
-    lotsComplete: false, uncheckedBuyers: [], today, window: win, invoicesRead: 0, calls: ctx.calls, firstError: null, paidDates, ...over,
+    lotsComplete: false, uncheckedBuyers: [], today, window: win, invoicesRead: 0, calls: ctx.calls, firstError: null, paidDates, judged: new Map(), ...over,
   })
 
   // 0. Does BC publish each lot's own paid date yet? (Asked once a run — Jordan can add it to the
@@ -682,6 +686,7 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
   const unread = { noId: 0, refused: 0, notFound: 0, ambiguous: 0 }
   let placesRead = 0
   const stillHere = new Set(buyers)
+  const judged = new Map<string, JudgedBuyer>()
   for (const b of buyers) {
     if (unchecked.has(b)) continue
     const invs = invoicesOf.get(b) ?? []
@@ -701,6 +706,11 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
         else unread.notFound++
       }
     }
+    // What was read for them — the sync's quick re-check of their open cases (droppedFromRun).
+    judged.set(b, {
+      lots: lotsNow,
+      invoices: new Map(invs.map((inv) => [inv.number.trim().toUpperCase(), { invoice: inv, refs: lines.get(inv.id)?.refs ?? null }])),
+    })
     const split = splitByPlace(lotsNow)
     goneLots.push(...split.gone)
     queryLots.push(...split.query)
@@ -749,7 +759,7 @@ async function find(ctx: Ctx, opts: FindOptions): Promise<FindResult> {
     // Locations BC refused to give mean part of the check wasn't done properly — said, not hidden.
     // (A buyer whose locations BC didn't answer for isn't judged at all — it is in `unchecked`.)
     partial: unchecked.size > 0 || unread.refused > 0, notes, lotsComplete: true,
-    uncheckedBuyers: [...unchecked.keys()], today, window: win, invoicesRead, calls: ctx.calls, firstError, paidDates,
+    uncheckedBuyers: [...unchecked.keys()], today, window: win, invoicesRead, calls: ctx.calls, firstError, paidDates, judged,
   }
 }
 
@@ -1178,26 +1188,7 @@ async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: st
       if (ev.verdict === "query") { out.query++; return }
       if (ev.verdict === "unknown") { out.unknown++; return }
 
-      // ⚠ closedAt is the STOP DAY (collectedStopOf), not the moment this check noticed: storage
-      // counts the day a case closes, so "now" charged every case the check closes a day too many.
-      // A close a GONE location decided says the storage figure may be too high (collectedCloseText).
-      const stop = s.collectedStop
-      const closedNow = await prisma.$transaction(async (tx) => {
-        const n = await tx.uncollectedPaid.updateMany({
-          where: { id: c.id, source: "bc", status: c.status },
-          data: { status: "collected", closedAt: stop.closedAt },
-        })
-        if (n.count !== 1) return false   // someone changed it meanwhile — theirs wins
-        await tx.uncollectedPaidEvent.create({
-          data: {
-            caseId: c.id, kind: "status", byId: null, byName: s.byName,
-            // ⚠ Never "storage charges from" here (storageStartOwner reads status lines).
-            text: collectedCloseText(STATUS_META[statusOf(c.status)].label, STATUS_META.collected.label, ev, stop.day),
-          },
-        })
-        return true
-      })
-      if (closedNow) { out.closed++; if (closedByLocation(ev)) out.byLocation++ }
+      if (await closeAsCollected(c, ev, s)) { out.closed++; if (closedByLocation(ev)) out.byLocation++ }
     } catch (e) {
       if (e instanceof OutOfTime || e instanceof BcError) out.unread++
       else { out.failed++; console.error("uncollected feed: a case couldn't be checked:", e) }
@@ -1220,6 +1211,32 @@ async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: st
 }
 
 /**
+ * Closes an open case from BC as collected because BC shows its lots gone (`ev`), on the run's stop
+ * day, with the line saying why. Only if it is still where it was read — someone changing it meanwhile
+ * wins (false). ⚠ closedAt is the STOP DAY (collectedStopOf), not the moment the check noticed: storage
+ * counts the day a case closes, so "now" charged every case the check closes a day too many. A close a
+ * GONE location decided says the storage figure may be too high (collectedCloseText).
+ */
+async function closeAsCollected(c: OpenBcCase, ev: Pick<DroppedEvidence, "ticked" | "gone">, s: SaveCtx): Promise<boolean> {
+  const stop = s.collectedStop
+  return prisma.$transaction(async (tx) => {
+    const n = await tx.uncollectedPaid.updateMany({
+      where: { id: c.id, source: "bc", status: c.status },
+      data: { status: "collected", closedAt: stop.closedAt },
+    })
+    if (n.count !== 1) return false   // someone changed it meanwhile — theirs wins
+    await tx.uncollectedPaidEvent.create({
+      data: {
+        caseId: c.id, kind: "status", byId: null, byName: s.byName,
+        // ⚠ Never "storage charges from" here (storageStartOwner reads status lines).
+        text: collectedCloseText(STATUS_META[statusOf(c.status)].label, STATUS_META.collected.label, ev, stop.day),
+      },
+    })
+    return true
+  })
+}
+
+/**
  * Where the clock stops on a case this run closes because BC shows its lots collected. BC keeps no
  * collected date, so the honest stop is the LAST DAY THE LOTS COULD HAVE BEEN SEEN STILL HERE: the
  * London day of the check's previous run that read BC's lot list in full (lotsSeen over 0) — normally
@@ -1230,7 +1247,7 @@ async function checkDropped(ctx: Ctx, cases: OpenBcCase[], s: SaveCtx, notes: st
  * every case it closes at least a day too many. A case that waited more than a run to be re-checked
  * (DROPPED_CHECK_LIMIT) can still have gone before the stop day — RULES.md says so.
  */
-async function collectedStopOf(runStarted: Date, today: string): Promise<{ day: string; closedAt: Date }> {
+export async function collectedStopOf(runStarted: Date, today: string): Promise<{ day: string; closedAt: Date }> {
   const prev = await prisma.uncollectedSyncRun.findFirst({
     where: { startedAt: { lt: runStarted }, lotsSeen: { gt: 0 } },
     orderBy: [{ startedAt: "desc" }, { id: "desc" }],
@@ -1436,8 +1453,14 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
     if (outOfSaveTime) notes.push(`The check ran so long that ${many(unsaved, "case")} it found ${unsaved === 1 ? "wasn't" : "weren't"} saved — the next check saves ${unsaved === 1 ? "it" : "them"}.`)
 
     // ── Open cases from BC it didn't find this time — judged only for buyers it fully checked, and
-    // not after a Stop or when the time is up. At most DROPPED_CHECK_LIMIT a run, turning round from
-    // run to run (pickDropped) so every one is reached in turn.
+    // not after a Stop or once saving has run out of time.
+    //  1. The QUICK re-check (droppedFromRun), from what this run already read: every lot BC hasn't
+    //     ticked on the case's invoice is at a GONE location → closed now, no BC call, no limit, even
+    //     when the time for reading BC ran out. (2026-10-23 — Jack: "things are scanned as collected
+    //     and still showing": the cases added before the check read locations waited 60 a run, and
+    //     none at all on a run that ran out of time.)
+    //  2. The rest — the SLOW re-check against BC (checkDropped): at most DROPPED_CHECK_LIMIT a run,
+    //     turning round from run to run (pickDropped) so every one is reached in turn.
     let unreadDropped = 0
     if (!stopBy() && !ctx.stopped && !outOfSaveTime) {
       const foundKeys = new Set(f.candidates.map((c) => c.invoiceNo.toUpperCase()))
@@ -1446,14 +1469,48 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
         const k = (c.bcKey ?? c.invoiceNo ?? "").toUpperCase()
         return k && !foundKeys.has(k) && !unchecked.has((c.buyerNo ?? "").trim().toUpperCase())
       })
-      const { pick, later } = pickDropped(dropped, new Set(f.buyerNos), seq, DROPPED_CHECK_LIMIT)
-      if (later) notes.push(`${many(later, "more case")} from BC ${later === 1 ? "waits" : "wait"} to be re-checked — the check re-checks ${DROPPED_CHECK_LIMIT} a run, taking them in turn.`)
-      const d = await checkDropped(ctx, pick, s, notes)
-      checked.closed = d.closed
-      checked.flagged = d.flagged
-      tally.failed += d.failed
-      // A case whose lots' locations BC didn't answer for was judged on the tick alone — not a full check.
-      unreadDropped = d.unread + d.placesUnread
+
+      const quick: { c: OpenBcCase; ev: DroppedEvidence }[] = []
+      const slow: OpenBcCase[] = []
+      for (const c of dropped) {
+        const ev = droppedFromRun({ saleCode: c.saleCode, invoiceKey: c.bcKey ?? c.invoiceNo ?? "" }, f.judged.get((c.buyerNo ?? "").trim().toUpperCase()))
+        if (ev) quick.push({ c, ev })
+        else slow.push(c)
+      }
+      const quickGone: Record<string, number> = {}
+      let quickClosed = 0
+      let quickLeft = 0
+      for (let i = 0; i < quick.length; i++) {
+        if (stopBy() || Date.now() > saveStopAt) { quickLeft = quick.length - i; break }
+        try {
+          if (await closeAsCollected(quick[i].c, quick[i].ev, s)) {
+            quickClosed++
+            for (const [loc, n] of Object.entries(quick[i].ev.gone)) quickGone[loc] = (quickGone[loc] ?? 0) + n
+          }
+        } catch (e) {
+          tally.failed++
+          console.error("uncollected feed: a case couldn't be closed as collected:", e)
+        }
+        setProgress({ stage: "checking", done: i + 1, total: quick.length, words: `Closing cases whose lots BC has at COLLECTED and the like — ${n0(i + 1)} of ${n0(quick.length)}` })
+      }
+      checked.closed += quickClosed
+      if (quickClosed) {
+        const where = Object.entries(quickGone).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `${k} ${n0(n)}`).join(", ")
+        notes.push(`${many(quickClosed, "case")} from BC closed as collected straight from this check's own read: every lot of theirs on the invoice is at a location that means it has gone (lots at ${where}), though BC hasn't ticked them collected because the collection docket wasn't posted. BC keeps no date for that scan, so if the lots had gone before a case was added its storage figure is too high — ${quickClosed === 1 ? "the case says" : "each case says"} to check it.`)
+      }
+      if (quickLeft) {
+        notes.push(`The check ran so long that ${many(quickLeft, "case")} whose lots have all gone ${quickLeft === 1 ? "wasn't" : "weren't"} closed — the next check closes ${quickLeft === 1 ? "it" : "them"}.`)
+        unreadDropped += quickLeft
+      } else if (!stopBy() && !ctx.stopped) {
+        const { pick, later } = pickDropped(slow, new Set(f.buyerNos), seq, DROPPED_CHECK_LIMIT)
+        if (later) notes.push(`${many(later, "more case")} from BC ${later === 1 ? "waits" : "wait"} to be re-checked — the check re-checks ${DROPPED_CHECK_LIMIT} a run, taking them in turn.`)
+        const d = await checkDropped(ctx, pick, s, notes)
+        checked.closed += d.closed
+        checked.flagged = d.flagged
+        tally.failed += d.failed
+        // A case whose lots' locations BC didn't answer for was judged on the tick alone — not a full check.
+        unreadDropped += d.unread + d.placesUnread
+      }
     }
 
     if (stopBy() || ctx.stopped) {
