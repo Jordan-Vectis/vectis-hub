@@ -2778,6 +2778,9 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     "Matched" event lists each lot's sale, number, description and hammer, and an update that changes
     how many lots are waiting lists the ones left. The case page also reads the buyer's lots in that
     sale **live from BC** (`bcLotsForCase` → the feed's `bcLotsForBuyer`, with the admin's own sign-in).
+    ⚠ On a case FROM BC the timeline doesn't SHOW the "Added" event (Jack, 2026-10-23: "can you remove
+    these bits" — its lot list repeats Lots in BC). Display only (case-client.tsx's Timeline): the event
+    is still written and stored, and the check's own rules still read it.
   - **One invoice can cover more than one sale**: the case's sale box then holds them joined, "F067,
     F068" (`joinSales`, 40 characters). When they don't all fit it keeps what fits and SAYS how many it
     left off — "F061, F062, F063, F064, F065, +4 more" (`salesLeftOff`) — and `salesOf` reads only the
@@ -2908,8 +2911,9 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     its location is a GONE one (with a small "by location" under it when only the location says so),
     amber outlined **⚠ Check this lot** at a QUERY location (and an amber box listing them — "Lot 513 is
     at MISSING in BC — check it before chasing"), amber **Not collected** otherwise; the headline count
-    ("2 not collected, 1 to check, 3 collected") follows the same rule, and a key under the list
-    explains the chips. Lots to check are listed first, then not collected. A location read that fails
+    ("2 not collected, 1 to check, 3 collected") follows the same rule. ⚠ No key under the list since
+    2026-10-23 (Jack: "can you remove these bits") — the chips say what they mean in words, and each
+    has a hover saying why (design rule 3 is met by the words, not a legend). Lots to check are listed first, then not collected. A location read that fails
     still shows the lots (judged on the tick) and says how many couldn't be read and why.
   - **"✓ Close as collected"** (2026-10-23): when that list reads every lot collected (ticked or at a
     GONE location), every sale of the case was read and the list isn't cut short, and the case is open,

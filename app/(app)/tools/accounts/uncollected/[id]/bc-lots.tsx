@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { bcLotsForCase, closeCollectedFromBc } from "@/lib/actions/uncollected"
 import {
-  GONE_LOCATIONS, QUERY_LOCATIONS, bcConnectHref, formatDateTime, formatDay, formatMoney, isGoneState, locationListWords, queryLotWords,
+  GONE_LOCATIONS, bcConnectHref, formatDateTime, formatDay, formatMoney, isGoneState, locationListWords, queryLotWords,
   type UncollectedBcLot, type UncollectedBcLots, type UncollectedCaseDetail,
 } from "@/lib/uncollected"
 import { PANEL_PATH, btn, btnGo, card, cardTitle, inlineLink, muted, plural, td, th } from "../ui"
@@ -189,7 +189,7 @@ function CollectedChip({ lot }: { lot: UncollectedBcLot }) {
   if (isGoneState(lot.state)) {
     return (
       <span className="inline-flex flex-col items-start gap-0.5">
-        <span className={`${chip} ${GREEN}`}>Collected</span>
+        <span className={`${chip} ${GREEN}`} title={`BC ticked it collected, or has it at ${locationListWords(GONE_LOCATIONS)}`}>Collected</span>
         {lot.state === "gone" && (
           <span className={`text-xs ${muted}`} title={`BC hasn't ticked it collected, but has it at ${lot.location} — its collection docket wasn't posted.`}>
             by location
@@ -357,16 +357,8 @@ function LotList({ data, close }: { data: UncollectedBcLots; close: ReactNode })
           </tbody>
         </table>
       </div>
-      {/* The key (design rule 3): what each chip means. */}
-      <p className={`text-xs ${muted} mt-2`}>
-        <b>Collected</b> — BC ticked it collected, or has it at {locationListWords(GONE_LOCATIONS)} (<i>by location</i> when only the location
-        says so: the collection docket wasn&apos;t posted). <b>⚠ Check this lot</b> — at {locationListWords(QUERY_LOCATIONS)}: not charged, or
-        counted in the case&apos;s lots. <b>Not collected</b> — still here. Location is where BC has the lot now (its receipt line).
-      </p>
-      <p className={`text-xs ${muted} mt-1`}>
-        Every lot BC shows as sold to them in {multi ? "these sales" : "this sale"} (hammer over £0, not withdrawn). If they bought on more
-        than one invoice in {multi ? "them" : "the sale"}, those lots are listed here too.
-      </p>
+      {/* No key under the list (Jack, 2026-10-23: "can you remove these bits") — the chips say what
+          they mean in words, and hovering one says why. */}
     </div>
   )
 }

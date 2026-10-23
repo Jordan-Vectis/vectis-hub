@@ -294,17 +294,22 @@ function Figure({ term, children }: { term: string; children: ReactNode }) {
 // ─── Timeline ────────────────────────────────────────────────────────────────────────────────
 
 function Timeline({ c }: { c: UncollectedCaseDetail }) {
+  // The BC check's "Added" line (its long list of the lots) isn't shown on a case from BC (Jack,
+  // 2026-10-23: "can you remove these bits") — Lots in BC shows the lots live, and the details say
+  // where it came from and since when. Display only: the event stays in the table, where the check's
+  // own rules read their lines.
+  const events = c.source === "bc" ? c.events.filter(e => e.kind !== "created") : c.events
   return (
     <section className={`${card} p-4 sm:p-5`} aria-labelledby="timeline-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
         <h2 id="timeline-title" className={cardTitle}>Timeline</h2>
         <span className="text-xs text-gray-500 dark:text-gray-400">Last contact: <LastContact last={c.lastContact} /></span>
       </div>
-      {c.events.length === 0 ? (
+      {events.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">Nothing on the timeline yet.</p>
       ) : (
         <ol className="space-y-3">
-          {c.events.map(e => {
+          {events.map(e => {
             const m = EVENT_META[e.kind]
             return (
               <li key={e.id} className="flex gap-3">
