@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-22, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-23, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"805424dfbfe455dfb02064a67db7a667d84b0f08","author":"jack-vectis","date":"2026-10-23T09:32:50+01:00","subject":"Accounts: Paid, not collected now fills itself from BC"},
+  {"sha":"f1406e691592f670ac07d7696ab88b0c72d89183","author":"jack-vectis","date":"2026-10-22T15:22:51+01:00","subject":"Accounts: Paid, not collected — track buyers who have paid but not collected"},
+  {"sha":"c68903999150e5c8c9dbde3e025e2fbdcb3a4618","author":"Jordan Orange","date":"2026-10-22T15:01:54+01:00","subject":"Redeploy: Railway's build service failed on the last push (no code change)"},
   {"sha":"bc7537a0c9206f661a5e2072ef6392eef917a403","author":"Jordan Orange","date":"2026-10-22T14:51:41+01:00","subject":"Two-factor: no backup codes — a lost phone means an admin presses Reset"},
   {"sha":"825ea9cd0dcfe7cf2739827acd3eabc479eb32c4","author":"Jordan Orange","date":"2026-10-22T12:33:11+01:00","subject":"Lot wizard: choose AI or manual description before typing (switch asks and keeps the text); warn on a barcode that isn't one letter + six digits"},
   {"sha":"c26d62ea68ab781f7e734615199b21b9ccdd4a0f","author":"Jordan Orange","date":"2026-10-22T11:54:47+01:00","subject":"Two-factor login: per-person tick box in Users & Permissions, authenticator codes, backup codes, remember device 30 days"},

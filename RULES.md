@@ -2514,6 +2514,232 @@ redirects here; the `Contact` table itself stays — Submissions use it.
   postcode, delivery addresses with no buyer here — the tidying to do before anything depends on it.
 
 ---
+## 📦 Accounts → Paid, not collected (2026-10-22)
+
+Jack: *"a new panel inside the Accounts section to track people who pay and are not collecting —
+make the framework for now"*. `/tools/accounts/uncollected` (the 📦 card under Reserves on the
+Accounts page, and — since 2026-10-23 — its own **"Paid, not collected" tile in Admin & Operations**
+on the Hub home, card key `UNCOLLECTED` in lib/app-cards.ts, admin-only like the panel: no appKey),
+a case page per buyer at `/tools/accounts/uncollected/<id>`. One case = one buyer
+who has paid (an invoice, or a sale's worth) and hasn't collected their lots: who they are, the
+sale and invoice, lots and £ paid, when they paid, where it stands, the next chase date, when
+storage charges start, and a timeline of every call, email, letter, note and change.
+
+- **Admins only, exactly like Reserves.** The pages use `getAccountsAccess()` (`!canAccess` → `/hub`,
+  `!isAdmin` → `/tools/accounts/simple`), and **every server action re-checks admin on the server**
+  (`lib/actions/uncollected.ts`). A non-admin granted Accounts never sees it, and neither does the
+  Help box (`adminOnly` in `lib/help-map.ts`).
+- **One module for the words** — `lib/uncollected.ts` (a plain, client-safe module: no Prisma):
+  statuses with their labels, help text and colours (`STATUS_META`), age bands (`AGE_BANDS`),
+  London-day helpers, the shapes the actions return, and the URL filter
+  (`parseUncollectedFilter` / `uncollectedFilterQuery`). Change a label or a band there, never in a
+  page. ⚠ The server's SQL age-band filter is built from `AGE_BANDS` and repeats `daysWaiting()`'s
+  rule — change the two together.
+- **Statuses:** `waiting` (Paid — waiting to collect) · `contacted` (We've been in touch) ·
+  `arranged` (Collection or delivery arranged) · `storage` (Storage charges apply) · `collected`
+  (closes the case) · `closed` (Closed another way — refunded, re-offered — **needs a reason**).
+  Collected/closed set `closedAt`; going back to an open status clears it. Choosing Storage with no
+  storage date yet starts the charges today. A call, email or letter logged on a `waiting` case moves
+  it to `contacted` (said on the timeline). A status change only wins if the case is still where it
+  was read, so two people changing it at once can't both win.
+  - A status in the table that isn't one of the six (a future feed's typo) **reads as `waiting`
+    everywhere** — `statusOf()` on the screen, the same `CASE` in the list's SQL, and "open" is
+    defined as *anything but collected / closed* for the tiles, the Accounts card and the invoice
+    check. So it is listed, counted and chased, never vanishes from every chip; an amber line on the
+    panel says how many there are (`totals.unknownStatus`) so someone picks the right one.
+- **Days waiting = today − the day they paid, in London days**, frozen on the day a case closed;
+  no paid date = no days and no age band. Bands 0–7 · 8–14 · 15–30 · 31–60 · Over 60 (61 and up —
+  the key stays `60+`, the label says "Over 60 days" so day 60 is plainly in the band before). Date-only values
+  (paid on, next chase, storage from) are stored at **12:00 UTC on their London day**, like the Goods
+  In signed-terms day, so they read as the same day all year. The tiles (open cases, lots and £
+  waiting, oldest wait, chases due today/overdue) are over every OPEN case, whatever the filters.
+- **Actions return `{ ok, error }`** (`UncollectedResult`); a missing table answers `notReady: true`
+  with "needs Run Migrations" and the page says so — never crashes. `countOpenCases()` (the Accounts
+  card's number) never fails, and never passes off "couldn't tell" as 0 (design rule 7): `ready:
+  false` before Run Migrations (the card says "Needs Run Migrations"), `error: true` when the count
+  couldn't be read ("Couldn't count just now").
+- **Tables `UncollectedPaid` + `UncollectedPaidEvent`** (cascade), and `UncollectedSyncRun` (the BC
+  check's runs, below) — **NEEDS Run Migrations**. Their own tables; nothing added to `Customer`,
+  `Contact` or `User`. `customerId` is a plain id (no
+  foreign key), filled when the buyer number matches a Hub **Customers** record (read tolerantly from
+  the Hub's own copy — never BC).
+- ⚠⚠ **Filled from BC automatically — and BC is READ ONLY** (2026-10-22 — Jack: *"so it triggers
+  4 weeks after they paid for us to chase … only paid things that haven't been collected for over 4
+  weeks"*). `lib/uncollected-feed.ts` — `findPaidUncollected` reads BC, `syncUncollected` writes the
+  cases — with its pure matching rules in `lib/uncollected-feed-match.ts` (checked with made-up data,
+  no BC, no database). Every BC call is a GET through `lib/bc.ts`. **Nothing is ever written to BC.**
+  Cases can still be added by hand (`source "manual"`).
+  - **The rule.** A case is due when ALL hold: a lot was **sold** (hammer > 0, not withdrawn); the
+    buyer's **invoice covering it is Paid with nothing remaining**; the lot is **not collected**
+    (`EVA_Collected` false — trustworthy: those lots' collection dockets sit "Awaiting Release" in
+    `CollectionList`); and at least **`UNCOLLECTED_AFTER_DAYS` (28) London days** have passed since the
+    paid day. **One case per invoice**, `bcKey` = the invoice number (SI167361). Sales of the last
+    `UNCOLLECTED_LOOKBACK_MONTHS` (12) are read. Both constants are in `lib/uncollected.ts`.
+  - **What BC is asked** (all verified live 2026-10-22 with the BC API viewer): (1) `Auction_Lines_Excel`
+    — `EVA_Collected eq false and EVA_HammerPrice gt 0` with `EVA_AuctionDate` from 12 months ago to
+    28 days ago (a lot paid 28 days ago was sold at least that long ago), `$select` of verified fields
+    only, paged by `@odata.nextLink`; (2) standard `api/v2.0` **`salesInvoices`** for those buyers
+    (`customerNumber` = `EVA_BuyerNo`; ≤ 20 buyers a call, dated from their earliest uncollected
+    lot's sale); (3) **`salesInvoiceLines`** (`documentId eq …`, ≤ 20 invoices a call — one at a time
+    if BC refuses the batch, and any invoice a batch answered with no lines is asked again on its
+    own) for the invoices that matter. ≤ 3 calls at once, backoff on 429 / 502 / 503 / 504, a 401
+    renews the sign-in once (the company lookup's "BC API companies 401" too), and a time budget for
+    reading BC: **25 minutes for the nightly run, 12 for Check BC now** — never more, under the
+    30-minute stale rule below; saving stops 28 minutes in (`SAVE_STOP_MS`), whatever is left, so a
+    run always ends before a second could be let in.
+  - **Each run starts at a different buyer** (`rotate`, by the run's sequence number — the count of
+    `UncollectedSyncRun` rows, kept in the database so a restart doesn't reset it). A run that runs out
+    of time leaves a different stretch unread, so runs that keep running out still reach every buyer.
+  - **Which lots are on which invoice.** A buyer invoice has a line per lot (its description) followed
+    by **"Buyer Premium for Lot No 366"**, so its lots are the numbers in those premium lines (suffix
+    tolerant: 366 matches 366A unless both carry different suffixes). ⚠ **Lot numbers repeat between
+    sales**, so each uncollected lot has ONE home: the buyer's **earliest** posted invoice dated on or
+    after its sale that lists its number. A dealer's lot 366 left in F066 must never also hang on
+    F067's paid invoice because F067's lot 366 (collected) is on it. **Exact first** (`assignHomes`):
+    the earliest invoice listing its number AND suffix; only when none does, the earliest listing it
+    suffix-tolerantly — so 366A is never hung on an earlier paid invoice listing plain 366, a different
+    lot. ⚠ A premium line's number may be grouped in thousands ("Lot No 1,234" — AL's `Format()` of an
+    integer does that) and is read whole (`lotRefFromText`), never as lot 1. Drafts, invoices in review and
+    cancelled invoices are never a home. A paid lot invoice whose lines carry no readable lot numbers
+    falls back to the buyer's unhomed uncollected lots from their latest sale on or before it (named
+    in the run's notes and on the case's first event); an invoice with no lot lines at all (postage,
+    storage) is skipped.
+  - ⚠ **The paid date is a PROXY.** BC publishes no payment date. On a paid invoice
+    `lastModifiedDateTime` matches BC's settling run (a batch at ~07:54 the morning after), so that
+    London day is stored as `paidAt` and shown as **"Paid by <date>"** — they paid on or before it
+    (`PAID_BY_HELP`, "BC's date the invoice was settled"). Caveat: anything else that changes a posted
+    invoice later moves the day later, so a case can be added late, never early. **Follow-up for
+    Jack / Jordan:** publishing BC's **Customer Ledger Entries** (Closed at Date) would give the exact
+    payment date.
+  - **Writing the cases** — per invoice, ONE transaction under the SAME invoice lock as the Hub's own
+    writes (`lockInvoice`, advisory lock first, then row locks — the SQL is repeated in the feed;
+    change both together): (1) the case BC already holds for that invoice → its BC fields brought up
+    to date, with an `edit` event ("BC update: lots not collected 3 → 2 …") only when something
+    changed; a CLOSED one is left closed; (2) else an OPEN case added by hand with the same invoice
+    number → **taken over** (`source "bc"`, `bcKey` set, event "Matched to BC invoice SI…"); (3) else
+    a case for that invoice that was CLOSED by hand → left alone — never re-added behind the staff's
+    back; (4) else an OPEN hand case with the same buyer number + sale and no invoice number → taken
+    over — and a CLOSED one like that → left alone, as in (3) (a hand case with no invoice number stands
+    for the buyer's whole sale); (5) else a **new case**: `waiting`, next chase today, event "Added
+    from BC: paid by 3 Jun 2026, 2 lots not collected after 49 days" with the lot list. Taking a case
+    over keeps its status, notes, chase dates, storage date and timeline. Invoices left closed are
+    counted in the run's notes.
+    ⚠ **A decision waiting on Jack:** "closed by hand → left alone" (3, and 4's closed half) wasn't in
+    the brief — it was chosen so the staff's decision stands. If he'd rather such an invoice came back
+    as a new case, change both together (`saveCandidate`).
+  - ⚠ **The feed writes only `BC_OWNED_FIELDS`** (name, buyer number, sale, invoice, lots still
+    waiting, amount paid, paid by) **plus email / phone where the case has none**, put through the
+    Hub's own rules (no bank or card shapes, at most 15 phone digits). A case's status, notes, chase
+    date (except a new case's first one), storage date and timeline are the staff's. The only status
+    it ever sets is `collected` (next point). Its events have no `byId` and are signed "BC check
+    (nightly)" or "BC check (Check BC now — <name>)"; new cases say "BC check" as who added them.
+  - **The lot list lives on the timeline, not in the notes** (notes are the staff's): the "Added" /
+    "Matched" event lists each lot's sale, number, description and hammer, and an update that changes
+    how many lots are waiting lists the ones left. The case page also reads the buyer's lots in that
+    sale **live from BC** (`bcLotsForCase` → the feed's `bcLotsForBuyer`, with the admin's own sign-in).
+  - **One invoice can cover more than one sale**: the case's sale box then holds them joined, "F067,
+    F068" (`joinSales`, 40 characters). When they don't all fit it keeps what fits and SAYS how many it
+    left off — "F061, F062, F063, F064, F065, +4 more" (`salesLeftOff`) — and `salesOf` reads only the
+    sale codes (split on commas; "+4 more" or words typed by hand are not sales). The case page reads
+    each sale (up to 4, `CASE_PAGE_MAX_SALES`) and says how many it didn't.
+  - **An open case from BC the check no longer finds** is judged on POSITIVE evidence only, and only
+    for buyers it fully checked — at most 60 a run (`pickDropped`): cases whose buyer has no uncollected
+    lot left in the window (the likely collected ones) first, with at least half the places; each group
+    turns round by the run's sequence number, so every case is reached in turn and one left open on
+    purpose (lots still waiting, not paid any more) never holds a place for ever. None of it after a
+    Stop or once saving ran out of time. Its invoice isn't paid in full any more
+    → said ONCE on the case ("BC no longer shows invoice SI… as paid — check it") and left open; still
+    paid and every lot of theirs on it that BC still shows is collected → **closed as `collected`**
+    ("BC shows the lots collected"); anything else (lots still waiting, nothing to be found under the
+    buyer, couldn't be read) → left as it is and counted in the run's notes. ⚠ A case whose sale box
+    had to leave sales off ("+N more") is NEVER closed this way — not every lot of theirs can be looked
+    at — and the notes say so.
+  - **Idempotent**: run twice, the second run changes nothing. **One at a time**: a lock on
+    `globalThis`, and a refusal while the database shows a run started under
+    `UNCOLLECTED_RUN_STALE_MINUTES` (30) ago and unfinished (one from before this server started is
+    dead — a restart ends it). Missing tables → "needs Run Migrations", nothing written.
+  - **Every run is an `UncollectedSyncRun` row** (**NEEDS Run Migrations**): start, finish, trigger,
+    who, ok, lots seen, buyers, found, added, updated (taken-over cases included), closed, notes,
+    error. A run that couldn't read part of BC, ran out of time, or was stopped says so (`ok` false)
+    and keeps what it saved — the next run reads BC afresh (from a different buyer). If BC's lot list
+    itself couldn't be read in full, **nothing** is changed. An unexpected error part-way still
+    records the counts and notes so far. The notes carry counts and invoice numbers, never a name.
+  - **Nightly at 08:30 London** — `server.js` → `POST /api/cron/uncollected` (`CRON_SECRET`; the ONE
+    background sign-in, `getBCTokenAny()`), after BC's overnight payment run. Same fixed-London-time
+    pattern as the warehouse sync, through its own `msUntilLondonTime(8, 30)` — ⚠ `msUntilLondonHour`
+    takes the hour ONLY, because `INCREMENTAL_LONDON_HOURS.map(msUntilLondonHour)` passes it the array
+    index (a minute parameter on it would move the 17:00 sync to 17:01). A wait of over three hours sleeps
+    to two hours before 08:30 and works it out again then, so a clock change overnight can't make it
+    fire an hour off (the warehouse schedules still can). A check that can't start waits for tomorrow.
+    The route answers at once (202) and the check logs `[cron/uncollected] …` itself.
+    ⚠ server.js's `UNCOLLECTED_LONDON_TIME` (08:30) and `UNCOLLECTED_NIGHTLY_AT` in lib/uncollected.ts
+    (what the panel says) must agree — server.js is CommonJS and can't import it. **Check BC now**
+    on the panel (admins) starts the same check with the admin's OWN BC sign-in (`getBCToken`, never
+    the background one) via `startUncollectedSync`, answers at once, and the panel follows it
+    (`uncollectedSyncNow()` for "Reading invoices — 120 of 312 buyers", then the run's row); not
+    connected to BC → it says so.
+  - **Stop** (design rule 7b): the panel's "Stop the check" asks first (inline), then `stopBcCheck()`
+    → the feed's `stopUncollectedSync(name)` puts a flag on the run's lock. The check looks at it before
+    every BC call (a wait between retries is cut short) and before each case it saves, then skips the
+    re-check of dropped cases and records "Stopped by <name> — N cases were saved before it stopped
+    (…); M it had found weren't saved" (`UNCOLLECTED_STOPPED_PREFIX`). Every case saved stays saved.
+    It stops the nightly run too — both run in the one server process.
+  - **The panel's BC line** (`bc-check.tsx`) — keep these in step when changing it: while a check runs
+    it asks `lastSyncRun()` every 2 s (`POLL_MS`) and shows `uncollectedSyncNow().progress` with the
+    time so far (the ticking time is outside the live region — a screen reader would read it out every
+    second), then `syncResultWords` for the run. "Last checked from BC" is the newest ok
+    `UncollectedSyncRun`, with how many cases from BC are open now; under it a red line when the newest
+    run failed or never finished (grey when it was stopped), "Sign in to BC →" when BC refused a Check
+    BC now's own sign-in (401), an amber warning when the last good check is over 36 hours old
+    (`STALE_AFTER_MS`), and each run's notes folded under its line. ⚠ "Running" means THIS server
+    holds the run's lock (one instance; the nightly run and Check BC now both run in it). An unfinished
+    run row with no lock is a run that died without recording its end: shown as that, never as a
+    spinner, and Check BC now says when it can run again (30 minutes after it started — the feed's own
+    guard).
+  - **Every case says where it came from** — "From BC" / "Added by hand" on every row, phone card,
+    case page and CSV (`SOURCE_META`; the colour key explains both, and a hand case the check took
+    over shows From BC). Cases from BC say "Paid by"; hand ones "Paid" / "Paid on".
+  - **The case page's "Lots in BC" card** (`[id]/bc-lots.tsx`) reads the lots live (above) as the
+    case opens for a case from BC, and on a press for one added by hand — chosen over storing a lot
+    list (the timeline keeps the snapshot). With several sales each lot says its sale. Below `sm` it
+    is stacked rows, not a table.
+- On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses Delete
+  (the feed would bring it back — close it instead). A manual case can be deleted, confirmed in the
+  page. Contact details, chase dates, storage start and notes stay the Hub's own.
+- ⚠ **One OPEN case per invoice** (case-insensitive) — the feed's "adopt the open manual case"
+  depends on it. Enforced by every write that could break it: adding a case, giving an open case a
+  new invoice number, and reopening a closed case whose invoice has had another case opened since.
+  Each takes a transaction-scoped advisory lock on the invoice (`lockInvoice` —
+  `hashtext('uncollected-invoice:' || lower(invoice))`, via `$executeRaw`) FIRST, then checks, then
+  writes, in one transaction, so two people doing it at once queue and the second is refused. A
+  refusal names the buyer and carries the other case's id (`existingId`); every screen that can be
+  refused links to it. ⚠ Always the advisory lock before any row lock (updateCase then takes the row
+  `FOR UPDATE`), so these writes can't deadlock each other; setStatus only writes if the case's
+  status AND invoice are still what it read. A closed case may share an invoice with an open one.
+- ⚠ **Customer personal data, and never bank or card details.** `looksLikeBankDetails()` refuses
+  the obvious shapes — the words "sort code" or "IBAN"; a sort code beside an 8-digit account number
+  (one that reads as a date, 22-10-26, only with an account word nearby); a card number (13–19
+  digits of WHOLE digit groups, unbroken or in a card's grouping, passing the Luhn check — so two
+  phone numbers side by side are never a card) — in **every box**: name, buyer number, sale,
+  invoice, email, notes, contact text and closing reasons. The phone box takes at most 15 digits
+  (no phone number has more) instead, because some real international numbers pass the card check.
+  The timeline records which contact details changed, never the old values.
+- ⚠ **Nothing personal goes in a URL — only the case id and the filters `?status= &age= &sort=`.
+  NEVER the search** (`uncollectedFilterQuery` never writes it, `parseUncollectedFilter` ignores a
+  `?q=`): a search is usually a customer's name or email, and an address ends up in the browser's
+  history and the server's request logs. The panel sends the search to `listCases` itself (a
+  server action — a POST, nothing in the URL) and keeps it in the tab's **sessionStorage** (in
+  try/catch, restored after hydration) so Back from a case returns to the same search. The server
+  page always renders the list unsearched. Don't move the search back into the address bar.
+- **Deleting a case** removes its timeline with it, so `deleteCase` writes one line to the server's
+  log (`console.info "uncollected case deleted"`: who, when, the case id, source, buyer number and
+  invoice — never contact details). Accounts has no audit table and none was added for this.
+- It is listed in `lib/data-map.ts`.
+- Registered in `lib/help-map.ts` as **"Paid, not collected (Accounts)"** — ⚠ never "Accounts → …":
+  with "Accounts" as a name part, any question mentioning accounts would score against this
+  admin-only entry and refuse a Simple-mode user about their own screens.
+
+---
 ## 🔐 Two-factor login (2026-10-22)
 
 Jordan: a tick box per person — *"Could we set it up as a tick box in the user panel would make

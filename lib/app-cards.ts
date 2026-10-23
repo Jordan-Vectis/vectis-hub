@@ -350,6 +350,22 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     allUsers:           false,
   },
   {
+    // Accounts → Paid, not collected, as its own tile (Jack, 2026-10-23). Filled from BC every
+    // morning: paid invoices whose lots are still here 28 days later. Admin-only — no appKey —
+    // exactly like the panel itself (getAccountsAccess: admins only).
+    key:                "UNCOLLECTED",
+    href:               "/tools/accounts/uncollected",
+    defaultLabel:       "Paid, not collected",
+    defaultDescription: "Buyers who paid over 4 weeks ago but haven't collected their lots — found in BC every morning, ready to chase.",
+    icon:               "📦",
+    border:             "border-amber-500",
+    iconBg:             "text-amber-400",
+    btnBg:              "bg-amber-600 hover:bg-amber-500",
+    glow:               "hover:shadow-amber-900/40",
+    group:              "OPERATIONS",
+    allUsers:           false,
+  },
+  {
     key:                "CONDITION_REPORTS",
     href:               "/tools/condition-reports",
     defaultLabel:       "Conditions Reports",

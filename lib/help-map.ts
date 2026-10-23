@@ -155,7 +155,10 @@ export const DESTINATIONS: Destination[] = [
   {
     name: "BC Warehouse", href: "/tools/bc-warehouse", app: "BC_WAREHOUSE",
     what: "Where things are in the building according to BC — location heatmap, sale checklist, search by location, location history, tote data, collections due, unsold items.",
-    also: ["where is a lot", "location", "tote", "find an item"],
+    // "uncollected lots" is also Accounts → Paid, not collected's keyword, ON PURPOSE: a tie never
+    // blocks, so a BC Warehouse user asking for the uncollected lots (Collections Due) isn't refused
+    // with Accounts. See that entry.
+    also: ["where is a lot", "location", "tote", "find an item", "uncollected lots"],
   },
   {
     ask: "Where is a customer's item?",
@@ -324,6 +327,30 @@ export const DESTINATIONS: Destination[] = [
       "how many scans each", "scans per person", "scans per day", "handheld scans per person", "handheld scans per day",
       "moves per person", "put away per person", "check ins per person",
       "failed scans acknowledged", "acknowledged failed scans", "who acknowledged a failed scan",
+    ],
+  },
+
+  // ── Accounts ────────────────────────────────────────────────────────────────
+  // Paid, not collected (2026-10-22). ACCOUNTS + adminOnly: a non-admin granted Accounts only ever
+  // reaches Simple mode, and the panel's page sends them there, so the help box mustn't offer it.
+  // ⚠ Named "Paid, not collected (Accounts)", NOT "Accounts → Paid, not collected": a name part scores
+  // the moment it appears as a word, so with "Accounts" as a part every question mentioning accounts
+  // ("how do I add receipts in accounts?") would score 3 against this admin-only entry, and a
+  // Simple-mode user would be refused with it about their own screens. As one part it never matches,
+  // and the token "accounts" alone scores 1. Every keyword names paying AND not collecting, or
+  // uncollected buyers — never bare "collection", "storage" or "invoice". "uncollected lots" is shared
+  // with BC Warehouse (Collections Due) on purpose, so neither side is refused with the other's.
+  // No `ask`, so the suggestions stay as they were. Apostrophes are spaces in matchScore ("haven t").
+  {
+    name: "Paid, not collected (Accounts)", href: "/tools/accounts/uncollected", app: "ACCOUNTS", adminOnly: true,
+    what: "Accounts → 📦 Paid, not collected (admins only): the buyers who have paid for their lots but haven't collected them. Filled automatically from BC every morning at 08:30 — a lot sold to them, on an invoice BC shows as paid in full, still not collected 28 days (4 weeks) after it was paid, one case per invoice, marked From BC — and 🔄 Check BC now runs the same check straight away with your own BC sign-in (it only reads BC, and Stop stops it part-way, keeping what it saved); the line at the top says when BC was last checked and what it found. A case from BC shows 'Paid by' (the day BC settled the invoice) and lists its lots live from BC, and closes itself when BC shows them collected. Tiles show the open cases, lots and money waiting, the longest wait and the chases due; filter by status and by how long they've waited, search by name, buyer number, sale or invoice, and export the list. Add a buyer by hand too, then open any case to change its details, log a call, email, letter or note with the next chase date, set the date storage charges start from, and move it on — waiting, been in touch, collection or delivery arranged, storage charges apply, collected (which closes it), or closed another way (with a reason).",
+    also: [
+      "paid not collected", "paid but not collected", "paid and not collected", "paid but uncollected",
+      "paid not collecting", "paid but not collecting", "paid and not collecting", "paid but haven t collected",
+      "uncollected lots", "uncollected paid lots", "paid uncollected lots", "uncollected buyers", "uncollected purchases",
+      "buyers not collecting", "buyers who haven t collected", "chase uncollected buyers", "chasing uncollected buyers",
+      "storage charges for uncollected lots",
+      "paid over 4 weeks not collected", "paid 4 weeks ago not collected", "check bc for uncollected buyers",
     ],
   },
 

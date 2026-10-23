@@ -196,7 +196,14 @@ app.prepare().then(async () => {
     // ⚠ Scheduled in EUROPE/LONDON and re-armed after every run, not on a fixed 24-hour interval.
     // A fixed interval drifts an hour each way at the clock changes, and the 12-hourly job's
     // "every N ms from boot" means its timing follows whenever Railway last deployed.
+    // ⚠ msUntilLondonHour takes the HOUR ONLY, and must stay that way: it is passed straight to
+    // `.map()` above (INCREMENTAL_LONDON_HOURS.map(msUntilLondonHour)), which hands it the array
+    // index as a second argument — a minute parameter here would move the 17:00 sync to 17:01.
+    // Anything that needs minutes calls msUntilLondonTime(hour, minute).
     function msUntilLondonHour(hour) {
+      return msUntilLondonTime(hour, 0)
+    }
+    function msUntilLondonTime(hour, minute) {
       const now = new Date()
       // What time is it in London right now, as plain numbers.
       const parts = new Intl.DateTimeFormat('en-GB', {
@@ -205,7 +212,7 @@ app.prepare().then(async () => {
       }).formatToParts(now).reduce((a, p) => (a[p.type] = p.value, a), {})
       const h = Number(parts.hour) % 24, m = Number(parts.minute), sec = Number(parts.second)
       const secsNow    = h * 3600 + m * 60 + sec
-      const secsTarget = hour * 3600
+      const secsTarget = hour * 3600 + minute * 60
       const delta = secsTarget - secsNow
       return (delta > 0 ? delta : delta + 24 * 3600) * 1000
     }
@@ -244,6 +251,46 @@ app.prepare().then(async () => {
       console.log(`[cron/bc-warehouse] next FULL sync in ${Math.round(wait / 1000 / 60)} minutes`)
       setTimeout(runFullWarehouseSync, wait)
     }
+
+    // Accounts → Paid, not collected — the BC check, daily at 08:30 London (2026-10-22). BC's
+    // overnight payment run settles invoices at about 07:54, so by 08:30 yesterday's payments read
+    // as paid. It READS BC only (never writes to it) and fills the panel's cases with paid invoices
+    // whose lots still weren't collected 28 days later. The route answers at once and the check
+    // logs its own result ("[cron/uncollected] finished …") and records an UncollectedSyncRun row.
+    // Same fixed-London-time pattern as the incremental warehouse sync: re-armed a minute after
+    // firing, so a timer landing a hair early can't fire it twice. A check that can't start
+    // (another one running — Check BC now, say) simply waits for tomorrow.
+    // ⚠ The time is UNCOLLECTED_LONDON_TIME below — keep it in step with UNCOLLECTED_NIGHTLY_AT in
+    // lib/uncollected.ts (what the panel says; this file is CommonJS and can't import it).
+    // ⚠ Clock changes: a timer set the day before for "08:30" would fire an hour off on the morning
+    // the clocks change (07:30 on the last Sunday in October). So a wait of over three hours sleeps
+    // until two hours before the time and works it out again then, after any change has happened.
+    const UNCOLLECTED_LONDON_TIME = { hour: 8, minute: 30 }
+    function runUncollectedCheck() {
+      const secret = process.env.CRON_SECRET
+      if (!secret) { console.warn('[cron] CRON_SECRET not set — skipping the uncollected check') ; return }
+      console.log('[cron/uncollected] starting the BC check')
+      fetch(`http://localhost:${port}/api/cron/uncollected`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      })
+        .then(r => r.json())
+        .then(d => console.log(d.started
+          ? '[cron/uncollected] started — it logs its own result when it finishes'
+          : `[cron/uncollected] not started — ${d.skipped ?? d.error ?? 'no reason given'}`))
+        .catch(e => console.warn('[cron/uncollected] could not start:', why(e)))
+    }
+    function armUncollectedCheck() {
+      const wait = msUntilLondonTime(UNCOLLECTED_LONDON_TIME.hour, UNCOLLECTED_LONDON_TIME.minute)
+      if (wait > 3 * 60 * 60 * 1000) { setTimeout(armUncollectedCheck, wait - 2 * 60 * 60 * 1000); return }
+      setTimeout(() => { runUncollectedCheck(); setTimeout(scheduleUncollectedCheck, 60 * 1000) }, wait)
+    }
+    function scheduleUncollectedCheck() {
+      const wait = msUntilLondonTime(UNCOLLECTED_LONDON_TIME.hour, UNCOLLECTED_LONDON_TIME.minute)
+      console.log(`[cron/uncollected] next BC check in ${Math.round(wait / 1000 / 60)} minutes`)
+      armUncollectedCheck()
+    }
+    scheduleUncollectedCheck()
 
     // Daily database backup — runs once at midnight UTC, then every 24 hours.
     function runDbBackup() {

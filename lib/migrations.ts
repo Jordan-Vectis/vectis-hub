@@ -2451,6 +2451,71 @@ export const MIGRATIONS = [
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedByName" TEXT,
     CONSTRAINT "UserTwoFactor_pkey" PRIMARY KEY ("userId")
   )`,
+  // Accounts → Paid, not collected (2026-10-22) — buyers who have paid but not collected, and what
+  // was done about each. New tables only.
+  `CREATE TABLE IF NOT EXISTS "UncollectedPaid" (
+    "id"            TEXT NOT NULL,
+    "source"        TEXT NOT NULL DEFAULT 'manual',
+    "bcKey"         TEXT,
+    "buyerNo"       TEXT,
+    "customerId"    TEXT,
+    "buyerName"     TEXT NOT NULL,
+    "email"         TEXT,
+    "phone"         TEXT,
+    "saleCode"      TEXT,
+    "invoiceNo"     TEXT,
+    "lots"          INTEGER,
+    "amountPaid"    DOUBLE PRECISION,
+    "paidAt"        TIMESTAMP(3),
+    "status"        TEXT NOT NULL DEFAULT 'waiting',
+    "nextChaseAt"   TIMESTAMP(3),
+    "storageFrom"   TIMESTAMP(3),
+    "notes"         TEXT,
+    "createdById"   TEXT,
+    "createdByName" TEXT,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "closedAt"      TIMESTAMP(3),
+    CONSTRAINT "UncollectedPaid_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "UncollectedPaid_bcKey_key" ON "UncollectedPaid"("bcKey")`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedPaid_status_idx" ON "UncollectedPaid"("status")`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedPaid_paidAt_idx" ON "UncollectedPaid"("paidAt")`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedPaid_buyerNo_idx" ON "UncollectedPaid"("buyerNo")`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedPaid_nextChaseAt_idx" ON "UncollectedPaid"("nextChaseAt")`,
+  `CREATE TABLE IF NOT EXISTS "UncollectedPaidEvent" (
+    "id"     TEXT NOT NULL,
+    "caseId" TEXT NOT NULL,
+    "kind"   TEXT NOT NULL,
+    "text"   TEXT,
+    "byId"   TEXT,
+    "byName" TEXT,
+    "at"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "UncollectedPaidEvent_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedPaidEvent_caseId_at_idx" ON "UncollectedPaidEvent"("caseId", "at")`,
+  `DO $$ BEGIN
+    ALTER TABLE "UncollectedPaidEvent" ADD CONSTRAINT "UncollectedPaidEvent_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "UncollectedPaid"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Accounts → Paid, not collected: each run of the BC check that fills it (2026-10-22). New table only.
+  `CREATE TABLE IF NOT EXISTS "UncollectedSyncRun" (
+    "id"         TEXT NOT NULL,
+    "startedAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" TIMESTAMP(3),
+    "trigger"    TEXT NOT NULL,
+    "byName"     TEXT,
+    "ok"         BOOLEAN,
+    "lotsSeen"   INTEGER,
+    "buyers"     INTEGER,
+    "found"      INTEGER,
+    "added"      INTEGER,
+    "updated"    INTEGER,
+    "closed"     INTEGER,
+    "note"       TEXT,
+    "error"      TEXT,
+    CONSTRAINT "UncollectedSyncRun_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "UncollectedSyncRun_startedAt_idx" ON "UncollectedSyncRun"("startedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
