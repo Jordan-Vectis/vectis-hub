@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7c1e1aa012d5069a61cc42cf1c844c14b36e3f54","author":"jack-vectis","date":"2026-10-23T15:34:08+01:00","subject":"Paid, not collected: close cases from a sale sold on the 12-month window's first day too"},
   {"sha":"b1948f344743af8160d9c56d87376543ff0cda7f","author":"Jordan Orange","date":"2026-10-23T15:25:34+01:00","subject":"Customers: always show the C-number (BC's contact no. is free text — 4 records hold a name or email); name a separate buyer or seller account under it; Data check lists the odd ones"},
   {"sha":"2b423d17fe0e0c5b312228a2ec7789febf05ad79","author":"jack-vectis","date":"2026-10-23T15:10:42+01:00","subject":"Paid, not collected: clear wrongly open cases whose invoices mix ticked and scanned-out lots"},
   {"sha":"fbfdf1efdff80ca4e31da54f55bb454380b23dfb","author":"jack-vectis","date":"2026-10-23T14:56:51+01:00","subject":"Paid, not collected: only close a case when every lot on its invoice is accounted for"},

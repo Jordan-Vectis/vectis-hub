@@ -982,10 +982,12 @@ export const sentence = (s: string | null | undefined, fallback = "no reason was
 // too, so "RE LOTTED" and "RELOTTED" read as RE-LOTTED). ⚠ The panel's "How cases are added" note
 // and the case page's key show these two lists from here — change them here only.
 
-/** Locations that mean the lot has LEFT us — exactly like BC's Collected tick. */
-export const GONE_LOCATIONS = ["COLLECTED", "SHIPPED", "RETURNED", "DISPOSAL", "CHARITY"] as const
+/** Locations that mean the lot has LEFT us — exactly like BC's Collected tick. ⚠ QUERY is one of them
+ *  (Jack, 2026-10-23: "anything in query, shipped and collected should be gone and shouldn't be on
+ *  here") — it was a "check this lot" location until then. */
+export const GONE_LOCATIONS = ["COLLECTED", "SHIPPED", "QUERY", "RETURNED", "DISPOSAL", "CHARITY"] as const
 /** Locations that mean the lot needs checking — not charged, not counted, flagged on the case. */
-export const QUERY_LOCATIONS = ["MISSING", "QUERY", "RE-LOTTED", "RE-AUCTION"] as const
+export const QUERY_LOCATIONS = ["MISSING", "RE-LOTTED", "RE-AUCTION"] as const
 
 /** A BC location code as compared and shown: upper case, no spaces ("" for none). */
 export const normaliseLocation = (v: unknown): string => (v == null ? "" : String(v)).toUpperCase().replace(/\s+/g, "")

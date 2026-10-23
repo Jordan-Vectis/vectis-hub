@@ -2635,12 +2635,14 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     (`EVA_UniqueID`, `EVA_ArticleLocationCode`, `EVA_ArticleBinCode`; `EVA_UniqueID eq '…' or …`, ≤ 20
     ids a call). The lists are constants in `lib/uncollected.ts`, compared upper case with spaces out
     (`normaliseLocation`; "-" and "_" ignored too):
-    - **`GONE_LOCATIONS` = COLLECTED, SHIPPED, RETURNED, DISPOSAL, CHARITY** — treated **exactly like
+    - **`GONE_LOCATIONS` = COLLECTED, SHIPPED, QUERY, RETURNED, DISPOSAL, CHARITY** — ⚠ QUERY since
+      2026-10-23 (Jack: *"anything in query, shipped and collected should be gone and shouldn't be on
+      here"*; it was a query location until then) — treated **exactly like
       the tick**: the lot is taken out before matching (`splitByPlace`), so it isn't charged or
       counted; a case with some gone keeps the rest ("lots not collected 2 → 1"); a case whose lots
       have ALL gone drops out and is closed as collected by the re-check below, its event naming the
       locations seen ("BC shows the lots collected (location COLLECTED)" — `collectedWhyWords`).
-    - **`QUERY_LOCATIONS` = MISSING, QUERY, RE-LOTTED, RE-AUCTION** — **not charged and not counted** in
+    - **`QUERY_LOCATIONS` = MISSING, RE-LOTTED, RE-AUCTION** — **not charged and not counted** in
       the case's lots or storage, but the lot still finds its invoice (`Candidate.queryLots`; a case
       may have only these — then `lots` is 0) and the case is **flagged** on its timeline: a note from
       the check, *"⚠ Lot 513 is at MISSING in BC — check it before chasing. …"* (`queryFlagText`),
