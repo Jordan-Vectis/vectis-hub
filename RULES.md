@@ -3051,8 +3051,12 @@ storage charges start, and a timeline of every call, email, letter, note and cha
       with `to_regclass` — every read is tolerant).
     - The list's **Docket · shipment** column (the docket, then each shipment number · status, then
       "Packed by …"), the phone cards, the case's Details card and the CSV (Collection docket, Shipment,
-      Shipment status, Packed by) all show the same `UncollectedCaseDetail.shipping`; the panel page is
-      up to 1,600px on a desktop so nine columns still fit without scrolling sideways.
+      Shipment status, Packed by) all show the same `UncollectedCaseDetail.shipping`. ⚠ The column is a
+      ninth column on a DESKTOP only (`desk:` — the panel page is up to 1,600px there); below that (an
+      iPad in landscape, lg) it sits under the sale and invoice, because nine columns made the list scroll
+      sideways there (review, 2026-10-23). A case not read says why: "Added by hand — not read from BC",
+      or "Not read yet" — never a promise that the next check reads it. The check doesn't spend BC time
+      reading shipments before Run Migrations (`shippingTableThere`).
 - On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses Delete
   (the feed would bring it back — close it instead). A manual case can be deleted, confirmed in the
   page. Contact details, chase dates, storage start and notes stay the Hub's own (a storage start a

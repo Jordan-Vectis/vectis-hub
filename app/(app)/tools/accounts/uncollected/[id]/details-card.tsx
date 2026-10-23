@@ -121,7 +121,7 @@ export default function DetailsCard({ c, today, caseHref }: { c: UncollectedCase
           </Item>
           <Item term="Next chase"><ChaseDate at={c.nextChaseAt} chase={c.chase} /></Item>
           <Item term="Collection docket · shipment">
-            <Shipping s={c.shipping} />
+            <Shipping s={c.shipping} source={c.source} />
             {c.shipping && <span className={`block text-xs ${muted} mt-0.5`}>From BC — read by the check {formatDay(c.shipping.checkedAt)}</span>}
           </Item>
           <div className="sm:col-span-2">

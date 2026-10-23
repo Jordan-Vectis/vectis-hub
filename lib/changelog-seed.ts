@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"0c20d6c34d74e472ecbfc95bbb7cbed10b3d232a","author":"Jordan Orange","date":"2026-10-23T16:53:04+01:00","subject":"Goods In: BC's receipts and totes copied into the Hub's own tables — BC first until switch day"},
   {"sha":"83af5d357e5c8a834b6dd35d8ce06ce526b1a2f8","author":"jack-vectis","date":"2026-10-23T16:44:05+01:00","subject":"Paid, not collected: collection docket, shipment number and who packed it, with a Shipment filter"},
   {"sha":"6de7945b79e2453713d075937c153d5ba8fcff37","author":"jack-vectis","date":"2026-10-23T16:25:58+01:00","subject":"Run Migrations: fix the Customers re-key statements failing (42703, and 42601)"},
   {"sha":"b8e410552636d66e921007ee4e2f15debb1675bb","author":"jack-vectis","date":"2026-10-23T16:17:00+01:00","subject":"Paid, not collected: Internal Barcode on Lots in BC, and the lot list across the full page"},

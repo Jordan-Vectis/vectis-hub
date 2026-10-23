@@ -367,6 +367,17 @@ async function readShipments(ctx: Ctx, dockets: string[]): Promise<Map<string, U
   return out
 }
 
+/** Is UncollectedShipping there (Run Migrations)? Never throws — false when it can't be told. */
+async function shippingTableThere(): Promise<boolean> {
+  try {
+    const t = await prisma.$queryRaw<{ t: string | null }[]>`SELECT to_regclass('public."UncollectedShipping"')::text AS "t"`
+    return !!t[0]?.t
+  } catch (e) {
+    console.error("uncollected feed: the shipping table couldn't be checked:", e)
+    return false
+  }
+}
+
 /**
  * Writes where each candidate's case stands for shipping (UncollectedShipping): its dockets and the
  * shipment requests on them, for every candidate whose dockets were ALL read this run (`shipmentsOf`
@@ -376,8 +387,7 @@ async function readShipments(ctx: Ctx, dockets: string[]): Promise<Map<string, U
  */
 async function writeShipping(cands: Candidate[], shipmentsOf: Map<string, UncollectedShipment[]>): Promise<string | null> {
   try {
-    const t = await prisma.$queryRaw<{ t: string | null }[]>`SELECT to_regclass('public."UncollectedShipping"')::text AS "t"`
-    if (!t[0]?.t) return "Shipment numbers aren't kept yet — an admin needs to press Run Migrations."
+    if (!(await shippingTableThere())) return "Shipment numbers aren't kept yet — an admin needs to press Run Migrations."
     const want = cands
       .map((c) => ({ key: c.invoiceNo, dockets: docketsOf([...c.lots, ...c.queryLots]) }))
       .filter((w) => w.dockets.every((d) => shipmentsOf.has(d)))
@@ -1593,7 +1603,10 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
     /** docket → its shipment requests — only dockets that were read. */
     const shipmentsOf = new Map<string, UncollectedShipment[]>()
     let shipNote: string | null = null
-    if (dockets.length && !ctx.outOfTime && !stopBy()) {
+    // Before Run Migrations there's nowhere to keep them — no BC time is spent reading them (writeShipping
+    // then says Run Migrations is needed).
+    const shipTable = dockets.length > 0 && (await shippingTableThere())
+    if (shipTable && !ctx.outOfTime && !stopBy()) {
       let unreadDockets = 0
       let doneDockets = 0
       await eachLimit(chunk(dockets, PLACES_PER_CALL), BC_CONCURRENCY, async (batch) => {
@@ -1607,8 +1620,10 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
         setProgress({ stage: "checking", done: doneDockets, total: dockets.length, words: `Reading shipment requests for the collection dockets — ${n0(doneDockets)} of ${n0(dockets.length)}` })
       })
       if (unreadDockets) shipNote = `The shipment requests on ${many(unreadDockets, "collection docket")} couldn't be read (BC didn't answer, or the time ran out) — those cases keep what was read before.`
-    } else if (dockets.length) {
-      shipNote = "There was no time left to read the shipment requests this run — the cases keep what was read before."
+    } else if (shipTable) {
+      shipNote = stopBy()
+        ? "It was stopped before the shipment requests were read — the cases keep what was read before."
+        : "There was no time left to read the shipment requests this run — the cases keep what was read before."
     }
 
     // ── Save every candidate — until a Stop, or the run has gone on so long that a second one

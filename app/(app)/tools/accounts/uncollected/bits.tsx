@@ -11,9 +11,16 @@ import { muted } from "./ui"
 
 /** A case's collection docket(s), the shipment request(s) on them that aren't cancelled (number ·
  *  status) and who packed them (the shipment request card's Internal Reference) — as the BC check last
- *  read them. `null` = not read yet. Plain text, no colour to explain. */
-export function Shipping({ s, inline = false }: { s: UncollectedShippingInfo | null; inline?: boolean }) {
-  if (!s) return <span className={`text-xs ${muted}`} title="The BC check reads it on its next run">Not read yet</span>
+ *  read them. `null` = not read: a case added by hand never is (the check only reads open cases from
+ *  BC that it finds), so it says so rather than promise a read. Plain text, no colour to explain. */
+export function Shipping({ s, source, inline = false }: { s: UncollectedShippingInfo | null; source?: UncollectedSource; inline?: boolean }) {
+  if (!s) {
+    const words = source === "manual" ? "Added by hand — not read from BC" : "Not read yet"
+    const why = source === "manual"
+      ? "The BC check only reads cases that came from BC"
+      : "The BC check reads an open case from BC each time it finds it"
+    return <span className={`text-xs ${muted}`} title={why}>{inline ? `Shipment: ${words.charAt(0).toLowerCase()}${words.slice(1)}` : words}</span>
+  }
   const live = s.shipments.filter(isLiveShipment)
   const docket = s.collectionNos.length ? s.collectionNos.join(", ") : null
   if (inline) {

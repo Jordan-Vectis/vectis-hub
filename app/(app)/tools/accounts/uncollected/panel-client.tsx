@@ -299,7 +299,8 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
               </div>
               {ships.unread > 0 && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  {plural(ships.unread, "case")} {ships.unread === 1 ? "hasn't" : "haven't"} been read for a shipment yet, so {ships.unread === 1 ? "it shows" : "they show"} under Any only — the next BC check reads {ships.unread === 1 ? "it" : "them"}.
+                  {plural(ships.unread, "case")} {ships.unread === 1 ? "hasn't" : "haven't"} been read for a shipment, so {ships.unread === 1 ? "it shows" : "they show"} under Any only.
+                  The BC check reads an open case from BC each time it finds it; cases added by hand aren&apos;t read.
                 </p>
               )}
             </>
@@ -379,17 +380,20 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
         </div>
       ) : (
         <div className={stale ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          {/* Wide screens (lg and up — an iPad in landscape too): a table. Nine columns, so it fits
-              without scrolling sideways: "paid on" sits under the amount, storage inc VAT under
-              storage before VAT, the last contact under the next chase, the shipment and who packed
-              it under the collection docket (and on a desktop the page widens to 1,600px). */}
+          {/* Wide screens (lg and up — an iPad in landscape too): a table that fits without scrolling
+              sideways: "paid on" sits under the amount, storage inc VAT under storage before VAT, the
+              last contact under the next chase. Docket · shipment (with who packed it) is a ninth column
+              on a desktop only (desk:, where the page is up to 1,600px) and sits under the sale and
+              invoice below that — nine columns scroll sideways on an iPad in landscape. */}
           <div className={`${card} hidden lg:block overflow-x-auto`}>
             <table className="w-full">
               <thead className="border-b border-gray-200 dark:border-gray-800">
                 <tr>
                   <th className={`${th} text-left`}>Buyer</th>
                   <th className={`${th} text-left`}>Sale / invoice</th>
-                  <th className={`${th} text-left`}>Docket · shipment</th>
+                  {/* Its own column on a desktop only (the page is 1,600px there); on an iPad in landscape it
+                      sits under the sale and invoice, or the table would scroll sideways (review, 2026-10-23). */}
+                  <th className={`${th} text-left hidden desk:table-cell`}>Docket · shipment</th>
                   <th className={`${th} text-right`}>Lots</th>
                   <th className={`${th} text-right`}>Paid</th>
                   <th className={`${th} text-right`}>Storage owed</th>
@@ -421,8 +425,9 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                     <td className={td}>
                       <div className="font-mono">{c.saleCode ?? "—"}</div>
                       {c.invoiceNo && <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">{c.invoiceNo}</div>}
+                      <div className="desk:hidden mt-1.5"><Shipping s={c.shipping} source={c.source} /></div>
                     </td>
-                    <td className={td}><Shipping s={c.shipping} /></td>
+                    <td className={`${td} hidden desk:table-cell`}><Shipping s={c.shipping} source={c.source} /></td>
                     <td className={`${td} text-right tabular-nums`}>{c.lots ?? "—"}</td>
                     <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
                       <div>{formatMoney(c.amountPaid)}</div>
@@ -466,7 +471,7 @@ export default function UncollectedPanel({ list }: { list: UncollectedList }) {
                     <PaidWhen source={c.source} paidAt={c.paidAt} exact={c.paidExact} />
                   </div>
                   <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Storage owed: <StorageOwed s={c.storage} inline /></p>
-                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-300"><Shipping s={c.shipping} inline /></p>
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-300"><Shipping s={c.shipping} source={c.source} inline /></p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-600 dark:text-gray-300">
                     <span>Next chase: <ChaseDate at={c.nextChaseAt} chase={c.chase} /></span>
                     <span>Last contact: <LastContact last={c.lastContact} compact /></span>
