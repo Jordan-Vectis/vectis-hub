@@ -201,6 +201,35 @@ function AuctionRow({ a, onStart, onView }: {
 type View = "list" | "cards"
 const VIEW_KEY = "photography_view"
 
+// Sort orders (2026-10-23 — Jordan: "by default can we have the soonest sales at the top and maybe a
+// filter as well"). "Soonest" = today's and upcoming sales first, nearest first; then sales whose
+// date has passed, most recent first; then sales with no date.
+type Sort = "soonest" | "latest" | "most-left" | "code"
+const SORT_KEY = "photography_sort"
+const SORTS: { value: Sort; label: string }[] = [
+  { value: "soonest",   label: "Soonest sale first" },
+  { value: "latest",    label: "Latest sale first" },
+  { value: "most-left", label: "Most lots still to photograph" },
+  { value: "code",      label: "Sale code" },
+]
+
+function sortRows(rows: PhotographyAuctionRow[], sort: Sort): PhotographyAuctionRow[] {
+  const t = (a: PhotographyAuctionRow) => a.auctionDate ? new Date(a.auctionDate).getTime() : null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const start = today.getTime()
+  const byCode = (a: PhotographyAuctionRow, b: PhotographyAuctionRow) => a.code.localeCompare(b.code, undefined, { numeric: true })
+  return [...rows].sort((a, b) => {
+    const ta = t(a), tb = t(b)
+    if (sort === "code") return byCode(a, b)
+    if (sort === "most-left") return (b.lots - b.lotsWithPhotos) - (a.lots - a.lotsWithPhotos) || byCode(a, b)
+    if (ta === null || tb === null) return ta === tb ? byCode(a, b) : ta === null ? 1 : -1
+    if (sort === "latest") return tb - ta || byCode(a, b)
+    const ua = ta >= start, ub = tb >= start
+    if (ua !== ub) return ua ? -1 : 1
+    return (ua ? ta - tb : tb - ta) || byCode(a, b)
+  })
+}
+
 export default function PhotographyAuctionList({ active, completed }: Props) {
   const router = useRouter()
   const [search, setSearch]   = useState("")
@@ -209,9 +238,18 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
   // List by default; each device remembers its own choice (read after mount, so the server's first
   // render matches).
   const [view, setView] = useState<View>("list")
+  const [sort, setSort] = useState<Sort>("soonest")
   useEffect(() => {
-    try { if (localStorage.getItem(VIEW_KEY) === "cards") setView("cards") } catch { /* private mode */ }
+    try {
+      if (localStorage.getItem(VIEW_KEY) === "cards") setView("cards")
+      const saved = localStorage.getItem(SORT_KEY)
+      if (SORTS.some(o => o.value === saved)) setSort(saved as Sort)
+    } catch { /* private mode */ }
   }, [])
+  const chooseSort = (v: Sort) => {
+    setSort(v)
+    try { localStorage.setItem(SORT_KEY, v) } catch { /* private mode */ }
+  }
   const chooseView = (v: View) => {
     setView(v)
     try { localStorage.setItem(VIEW_KEY, v) } catch { /* private mode */ }
@@ -231,8 +269,8 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
     return true
   })
 
-  const shownActive    = useMemo(() => filter(active),    [active, search, type])
-  const shownCompleted = useMemo(() => filter(completed), [completed, search, type])
+  const shownActive    = useMemo(() => sortRows(filter(active), sort),    [active, search, type, sort])
+  const shownCompleted = useMemo(() => sortRows(filter(completed), sort), [completed, search, type, sort])
 
   const start = (id: string) => router.push(`/tools/cataloguing/photography/${id}`)
   const view_ = (id: string) => router.push(`/tools/cataloguing/photography/${id}?tab=view`)
@@ -295,6 +333,16 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
           <option value="">All types</option>
           {AUCTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
         </select>
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          Sort by
+          <select
+            value={sort}
+            onChange={e => chooseSort(e.target.value as Sort)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            {SORTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
         {(search || type) && (
           <button onClick={() => { setSearch(""); setType("") }}
             className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white px-2 py-1">

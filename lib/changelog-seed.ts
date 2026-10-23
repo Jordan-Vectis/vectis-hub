@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"d98297f774f6c679bca5471a3742a849c969e5b4","author":"Jordan Orange","date":"2026-10-23T11:54:30+01:00","subject":"Photography: list view by default, with a List / Cards switch remembered per device"},
   {"sha":"811f382849451d529668f079b99253b2ac00b46e","author":"Jordan Orange","date":"2026-10-23T11:21:32+01:00","subject":"Refresh changelog seed"},
   {"sha":"a13268317aa75bbd73e3be5c094868f5ce74bd44","author":"Jordan Orange","date":"2026-10-23T11:21:20+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"399770142d3ee8ee4217244b7ab6e5039cc5af6b","author":"Jordan Orange","date":"2026-10-23T11:21:19+01:00","subject":"Lot wizard: remember tote/vendor/receipt on Start cataloguing, so a restart brings back the current tote, not the last saved batch"},
