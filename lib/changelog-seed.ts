@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"438852b7602c3cc0bd617a5656da1ecc77deb039","author":"jack-vectis","date":"2026-10-23T16:11:21+01:00","subject":"Paid, not collected: remove the key under Lots in BC and the Added line from BC cases' timeline"},
   {"sha":"d5c49a8fb4f5e4fe9a06f2eedac24c39808f7e10","author":"jack-vectis","date":"2026-10-23T15:43:49+01:00","subject":"Paid, not collected: a lot at QUERY counts as gone, like COLLECTED and SHIPPED"},
   {"sha":"7c1e1aa012d5069a61cc42cf1c844c14b36e3f54","author":"jack-vectis","date":"2026-10-23T15:34:08+01:00","subject":"Paid, not collected: close cases from a sale sold on the 12-month window's first day too"},
   {"sha":"b1948f344743af8160d9c56d87376543ff0cda7f","author":"Jordan Orange","date":"2026-10-23T15:25:34+01:00","subject":"Customers: always show the C-number (BC's contact no. is free text — 4 records hold a name or email); name a separate buyer or seller account under it; Data check lists the odd ones"},

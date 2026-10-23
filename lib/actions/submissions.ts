@@ -5,28 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { hasAppAccess } from "@/lib/apps"
 import { SubmissionChannel, SubmissionStatus } from "@/app/generated/prisma/enums"
-
-async function findOrCreateContact(name: string, email: string | null, phone: string | null) {
-  // Try to find by email first, then by name
-  let contact = email
-    ? await prisma.contact.findFirst({ where: { email } })
-    : await prisma.contact.findFirst({ where: { name } })
-
-  if (!contact) {
-    const contacts = await prisma.contact.findMany({ select: { id: true } })
-    let maxNum = 0
-    for (const c of contacts) {
-      const num = parseInt(c.id.replace(/^\D+/, ""), 10)
-      if (!isNaN(num) && num > maxNum) maxNum = num
-    }
-    const id = `c${String(maxNum + 1).padStart(5, "0")}`
-    contact = await prisma.contact.create({
-      data: { id, name, email: email || null, phone: phone || null },
-    })
-  }
-
-  return contact
-}
+import { findOrCreateCustomer } from "@/lib/customers/prospects"
 
 export async function createSubmission(formData: FormData) {
   const session = await auth()
@@ -41,13 +20,14 @@ export async function createSubmission(formData: FormData) {
   const itemNames = formData.getAll("itemName") as string[]
   const itemDescriptions = formData.getAll("itemDescription") as string[]
 
-  const contact = await findOrCreateContact(customerName, customerEmail, customerPhone)
+  // Found in the Hub's customer database by email, else made as a Hub prospect (lib/customers/prospects.ts).
+  const customer = await findOrCreateCustomer({ name: customerName, email: customerEmail, phone: customerPhone })
 
   const submission = await prisma.submission.create({
     data: {
       channel,
       notes: notes || null,
-      contactId: contact.id,
+      customerId: customer.id,
       createdById: session.user.id,
       items: {
         create: itemNames.map((name, i) => ({

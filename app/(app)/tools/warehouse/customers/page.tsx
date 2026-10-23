@@ -4,14 +4,19 @@ import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/app/generated/prisma/client"
 import { getGoodsInUser } from "@/lib/goods-in/access"
 import { normaliseCode } from "@/lib/goods-in/model"
+import { CUSTOMER_INCLUDE, customerRow, personName } from "@/lib/goods-in/customer-row"
+import { HUB_OWNS_CUSTOMERS } from "@/lib/customers/ownership"
+import type { CustomerRow } from "@/lib/actions/goods-in"
 import { box, btn, btnGo, mono, th, td, ukDate, PageHeader, Empty, NotReady, ErrorBox, isMissingTable } from "../_components/ui"
 import { NOT_DRAFT, carryOnHref } from "../receipts/_parts"
 import CustomerSearchBox from "./new/search-box"
 
-// Goods In → Customers. One search over the CRM's customer database (the same fields the counter's
-// customer picker searches: name, postcode, email, phone, vendor number) run on the server, 50 to a
-// page. With nothing searched it lists the customers who have booked goods in, most recent first.
-// A scanned vendor-number card goes straight to that customer. Nothing here touches Business Central.
+// Goods In → Customers. One search over the Hub's customer database — every BC customer (the
+// Customers section's `Customer` table) and anyone added here — the same fields the counter's
+// customer picker searches (name, postcode, email, phone, customer / vendor number), run on the
+// server, 50 to a page. With nothing searched it lists the customers who have booked goods in, most
+// recent first. A scanned customer-number card goes straight to that customer. Nothing here writes
+// to Business Central.
 //
 // Receipt counts and "last booked" leave out check-ins not booked in yet (draft receipts) — a
 // customer whose only receipt is a draft hasn't booked anything in. A scanned draft receipt or tote
@@ -22,59 +27,35 @@ export const dynamic = "force-dynamic"
 const PAGE_SIZE = 50
 const BASE = "/tools/warehouse/customers"
 
-type Row = {
-  id: string
-  salutation: string | null
-  name: string
-  vendorNo: string | null
-  town: string | null
-  postcode: string | null
-  email: string | null
-  mobile: string | null
-  phone: string | null
-  receipts: number
-  lastBooked: Date | null
-}
+type Row = CustomerRow & { lastBooked: Date | null }
 
 /** A scanned or typed receipt / tote / pallet number — we say whose it is rather than "no customer found". */
-type CodeHit = { what: "receipt" | "tote" | "pallet"; code: string; receiptId: string; customerId: string; customer: string; draft: boolean }
+type CodeHit = { what: "receipt" | "tote" | "pallet"; code: string; receiptId: string; customerId: string | null; customer: string; draft: boolean }
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? ""
 const plural = (n: number, word: string) => `${n.toLocaleString("en-GB")} ${word}${n === 1 ? "" : "s"}`
-const fullName = (r: { salutation: string | null; name: string }) => [r.salutation, r.name].filter(Boolean).join(" ")
 const looksLikeCode = (code: string) => /^[A-Z]{1,3}\d{3,}$/.test(code)
+const PERSON = { select: { name: true, name2: true } } as const
 
 /** The same fields searchCustomers looks through, with a little more forgiveness for how people type. */
-function searchWhere(s: string): Prisma.ContactWhereInput {
+function searchWhere(s: string): Prisma.CustomerWhereInput {
   const like = { contains: s, mode: "insensitive" as const }
   const code = normaliseCode(s)
   const digits = s.replace(/\D/g, "")
   const words = s.split(/\s+/).filter(Boolean)
-  const or: Prisma.ContactWhereInput[] = [
-    { name: like }, { email: like }, { postcode: like }, { addressLine1: like }, { phone: like },
-    { id: { equals: s, mode: "insensitive" } },
+  const or: Prisma.CustomerWhereInput[] = [
+    { name: like }, { name2: like }, { email: like }, { postCode: like }, { address: like }, { city: like },
+    { contactNo: { equals: code, mode: "insensitive" } }, { vendorNo: { equals: code, mode: "insensitive" } }, { buyerNo: { equals: code, mode: "insensitive" } },
   ]
   // "Smith John" or "J Smith" still finds John Smith.
-  if (words.length > 1) or.push({ AND: words.map(w => ({ name: { contains: w, mode: "insensitive" as const } })) })
+  if (words.length > 1) or.push({ AND: words.map(w => ({ OR: [{ name: { contains: w, mode: "insensitive" as const } }, { name2: { contains: w, mode: "insensitive" as const } }] })) })
   // A postcode typed without its space (TS176JJ) still finds TS17 6JJ.
-  if (!/\s/.test(s) && /^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/i.test(s)) or.push({ postcode: { contains: `${s.slice(0, -3)} ${s.slice(-3)}`, mode: "insensitive" } })
+  if (!/\s/.test(s) && /^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/i.test(s)) or.push({ postCode: { contains: `${s.slice(0, -3)} ${s.slice(-3)}`, mode: "insensitive" } })
   // A phone number typed without its spaces.
-  if (digits.length >= 5) or.push({ phone: { contains: digits } })
-  const goodsIn: Prisma.GoodsInCustomerWhereInput[] = [{ vendorNo: { equals: code, mode: "insensitive" } }, { mobile: like }]
-  if (code.length >= 3) goodsIn.push({ vendorNo: { contains: code, mode: "insensitive" } })
-  if (digits.length >= 5) goodsIn.push({ mobile: { contains: digits } })
-  or.push({ goodsInCustomer: { is: { OR: goodsIn } } })
+  if (digits.length >= 5) or.push({ phone: { contains: digits } }, { mobile: { contains: digits } })
+  if (code.length >= 3) or.push({ contactNo: { contains: code, mode: "insensitive" } }, { goodsInCustomer: { is: { vendorNo: { contains: code, mode: "insensitive" } } } })
   return { OR: or }
 }
-
-const CONTACT_INCLUDE = { goodsInCustomer: true, _count: { select: { goodsInReceipts: { where: NOT_DRAFT } } } } as const
-type ContactWithGoodsIn = Prisma.ContactGetPayload<{ include: typeof CONTACT_INCLUDE }>
-
-const toRow = (c: ContactWithGoodsIn, lastBooked: Date | null, receipts?: number): Row => ({
-  id: c.id, salutation: c.salutation, name: c.name, vendorNo: c.goodsInCustomer?.vendorNo ?? null,
-  town: c.goodsInCustomer?.town ?? null, postcode: c.postcode, email: c.email, mobile: c.goodsInCustomer?.mobile ?? null, phone: c.phone,
-  receipts: receipts ?? c._count.goodsInReceipts, lastBooked,
-})
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams
@@ -99,52 +80,53 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     if (searching) {
       const code = normaliseCode(q)
       if (looksLikeCode(code)) {
-        const [vendor, receipt, container] = await Promise.all([
-          prisma.goodsInCustomer.findUnique({ where: { vendorNo: code }, select: { contactId: true } }),
-          prisma.goodsInReceipt.findUnique({ where: { id: code }, select: { id: true, status: true, contactId: true, contact: { select: { name: true } } } }),
-          prisma.goodsInContainer.findUnique({ where: { id: code }, select: { id: true, kind: true, receiptId: true, receipt: { select: { status: true, contactId: true, contact: { select: { name: true } } } } } }),
+        const [byNumber, vendor, receipt, container] = await Promise.all([
+          prisma.customer.findFirst({ where: { OR: [{ contactNo: code }, { vendorNo: code }] }, select: { id: true } }),
+          prisma.goodsInCustomer.findUnique({ where: { vendorNo: code }, select: { customerId: true } }),
+          prisma.goodsInReceipt.findUnique({ where: { id: code }, select: { id: true, status: true, customerId: true, person: PERSON, customer: true } }),
+          prisma.goodsInContainer.findUnique({ where: { id: code }, select: { id: true, kind: true, receiptId: true, receipt: { select: { status: true, customerId: true, person: PERSON, customer: true } } } }),
         ])
-        // A scanned vendor-number card: straight to that customer.
-        if (vendor) goTo = `${BASE}/${encodeURIComponent(vendor.contactId)}`
-        else if (receipt) hit = { what: "receipt", code: receipt.id, receiptId: receipt.id, customerId: receipt.contactId, customer: receipt.contact.name, draft: receipt.status === "draft" }
-        else if (container) hit = { what: container.kind === "pallet" ? "pallet" : "tote", code: container.id, receiptId: container.receiptId, customerId: container.receipt.contactId, customer: container.receipt.contact.name, draft: container.receipt.status === "draft" }
+        // A scanned customer-number card: straight to that customer.
+        const direct = byNumber?.id ?? vendor?.customerId ?? null
+        if (direct) goTo = `${BASE}/${encodeURIComponent(direct)}`
+        else if (receipt) hit = { what: "receipt", code: receipt.id, receiptId: receipt.id, customerId: receipt.customerId, customer: personName(receipt.person, receipt.customer), draft: receipt.status === "draft" }
+        else if (container) hit = { what: container.kind === "pallet" ? "pallet" : "tote", code: container.id, receiptId: container.receiptId, customerId: container.receipt.customerId, customer: personName(container.receipt.person, container.receipt.customer), draft: container.receipt.status === "draft" }
       }
       if (!goTo) {
         const where = searchWhere(q)
-        const [contacts, count] = await Promise.all([
-          prisma.contact.findMany({ where, include: CONTACT_INCLUDE, orderBy: [{ name: "asc" }, { id: "asc" }], skip, take: PAGE_SIZE }),
-          prisma.contact.count({ where }),
+        const [customers, count] = await Promise.all([
+          prisma.customer.findMany({ where, include: CUSTOMER_INCLUDE, orderBy: [{ name: "asc" }, { id: "asc" }], skip, take: PAGE_SIZE }),
+          prisma.customer.count({ where }),
         ])
         total = count
-        const ids = contacts.map(c => c.id)
+        const ids = customers.map(c => c.id)
         const last = ids.length
-          ? await prisma.goodsInReceipt.groupBy({ by: ["contactId"], where: { contactId: { in: ids }, ...NOT_DRAFT }, _max: { createdAt: true } })
+          ? await prisma.goodsInReceipt.groupBy({ by: ["customerId"], where: { customerId: { in: ids }, ...NOT_DRAFT }, _max: { createdAt: true } })
           : []
-        const lastOf = new Map(last.map(l => [l.contactId, l._max.createdAt ?? null]))
-        rows = contacts.map(c => toRow(c, lastOf.get(c.id) ?? null))
+        const lastOf = new Map(last.map(l => [l.customerId, l._max.createdAt ?? null]))
+        rows = customers.map(c => ({ ...customerRow(c), lastBooked: lastOf.get(c.id) ?? null }))
       }
     } else {
       // Nothing searched: the customers who have booked goods in, the most recently booked first.
       const [groups, count] = await Promise.all([
         prisma.goodsInReceipt.groupBy({
-          by: ["contactId"],
-          where: NOT_DRAFT,
+          by: ["customerId"],
+          where: { ...NOT_DRAFT, customerId: { not: null } },
           _max: { createdAt: true },
           _count: { _all: true },
           orderBy: { _max: { createdAt: "desc" } },
           skip,
           take: PAGE_SIZE,
         }),
-        prisma.contact.count({ where: { goodsInReceipts: { some: NOT_DRAFT } } }),
+        prisma.customer.count({ where: { goodsInReceipts: { some: NOT_DRAFT } } }),
       ])
       total = count
-      const contacts = groups.length
-        ? await prisma.contact.findMany({ where: { id: { in: groups.map(g => g.contactId) } }, include: CONTACT_INCLUDE })
-        : []
-      const byId = new Map(contacts.map(c => [c.id, c]))
+      const ids = groups.map(g => g.customerId).filter((x): x is string => !!x)
+      const customers = ids.length ? await prisma.customer.findMany({ where: { id: { in: ids } }, include: CUSTOMER_INCLUDE }) : []
+      const byId = new Map(customers.map(c => [c.id, c]))
       rows = groups.flatMap(g => {
-        const c = byId.get(g.contactId)
-        return c ? [toRow(c, g._max.createdAt ?? null, g._count._all)] : []
+        const c = g.customerId ? byId.get(g.customerId) : null
+        return c ? [{ ...customerRow(c), receipts: g._count._all, lastBooked: g._max.createdAt ?? null }] : []
       })
     }
   } catch (e) {
@@ -168,13 +150,25 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     const s = u.toString()
     return s ? `${BASE}?${s}` : BASE
   }
+  const addLabel = HUB_OWNS_CUSTOMERS ? "+ New customer" : "Not on the system?"
+
+  /** Their one number, with a seller number named under it only when it differs (the Customers rule). */
+  const numberCell = (r: Row) => (
+    r.customerNo || r.vendorNo ? (
+      <>
+        <span className={`${mono} font-semibold`}>{r.customerNo ?? r.vendorNo}</span>
+        {r.customerNo && r.vendorNo && r.vendorNo !== r.customerNo && <span className="block text-xs text-gray-500 dark:text-gray-400">seller <span className={mono}>{r.vendorNo}</span></span>}
+        {!r.fromBc && <span className="block text-[11px] font-semibold text-amber-700 dark:text-amber-300">Not in BC yet</span>}
+      </>
+    ) : <span className="text-gray-500 dark:text-gray-400">{r.fromBc ? "—" : "Not in BC yet"}</span>
+  )
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-5">
       <PageHeader
         title="Customers"
         intro="Find a customer to see their receipts, which of their totes and pallets are in the warehouse, and the lots made from them."
-        actions={<Link href={`${BASE}/new`} className={btnGo}>+ New customer</Link>}
+        actions={<Link href={`${BASE}/new`} className={btnGo}>{addLabel}</Link>}
       />
 
       {/* A GET search: Enter (or a barcode scanner's Enter) searches; the address bar keeps it. */}
@@ -198,7 +192,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               </span>
               <span className="flex flex-wrap gap-2">
                 {hit.draft && <Link href={carryOnHref(hit.receiptId)} className={btnGo}>Carry on checking in</Link>}
-                <Link href={`${BASE}/${encodeURIComponent(hit.customerId)}`} className={btn}>Open {hit.customer}</Link>
+                {hit.customerId && <Link href={`${BASE}/${encodeURIComponent(hit.customerId)}`} className={btn}>Open {hit.customer}</Link>}
                 <Link href={`/tools/warehouse/receipts/${encodeURIComponent(hit.receiptId)}`} className={btn}>Open {hit.draft ? "check-in" : "receipt"} {hit.receiptId}</Link>
               </span>
             </div>
@@ -215,7 +209,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Recently booked in</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
-                Only customers who have booked goods in are listed here. The search above looks through every contact.
+                Only customers who have booked goods in are listed here. The search above looks through every customer — everyone in Business Central&apos;s copy and anyone added here.
               </p>
             </div>
           )}
@@ -226,12 +220,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             ) : searching ? (
               !hit && (
                 <Empty>
-                  <p>Check the spelling, try their postcode or vendor number — or add them as a new customer.</p>
-                  <Link href={`${BASE}/new`} className={`${btnGo} mt-4`}>+ New customer</Link>
+                  <p>Check the spelling, try their postcode or customer number{HUB_OWNS_CUSTOMERS ? " — or add them as a new customer." : ". If they've just been added in BC, fetch them."}</p>
+                  <Link href={`${BASE}/new`} className={`${btnGo} mt-4`}>{addLabel}</Link>
                 </Empty>
               )
             ) : (
-              <Empty>Nobody has been booked in yet. Search above to find a customer in the CRM, or add a new one.</Empty>
+              <Empty>Nobody has been booked in yet. Search above to find a customer.</Empty>
             )
           ) : (
             <>
@@ -241,13 +235,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   <li key={r.id} className={box}>
                     <Link href={`${BASE}/${encodeURIComponent(r.id)}`} className="block px-4 py-3 min-h-14 active:bg-gray-50 dark:active:bg-gray-800 rounded-xl">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="font-semibold text-gray-900 dark:text-white min-w-0 break-words">{fullName(r)}</span>
-                        {r.vendorNo && <span className={`${mono} text-xs text-indigo-700 dark:text-indigo-300 shrink-0`}>{r.vendorNo}</span>}
+                        <span className="font-semibold text-gray-900 dark:text-white min-w-0 break-words">{r.name}</span>
+                        {(r.customerNo ?? r.vendorNo) && <span className={`${mono} text-xs text-indigo-700 dark:text-indigo-300 shrink-0`}>{r.customerNo ?? r.vendorNo}</span>}
                       </div>
                       {(r.town || r.postcode) && <div className="text-sm text-gray-600 dark:text-gray-300">{[r.town, r.postcode].filter(Boolean).join(", ")}</div>}
                       {(r.email || r.mobile || r.phone) && <div className="text-sm text-gray-500 dark:text-gray-400 break-all">{[r.email, r.mobile ?? r.phone].filter(Boolean).join(" · ")}</div>}
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {plural(r.receipts, "receipt")}{r.lastBooked ? ` · last booked ${ukDate(r.lastBooked)}` : ""}
+                        {plural(r.receipts, "receipt")}{r.lastBooked ? ` · last booked ${ukDate(r.lastBooked)}` : ""}{r.fromBc ? "" : " · not in BC yet"}
                       </div>
                     </Link>
                   </li>
@@ -260,7 +254,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   <thead className="border-b border-gray-200 dark:border-gray-800">
                     <tr>
                       <th className={th}>Name</th>
-                      <th className={th}>Vendor no.</th>
+                      <th className={th}>Customer no.</th>
                       <th className={th}>Town / postcode</th>
                       <th className={th}>Email / mobile</th>
                       <th className={th}>Receipts</th>
@@ -273,10 +267,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                       <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                         <td className={td}>
                           <Link href={`${BASE}/${encodeURIComponent(r.id)}`} className="inline-flex items-center min-h-11 font-semibold text-indigo-700 dark:text-indigo-300 hover:underline">
-                            {fullName(r)}
+                            {r.name}
                           </Link>
                         </td>
-                        <td className={`${td} ${mono} whitespace-nowrap`}>{r.vendorNo ?? <span className="text-gray-500 dark:text-gray-400">—</span>}</td>
+                        <td className={`${td} whitespace-nowrap`}>{numberCell(r)}</td>
                         <td className={td}>
                           {r.town || r.postcode ? (
                             <>

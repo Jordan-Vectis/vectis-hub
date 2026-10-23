@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { personName } from "@/lib/goods-in/customer-row"
 import type { ReactNode } from "react"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/app/generated/prisma/client"
@@ -42,7 +43,7 @@ async function loadDashboard() {
       where: NOT_DRAFT,
       take: 10,
       orderBy: { createdAt: "desc" },
-      select: { id: true, customer: true, status: true, createdByName: true, createdAt: true, contact: { select: { name: true } }, containers: { select: { kind: true } } },
+      select: { id: true, customer: true, status: true, createdByName: true, createdAt: true, person: { select: { name: true, name2: true } }, containers: { select: { kind: true } } },
     }),
     prisma.goodsInMovement.findMany({ take: 10, orderBy: { movedAt: "desc" }, select: MOVE_SELECT }),
     prisma.goodsInCounter.findMany({ select: { key: true } }),
@@ -304,7 +305,7 @@ function Figures({ data }: { data: Data }) {
 
 type ReceiptItem = Data["receipts"][number]
 
-const receiptCustomer = (r: ReceiptItem) => (r.customer as CustomerSnapshot | null)?.name || r.contact.name
+const receiptCustomer = (r: ReceiptItem) => personName(r.person, r.customer)
 const receiptContents = (r: ReceiptItem) => {
   const totes = r.containers.filter(c => c.kind !== "pallet").length
   const pallets = r.containers.length - totes

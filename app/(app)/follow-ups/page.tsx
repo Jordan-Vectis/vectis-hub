@@ -2,6 +2,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
+import { WHO_INCLUDE, whoFor } from "@/lib/customers/who"
 
 const statusLabels: Record<string, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -32,7 +33,7 @@ export default async function FollowUpsPage() {
   const submissions = await prisma.submission.findMany({
     where: { needsFollowUp: true },
     include: {
-      contact: true,
+      ...WHO_INCLUDE,
       items: { include: { valuation: true } },
       _count: { select: { items: true } },
     },
@@ -68,7 +69,7 @@ export default async function FollowUpsPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-xl font-bold text-gray-900 dark:text-white truncate">{sub.contact.name}</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white truncate">{whoFor(sub).name}</p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-base text-gray-500 dark:text-gray-400">
                       <span className="font-mono text-sm text-blue-600 dark:text-blue-400">
                         {sub.reference.slice(0, 8).toUpperCase()}
@@ -87,8 +88,8 @@ export default async function FollowUpsPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-gray-400">
-                      {sub.contact.email && <span>{sub.contact.email}</span>}
-                      {sub.contact.phone && <span>{sub.contact.phone}</span>}
+                      {whoFor(sub).email && <span>{whoFor(sub).email}</span>}
+                      {whoFor(sub).phone && <span>{whoFor(sub).phone}</span>}
                     </div>
                   </div>
                   <span className={`inline-flex px-3 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap flex-shrink-0 ${color}`}>

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { PERSON_FOR_PDF, personFallback, type PersonForPdf } from "@/lib/goods-in/customer-row"
 import { prisma } from "@/lib/prisma"
 import { buildLabelsPdf, type LabelForPdf } from "@/lib/goods-in/pdf"
 import { LOCATION_KINDS, normaliseCode } from "@/lib/goods-in/model"
@@ -40,7 +41,7 @@ const KIND_LABEL = new Map(LOCATION_KINDS.map(k => [k.value as string, k.label])
 
 type ContainerRow = {
   id: string; kind: string; category: string | null; description: string | null; createdAt: Date
-  receipt: { id: string; status: string | null; vendorNo: string | null; customer: unknown; contact: { salutation: string | null; name: string; email: string | null; phone: string | null; addressLine1: string | null; addressLine2: string | null; postcode: string | null } }
+  receipt: { id: string; status: string | null; vendorNo: string | null; customer: unknown; person: PersonForPdf | null }
 }
 
 const CONTAINER_SELECT = {
@@ -48,13 +49,13 @@ const CONTAINER_SELECT = {
   receipt: {
     select: {
       id: true, status: true, vendorNo: true, customer: true,
-      contact: { select: { salutation: true, name: true, email: true, phone: true, addressLine1: true, addressLine2: true, postcode: true } },
+      person: PERSON_FOR_PDF,
     },
   },
 } as const
 
 function containerLabel(c: ContainerRow): LabelForPdf {
-  const cust = customerSnapshot(c.receipt.customer, c.receipt.contact, c.receipt.vendorNo)
+  const cust = customerSnapshot(c.receipt.customer, personFallback(c.receipt.person), c.receipt.vendorNo)
   const what = [c.category?.trim(), c.description?.trim()].filter(Boolean).join(" – ")
   return {
     code: c.id,

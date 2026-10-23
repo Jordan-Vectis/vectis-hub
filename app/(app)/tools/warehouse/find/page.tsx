@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { personName } from "@/lib/goods-in/customer-row"
 import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
 import type { Prisma } from "@/app/generated/prisma/client"
@@ -70,7 +71,7 @@ async function loadContainer(id: string) {
   const c = await prisma.goodsInContainer.findUnique({
     where: { id },
     include: {
-      receipt: { select: { id: true, createdAt: true, status: true, vendorNo: true, contactId: true, contact: { select: { name: true } } } },
+      receipt: { select: { id: true, createdAt: true, status: true, vendorNo: true, customerId: true, person: { select: { name: true, name2: true } } } },
       movements: { orderBy: { movedAt: "desc" }, take: 200, select: MOVE_SELECT },
     },
   })
@@ -102,7 +103,7 @@ async function loadLots(where: Prisma.CatalogueLotWhereInput) {
   ])
   const receiptIds = strings([...lots.map(l => (l.receipt ? normaliseCode(l.receipt) : null)), ...containers.map(c => c.receiptId)])
   const [receipts, places] = await Promise.all([
-    prisma.goodsInReceipt.findMany({ where: { id: { in: receiptIds } }, select: { id: true, status: true, contactId: true, contact: { select: { name: true } } } }),
+    prisma.goodsInReceipt.findMany({ where: { id: { in: receiptIds } }, select: { id: true, status: true, customerId: true, person: { select: { name: true, name2: true } } } }),
     placesFor(strings([...moves.flatMap(m => [m.locationCode, m.fromCode]), ...containers.map(c => c.locationCode)])),
   ])
   return { lots, moves, containers, receipts, places }
@@ -113,7 +114,7 @@ async function loadLocation(code: string) {
     prisma.goodsInLocation.findUnique({ where: { code }, select: { code: true, name: true, kind: true, active: true } }),
     prisma.goodsInContainer.findMany({
       where: { locationCode: code },
-      select: { id: true, kind: true, category: true, description: true, status: true, movedAt: true, receiptId: true, receipt: { select: { status: true, contactId: true, contact: { select: { name: true } } } } },
+      select: { id: true, kind: true, category: true, description: true, status: true, movedAt: true, receiptId: true, receipt: { select: { status: true, customerId: true, person: { select: { name: true, name2: true } } } } },
       orderBy: { movedAt: "desc" },
       take: 500,
     }),
@@ -405,7 +406,7 @@ function ContainerView({ d, canOpen }: { d: ContainerData; canOpen: CanOpen }) {
         {isDraft && (
           <div role="note" className="rounded-lg border border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 flex flex-wrap items-center gap-x-4 gap-y-2">
             <p className="min-w-0 flex-1 basis-64">
-              <b>Not booked in yet.</b> {c.id} is on check-in <span className={`${mono} font-semibold`}>{c.receipt.id}</span> for {c.receipt.contact.name}, which hasn&apos;t been booked in.
+              <b>Not booked in yet.</b> {c.id} is on check-in <span className={`${mono} font-semibold`}>{c.receipt.id}</span> for {personName(c.receipt.person)}, which hasn&apos;t been booked in.
             </p>
             <CarryOnLink receiptId={c.receipt.id} className={btnGo} />
           </div>
@@ -424,7 +425,7 @@ function ContainerView({ d, canOpen }: { d: ContainerData; canOpen: CanOpen }) {
                 "Not put anywhere yet"
               ),
             ],
-            ["Customer", <Link key="c" href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.contactId)}`} className="font-semibold underline-offset-2 hover:underline">{c.receipt.contact.name}</Link>],
+            ["Customer", <Link key="c" href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.customerId ?? "")}`} className="font-semibold underline-offset-2 hover:underline">{personName(c.receipt.person)}</Link>],
             [
               "Receipt",
               <span key="r">
@@ -576,7 +577,7 @@ function LotCard({ lot, d, canOpenSale }: { lot: LotsData["lots"][number]; d: Lo
                 )
               ) : "—",
             ],
-            ["Customer", receipt ? <Link key="c" href={`/tools/warehouse/customers/${encodeURIComponent(receipt.contactId)}`} className="font-semibold underline-offset-2 hover:underline">{receipt.contact.name}</Link> : "—"],
+            ["Customer", receipt ? <Link key="c" href={`/tools/warehouse/customers/${encodeURIComponent(receipt.customerId ?? "")}`} className="font-semibold underline-offset-2 hover:underline">{personName(receipt.person)}</Link> : "—"],
             ["Vendor no.", lot.vendor ? <span className={mono}>{lot.vendor}</span> : "—"],
             ["Unique ID", lot.receiptUniqueId ? <span className={mono}>{lot.receiptUniqueId}</span> : "—"],
             ["Category", [lot.category, lot.subCategory].filter(Boolean).join(" › ") || "—"],
@@ -635,7 +636,7 @@ function LocationView({ d, code, canOpen }: { d: LocationData; code: string; can
                         <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">since {ukDateTime(c.movedAt)}</span>
                       </div>
                       <p className="text-sm text-gray-700 dark:text-gray-200 break-words">
-                        <Link href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.contactId)}`} className="hover:underline">{c.receipt.contact.name}</Link>
+                        <Link href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.customerId ?? "")}`} className="hover:underline">{personName(c.receipt.person)}</Link>
                         <span className="text-gray-400"> · </span>
                         <Link href={`/tools/warehouse/receipts/${encodeURIComponent(c.receiptId)}`} className={`${mono} hover:underline`}>{c.receiptId}</Link>
                         {(c.category || c.description) && <span className="text-gray-600 dark:text-gray-300"> · {[c.category, c.description].filter(Boolean).join(" — ")}</span>}

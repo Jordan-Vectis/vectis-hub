@@ -26,7 +26,7 @@ import type { Result } from "@/lib/actions/goods-in"
 // Central.
 
 export type CustomerAgreement = {
-  contactId: string
+  customerId: string
   /** null = standard (DEFAULT_TERMS). */
   fees: { commission: number | null; lottingFee: number | null; photographyFee: number | null; unsoldFee: number | null }
   /** null = standard (DEFAULT_TERMS.reservePercent). */
@@ -149,9 +149,9 @@ function readArrangement(v: unknown): string | null {
 // ─── Loading ────────────────────────────────────────────────────────────────────────────────
 
 /** The customer's whole agreement — fees from GoodsInCustomer, the rest from GoodsInAgreement (its own, tolerant query). */
-async function load(contactId: string): Promise<CustomerAgreement> {
-  const c = await prisma.contact.findUnique({
-    where: { id: contactId },
+async function load(customerId: string): Promise<CustomerAgreement> {
+  const c = await prisma.customer.findUnique({
+    where: { id: customerId },
     select: { id: true, goodsInCustomer: { select: { commission: true, lottingFee: true, photographyFee: true, unsoldFee: true } } },
   })
   if (!c) throw new Refusal(NOT_FOUND)
@@ -159,7 +159,7 @@ async function load(contactId: string): Promise<CustomerAgreement> {
   const g = c.goodsInCustomer
   const fee = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null)
   return {
-    contactId: c.id,
+    customerId: c.id,
     fees: { commission: fee(g?.commission), lottingFee: fee(g?.lottingFee), photographyFee: fee(g?.photographyFee), unsoldFee: fee(g?.unsoldFee) },
     reservePercent: a.reservePercent,
     termsSignedAt: a.termsSignedAt,
@@ -174,10 +174,10 @@ async function load(contactId: string): Promise<CustomerAgreement> {
 // ─── The actions ────────────────────────────────────────────────────────────────────────────
 
 /** A customer's fees and agreement, for their Fees & agreement tab (and Check in). Any Goods In user. */
-export async function getAgreement(contactId: string): Promise<Result<CustomerAgreement>> {
+export async function getAgreement(customerId: string): Promise<Result<CustomerAgreement>> {
   try {
     await requireGoodsIn("warehouse")
-    const id = blank(contactId)
+    const id = blank(customerId)
     if (!id) return { ok: false, error: "Say which customer." }
     return { ok: true, data: await load(id) }
   } catch (e) { return fail(e) }
@@ -194,10 +194,10 @@ export async function getAgreement(contactId: string): Promise<Result<CustomerAg
  * Everything sent is checked before anything is written, and it is written in one transaction, so
  * a save either happens whole or not at all. Answers with the agreement as it now stands.
  */
-export async function saveAgreement(contactId: string, patch: AgreementPatch): Promise<Result<CustomerAgreement>> {
+export async function saveAgreement(customerId: string, patch: AgreementPatch): Promise<Result<CustomerAgreement>> {
   try {
     const me = await requireGoodsIn("warehouse")
-    const id = blank(contactId)
+    const id = blank(customerId)
     if (!id) return { ok: false, error: "Say which customer." }
     const p = (patch && typeof patch === "object" ? patch : {}) as AgreementPatch
 
@@ -217,7 +217,7 @@ export async function saveAgreement(contactId: string, patch: AgreementPatch): P
     }
     if (p.specialArrangement !== undefined) agreement.specialArrangement = readArrangement(p.specialArrangement)
 
-    const exists = await prisma.contact.findUnique({ where: { id }, select: { id: true } })
+    const exists = await prisma.customer.findUnique({ where: { id }, select: { id: true } })
     if (!exists) return { ok: false, error: NOT_FOUND }
 
     const hasFees = Object.keys(fees).length > 0
@@ -231,20 +231,21 @@ export async function saveAgreement(contactId: string, patch: AgreementPatch): P
       // Clearing back to standard / not signed / none is already true without the table.
       const wantsTable = Object.entries(agreement).some(([k, v]) => k !== "termsRecordedBy" && v !== null)
       if (wantsTable) return { ok: false, error: `${AGREEMENT_NOT_READY} Nothing was saved.` }
-      if (hasFees) await prisma.goodsInCustomer.upsert({ where: { contactId: id }, create: { contactId: id, ...fees }, update: fees })
+      if (hasFees) await prisma.goodsInCustomer.upsert({ where: { customerId: id }, create: { customerId: id, ...fees }, update: fees })
     } else {
       await prisma.$transaction(async tx => {
-        if (hasFees) await tx.goodsInCustomer.upsert({ where: { contactId: id }, create: { contactId: id, ...fees }, update: fees })
+        if (hasFees) await tx.goodsInCustomer.upsert({ where: { customerId: id }, create: { customerId: id, ...fees }, update: fees })
         // Who changed it last — the fees as well as the rest.
         await tx.goodsInAgreement.upsert({
-          where: { contactId: id },
-          create: { contactId: id, ...agreement, updatedByName: me.name },
+          where: { customerId: id },
+          create: { customerId: id, ...agreement, updatedByName: me.name },
           update: { ...agreement, updatedByName: me.name },
         })
       })
     }
 
     revalidatePath("/tools/warehouse", "layout")
+    revalidatePath("/tools/customers", "layout")
     return { ok: true, data: await load(id) }
   } catch (e) { return fail(e) }
 }

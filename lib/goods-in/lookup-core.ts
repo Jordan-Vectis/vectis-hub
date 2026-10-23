@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { PERSON_NAME, personName } from "@/lib/goods-in/customer-row"
 import { normaliseCode, type ContainerKind, type LocationKind } from "@/lib/goods-in/model"
 import { compareCodes } from "@/lib/goods-in/location-codes"
 import type { ScanHit } from "@/lib/actions/goods-in"
@@ -20,21 +21,21 @@ export async function findCode(raw: string): Promise<ScanHit | null> {
   const code = normaliseCode(raw)
   if (!code) return null
   const [container, receipt, location, customer, lot] = await Promise.all([
-    prisma.goodsInContainer.findUnique({ where: { id: code }, include: { receipt: { select: { contact: { select: { name: true } } } } } }),
-    prisma.goodsInReceipt.findUnique({ where: { id: code }, include: { contact: { select: { name: true } }, _count: { select: { containers: true } } } }),
+    prisma.goodsInContainer.findUnique({ where: { id: code }, include: { receipt: { select: { customer: true, person: PERSON_NAME } } } }),
+    prisma.goodsInReceipt.findUnique({ where: { id: code }, include: { person: PERSON_NAME, _count: { select: { containers: true } } } }),
     prisma.goodsInLocation.findUnique({ where: { code } }),
-    prisma.goodsInCustomer.findUnique({ where: { vendorNo: code }, include: { contact: { select: { name: true } } } }),
+    prisma.goodsInCustomer.findUnique({ where: { vendorNo: code }, include: { customer: PERSON_NAME } }),
     // A barcode can be on more than one lot (a re-entered item): the newest is the one in hand, as Find lists it first.
     prisma.catalogueLot.findFirst({ where: { barcode: { equals: code, mode: "insensitive" } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, barcode: true, title: true, tote: true, receipt: true, auction: { select: { code: true } } } }),
   ])
-  if (container) return { type: "container", id: container.id, kind: container.kind as ContainerKind, receiptId: container.receiptId, customer: container.receipt.contact.name, category: container.category, description: container.description, status: container.status, locationCode: container.locationCode }
+  if (container) return { type: "container", id: container.id, kind: container.kind as ContainerKind, receiptId: container.receiptId, customer: personName(container.receipt.person, container.receipt.customer), category: container.category, description: container.description, status: container.status, locationCode: container.locationCode }
   if (lot) {
     const last = await prisma.goodsInMovement.findFirst({ where: { lotId: lot.id }, orderBy: { movedAt: "desc" }, select: { locationCode: true } })
     return { type: "lot", lotId: lot.id, barcode: lot.barcode ?? code, title: lot.title, auction: lot.auction?.code ?? null, tote: lot.tote, receipt: lot.receipt, locationCode: last?.locationCode ?? null }
   }
-  if (receipt) return { type: "receipt", id: receipt.id, customer: receipt.contact.name, containers: receipt._count.containers, createdAt: receipt.createdAt }
+  if (receipt) return { type: "receipt", id: receipt.id, customer: personName(receipt.person), containers: receipt._count.containers, createdAt: receipt.createdAt }
   if (location) return { type: "location", code: location.code, name: location.name, kind: (location.kind as LocationKind) ?? "storage" }
-  if (customer) return { type: "customer", id: customer.contactId, name: customer.contact.name, vendorNo: customer.vendorNo }
+  if (customer) return { type: "customer", id: customer.customerId, name: personName(customer.customer), vendorNo: customer.vendorNo }
   return null
 }
 
@@ -49,7 +50,7 @@ export async function goodsHere(codes: string[]): Promise<{ rows: GoodsHere[]; t
   const [containers, lots] = await Promise.all([
     prisma.goodsInContainer.findMany({
       where: { locationCode: { in: codes }, OR: [{ status: null }, { status: { not: "returned" } }] },
-      select: { id: true, kind: true, status: true, category: true, description: true, movedAt: true, locationCode: true, receiptId: true, receipt: { select: { contact: { select: { name: true } } } } },
+      select: { id: true, kind: true, status: true, category: true, description: true, movedAt: true, locationCode: true, receiptId: true, receipt: { select: { customer: true, person: PERSON_NAME } } },
       orderBy: [{ locationCode: "asc" }, { id: "asc" }],
       take: MAX_EXPORT_ROWS + 1,
     }),
@@ -78,7 +79,7 @@ export async function goodsHere(codes: string[]): Promise<{ rows: GoodsHere[]; t
       code: c.id,
       status: c.status,
       receipt: c.receiptId,
-      customer: c.receipt.contact.name,
+      customer: personName(c.receipt.person, c.receipt.customer),
       what: [c.category, c.description].filter(Boolean).join(" — ") || null,
       sale: null,
       since: iso(c.movedAt),

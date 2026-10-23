@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { customerName, personName } from "@/lib/goods-in/customer-row"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getGoodsInUser, atLeast } from "@/lib/goods-in/access"
@@ -254,7 +255,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
         <section className={`${box} p-4`} aria-labelledby="cust-heading">
           <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
             <h2 id="cust-heading" className="text-base font-bold text-gray-900 dark:text-white">Customer</h2>
-            <Link href={`/tools/warehouse/customers/${encodeURIComponent(r.contactId)}`} className="text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:underline inline-flex items-center min-h-11 -my-2">
+            <Link href={`/tools/warehouse/customers/${encodeURIComponent(r.customerId ?? "")}`} className="text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:underline inline-flex items-center min-h-11 -my-2">
               Open their record →
             </Link>
           </div>
@@ -292,7 +293,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
               <p>
                 <b>Their record has changed since this was booked</b> — {changed.join(", ")}. The receipt keeps the details as they were on the day.
               </p>
-              <Link href={`/tools/warehouse/customers/${encodeURIComponent(r.contactId)}`} className="underline font-medium inline-flex items-center min-h-8">See their details now</Link>
+              <Link href={`/tools/warehouse/customers/${encodeURIComponent(r.customerId ?? "")}`} className="underline font-medium inline-flex items-center min-h-8">See their details now</Link>
             </div>
           )}
         </section>
@@ -363,10 +364,11 @@ async function load(id: string, me: { id: string; role: string }) {
   const r = await prisma.goodsInReceipt.findUnique({
     where: { id },
     include: {
-      contact: {
+      person: {
         select: {
-          id: true, name: true, salutation: true, email: true, phone: true, addressLine1: true, addressLine2: true, postcode: true,
-          goodsInCustomer: { select: { vendorNo: true, mobile: true, town: true, county: true, country: true, vatRegNo: true } },
+          id: true, name: true, name2: true, email: true, phone: true, mobile: true, address: true, address2: true, address3: true,
+          city: true, county: true, postCode: true, countryCode: true, vatRegNo: true, vendorNo: true,
+          goodsInCustomer: { select: { vendorNo: true } },
         },
       },
       containers: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
@@ -445,16 +447,17 @@ async function load(id: string, me: { id: string; role: string }) {
   }))
 
   // The customer as printed (the snapshot) and as their record stands now.
-  const g = r.contact.goodsInCustomer
+  // Their record as it stands now (the customer database). A receipt from before it has no person.
+  const p = r.person
   const live: CustomerSnapshot = {
-    salutation: r.contact.salutation, name: r.contact.name, addressLine1: r.contact.addressLine1, addressLine2: r.contact.addressLine2,
-    town: g?.town ?? null, county: g?.county ?? null, postcode: r.contact.postcode, country: g?.country ?? null,
-    email: r.contact.email, mobile: g?.mobile ?? null, phone: r.contact.phone, vatRegNo: g?.vatRegNo ?? null, vendorNo: g?.vendorNo ?? null,
+    salutation: null, name: customerName(p), addressLine1: p?.address ?? null, addressLine2: [p?.address2, p?.address3].filter(Boolean).join(", ") || null,
+    town: p?.city ?? null, county: p?.county ?? null, postcode: p?.postCode ?? null, country: p?.countryCode ?? null,
+    email: p?.email ?? null, mobile: p?.mobile ?? null, phone: p?.phone ?? null, vatRegNo: p?.vatRegNo ?? null, vendorNo: p?.vendorNo ?? p?.goodsInCustomer?.vendorNo ?? null,
   }
   const snap = asSnapshot(r.customer)
   const changed = snap ? [...new Set(FIELD_WORDS.filter(([k]) => !same(snap[k], live[k])).map(([, w]) => w))] : []
 
   const categories = catRows.map(c => c.category).filter((c): c is string => !!c)
 
-  return { r, containers, otherLots, snap, live, changed, liveName: r.contact.name, categories }
+  return { r, containers, otherLots, snap, live, changed, liveName: personName(r.person, r.customer), categories }
 }

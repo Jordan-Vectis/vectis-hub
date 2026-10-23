@@ -7,6 +7,8 @@ import { getDepartmentAccess, canSeeAuction } from "@/lib/departments"
 import { CONTAINER_STATUS, DEFAULT_TERMS, LOCATION_KINDS, type ContainerStatus } from "@/lib/goods-in/model"
 import type { CustomerRow } from "@/lib/actions/goods-in"
 import { getAgreement, type CustomerAgreement } from "@/lib/actions/goods-in-agreement"
+import { CUSTOMER_INCLUDE, customerRow } from "@/lib/goods-in/customer-row"
+import { HUB_OWNS_CUSTOMERS } from "@/lib/customers/ownership"
 import {
   box, btn, btnGo, mono, th, td, ukDate, ukDateTime,
   PageHeader, StatusBadge, StatusKey, KindBadge, Empty, NotReady, ErrorBox, OkBox, isMissingTable,
@@ -130,18 +132,10 @@ const muted = "text-gray-500 dark:text-gray-400"
 const link = "text-indigo-700 dark:text-indigo-300 hover:underline"
 
 async function loadCustomer(id: string): Promise<Customer | null> {
-  const c = await prisma.contact.findUnique({ where: { id }, include: { goodsInCustomer: true, _count: { select: { goodsInReceipts: { where: NOT_DRAFT } } } } })
+  const c = await prisma.customer.findUnique({ where: { id }, include: CUSTOMER_INCLUDE })
   if (!c) return null
-  const g = c.goodsInCustomer
-  const customer: CustomerRow = {
-    id: c.id, salutation: c.salutation, name: c.name, email: c.email, phone: c.phone,
-    addressLine1: c.addressLine1, addressLine2: c.addressLine2, postcode: c.postcode, notes: c.notes,
-    vendorNo: g?.vendorNo ?? null, mobile: g?.mobile ?? null, town: g?.town ?? null, county: g?.county ?? null, country: g?.country ?? null,
-    vatRegNo: g?.vatRegNo ?? null, commission: g?.commission ?? null, lottingFee: g?.lottingFee ?? null,
-    photographyFee: g?.photographyFee ?? null, unsoldFee: g?.unsoldFee ?? null,
-    receipts: c._count.goodsInReceipts,
-  }
-  return { customer, since: c.createdAt, receiptTotal: c._count.goodsInReceipts }
+  const customer = customerRow(c)
+  return { customer, since: c.bcCreatedAt ?? c.createdAt, receiptTotal: customer.receipts }
 }
 
 /**
@@ -151,7 +145,7 @@ async function loadCustomer(id: string): Promise<Customer | null> {
  */
 async function loadAgreement(c: CustomerRow): Promise<{ agreement: CustomerAgreement; error: string | null }> {
   const fallback: CustomerAgreement = {
-    contactId: c.id,
+    customerId: c.id,
     fees: { commission: c.commission, lottingFee: c.lottingFee, photographyFee: c.photographyFee, unsoldFee: c.unsoldFee },
     reservePercent: null, termsSignedAt: null, termsRecordedBy: null, specialArrangement: null,
     updatedAt: null, updatedByName: null, ready: false,
@@ -169,13 +163,13 @@ async function loadOverview(id: string, viewer: { id: string; role: string }): P
   // In the warehouse now = not yet catalogued or given back, on a receipt that was booked in and
   // wasn't voided. (Prisma's "not" leaves out NULLs, so a blank status is let in explicitly.)
   const inWarehouseWhere: Prisma.GoodsInContainerWhereInput = {
-    receipt: { contactId: id, ...BOOKED_LIVE },
+    receipt: { customerId: id, ...BOOKED_LIVE },
     OR: [{ status: null }, { status: { notIn: ["catalogued", "returned"] } }],
   }
 
   const [receipts, inWarehouse, inWarehouseTotal, access, unfinished] = await Promise.all([
     prisma.goodsInReceipt.findMany({
-      where: { contactId: id, ...NOT_DRAFT },
+      where: { customerId: id, ...NOT_DRAFT },
       orderBy: { createdAt: "desc" },
       take: RECEIPT_LIMIT,
       select: {
@@ -193,7 +187,7 @@ async function loadOverview(id: string, viewer: { id: string; role: string }): P
     getDepartmentAccess(viewer.id, viewer.role),
     // Their check-ins not booked in yet, newest first.
     prisma.goodsInReceipt.findMany({
-      where: { contactId: id, status: "draft" },
+      where: { customerId: id, status: "draft" },
       orderBy: { updatedAt: "desc" },
       take: 20,
       select: { id: true, createdAt: true, updatedAt: true, createdByName: true, _count: { select: { containers: true } } },
@@ -214,7 +208,7 @@ async function loadOverview(id: string, viewer: { id: string; role: string }): P
         JOIN "CatalogueAuction" a ON a."id" = l."auctionId"
         JOIN "GoodsInContainer" c ON c."id" = upper(btrim(l."tote"))
         JOIN "GoodsInReceipt" r ON r."id" = c."receiptId"
-        WHERE r."contactId" = ${id}
+        WHERE r."customerId" = ${id}
           AND (r."status" IS NULL OR r."status" <> 'draft')
           AND l."createdAt" >= c."createdAt"
         ORDER BY l."createdAt" DESC
@@ -446,7 +440,7 @@ function OverviewTab({ c, overview, receiptTotal, bookHref, summary, feesHref }:
             <p className="text-xs text-amber-800 dark:text-amber-200/90">Not booked in until Book in is pressed. Open one to throw it away.</p>
           </section>
         )}
-        <CustomerPanel customer={c} summary={summary} feesHref={feesHref} />
+        <CustomerPanel customer={c} summary={summary} feesHref={feesHref} canEdit={HUB_OWNS_CUSTOMERS} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -753,7 +747,9 @@ export default async function CustomerPage({ params, searchParams }: {
             {c.vendorNo
               ? <span>Vendor no. <span className={`${mono} font-semibold text-gray-800 dark:text-gray-100`}>{c.vendorNo}</span></span>
               : <span>No vendor number yet — one is given when goods are first booked in, once the vendor number series is set up.</span>}
-            <span>On the system since {ukDate(cust.since)}</span>
+            {c.customerNo && <span>Customer no. <span className={`${mono} font-semibold text-gray-800 dark:text-gray-100`}>{c.customerNo}</span></span>}
+            <span>{c.fromBc ? "In BC since" : "On the system since"} {ukDate(cust.since)}</span>
+            <Link href={`/tools/customers/${encodeURIComponent(c.id)}`} className={link}>Open in Customers →</Link>
           </span>
         }
         actions={<Link href={bookHref} className={`${btnGo} !min-h-12`}>Book goods in for this customer</Link>}
@@ -771,7 +767,7 @@ export default async function CustomerPage({ params, searchParams }: {
 
       {tab === "fees" ? (
         <FeesAgreement
-          contactId={c.id}
+          customerId={c.id}
           name={c.name}
           initial={agreement}
           loadError={agreementError}

@@ -13,6 +13,7 @@ export default async function ValuationPage({
   const submission = await prisma.submission.findUnique({
     where:   { valuationToken: token },
     include: {
+      customer: { select: { name: true, name2: true } },
       contact: { select: { name: true } },
       items: {
         select: { id: true, name: true, description: true, imageUrls: true,
@@ -46,7 +47,7 @@ export default async function ValuationPage({
         />
         <p className="text-sm font-bold uppercase tracking-widest text-blue-600 mb-1">Valuation Request</p>
         <h1 className="text-2xl font-bold text-gray-900 mb-1">
-          {alreadySubmitted ? "Valuation Submitted" : `Items from ${submission.contact.name}`}
+          {alreadySubmitted ? "Valuation Submitted" : `Items from ${submission.customer?.name || submission.customer?.name2 || submission.contact?.name || "a customer"}`}
         </h1>
         {!alreadySubmitted && (
           <p className="text-gray-500 text-sm max-w-md">

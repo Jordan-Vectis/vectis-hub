@@ -151,7 +151,7 @@ export const TERM_FIELDS: { key: keyof ReceiptTerms; label: string; unit: "%" | 
 
 /** Their Fees & agreement — only when it is this customer's. */
 export const agreementOf = (c: Pick<CustomerRow, "id"> | null | undefined, a: CustomerAgreement | null | undefined): CustomerAgreement | null =>
-  c && a && a.contactId === c.id ? a : null
+  c && a && a.customerId === c.id ? a : null
 
 type Fee = Exclude<keyof ReceiptTerms, "reservePercent">
 

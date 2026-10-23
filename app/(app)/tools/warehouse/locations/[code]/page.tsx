@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { personName } from "@/lib/goods-in/customer-row"
 import type { ReactNode } from "react"
 import type { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -83,7 +84,7 @@ async function load(code: string) {
     prisma.goodsInLocation.findUnique({ where: { code }, select: { code: true, name: true, kind: true, active: true, createdAt: true } }),
     prisma.goodsInContainer.findMany({
       where: live,
-      select: { id: true, kind: true, category: true, description: true, status: true, movedAt: true, receiptId: true, receipt: { select: { contactId: true, contact: { select: { name: true } } } } },
+      select: { id: true, kind: true, category: true, description: true, status: true, movedAt: true, receiptId: true, receipt: { select: { customerId: true, person: { select: { name: true, name2: true } } } } },
       orderBy: [{ movedAt: { sort: "desc", nulls: "last" } }, { id: "asc" }],
       take: MAX_CONTAINERS,
     }),
@@ -171,7 +172,7 @@ export default async function LocationPage({ params }: { params: Promise<Params>
   const titles = await lotTitles(moves)
   // What the Hub records here, for "Check what's here" — a lot with no barcode can't be scanned.
   const expected: Expected[] = [
-    ...containers.map(c => ({ code: c.id, kind: (c.kind === "pallet" ? "pallet" : "tote") as Expected["kind"], label: [c.category, c.description].filter(Boolean).join(" — ") || c.receipt.contact.name })),
+    ...containers.map(c => ({ code: c.id, kind: (c.kind === "pallet" ? "pallet" : "tote") as Expected["kind"], label: [c.category, c.description].filter(Boolean).join(" — ") || personName(c.receipt.person) })),
     ...lots.flatMap(l => {
       const bc = l.barcode ?? l.moveBarcode
       return bc ? [{ code: bc, kind: "lot" as const, label: l.title }] : []
@@ -350,7 +351,7 @@ function Containers({ rows }: { rows: ContainerRow[] }) {
               <StatusBadge status={c.status} />
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-200 break-words">
-              <Link href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.contactId)}`} className={`${tapCard} hover:underline`}>{c.receipt.contact.name}</Link>
+              <Link href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.customerId ?? "")}`} className={`${tapCard} hover:underline`}>{personName(c.receipt.person)}</Link>
               <span className="text-gray-400"> · </span>
               <Link href={`/tools/warehouse/receipts/${encodeURIComponent(c.receiptId)}`} className={`${mono} ${tapCard} hover:underline`}>{c.receiptId}</Link>
             </p>
@@ -379,7 +380,7 @@ function Containers({ rows }: { rows: ContainerRow[] }) {
                   <span className="inline-flex items-center gap-2"><Link href={findHref(c.id)} className={`${codeLink} ${tapCell}`}>{c.id}</Link><KindBadge kind={c.kind} /></span>
                 </td>
                 <td className={td}><StatusBadge status={c.status} /></td>
-                <td className={td}><Link href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.contactId)}`} className={`${tapCell} hover:underline`}>{c.receipt.contact.name}</Link></td>
+                <td className={td}><Link href={`/tools/warehouse/customers/${encodeURIComponent(c.receipt.customerId ?? "")}`} className={`${tapCell} hover:underline`}>{personName(c.receipt.person)}</Link></td>
                 <td className={td}><Link href={`/tools/warehouse/receipts/${encodeURIComponent(c.receiptId)}`} className={`${mono} ${tapCell} hover:underline`}>{c.receiptId}</Link></td>
                 <td className={`${td} min-w-40 max-w-sm break-words text-gray-600 dark:text-gray-300`}>{[c.category, c.description].filter(Boolean).join(" — ") || "—"}</td>
                 <td className={`${td} whitespace-nowrap text-gray-600 dark:text-gray-300`}>{ukDateTime(c.movedAt)}</td>

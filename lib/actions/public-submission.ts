@@ -1,7 +1,11 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import { findOrCreateCustomer } from "@/lib/customers/prospects"
 
+// The public web form (the fake test website's "sell with us" form). A submission belongs to a
+// Customer — the Hub's customer database — found by email, else made as a Hub prospect that the
+// nightly BC copy adopts the day BC gets them (lib/customers/prospects.ts).
 export async function submitPublicForm(formData: FormData) {
   const title = formData.get("title") as string
   const firstName = formData.get("firstName") as string
@@ -12,29 +16,7 @@ export async function submitPublicForm(formData: FormData) {
   const uploadedKeys = formData.getAll("photoKey") as string[]
 
   const name = `${title} ${firstName} ${lastName}`.trim()
-
-  // Find or create contact
-  let contact = await prisma.contact.findFirst({
-    where: { email: email || undefined },
-  })
-
-  if (!contact) {
-    const contacts = await prisma.contact.findMany({ select: { id: true } })
-    let maxNum = 0
-    for (const c of contacts) {
-      const num = parseInt(c.id.replace(/^\D+/, ""), 10)
-      if (!isNaN(num) && num > maxNum) maxNum = num
-    }
-    const id = `c${String(maxNum + 1).padStart(5, "0")}`
-    contact = await prisma.contact.create({
-      data: { id, name, email: email || null, phone: phone || null },
-    })
-  } else {
-    contact = await prisma.contact.update({
-      where: { id: contact.id },
-      data: { name, phone: phone || null },
-    })
-  }
+  const customer = await findOrCreateCustomer({ name, email: email || null, phone: phone || null })
 
   const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } })
   if (!adminUser) throw new Error("No admin user found")
@@ -42,7 +24,7 @@ export async function submitPublicForm(formData: FormData) {
   await prisma.submission.create({
     data: {
       channel: "WEB_FORM",
-      contactId: contact.id,
+      customerId: customer.id,
       createdById: adminUser.id,
       items: {
         create: {

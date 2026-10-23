@@ -13,6 +13,7 @@ import ValuationLink from "./valuation-link"
 import StatusSelect from "./status-select"
 import FollowUpToggle from "./follow-up-toggle"
 import NotesSection from "./notes-section"
+import { WHO_INCLUDE, whoFor } from "@/lib/customers/who"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -38,7 +39,7 @@ export default async function SubmissionDetailPage({
   const submission = await prisma.submission.findUnique({
     where: { id },
     include: {
-      contact: true,
+      ...WHO_INCLUDE,
       items: { include: { valuation: { include: { cataloguer: true } } } },
       contactLogs: { include: { user: true }, orderBy: { createdAt: "desc" } },
       logistics: true,
@@ -47,6 +48,7 @@ export default async function SubmissionDetailPage({
   })
 
   if (!submission) notFound()
+  const who = whoFor(submission)
 
   const cataloguers = await prisma.user.findMany({
     where: { role: "CATALOGUER" },
@@ -87,7 +89,7 @@ export default async function SubmissionDetailPage({
         </Link>
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{submission.contact.name}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{who.name}</h1>
             <p className="text-sm font-mono text-gray-400 mt-1">
               REF {submission.reference.slice(0, 8).toUpperCase()} · {submission.channel.replace("_", " ")} · {new Date(submission.createdAt).toLocaleDateString("en-GB")}
             </p>
@@ -107,18 +109,18 @@ export default async function SubmissionDetailPage({
             <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-base">
               <div>
                 <dt className="text-gray-400 text-xs uppercase tracking-wide">Name</dt>
-                <dd className="text-gray-800 dark:text-gray-100 font-semibold mt-0.5">{submission.contact.name}</dd>
+                <dd className="text-gray-800 dark:text-gray-100 font-semibold mt-0.5">{who.name}</dd>
               </div>
-              {submission.contact.email && (
+              {who.email && (
                 <div className="min-w-0">
                   <dt className="text-gray-400 text-xs uppercase tracking-wide">Email</dt>
-                  <dd className="text-gray-800 dark:text-gray-100 mt-0.5 truncate">{submission.contact.email}</dd>
+                  <dd className="text-gray-800 dark:text-gray-100 mt-0.5 truncate">{who.email}</dd>
                 </div>
               )}
-              {submission.contact.phone && (
+              {who.phone && (
                 <div>
                   <dt className="text-gray-400 text-xs uppercase tracking-wide">Phone</dt>
-                  <dd className="text-gray-800 dark:text-gray-100 mt-0.5">{submission.contact.phone}</dd>
+                  <dd className="text-gray-800 dark:text-gray-100 mt-0.5">{who.phone}</dd>
                 </div>
               )}
             </dl>
@@ -346,7 +348,7 @@ export default async function SubmissionDetailPage({
             <ValuationLink
               submissionId={submission.id}
               token={(submission as any).valuationToken ?? null}
-              customerName={submission.contact.name}
+              customerName={who.name}
               items={submission.items.map(i => ({ name: i.name }))}
               cataloguers={cataloguers}
               sentTo={(submission as any).valuationSentTo ?? null}

@@ -22,7 +22,7 @@ export const OWNER_TEXT = "I confirm I am the legal owner of the property"
 export const AGENT_TEXT = "I confirm I am authorised to act as agent on behalf of the legal owner of the property"
 
 /** The customer's Fees & agreement tab. */
-export const feesHref = (contactId: string) => `/tools/warehouse/customers/${encodeURIComponent(contactId)}?tab=fees`
+export const feesHref = (customerId: string) => `/tools/warehouse/customers/${encodeURIComponent(customerId)}?tab=fees`
 
 /** The terms fields for this receipt, opened from the one-line summary. Lays itself out to its own width. */
 export function TermsEditor({ customer, agreement, terms, setTerm, onReset }: {

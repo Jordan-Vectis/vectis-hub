@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { personName } from "@/lib/goods-in/customer-row"
 import { prisma } from "@/lib/prisma"
 import { getGoodsInUser } from "@/lib/goods-in/access"
 import { box, btn, mono, Empty, ErrorBox, KindBadge, NotReady, PageHeader, StatusBadge, StatusKey, isMissingTable, ukDateTime } from "../_components/ui"
@@ -26,7 +27,7 @@ async function load() {
       where: { locationKind: "bench", locationCode: { not: null } },
       select: {
         id: true, kind: true, category: true, description: true, status: true, locationCode: true, movedAt: true, receiptId: true,
-        receipt: { select: { contactId: true, contact: { select: { name: true } } } },
+        receipt: { select: { customerId: true, person: { select: { name: true, name2: true } } } },
       },
       orderBy: { movedAt: "asc" },
     }),
@@ -51,7 +52,7 @@ async function load() {
     if (!groups.has(code)) groups.set(code, { code, name: null, active: true, totes: [] })
     groups.get(code)!.totes.push({
       id: c.id, kind: c.kind, category: c.category, description: c.description, status: c.status, movedAt: c.movedAt,
-      receiptId: c.receiptId, customerId: c.receipt.contactId, customer: c.receipt.contact.name, lots: lotsFor.get(c.id) ?? 0,
+      receiptId: c.receiptId, customerId: c.receipt.customerId ?? "", customer: personName(c.receipt.person), lots: lotsFor.get(c.id) ?? 0,
     })
   }
   const all = [...groups.values()]

@@ -8,7 +8,7 @@ import { NumberingNotSetError, takeNumbers } from "@/lib/goods-in/numbers"
 import {
   DEFAULT_TERMS, LABEL_GIVEN_UP_NOTE, THROWN_AWAY_NOTE, labelsGivenUp, normaliseCode, usualTermsFrom, type ContainerKind, type ReceiptTerms,
 } from "@/lib/goods-in/model"
-import { CUSTOMER_INCLUDE, customerRow, snapshot } from "@/lib/goods-in/customer-row"
+import { CUSTOMER_INCLUDE, PERSON_NAME, customerRow, personName, snapshot } from "@/lib/goods-in/customer-row"
 import { AGREEMENT_UNREAD, findAgreement, readAgreement, type AgreementTerms } from "@/lib/goods-in/agreement"
 import type { CustomerRow, Result } from "@/lib/actions/goods-in"
 
@@ -51,7 +51,7 @@ export type CheckInRowSaved = {
 }
 export type CheckInInput = {
   receiptId: string | null          // null = not saved yet
-  contactId: string
+  customerId: string
   rows: CheckInRowInput[]           // in screen order, ≤ 200
   /**
    * The numbers this screen had and has taken off (removed rows). When it is sent, a tote or pallet
@@ -66,13 +66,13 @@ export type CheckInInput = {
   agentConfirmed?: boolean
 }
 export type CheckInLoaded = {
-  receiptId: string; contactId: string; customer: CustomerRow | null
+  receiptId: string; customerId: string; customer: CustomerRow | null
   rows: CheckInRowSaved[]           // key = id for loaded rows, in createdAt/id order
   terms: ReceiptTerms; notes: string | null; ownerConfirmed: boolean; agentConfirmed: boolean
   createdByName: string | null; updatedAt: string
 }
 export type UnfinishedCheckIn = {
-  receiptId: string; contactId: string; customer: string; rows: number; createdByName: string | null; updatedAt: string
+  receiptId: string; customerId: string; customer: string; rows: number; createdByName: string | null; updatedAt: string
   /** Started by the person asking. */
   mine: boolean
 }
@@ -175,13 +175,13 @@ function cleanRemoved(raw: unknown): Set<string> | null {
   return out
 }
 
-type HeldReceipt = { id: string; status: string | null; contactId: string; vendorNo: string | null; notes: string | null }
+type HeldReceipt = { id: string; status: string | null; customerId: string | null; vendorNo: string | null; notes: string | null }
 type HeldContainer = { id: string; kind: string; category: string | null; description: string | null; labelPrintedAt: Date | null; locationCode: string | null }
 
 /** The receipt row, locked for the rest of the transaction — or null when there is none. */
 async function lockReceipt(tx: Tx, id: string): Promise<HeldReceipt | null> {
   const rows = await tx.$queryRaw<HeldReceipt[]>`
-    SELECT "id", "status", "contactId", "vendorNo", "notes" FROM "GoodsInReceipt" WHERE "id" = ${id} FOR UPDATE`
+    SELECT "id", "status", "customerId", "vendorNo", "notes" FROM "GoodsInReceipt" WHERE "id" = ${id} FOR UPDATE`
   return rows[0] ?? null
 }
 
@@ -371,9 +371,9 @@ export async function saveCheckIn(input: CheckInInput): Promise<Result<{ receipt
   try {
     const me = await who()
     const rows = cleanRows(input?.rows)
-    const contactId = blank(input?.contactId)
-    if (!contactId) return { ok: false, error: "Choose the customer first." }
-    const cust = await prisma.contact.findUnique({ where: { id: contactId }, include: CUSTOMER_INCLUDE })
+    const customerId = blank(input?.customerId)
+    if (!customerId) return { ok: false, error: "Choose the customer first." }
+    const cust = await prisma.customer.findUnique({ where: { id: customerId }, include: CUSTOMER_INCLUDE })
     if (!cust) return { ok: false, error: "That customer couldn't be found — search for them again." }
     const c = customerRow(cust)
     // Their usual reserve and special arrangement — tolerant, and before the transaction (never inside it).
@@ -386,7 +386,7 @@ export async function saveCheckIn(input: CheckInInput): Promise<Result<{ receipt
         const [receiptId] = await takeNumbers(tx, "receipt", 1)
         await tx.goodsInReceipt.create({
           data: {
-            id: receiptId, contactId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo, a),
+            id: receiptId, customerId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo, a),
             ...mergeTerms(input.terms, usualTerms(c, a)),
             ownerConfirmed: !!input.ownerConfirmed, agentConfirmed: !!input.agentConfirmed, notes: draftNotes(input.notes, null, null),
             status: "draft", createdById: me.id, createdByName: me.name,
@@ -402,11 +402,11 @@ export async function saveCheckIn(input: CheckInInput): Promise<Result<{ receipt
       const synced = await syncRows(tx, receiptId, rows, takenOff, me.name)
       const add = synced.removedPrinted.length ? givenUpLine(synced.removedPrinted, me.name) : null
       // A different customer brings their own usual terms with them, unless terms were sent.
-      const terms = r.contactId !== c.id ? mergeTerms(input.terms, usualTerms(c, a)) : sentTerms(input.terms)
+      const terms = r.customerId !== c.id ? mergeTerms(input.terms, usualTerms(c, a)) : sentTerms(input.terms)
       await tx.goodsInReceipt.update({
         where: { id: receiptId },
         data: {
-          contactId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo, a), ...terms,
+          customerId: c.id, vendorNo: c.vendorNo, customer: snapJson(c, c.vendorNo, a), ...terms,
           ...(input.notes !== undefined || add ? { notes: draftNotes(input.notes, r.notes, add) } : {}),
           ...(input.ownerConfirmed !== undefined ? { ownerConfirmed: !!input.ownerConfirmed } : {}),
           ...(input.agentConfirmed !== undefined ? { agentConfirmed: !!input.agentConfirmed } : {}),
@@ -433,14 +433,14 @@ export async function bookInCheckIn(input: CheckInInput & { receiptId: string; t
     if (!id) return { ok: false, error: "This check-in hasn't been saved yet — wait a moment and press Book in again." }
     const rows = cleanRows(input.rows)
     const takenOff = cleanRemoved(input.removed)
-    const contactId = blank(input.contactId)
-    if (!contactId) return { ok: false, error: "Choose the customer first." }
+    const customerId = blank(input.customerId)
+    if (!customerId) return { ok: false, error: "Choose the customer first." }
     const t = bookingTerms(input.terms)
     // The special arrangement copied onto the receipt — read BEFORE the transaction (the table needs
     // Run Migrations, and a failed query inside the transaction would abort the booking), and
     // STRICTLY: a missing table is "no arrangement yet" (ready: false), but any other fault refuses
     // the booking below rather than book a receipt that silently leaves off what was agreed.
-    const a = await findAgreement(contactId).catch((e: unknown) => {
+    const a = await findAgreement(customerId).catch((e: unknown) => {
       console.error("goods-in book in: couldn't read the customer's agreement:", e)
       return null
     })
@@ -460,8 +460,8 @@ export async function bookInCheckIn(input: CheckInInput & { receiptId: string; t
       // Hold the customer while their vendor number is decided, so two receipts for a new customer
       // booked at the same moment can't each give them a different one. (NO KEY: other receipts
       // pointing at the contact aren't held up.)
-      await tx.$queryRaw`SELECT "id" FROM "Contact" WHERE "id" = ${contactId} FOR NO KEY UPDATE`
-      const cust = await tx.contact.findUnique({ where: { id: contactId }, include: CUSTOMER_INCLUDE })
+      await tx.$queryRaw`SELECT "id" FROM "Customer" WHERE "id" = ${customerId} FOR NO KEY UPDATE`
+      const cust = await tx.customer.findUnique({ where: { id: customerId }, include: CUSTOMER_INCLUDE })
       if (!cust) throw new Refusal("That customer couldn't be found — search for them again.")
       const c = customerRow(cust)
 
@@ -473,14 +473,14 @@ export async function bookInCheckIn(input: CheckInInput & { receiptId: string; t
       let vendorNo = c.vendorNo
       if (!vendorNo && (await tx.goodsInCounter.findUnique({ where: { key: "vendor" }, select: { key: true } }))) {
         vendorNo = (await takeNumbers(tx, "vendor", 1))[0]
-        await tx.goodsInCustomer.upsert({ where: { contactId: c.id }, create: { contactId: c.id, vendorNo }, update: { vendorNo } })
+        await tx.goodsInCustomer.upsert({ where: { customerId: c.id }, create: { customerId: c.id, vendorNo }, update: { vendorNo } })
       }
 
       const now = new Date()
       const booked = await tx.goodsInReceipt.updateMany({
         where: { id, status: "draft" },
         data: {
-          status: "open", contactId: c.id, vendorNo, customer: snapJson(c, vendorNo, a), ...t.terms,
+          status: "open", customerId: c.id, vendorNo, customer: snapJson(c, vendorNo, a), ...t.terms,
           // What was typed, then the record of any label printed for a number since given up.
           notes: draftNotes(input.notes, r.notes, add),
           ...(input.ownerConfirmed !== undefined ? { ownerConfirmed: !!input.ownerConfirmed } : {}),
@@ -506,16 +506,18 @@ export async function loadCheckIn(receiptId: string): Promise<Result<CheckInLoad
     const r = await prisma.goodsInReceipt.findUnique({
       where: { id },
       include: {
-        contact: { include: CUSTOMER_INCLUDE },
+        person: { include: CUSTOMER_INCLUDE },
         containers: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, kind: true, category: true, description: true, labelPrintedAt: true } },
       },
     })
     if (!r) return { ok: false, error: `${id} couldn't be found — it may have been thrown away.` }
     if (r.status !== "draft") return { ok: false, error: notADraft(id, r) }
+    // A check-in from before the customer database (keyed to an old test contact) can't be carried on.
+    if (!r.person || !r.customerId) return { ok: false, error: `${id} was started against a customer who isn't on the customer database — open it from Receipts and throw it away.` }
     return {
       ok: true,
       data: {
-        receiptId: r.id, contactId: r.contactId, customer: customerRow(r.contact),
+        receiptId: r.id, customerId: r.customerId, customer: customerRow(r.person),
         rows: r.containers.map(k => ({ key: k.id, id: k.id, kind: asKind(k.kind), category: k.category, description: k.description, labelPrintedAt: iso(k.labelPrintedAt) })),
         terms: {
           commission: r.commission ?? DEFAULT_TERMS.commission,
@@ -585,8 +587,8 @@ export async function listUnfinishedCheckIns(): Promise<Result<UnfinishedCheckIn
   try {
     const me = await who()
     const select = {
-      id: true, contactId: true, updatedAt: true, createdByName: true,
-      contact: { select: { name: true } },
+      id: true, customerId: true, updatedAt: true, createdByName: true,
+      person: PERSON_NAME,
       _count: { select: { containers: true } },
     } as const
     const orderBy = [{ updatedAt: "desc" as const }, { id: "desc" as const }]
@@ -595,7 +597,7 @@ export async function listUnfinishedCheckIns(): Promise<Result<UnfinishedCheckIn
       prisma.goodsInReceipt.findMany({ where: { status: "draft", OR: [{ createdById: null }, { createdById: { not: me.id } }] }, orderBy, take: 20, select }),
     ])
     const item = (r: (typeof mine)[number], own: boolean): UnfinishedCheckIn => ({
-      receiptId: r.id, contactId: r.contactId, customer: r.contact.name, rows: r._count.containers,
+      receiptId: r.id, customerId: r.customerId ?? "", customer: personName(r.person), rows: r._count.containers,
       createdByName: r.createdByName, updatedAt: r.updatedAt.toISOString(), mine: own,
     })
     return { ok: true, data: [...mine.map(r => item(r, true)), ...others.map(r => item(r, false))].slice(0, 20) }

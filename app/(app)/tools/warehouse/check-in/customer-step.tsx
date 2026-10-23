@@ -7,17 +7,20 @@ import { btn, mono } from "../_components/ui"
 import CustomerCard from "./customer-card"
 import { NOTE, fullName, linkBtn, type UnfinishedCheckIn } from "./shared"
 
-// Step 1 — who is booking in. Find them (or add them) with the shared picker; once picked, their
-// card shows with Change and Edit details. Adding or editing a customer saves their RECORD straight
-// away (it's the same customer database the rest of the Hub uses). The receipt is saved — not
-// booked in — from the goods step on; changing the customer here changes whose receipt it is.
+// Step 1 — who is booking in. Find them with the shared picker (the Hub's customer database — every
+// BC customer); once picked, their card shows with Change. The receipt is saved — not booked in —
+// from the goods step on; changing the customer here changes whose receipt it is.
+//
+// `hubOwns` (lib/customers/ownership.ts): until switch day a new person is made in BC and fetched,
+// and details aren't edited here (BC's copy would come back over them tonight); after it the Hub's
+// own form adds and edits them.
 
 export type CustomerMode = "view" | "change" | "edit"
 
 const heading = "text-lg font-bold text-gray-900 dark:text-white outline-none"
 const intro = "mt-1 text-sm text-gray-600 dark:text-gray-400 max-w-3xl"
 
-export default function CustomerStep({ customer, mode, setMode, onPick, vendorSeries, onAnother, existing = null, onCarryOnExisting, opening = false }: {
+export default function CustomerStep({ customer, mode, setMode, onPick, vendorSeries, onAnother, existing = null, onCarryOnExisting, opening = false, hubOwns = false }: {
   customer: CustomerRow | null
   mode: CustomerMode
   setMode: (m: CustomerMode) => void
@@ -30,6 +33,8 @@ export default function CustomerStep({ customer, mode, setMode, onPick, vendorSe
   onCarryOnExisting?: () => void
   /** That check-in is being opened. */
   opening?: boolean
+  /** Whether the Hub owns customers' details yet (false = BC first). */
+  hubOwns?: boolean
 }) {
   if (!customer || mode === "change") {
     return (
@@ -37,10 +42,11 @@ export default function CustomerStep({ customer, mode, setMode, onPick, vendorSe
         <div>
           <h2 id="gi-step-0-heading" tabIndex={-1} className={heading}>Who is booking in?</h2>
           <p className={intro}>
-            Search by name, postcode, email, phone or vendor number — or scan their vendor card. Not on the system yet? Press <b>New customer</b>.
+            Search by name, postcode, email, phone or customer number — or scan their card.{" "}
+            {hubOwns ? <>Not on the system yet? Press <b>New customer</b>.</> : <>Not on the system yet? Press <b>Not on the system?</b> — they&apos;re added in BC first, then fetched here.</>}
           </p>
         </div>
-        <CustomerPicker onPick={onPick} />
+        <CustomerPicker onPick={onPick} hubOwns={hubOwns} />
         {customer && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-600 dark:text-gray-400">
             <span>Changing from <b className="text-gray-900 dark:text-white">{fullName(customer)}</b>.</span>
@@ -51,7 +57,7 @@ export default function CustomerStep({ customer, mode, setMode, onPick, vendorSe
     )
   }
 
-  if (mode === "edit") {
+  if (mode === "edit" && hubOwns) {
     return (
       <section aria-labelledby="gi-step-0-heading" className="space-y-4">
         <div>
@@ -72,7 +78,9 @@ export default function CustomerStep({ customer, mode, setMode, onPick, vendorSe
       <h2 id="gi-step-0-heading" tabIndex={-1} className={heading}>Who is booking in?</h2>
       <CustomerCard c={customer} vendorSeries={vendorSeries}>
         <button type="button" className={btn} onClick={() => setMode("change")}>Change customer</button>
-        <button type="button" className={btn} onClick={() => setMode("edit")}>Edit details</button>
+        {hubOwns
+          ? <button type="button" className={btn} onClick={() => setMode("edit")}>Edit details</button>
+          : <span className="self-center text-xs text-gray-500 dark:text-gray-400">Details wrong? Change them in BC, then fetch.</span>}
       </CustomerCard>
       {existing && onCarryOnExisting && (
         <div className={`${NOTE.warn} flex flex-wrap items-center gap-x-3 gap-y-2`}>

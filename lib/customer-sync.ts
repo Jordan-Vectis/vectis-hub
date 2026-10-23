@@ -141,8 +141,24 @@ export async function copyCustomerPage(token: string, phase: CustomerPhase, next
       const contactNo = str(r.no)
       if (!contactNo) return
       const data = { ...sharedFrom(r), blocked: str(r.blocked), bcContact: r, bcCreatedAt: date(r.systemCreatedAt), bcModifiedAt: date(r.systemModifiedAt), syncedAt: now }
-      await prisma.customer.upsert({ where: { contactNo }, update: data, create: { contactNo, ...data } })
-      have.has(contactNo) ? res.updated++ : res.created++
+      if (have.has(contactNo)) {
+        await prisma.customer.update({ where: { contactNo }, data })
+        res.updated++
+        return
+      }
+      // A person BC has just got who is already here as a Hub prospect (a Submissions enquiry made
+      // them — lib/customers/prospects.ts, source "hub", no contact number): BC's record is written
+      // ONTO that row, so their submission and anything else hung on it follows them.
+      const prospect = data.email
+        ? await prisma.customer.findFirst({ where: { source: "hub", contactNo: null, email: { equals: data.email, mode: "insensitive" } }, orderBy: { createdAt: "asc" }, select: { id: true } })
+        : null
+      if (prospect) {
+        await prisma.customer.update({ where: { id: prospect.id }, data: { contactNo, source: "bc", ...data } })
+        res.merged++
+      } else {
+        await prisma.customer.create({ data: { contactNo, ...data } })
+        res.created++
+      }
     })
   } else if (phase === "vendors" || phase === "customers") {
     const kind = phase === "vendors" ? "vendorNo" : "buyerNo"

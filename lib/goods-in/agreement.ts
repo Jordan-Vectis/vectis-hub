@@ -23,7 +23,7 @@ import { isMissingTable } from "@/lib/prisma-errors"
 
 /** The GoodsInAgreement half of a customer's agreement. null = standard / not signed / none. */
 export type AgreementTerms = {
-  contactId: string
+  customerId: string
   /** Their usual reserve, a whole % of the bottom estimate. null = the standard one (DEFAULT_TERMS). */
   reservePercent: number | null
   /** ISO. Stored at 12:00 UTC on the London day they signed, so it reads as that day anywhere. */
@@ -47,18 +47,18 @@ export const AGREEMENT_NOT_READY = "Reserve, signed vendor terms and special arr
 export const AGREEMENT_UNREAD = "Their Fees & agreement couldn't be read just now (the receipt needs any special arrangement on it), so nothing was booked in — press Book in again."
 
 const SELECT = {
-  contactId: true, reservePercent: true, termsSignedAt: true, termsRecordedBy: true,
+  customerId: true, reservePercent: true, termsSignedAt: true, termsRecordedBy: true,
   specialArrangement: true, updatedAt: true, updatedByName: true,
 } as const
 
-type Row = { contactId: string; reservePercent: number | null; termsSignedAt: Date | null; termsRecordedBy: string | null; specialArrangement: string | null; updatedAt: Date; updatedByName: string | null }
+type Row = { customerId: string; reservePercent: number | null; termsSignedAt: Date | null; termsRecordedBy: string | null; specialArrangement: string | null; updatedAt: Date; updatedByName: string | null }
 
-export const emptyAgreement = (contactId: string, ready: boolean): AgreementTerms => ({
-  contactId, reservePercent: null, termsSignedAt: null, termsRecordedBy: null, specialArrangement: null, updatedAt: null, updatedByName: null, ready,
+export const emptyAgreement = (customerId: string, ready: boolean): AgreementTerms => ({
+  customerId, reservePercent: null, termsSignedAt: null, termsRecordedBy: null, specialArrangement: null, updatedAt: null, updatedByName: null, ready,
 })
 
 const fromRow = (r: Row): AgreementTerms => ({
-  contactId: r.contactId,
+  customerId: r.customerId,
   reservePercent: typeof r.reservePercent === "number" && Number.isFinite(r.reservePercent) ? r.reservePercent : null,
   termsSignedAt: r.termsSignedAt ? r.termsSignedAt.toISOString() : null,
   termsRecordedBy: r.termsRecordedBy,
@@ -75,23 +75,23 @@ const fromRow = (r: Row): AgreementTerms => ({
  * arrangement" onto a receipt it couldn't check. Screens and autosaves use readAgreement /
  * readAgreements, which never throw (Book in copies the arrangement afresh anyway).
  */
-export async function findAgreement(contactId: string): Promise<AgreementTerms> {
+export async function findAgreement(customerId: string): Promise<AgreementTerms> {
   try {
-    const r = await prisma.goodsInAgreement.findUnique({ where: { contactId }, select: SELECT })
-    return r ? fromRow(r) : emptyAgreement(contactId, true)
+    const r = await prisma.goodsInAgreement.findUnique({ where: { customerId }, select: SELECT })
+    return r ? fromRow(r) : emptyAgreement(customerId, true)
   } catch (e) {
-    if (isMissingTable(e)) return emptyAgreement(contactId, false)
+    if (isMissingTable(e)) return emptyAgreement(customerId, false)
     throw e
   }
 }
 
 /** One customer's agreement. Never throws: no row, a missing table or a fault all give nulls. */
-export async function readAgreement(contactId: string): Promise<AgreementTerms> {
+export async function readAgreement(customerId: string): Promise<AgreementTerms> {
   try {
-    return await findAgreement(contactId)
+    return await findAgreement(customerId)
   } catch (e) {
     console.error("goods-in agreement: couldn't read the agreement, using the standard terms:", e)
-    return emptyAgreement(contactId, true)
+    return emptyAgreement(customerId, true)
   }
 }
 
@@ -105,8 +105,8 @@ export async function readAgreements(contactIds: string[]): Promise<Map<string, 
   if (ids.length === 0) return out
   let ready = true
   try {
-    const rows = await prisma.goodsInAgreement.findMany({ where: { contactId: { in: ids } }, select: SELECT })
-    for (const r of rows) out.set(r.contactId, fromRow(r))
+    const rows = await prisma.goodsInAgreement.findMany({ where: { customerId: { in: ids } }, select: SELECT })
+    for (const r of rows) out.set(r.customerId, fromRow(r))
   } catch (e) {
     if (isMissingTable(e)) ready = false
     else console.error("goods-in agreement: couldn't read the agreements, using the standard terms:", e)

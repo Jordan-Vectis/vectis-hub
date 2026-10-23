@@ -76,7 +76,9 @@ const reopenNeeded = (m: string) => /open the check-in again/i.test(m)
 const thrownAwayMsg = (m: string) => /was thrown away/i.test(m)
 const bookedOrVoidMsg = (m: string) => /has already been booked in|has been voided/i.test(m)
 
-export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCustomer = null, initialCheckIn = null, initialAgreement = null, unfinished: unfinishedAtLoad = [] }: {
+export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCustomer = null, initialCheckIn = null, initialAgreement = null, unfinished: unfinishedAtLoad = [], hubOwns = false }: {
+  /** Whether the Hub owns customers' details yet (lib/customers/ownership.ts); false = BC first. */
+  hubOwns?: boolean
   /** Number series not yet set up in Settings (null = couldn't check). */
   missingSeries: CounterKey[] | null
   isAdmin: boolean
@@ -145,7 +147,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   const input: CheckInInput | null = customer
     ? {
         receiptId,
-        contactId: customer.id,
+        customerId: customer.id,
         rows: rows.map(r => ({ key: r.key, id: r.id, kind: r.kind, category: r.category, description: r.description })),
         // Terms that can't be used aren't sent — the Hub keeps the last good ones until they're fixed.
         terms: parsedTerms,
@@ -192,7 +194,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   const gotAgreement = useRef<(a: CustomerAgreement) => void>(() => {})
   useLayoutEffect(() => {
     gotAgreement.current = a => {
-      if (!customer || a.contactId !== customer.id || booked || bookingRef.current) return
+      if (!customer || a.customerId !== customer.id || booked || bookingRef.current) return
       const before = usualTerms(customer, agreement)
       const after = usualTerms(customer, a)
       setAgreement(a)
@@ -206,20 +208,20 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   // first answer Book in waits ("Reading their fees…", AGREEMENT_WAIT_MS at most), and a read that
   // fails says so on Check & book in, with Try again — the fees on their record and the standard
   // reserve are what's shown then. A failed RE-read (the tab coming back) keeps what was read before.
-  const [agreementRead, setAgreementRead] = useState<{ contactId: string; state: "ok" | "failed" | "reading" } | null>(() => {
+  const [agreementRead, setAgreementRead] = useState<{ customerId: string; state: "ok" | "failed" | "reading" } | null>(() => {
     const c = opened ? opened.customer : initialCustomer
-    return c && initialAgreement?.contactId === c.id ? { contactId: c.id, state: "ok" } : null
+    return c && initialAgreement?.customerId === c.id ? { customerId: c.id, state: "ok" } : null
   })
   const [agreementTry, setAgreementTry] = useState(0)
-  const contactId = customer?.id ?? null
+  const customerId = customer?.id ?? null
   useEffect(() => {
-    if (!contactId) return
-    const id = contactId
+    if (!customerId) return
+    const id = customerId
     let live = true
     let retried = false
     let retry: ReturnType<typeof setTimeout> | undefined
     const settle = (state: "ok" | "failed") =>
-      setAgreementRead(s => (state === "failed" && s?.contactId === id && s.state === "ok" ? s : { contactId: id, state }))
+      setAgreementRead(s => (state === "failed" && s?.customerId === id && s.state === "ok" ? s : { customerId: id, state }))
     const read = () => {
       getAgreement(id).then(
         r => {
@@ -240,7 +242,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
     read()
     // Book in never waits on it for longer than this.
     const slow = setTimeout(() => {
-      if (live) setAgreementRead(s => (s?.contactId === id && s.state !== "reading" ? s : { contactId: id, state: "failed" }))
+      if (live) setAgreementRead(s => (s?.customerId === id && s.state !== "reading" ? s : { customerId: id, state: "failed" }))
     }, AGREEMENT_WAIT_MS)
     const back = () => { if (document.visibilityState === "visible") read() }
     document.addEventListener("visibilitychange", back)
@@ -250,11 +252,11 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       clearTimeout(slow)
       document.removeEventListener("visibilitychange", back)
     }
-  }, [contactId, agreementTry])
-  const agreementState = !customer ? null : agreementRead?.contactId === customer.id ? agreementRead.state : "reading"
+  }, [customerId, agreementTry])
+  const agreementState = !customer ? null : agreementRead?.customerId === customer.id ? agreementRead.state : "reading"
   const retryAgreement = () => {
     if (!customer) return
-    setAgreementRead({ contactId: customer.id, state: "reading" })
+    setAgreementRead({ customerId: customer.id, state: "reading" })
     setAgreementTry(n => n + 1)
   }
   const shownAgreement = agreementOf(customer, agreement)
@@ -478,7 +480,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
       const cur = saving.current()
       if (cur?.receiptId && customer) {
         const kept: UnfinishedCheckIn = {
-          receiptId: cur.receiptId, contactId: customer.id, customer: fullName(customer), rows: cur.rows.length,
+          receiptId: cur.receiptId, customerId: customer.id, customer: fullName(customer), rows: cur.rows.length,
           createdByName: null, updatedAt: new Date().toISOString(), mine: true,
         }
         setUnfinished(u => [kept, ...u.filter(x => x.receiptId !== kept.receiptId)])
@@ -882,7 +884,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
   const printedHere = rows.filter(isPrinted).map(r => r.id!)
   // The customer on screen already has a check-in waiting (they came back with more, or a colleague
   // started one): say so once, so a second receipt isn't started by accident.
-  const existing = customer ? unfinished.find(u => u.contactId === customer.id && u.receiptId !== receiptId) ?? null : null
+  const existing = customer ? unfinished.find(u => u.customerId === customer.id && u.receiptId !== receiptId) ?? null : null
 
   return (
     <div className="@container">
@@ -1069,6 +1071,7 @@ export default function CheckInFlow({ missingSeries, isAdmin, userId, initialCus
             existing={existing}
             onCarryOnExisting={existing ? () => carryOnWith(existing.receiptId) : undefined}
             opening={!!existing && opening === existing.receiptId}
+            hubOwns={hubOwns}
           />
         )}
         {step === 1 && (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { customerName } from "@/lib/goods-in/customer-row"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { searchReceiptTotes } from "@/lib/receipt-totes"
@@ -27,7 +28,7 @@ async function searchGoodsIn(q: string) {
     receipt: {
       select: {
         id: true, vendorNo: true, customer: true,
-        contact: { select: { name: true, goodsInCustomer: { select: { vendorNo: true } } } },
+        person: { select: { name: true, name2: true, vendorNo: true, goodsInCustomer: { select: { vendorNo: true } } } },
       },
     },
   } as const
@@ -50,8 +51,8 @@ async function searchGoodsIn(q: string) {
         toteNo:     c.id,
         // The receipt's own copy first (what was printed on it), then the customer's current
         // vendor number for a receipt booked before they were given one.
-        vendorNo:   text(c.receipt.vendorNo) ?? text(snap?.vendorNo) ?? text(c.receipt.contact.goodsInCustomer?.vendorNo),
-        vendorName: text(snap?.name) ?? text(c.receipt.contact.name),
+        vendorNo:   text(c.receipt.vendorNo) ?? text(snap?.vendorNo) ?? text(c.receipt.person?.vendorNo ?? c.receipt.person?.goodsInCustomer?.vendorNo),
+        vendorName: text(snap?.name) ?? text(customerName(c.receipt.person)),
         receiptNo:  c.receipt.id,
         location:   c.locationCode ?? null,
         contents:   contents || null,

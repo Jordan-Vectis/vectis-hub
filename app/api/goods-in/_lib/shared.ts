@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { PERSON_FOR_PDF, personFallback } from "@/lib/goods-in/customer-row"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { GoodsInAccessError, requireGoodsIn, type GoodsInUser } from "@/lib/goods-in/access"
@@ -107,11 +108,11 @@ export async function loadReceiptForPdf(rawId: string): Promise<LoadedReceipt | 
     where: { id },
     include: {
       containers: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, kind: true, category: true, description: true } },
-      contact: { select: { salutation: true, name: true, email: true, phone: true, addressLine1: true, addressLine2: true, postcode: true } },
+      person: PERSON_FOR_PDF,
     },
   })
   if (!r) return null
-  const customer = customerSnapshot(r.customer, r.contact, r.vendorNo)
+  const customer = customerSnapshot(r.customer, personFallback(r.person), r.vendorNo)
   const num = (v: number | null | undefined, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d)
   return {
     status: r.status,

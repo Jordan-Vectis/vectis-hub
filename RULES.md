@@ -1674,7 +1674,8 @@ Jack rebuilt the Warehouse section (`/tools/warehouse`, app key `WAREHOUSE`, tie
 < admin) as **Goods In**, replacing the abandoned April prototype. The Hub card is now called "Goods
 In" (key, href and app key unchanged). The flow, in the words staff see:
 
-1. Find the customer in the customer database (the CRM `Contact`), or add them at the counter.
+1. Find the customer in the Hub's customer database (`Customer` — every BC customer). Until switch
+   day a new person is added in BC first, then **Fetch new customers from BC** (next section).
 2. **Check in** their goods onto a **receipt** (R010244) — three steps: Customer · What they've
    brought · Check & book in.
 3. Group the goods **by category, not item**, into **totes** (T027657) and **pallets** (P…) —
@@ -1816,7 +1817,7 @@ the same way, never as an export of an actions file.
   block or a nag). The customer form has no fees any more: new customers start on the standard terms.
   - **Where it is kept.** The fees stay on `GoodsInCustomer`; the reserve, the signed date + who
     recorded it, the special arrangement (≤ 1,000 characters, `SPECIAL_ARRANGEMENT_MAX`) and who
-    changed any of it last are ONE new table, **`GoodsInAgreement`** (one row per contact, cascade —
+    changed any of it last are ONE new table, **`GoodsInAgreement`** (one row per customer, cascade —
     **NEEDS Run Migrations**). Nothing was added to `Contact` or `GoodsInCustomer`. The signed day is
     stored at 12:00 UTC on that London day, so it reads as that day.
   - **Editing** is `getAgreement` / `saveAgreement` in `lib/actions/goods-in-agreement.ts` — anyone
@@ -1876,8 +1877,9 @@ the same way, never as an export of an actions file.
   added to `Contact`, `CatalogueLot` or `User`** — a shipped-but-unmigrated column there breaks every
   contact or lot save, or login, between the deploy and Run Migrations. Keep it that way. Until the
   tables exist every Goods In screen says it isn't set up yet rather than crashing.
-  - A Goods In customer **is** a CRM contact; `GoodsInCustomer` holds only the Goods In half (vendor
-    number, mobile, town, county, country, VAT number and fees), one row per contact; their reserve,
+  - A Goods In customer **is** a `Customer` row (the Customers section — since 2026-10-23; the CRM
+    `Contact` before that). `GoodsInCustomer` holds only the Goods In half (the Hub-given vendor
+    number and the fees), one row per customer; their reserve,
     signed vendor terms and special arrangement are `GoodsInAgreement` (above).
   - A receipt **copies** the customer's details when it is booked (`GoodsInReceipt.customer`, with
     their special arrangement as it was then), so a reprint next year says what it said on the day.
@@ -1908,7 +1910,7 @@ the same way, never as an export of an actions file.
   (every access in try/catch), offered back only to the same user; carrying on from it loads the draft
   from the server (`loadCheckIn`), and a v1 copy (no receipt number) still restores as before. It is
   cleared on Book in. Never put anything more personal in it.
-- Check in opens with a customer already chosen from `/tools/warehouse/check-in?customer=<contact id>`
+- Check in opens with a customer already chosen from `/tools/warehouse/check-in?customer=<customer id>`
   (the Customers list and customer page use it), or carries on a draft from
   `/tools/warehouse/check-in?receipt=<receipt number>` (a receipt that isn't a draft opens its receipt
   page instead).
@@ -2473,7 +2475,8 @@ The first step of the Hub taking over the whole business from Business Central (
 *"we are now starting to plan for the hub taking over the entire business"*). `/tools/customers`,
 the Customers card in Admin & Operations, its own app permission **`CUSTOMERS`** (admins
 automatically; anyone else is ticked in Users & Permissions). The old test Contacts page (`/contacts`)
-redirects here; the `Contact` table itself stays — Submissions use it.
+redirects here; the `Contact` table itself stays only for the old test submissions and receipts that
+point at it — since 2026-10-23 Submissions and Goods In use `Customer` (below).
 
 - **One row per PERSON** (`Customer`): seller (`vendorNo`, BC's C…), buyer (`buyerNo`) or both,
   keyed on BC's contact number — the same shape BC uses (a Contact linked to a Vendor and/or a
@@ -2560,6 +2563,39 @@ filters and a preview drawer** (the filter panel collapsible), and the customer 
   number. The Buying tab says so. Adding `EVA_BuyerNo` to that copy is the next copy change.
 - Nothing on these screens writes to BC or edits a BC-owned detail; the page says details change in
   BC until switch day.
+
+---
+### Goods In and Submissions use `Customer` — BC first until switch day (2026-10-23)
+
+Jordan: *"The submissions and goods in needs to use this new customer database"*, then *"BC first:
+Goods In picks from the BC customers; new people are created in BC then copied in. Build it so the
+Hub can take over at switch day."* Migration `20261023150000_customers_one_record` (**NEEDS Run
+Migrations**): `GoodsInCustomer` and `GoodsInAgreement` are keyed on `customerId`; `GoodsInReceipt`
+and `Submission` gain `customerId` (their old `contactId` stays, nullable, for the test rows).
+
+- **The switch is ONE variable:** `CUSTOMERS_OWNER=hub` on Railway → `HUB_OWNS_CUSTOMERS`
+  (`lib/customers/ownership.ts`). Unset (now): BC owns the details — `saveCustomer` refuses, the
+  Goods In customer page has no Edit, and the check-in picker's "+ New customer" is **"Not on the
+  system?"**: a panel (`_components/bc-first-panel.tsx`) saying add them in BC, then **Fetch new
+  customers from BC** (`pullRecentCustomersFromBc`, `lib/actions/customers-pull.ts` — the nightly
+  copy's own `copyCustomerPage` over the four person feeds, rows changed in the last 3 days, ≤ 20
+  pages a feed, the background BC sign-in; nothing written to BC). Set to `hub`: the Hub's own form
+  adds and edits, and new people get `Customer.source = "hub"`.
+- Goods In searches the whole Customer table (name, name2, email, postcode, address, phone/mobile
+  digits, contact / vendor / buyer number) — `searchCustomers` and the Customers list's
+  `searchWhere`. `vendorNoOf()` = BC's `Customer.vendorNo`, else the Hub-given
+  `GoodsInCustomer.vendorNo`. The list shows ONE number (the Customers rule).
+- **A receipt's `person` is the Customer** (`GoodsInReceipt.person`); `customer` (JSON) stays the
+  printed snapshot. `personName(p, snapshot)` falls back to the snapshot, then "(customer not on
+  record)". The PDFs take `PERSON_FOR_PDF` + `personFallback()` (`lib/goods-in/customer-row.ts`).
+- ⚠ **Submissions are the one place the Hub makes a customer before switch day**: an enquiry is
+  matched to a Customer by EMAIL, else a **Hub prospect** is made — `source = "hub"`, no contact
+  number (`lib/customers/prospects.ts`). The nightly copy's contacts phase ADOPTS a prospect when BC
+  gets a contact with that email (BC's record is written onto the row, `source` → "bc", counted as
+  `merged`), so the submission follows them. Submissions screens read `whoFor()`
+  (`lib/customers/who.ts`): the Customer first, the old Contact second.
+- The Customers hub person page has a **Fees & agreement** tab (the same `FeesAgreement` component)
+  and lists their Goods In receipts; the Goods In customer page links "Open in Customers →".
 
 ---
 ## 📦 Accounts → Paid, not collected (2026-10-22)

@@ -5,6 +5,10 @@ import { getCustomersUser } from "@/lib/customers/access"
 import { customerNumber } from "@/lib/customers/filters"
 import { sellerFigures, receiptsFor, totesFor, lotsFor, hubOnlyLotsFor, notesFor, uncollectedFor, type Lot } from "@/lib/customers/queries"
 import { NoteComposer, NotesList, NotesFilter, type NoteDTO } from "./notes"
+import { getAgreement, type CustomerAgreement } from "@/lib/actions/goods-in-agreement"
+import { NOT_DRAFT } from "../../warehouse/receipts/_parts"
+import FeesAgreement from "../../warehouse/customers/[id]/fees-agreement"
+import VendorTermsText from "../../warehouse/customers/[id]/vendor-terms-text"
 
 export const dynamic = "force-dynamic"
 
@@ -18,7 +22,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 
 const TABS = [
   ["overview", "Overview"], ["notes", "Notes & calls"], ["receipts", "Receipts & totes"], ["lots", "Lots"],
-  ["buying", "Buying"], ["website", "Website account"], ["checks", "ID checks & terms"], ["bc", "Everything BC sent"],
+  ["buying", "Buying"], ["website", "Website account"], ["checks", "ID checks & terms"], ["fees", "Fees & agreement"], ["bc", "Everything BC sent"],
 ] as const
 type Tab = (typeof TABS)[number][0]
 
@@ -260,11 +264,36 @@ export default async function CustomerPage({ params, searchParams }: { params: P
       </div>
     )
   } else if (tab === "receipts") {
-    const [receipts, totes] = await Promise.all([receiptsFor(c.vendorNo), totesFor(c.vendorNo)])
+    // Goods In's own receipts (the Hub's check-in) are read on their own and tolerantly: their table is
+    // keyed on the customer only after Run Migrations.
+    const [receipts, totes, giReceipts] = await Promise.all([
+      receiptsFor(c.vendorNo), totesFor(c.vendorNo),
+      prisma.goodsInReceipt.findMany({ where: { customerId: c.id, ...NOT_DRAFT }, orderBy: { createdAt: "desc" }, take: 200, select: { id: true, status: true, createdAt: true, createdByName: true, _count: { select: { containers: true } } } }).catch(() => null),
+    ])
     body = (
       <div className="space-y-4">
         <Card title={`Receipts (${receipts.length})`} right={<Link href="/tools/lot-lookup" className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline">Look up in Admin Centre →</Link>}>
           {receipts.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">{c.vendorNo ? "No receipts in the BC copy." : "Not a seller."}</p> : <ReceiptsTable receipts={receipts} />}
+        </Card>
+        <Card title={`Booked in through Goods In${giReceipts ? ` (${giReceipts.length})` : ""}`} right={<Link href={`/tools/warehouse/customers/${encodeURIComponent(c.id)}`} className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline">Open in Goods In →</Link>}>
+          {giReceipts === null ? <p className="text-sm text-gray-500 dark:text-gray-400">Goods In receipts can&apos;t be read until an admin presses Run Migrations.</p>
+            : giReceipts.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">Nothing booked in through the Hub&apos;s own check-in yet.</p>
+            : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-left text-gray-500 dark:text-gray-400"><tr><th className="py-1 pr-3">Receipt</th><th className="py-1 pr-3">Booked in</th><th className="py-1 pr-3 text-right">Totes / pallets</th><th className="py-1 pr-3">Status</th><th className="py-1">By</th></tr></thead>
+                  <tbody>{giReceipts.map(r => (
+                    <tr key={r.id} className="border-t border-gray-100 dark:border-gray-800 text-gray-800 dark:text-gray-200">
+                      <td className="py-1.5 pr-3 font-mono"><Link href={`/tools/warehouse/receipts/${encodeURIComponent(r.id)}`} className="text-indigo-700 dark:text-indigo-300 hover:underline">{r.id}</Link></td>
+                      <td className="py-1.5 pr-3">{day(r.createdAt) ?? "—"}</td>
+                      <td className="py-1.5 pr-3 text-right font-mono">{r._count.containers}</td>
+                      <td className="py-1.5 pr-3">{r.status === "void" ? "Void" : r.status === "closed" ? "Closed" : "Open"}</td>
+                      <td className="py-1.5">{r.createdByName ?? "—"}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
         </Card>
         <Card title={`Totes (${totes.length})`}>
           {totes.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">{c.vendorNo ? "No totes in the BC copy." : "Not a seller."}</p> : (
@@ -381,6 +410,22 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           </>
         ) : <p className="text-sm text-gray-500 dark:text-gray-400">No account on the website.</p>}
       </Card>
+    )
+  } else if (tab === "fees") {
+    // The same tab Goods In shows (fees-agreement.tsx) — set once, used by every check-in for them.
+    const a = await getAgreement(c.id).catch(() => null)
+    const fallback: CustomerAgreement = {
+      customerId: c.id, fees: { commission: null, lottingFee: null, photographyFee: null, unsoldFee: null },
+      reservePercent: null, termsSignedAt: null, termsRecordedBy: null, specialArrangement: null, updatedAt: null, updatedByName: null, ready: false,
+    }
+    body = (
+      <FeesAgreement
+        customerId={c.id}
+        name={name}
+        initial={a?.ok ? a.data : fallback}
+        loadError={a?.ok ? null : a ? a.error : "Couldn't read their fees and agreement just now."}
+        termsText={<VendorTermsText />}
+      />
     )
   } else if (tab === "checks") {
     body = (

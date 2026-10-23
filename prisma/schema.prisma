@@ -138,9 +138,7 @@ model Contact {
   receipts        WarehouseReceipt[] @relation("ContactReceipts")
   submissions     Submission[]       @relation("ContactSubmissions")
   customerAccount CustomerAccount?
-  goodsInCustomer GoodsInCustomer?
-  goodsInAgreement GoodsInAgreement?
-  goodsInReceipts GoodsInReceipt[]
+  goodsInReceipts GoodsInReceipt[]   // old test receipts only — see GoodsInReceipt.contactId
 }
 
 model CustomerAccount {
@@ -191,8 +189,10 @@ model Submission {
   valuationSentTo      String?
   needsFollowUp        Boolean           @default(false)
 
-  contactId    String
-  contact      Contact     @relation("ContactSubmissions", fields: [contactId], references: [id])
+  customerId   String?
+  customer     Customer?   @relation(fields: [customerId], references: [id])
+  contactId    String?
+  contact      Contact?    @relation("ContactSubmissions", fields: [contactId], references: [id])
   departmentId String?
   department   Department? @relation(fields: [departmentId], references: [id])
   cataloguerId String?
@@ -207,6 +207,7 @@ model Submission {
   contactLogs ContactLog[]
   logistics   Logistics?
   staffNotes  SubmissionNote[]
+  @@index([customerId])
 }
 
 // Internal staff notes on a submission — a running, timestamped log (not the
@@ -1140,8 +1141,8 @@ model WarehouseMovement {
 /// The Goods In half of a customer: their vendor number and the terms their receipts carry. One
 /// row per Contact (the CRM's customer record stays the one customer database).
 model GoodsInCustomer {
-  contactId       String   @id
-  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  customerId      String   @id
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   vendorNo        String?  @unique
   mobile          String?
   town            String?
@@ -1160,8 +1161,8 @@ model GoodsInCustomer {
 /// when they signed Vectis's vendor terms, and any special arrangement in plain words (shown at
 /// check-in and printed on their receipts). Their fees themselves are on GoodsInCustomer.
 model GoodsInAgreement {
-  contactId          String    @id
-  contact            Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  customerId         String    @id
+  customer           Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   reservePercent     Int?
   termsSignedAt      DateTime?
   termsRecordedBy    String?
@@ -1176,8 +1177,13 @@ model GoodsInAgreement {
 /// reprinted next year still says what it said on the day.
 model GoodsInReceipt {
   id              String    @id
-  contactId       String
-  contact         Contact   @relation(fields: [contactId], references: [id])
+  // The person (2026-10-23: the Customer record — one customer database for the whole Hub). `customer`
+  // below is the COPY printed on the receipt, so the relation is `person`. `contactId` is the old CRM
+  // contact, kept optional for test receipts booked before this; nothing writes it any more.
+  customerId      String?
+  person          Customer? @relation(fields: [customerId], references: [id])
+  contactId       String?
+  contact         Contact?  @relation(fields: [contactId], references: [id])
   vendorNo        String?
   customer        Json?
   commission      Float?
@@ -1201,6 +1207,7 @@ model GoodsInReceipt {
 
   @@index([contactId])
   @@index([createdAt])
+  @@index([customerId])
 }
 
 /// A tote or a pallet on a receipt — goods grouped by CATEGORY, not item. The id IS the tote or
@@ -1977,6 +1984,10 @@ model Customer {
   shipTo                     CustomerShipTo[]
   bcCard                     CustomerBcCard?
   notes                      CustomerNote[]
+  goodsInCustomer            GoodsInCustomer?
+  goodsInAgreement           GoodsInAgreement?
+  goodsInReceipts            GoodsInReceipt[]
+  submissions                Submission[]
 
   @@index([email])
   @@index([postCode])

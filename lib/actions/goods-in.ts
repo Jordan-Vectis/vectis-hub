@@ -12,6 +12,7 @@ import {
 } from "@/lib/goods-in/model"
 import { LOCATION_CODE_HELP, LOCATION_CODE_RULE } from "@/lib/goods-in/location-codes"
 import { CUSTOMER_INCLUDE, customerRow, snapshot } from "@/lib/goods-in/customer-row"
+import { HUB_OWNS_CUSTOMERS, BC_OWNS_MESSAGE } from "@/lib/customers/ownership"
 import { AGREEMENT_UNREAD, findAgreement } from "@/lib/goods-in/agreement"
 import { moveItem } from "@/lib/goods-in/move-core"
 import { findCode } from "@/lib/goods-in/lookup-core"
@@ -44,7 +45,12 @@ const money = (v: unknown, dflt: number) => { const n = Number(v); return Number
 // ─── Customers ────────────────────────────────────────────────────────────────────────────
 
 export type CustomerRow = {
-  id: string; salutation: string | null; name: string; email: string | null; phone: string | null
+  id: string
+  /** Their BC customer number (C…) — null for a Hub prospect BC hasn't got yet. */
+  customerNo: string | null
+  /** false = made in the Hub (a Submissions prospect, or added after switch day), not copied from BC. */
+  fromBc: boolean
+  salutation: string | null; name: string; email: string | null; phone: string | null
   addressLine1: string | null; addressLine2: string | null; postcode: string | null; notes: string | null
   vendorNo: string | null; mobile: string | null; town: string | null; county: string | null; country: string | null
   vatRegNo: string | null; commission: number | null; lottingFee: number | null; photographyFee: number | null; unsoldFee: number | null
@@ -62,16 +68,20 @@ export async function searchCustomers(q: string): Promise<Result<CustomerRow[]>>
     if (s.length < 2) return { ok: true, data: [] }
     const like = { contains: s, mode: "insensitive" as const }
     const digits = s.replace(/\D/g, "")
-    const rows = await prisma.contact.findMany({
+    const code = normaliseCode(s)
+    // The Hub's customer database (every BC customer, 208,000 of them, plus Hub prospects). A typed
+    // or scanned C-number matches exactly on any of the person's numbers.
+    const rows = await prisma.customer.findMany({
       where: {
         OR: [
-          { name: like }, { email: like }, { postcode: like }, { addressLine1: like }, { id: { equals: s, mode: "insensitive" } },
-          ...(digits.length >= 5 ? [{ phone: { contains: digits } }] : []),
-          { goodsInCustomer: { is: { OR: [{ vendorNo: { equals: normaliseCode(s), mode: "insensitive" as const } }, ...(digits.length >= 5 ? [{ mobile: { contains: digits } }] : [])] } } },
+          { name: like }, { name2: like }, { email: like }, { postCode: like }, { address: like }, { city: like },
+          { contactNo: { equals: code, mode: "insensitive" } }, { vendorNo: { equals: code, mode: "insensitive" } }, { buyerNo: { equals: code, mode: "insensitive" } },
+          ...(digits.length >= 5 ? [{ phone: { contains: digits } }, { mobile: { contains: digits } }] : []),
+          { goodsInCustomer: { is: { vendorNo: { equals: code, mode: "insensitive" as const } } } },
         ],
       },
       include: CUSTOMER_INCLUDE,
-      orderBy: { name: "asc" },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
       take: 30,
     })
     return { ok: true, data: rows.map(customerRow) }
@@ -81,7 +91,7 @@ export async function searchCustomers(q: string): Promise<Result<CustomerRow[]>>
 export async function getCustomer(id: string): Promise<Result<CustomerRow | null>> {
   try {
     await who()
-    const c = await prisma.contact.findUnique({ where: { id }, include: CUSTOMER_INCLUDE })
+    const c = await prisma.customer.findUnique({ where: { id }, include: CUSTOMER_INCLUDE })
     return { ok: true, data: c ? customerRow(c) : null }
   } catch (e) { return fail(e) }
 }
@@ -97,70 +107,62 @@ export type CustomerInput = {
   commission?: number | null; lottingFee?: number | null; photographyFee?: number | null; unsoldFee?: number | null
 }
 
-// The CRM's own contact id scheme (c00001…), kept so a Goods In customer is the same kind of
-// record the CRM makes. Retried on a clash, because two clerks can add a customer at once.
-async function nextContactId(tx: Prisma.TransactionClient): Promise<string> {
-  const rows = await tx.$queryRaw<{ n: number | null }[]>`SELECT MAX(NULLIF(regexp_replace("id", '\\D', '', 'g'), '')::int) AS n FROM "Contact" WHERE "id" ~ '^c\\d+$'`
-  return `c${String((Number(rows[0]?.n) || 0) + 1).padStart(5, "0")}`
+/** Whether the Hub owns customers' details yet (BC first until switch day — lib/customers/ownership.ts). */
+export async function customerOwnership(): Promise<{ hubOwns: boolean }> {
+  return { hubOwns: HUB_OWNS_CUSTOMERS }
 }
 
 /**
- * Create or update a customer — the CRM contact and its Goods In half together. Their fees are
+ * Create or update a customer — the Customer record and its Goods In half together. Their fees are
  * changed on the Fees & agreement tab (saveAgreement); a fee that is sent is still saved, and one
  * left out is left alone.
+ *
+ * ⚠ Until switch day (CUSTOMERS_OWNER=hub) this REFUSES: BC owns the details and the nightly copy
+ * would write BC's version straight back over anything typed here. New people are made in BC and
+ * fetched in (Fetch new customers from BC). After switch day a new person is a Hub record (source
+ * "hub", no C-number) and edits write the record itself.
  */
 export async function saveCustomer(input: CustomerInput): Promise<Result<CustomerRow>> {
   try {
     await who()
+    if (!HUB_OWNS_CUSTOMERS) return { ok: false, error: BC_OWNS_MESSAGE }
     const name = blank(input.name)
     if (!name) return { ok: false, error: "The customer needs a name." }
     const vendorTyped = blank(input.vendorNo) ? normaliseCode(input.vendorNo!) : null
-    const contact = {
-      salutation: blank(input.salutation), name, email: blank(input.email)?.toLowerCase() ?? null, phone: blank(input.phone),
-      addressLine1: blank(input.addressLine1), addressLine2: blank(input.addressLine2), postcode: blank(input.postcode)?.toUpperCase() ?? null,
-      notes: blank(input.notes), isSeller: true,
+    const person = {
+      name, email: blank(input.email)?.toLowerCase() ?? null, phone: blank(input.phone), mobile: blank(input.mobile),
+      address: blank(input.addressLine1), address2: blank(input.addressLine2), city: blank(input.town), county: blank(input.county),
+      postCode: blank(input.postcode)?.toUpperCase() ?? null, countryCode: blank(input.country), vatRegNo: blank(input.vatRegNo),
     }
     // ⚠ A fee LEFT OUT is left as it is (undefined → Prisma doesn't touch it). The customer form no
     // longer has the fees — they live on the customer's Fees & agreement tab (saveAgreement in
     // goods-in-agreement.ts) — so writing a missing one as null would put every customer back on
     // the standard fees each time their address was edited. null still means "standard".
     const terms = (v: number | null | undefined) => (v === undefined ? undefined : v == null || !Number.isFinite(Number(v)) ? null : money(v, 0))
-    const extra = {
-      mobile: blank(input.mobile), town: blank(input.town), county: blank(input.county), country: blank(input.country),
-      vatRegNo: blank(input.vatRegNo), commission: terms(input.commission), lottingFee: terms(input.lottingFee),
-      photographyFee: terms(input.photographyFee), unsoldFee: terms(input.unsoldFee),
-    }
-    let saved: string | null = null
-    for (let attempt = 0; attempt < 5 && !saved; attempt++) {
-      try {
-        saved = await prisma.$transaction(async tx => {
-          let id = input.id ?? null
-          if (id) {
-            await tx.contact.update({ where: { id }, data: contact })
-          } else {
-            id = await nextContactId(tx)
-            await tx.contact.create({ data: { id, ...contact } })
-          }
-          const existing = await tx.goodsInCustomer.findUnique({ where: { contactId: id }, select: { vendorNo: true } })
-          let vendorNo = vendorTyped ?? existing?.vendorNo ?? null
-          if (!vendorNo && input.newVendorNo && (await tx.goodsInCounter.findUnique({ where: { key: "vendor" }, select: { key: true } }))) {
-            vendorNo = (await takeNumbers(tx, "vendor", 1))[0]
-          }
-          if (vendorNo && vendorNo !== existing?.vendorNo) {
-            const clash = await tx.goodsInCustomer.findUnique({ where: { vendorNo }, select: { contactId: true } })
-            if (clash && clash.contactId !== id) throw new Error(`Vendor number ${vendorNo} already belongs to another customer.`)
-          }
-          await tx.goodsInCustomer.upsert({ where: { contactId: id }, create: { contactId: id, vendorNo, ...extra }, update: { vendorNo, ...extra } })
-          return id
-        })
-      } catch (e) {
-        // A clash on the new contact id (someone else added a customer at the same moment) — try the next id.
-        if (!input.id && e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && attempt < 4) continue
-        throw e
+    const extra = { commission: terms(input.commission), lottingFee: terms(input.lottingFee), photographyFee: terms(input.photographyFee), unsoldFee: terms(input.unsoldFee) }
+    const saved = await prisma.$transaction(async tx => {
+      let id = input.id ?? null
+      if (id) {
+        await tx.customer.update({ where: { id }, data: person })
+      } else {
+        id = (await tx.customer.create({ data: { ...person, source: "hub" }, select: { id: true } })).id
       }
-    }
-    const c = await prisma.contact.findUnique({ where: { id: saved! }, include: CUSTOMER_INCLUDE })
+      const existing = await tx.goodsInCustomer.findUnique({ where: { customerId: id }, select: { vendorNo: true } })
+      let vendorNo = vendorTyped ?? existing?.vendorNo ?? null
+      if (!vendorNo && input.newVendorNo && (await tx.goodsInCounter.findUnique({ where: { key: "vendor" }, select: { key: true } }))) {
+        vendorNo = (await takeNumbers(tx, "vendor", 1))[0]
+      }
+      if (vendorNo && vendorNo !== existing?.vendorNo) {
+        const clash = await tx.goodsInCustomer.findUnique({ where: { vendorNo }, select: { customerId: true } })
+        const bcClash = await tx.customer.findFirst({ where: { vendorNo, NOT: { id } }, select: { id: true } })
+        if ((clash && clash.customerId !== id) || bcClash) throw new Error(`Vendor number ${vendorNo} already belongs to another customer.`)
+      }
+      await tx.goodsInCustomer.upsert({ where: { customerId: id }, create: { customerId: id, vendorNo, ...extra }, update: { vendorNo, ...extra } })
+      return id
+    })
+    const c = await prisma.customer.findUnique({ where: { id: saved }, include: CUSTOMER_INCLUDE })
     revalidatePath("/tools/warehouse", "layout")
+    revalidatePath("/tools/customers", "layout")
     return { ok: true, data: customerRow(c!) }
   } catch (e) { return fail(e) }
 }
@@ -169,7 +171,7 @@ export async function saveCustomer(input: CustomerInput): Promise<Result<Custome
 
 export type ContainerInput = { kind: ContainerKind; category?: string | null; description?: string | null }
 export type ReceiptInput = {
-  contactId: string
+  customerId: string
   terms?: Partial<ReceiptTerms>
   containers: ContainerInput[]
   notes?: string | null
@@ -188,7 +190,7 @@ export async function createReceipt(input: ReceiptInput): Promise<Result<{ recei
     const rows = (input.containers ?? []).filter(r => r && (r.kind === "tote" || r.kind === "pallet"))
     if (rows.length === 0) return { ok: false, error: "Add at least one tote or pallet before booking in." }
     if (rows.length > 200) return { ok: false, error: "That's more than 200 totes on one receipt — split it into two receipts." }
-    const cust = await prisma.contact.findUnique({ where: { id: input.contactId }, include: CUSTOMER_INCLUDE })
+    const cust = await prisma.customer.findUnique({ where: { id: input.customerId }, include: CUSTOMER_INCLUDE })
     if (!cust) return { ok: false, error: "That customer couldn't be found — search for them again." }
     const c = customerRow(cust)
     // Their usual reserve and special arrangement (the Fees & agreement tab) — read BEFORE the
@@ -217,7 +219,7 @@ export async function createReceipt(input: ReceiptInput): Promise<Result<{ recei
       let vendorNo = c.vendorNo
       if (!vendorNo && (await tx.goodsInCounter.findUnique({ where: { key: "vendor" }, select: { key: true } }))) {
         vendorNo = (await takeNumbers(tx, "vendor", 1))[0]
-        await tx.goodsInCustomer.upsert({ where: { contactId: c.id }, create: { contactId: c.id, vendorNo }, update: { vendorNo } })
+        await tx.goodsInCustomer.upsert({ where: { customerId: c.id }, create: { customerId: c.id, vendorNo }, update: { vendorNo } })
       }
       const [receiptId] = await takeNumbers(tx, "receipt", 1)
       const totes = rows.filter(r => r.kind === "tote").length
@@ -226,7 +228,7 @@ export async function createReceipt(input: ReceiptInput): Promise<Result<{ recei
       const palletNos = pallets ? await takeNumbers(tx, "pallet", pallets) : []
       await tx.goodsInReceipt.create({
         data: {
-          id: receiptId, contactId: c.id, vendorNo, customer: { ...snapshot(c, { specialArrangement: a.specialArrangement }), vendorNo } as unknown as Prisma.InputJsonValue,
+          id: receiptId, customerId: c.id, vendorNo, customer: { ...snapshot(c, { specialArrangement: a.specialArrangement }), vendorNo } as unknown as Prisma.InputJsonValue,
           ...t, ownerConfirmed: !!input.ownerConfirmed, agentConfirmed: !!input.agentConfirmed,
           notes: blank(input.notes), status: "open", createdById: me.id, createdByName: me.name,
         },

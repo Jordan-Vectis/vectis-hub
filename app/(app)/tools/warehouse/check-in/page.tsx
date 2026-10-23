@@ -5,6 +5,7 @@ import { getCustomer, type CustomerRow } from "@/lib/actions/goods-in"
 import { getAgreement, type CustomerAgreement } from "@/lib/actions/goods-in-agreement"
 import { listUnfinishedCheckIns, loadCheckIn, type CheckInLoaded } from "@/lib/actions/goods-in-checkin"
 import { atLeast, getGoodsInUser } from "@/lib/goods-in/access"
+import { HUB_OWNS_CUSTOMERS } from "@/lib/customers/ownership"
 import { COUNTER_KEYS, normaliseCode, type CounterKey } from "@/lib/goods-in/model"
 import { readCounters } from "@/lib/goods-in/numbers"
 import { ErrorBox, NotReady, PageHeader, isMissingTable } from "../_components/ui"
@@ -33,7 +34,7 @@ const Shell = ({ children }: { children: ReactNode }) => (
 
 export default async function CheckInPage({ searchParams }: { searchParams: Promise<{ customer?: string | string[]; receipt?: string | string[] }> }) {
   const sp = await searchParams
-  // "Book in" on the Customers list and on a customer's page arrive with ?customer=<contact id>,
+  // "Book in" on the Customers list and on a customer's page arrive with ?customer=<customer id>,
   // so the counter starts with that customer already picked. "Carry on checking in" (Receipts, the
   // dashboard, a customer's page) arrives with ?receipt=<receipt not booked in yet>.
   const wantedId = [sp.customer].flat()[0]?.trim() || null
@@ -123,6 +124,7 @@ export default async function CheckInPage({ searchParams }: { searchParams: Prom
         initialCheckIn={initialCheckIn}
         initialAgreement={initialAgreement}
         unfinished={unfinished}
+        hubOwns={HUB_OWNS_CUSTOMERS}
       />
     </Shell>
   )

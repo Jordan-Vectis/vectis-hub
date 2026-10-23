@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { personName } from "@/lib/goods-in/customer-row"
 import Form from "next/form"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
@@ -65,7 +66,7 @@ type Row = {
   emailedAt: Date | null
   emailedTo: string | null
   customerName: string
-  contactId: string
+  customerId: string | null
   containers: { kind: string; status: string | null }[]
 }
 
@@ -120,7 +121,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
           OR: [
             { id: { contains: code, mode: "insensitive" } },
             { vendorNo: { contains: code, mode: "insensitive" } },
-            { contact: { name: { contains: q, mode: "insensitive" } } },
+            { person: { name: { contains: q, mode: "insensitive" } } },
             { containers: { some: { id: code } } },
           ],
         })
@@ -147,8 +148,8 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
         take: PAGE_SIZE,
         select: {
           id: true, createdAt: true, vendorNo: true, status: true, createdByName: true, printedAt: true, emailedAt: true, emailedTo: true,
-          customer: true, contactId: true,
-          contact: { select: { name: true } },
+          customer: true, customerId: true,
+          person: { select: { name: true, name2: true } },
           containers: { select: { kind: true, status: true } },
         },
       })
@@ -157,8 +158,8 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
         return {
           id: r.id, createdAt: r.createdAt, vendorNo: r.vendorNo, status: r.status, createdByName: r.createdByName,
           printedAt: r.printedAt, emailedAt: r.emailedAt, emailedTo: r.emailedTo,
-          customerName: r.contact?.name || (typeof snap?.name === "string" ? snap.name : "") || "—",
-          contactId: r.contactId,
+          customerName: personName(r.person, snap),
+          customerId: r.customerId,
           containers: r.containers,
         }
       })
@@ -354,7 +355,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
                             <div className="text-xs text-gray-500 dark:text-gray-400">{ukTime(r.createdAt)}</div>
                           </td>
                           <td className={td}>
-                            <Link href={`/tools/warehouse/customers/${encodeURIComponent(r.contactId)}`} className="hover:underline">{r.customerName}</Link>
+                            <Link href={`/tools/warehouse/customers/${encodeURIComponent(r.customerId ?? "")}`} className="hover:underline">{r.customerName}</Link>
                           </td>
                           <td className={`${td} ${mono} whitespace-nowrap`}>{r.vendorNo ?? <span className="text-gray-500 dark:text-gray-400">—</span>}</td>
                           <td className={td}>{draft && r.containers.length === 0 ? "Nothing added yet" : kindCounts(r.containers)}</td>

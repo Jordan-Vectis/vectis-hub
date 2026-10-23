@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { hasAppAccess } from "@/lib/apps"
 import { SubmissionStatus } from "@/app/generated/prisma/enums"
 import DeleteSubmissionButton from "./delete-button"
+import { WHO_INCLUDE, whoFor } from "@/lib/customers/who"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -52,6 +53,7 @@ export default async function SubmissionsPage({
       ...(search
         ? {
             OR: [
+              { customer: { name: { contains: search, mode: "insensitive" } } },
               { contact: { name: { contains: search, mode: "insensitive" } } },
               { reference: { contains: search, mode: "insensitive" } },
             ],
@@ -59,7 +61,7 @@ export default async function SubmissionsPage({
         : {}),
     },
     include: {
-      contact: true,
+      ...WHO_INCLUDE,
       cataloguer: true,
       _count: { select: { items: true } },
     },
@@ -181,7 +183,7 @@ export default async function SubmissionsPage({
                     href={`/submissions/${sub.id}`}
                     className="block bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-200 dark:border-gray-800 hover:border-blue-400 dark:hover:border-blue-500 transition-colors p-3"
                   >
-                    <p className="font-semibold text-gray-900 dark:text-white text-sm truncate">{sub.contact.name}</p>
+                    <p className="font-semibold text-gray-900 dark:text-white text-sm truncate">{whoFor(sub).name}</p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-gray-400">
                       <span className="font-mono text-blue-600 dark:text-blue-400">{sub.reference.slice(0, 8).toUpperCase()}</span>
                       <span>·</span>
@@ -216,7 +218,7 @@ export default async function SubmissionsPage({
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="text-xl font-bold text-gray-900 dark:text-white truncate">{sub.contact.name}</p>
+                      <p className="text-xl font-bold text-gray-900 dark:text-white truncate">{whoFor(sub).name}</p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-base text-gray-500 dark:text-gray-400">
                         <span className="font-mono text-sm text-blue-600 dark:text-blue-400">
                           {sub.reference.slice(0, 8).toUpperCase()}

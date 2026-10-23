@@ -93,8 +93,8 @@ const Done = ({ children }: { children: ReactNode }) => <span className="text-sm
 
 // ─── Their fees ─────────────────────────────────────────────────────────────────────────────
 
-function FeesCard({ contactId, name, agreement, unread, onSaved }: {
-  contactId: string
+function FeesCard({ customerId, name, agreement, unread, onSaved }: {
+  customerId: string
   name: string
   agreement: Agreement
   /** The agreement couldn't be read (a fault) — the reserve is held back for that reason, not Run Migrations. */
@@ -129,7 +129,7 @@ function FeesCard({ contactId, name, agreement, unread, onSaved }: {
     }
     setSaving(true)
     setError(null)
-    const res = await attempt(() => saveAgreement(contactId, {
+    const res = await attempt(() => saveAgreement(customerId, {
       ...(Object.keys(fees).length ? { fees } : {}),
       ...(reserve !== undefined ? { reservePercent: reserve } : {}),
     }))
@@ -212,8 +212,8 @@ function FeesCard({ contactId, name, agreement, unread, onSaved }: {
 
 // ─── Vendor terms ───────────────────────────────────────────────────────────────────────────
 
-function TermsCard({ contactId, agreement, why, onSaved, termsText }: {
-  contactId: string
+function TermsCard({ customerId, agreement, why, onSaved, termsText }: {
+  customerId: string
   agreement: Agreement
   /** What to say instead of the controls while `agreement.ready` is false. */
   why: string
@@ -241,7 +241,7 @@ function TermsCard({ contactId, agreement, why, onSaved, termsText }: {
   const send = async (termsSignedOn: string | null) => {
     setSaving(true)
     setError(null)
-    const res = await attempt(() => saveAgreement(contactId, { termsSignedOn }))
+    const res = await attempt(() => saveAgreement(customerId, { termsSignedOn }))
     setSaving(false)
     if (!res.ok) { setError(res.error); return }
     setMode("view")
@@ -347,8 +347,8 @@ function TermsCard({ contactId, agreement, why, onSaved, termsText }: {
 
 // ─── Special arrangement ────────────────────────────────────────────────────────────────────
 
-function ArrangementCard({ contactId, agreement, why, onSaved }: {
-  contactId: string
+function ArrangementCard({ customerId, agreement, why, onSaved }: {
+  customerId: string
   agreement: Agreement
   /** What to say instead of the controls while `agreement.ready` is false. */
   why: string
@@ -368,7 +368,7 @@ function ArrangementCard({ contactId, agreement, why, onSaved }: {
   const send = async (value: string | null) => {
     setSaving(true)
     setError(null)
-    const res = await attempt(() => saveAgreement(contactId, { specialArrangement: value }))
+    const res = await attempt(() => saveAgreement(customerId, { specialArrangement: value }))
     setSaving(false)
     if (!res.ok) { setError(res.error); return }
     const now = res.data.specialArrangement
@@ -435,8 +435,8 @@ function ArrangementCard({ contactId, agreement, why, onSaved }: {
 
 // ─── The tab ────────────────────────────────────────────────────────────────────────────────
 
-export default function FeesAgreement({ contactId, name, initial, loadError, termsText }: {
-  contactId: string
+export default function FeesAgreement({ customerId, name, initial, loadError, termsText }: {
+  customerId: string
   name: string
   initial: Agreement
   /** Set when the agreement couldn't be read (the fees shown are the customer's own). */
@@ -468,10 +468,10 @@ export default function FeesAgreement({ contactId, name, initial, loadError, ter
       ) : null}
 
       <div className="grid grid-cols-1 items-start gap-6 @4xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-        <FeesCard contactId={contactId} name={name} agreement={agreement} unread={unread} onSaved={saved} />
+        <FeesCard customerId={customerId} name={name} agreement={agreement} unread={unread} onSaved={saved} />
         <div className="space-y-6">
-          <TermsCard key={`t-${fresh}`} contactId={contactId} agreement={agreement} why={why} onSaved={saved} termsText={termsText} />
-          <ArrangementCard key={`a-${fresh}`} contactId={contactId} agreement={agreement} why={why} onSaved={saved} />
+          <TermsCard key={`t-${fresh}`} customerId={customerId} agreement={agreement} why={why} onSaved={saved} termsText={termsText} />
+          <ArrangementCard key={`a-${fresh}`} customerId={customerId} agreement={agreement} why={why} onSaved={saved} />
         </div>
       </div>
 

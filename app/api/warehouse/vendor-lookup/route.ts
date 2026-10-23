@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { customerName } from "@/lib/goods-in/customer-row"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { resolveTote, resolveReceipt, dedupeByToteAndReceipt } from "@/lib/receipt-totes"
@@ -29,7 +30,7 @@ type GoodsInWho = { vendorNo: string | null; vendorName: string | null }
 
 const RECEIPT_SELECT = {
   id: true, vendorNo: true, customer: true, status: true,
-  contact: { select: { name: true, goodsInCustomer: { select: { vendorNo: true } } } },
+  person: { select: { name: true, name2: true, vendorNo: true, goodsInCustomer: { select: { vendorNo: true } } } },
 } as const
 
 /** Vendor number and name for a Goods In receipt: the receipt's own copy first (what was printed on
@@ -37,13 +38,13 @@ const RECEIPT_SELECT = {
 function goodsInWho(r: {
   vendorNo: string | null
   customer: unknown
-  contact: { name: string; goodsInCustomer: { vendorNo: string | null } | null }
+  person: { name: string | null; name2: string | null; vendorNo: string | null; goodsInCustomer: { vendorNo: string | null } | null } | null
 }): GoodsInWho {
   const snap = r.customer && typeof r.customer === "object" ? (r.customer as Partial<CustomerSnapshot>) : null
   const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null)
   return {
-    vendorNo:   text(r.vendorNo) ?? text(snap?.vendorNo) ?? text(r.contact.goodsInCustomer?.vendorNo),
-    vendorName: text(snap?.name) ?? text(r.contact.name),
+    vendorNo:   text(r.vendorNo) ?? text(snap?.vendorNo) ?? text(r.person?.vendorNo ?? r.person?.goodsInCustomer?.vendorNo),
+    vendorName: text(snap?.name) ?? text(customerName(r.person)),
   }
 }
 

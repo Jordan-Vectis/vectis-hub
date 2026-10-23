@@ -13,6 +13,44 @@ import SetupBackups from "./setup-backups"
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reference_customers_hub.md",
+    content: `---
+name: reference-customers-hub
+description: Customers section (2026-10-23) — side filters + preview drawer, tabbed customer page, CustomerNote CRM notes; ONE customer number; measured query costs that shaped it. Read before touching /tools/customers
+metadata:
+  type: reference
+---
+
+Customers (\`/tools/customers\`, app key CUSTOMERS) rebuilt 2026-10-23 from Jordan's pick of four mock-ups
+(design canvas https://claude.ai/artifact/PbgQA2qLtqDJhHzA4gRmPS): list = Option B (collapsible side
+filters + a preview of the tapped row), customer page = Option 1 (tabs). Full rules: RULES.md → Customers
+→ "The customer section as the admins' central hub".
+
+- **One number per person**: BC contact no. = vendor no. = buyer no. for all but ~60 of 208k. Never
+  re-add separate Seller/Buyer no. columns. "Always blank" was a dark-theme colour bug (no text colour).
+- Files: \`lib/customers/{filters,queries,access}.ts\`, \`lib/actions/customer-notes.ts\`,
+  \`customers-list.tsx\`, \`[id]/{page,notes}.tsx\`, \`/api/customers/[id]/summary\`.
+- **CustomerNote** table (NEEDS Run Migrations) — note/call/email/visit + follow-up date; bank details refused.
+- **Measured on production**: per-row receipt/lot counts were 7.9 s/page without vendorNo indexes (added
+  in the migration); scanning BC card JSON for a flag = 2.8 s → no high-risk/trusted-seller/ID filters yet.
+- **Not copied yet**: what a customer has BOUGHT — WarehouseItem has no buyer no. Next copy change = EVA_BuyerNo.
+- Later steps Jordan hasn't asked for: saved views, department-they-sell-in filter, "Open in BC" link.
+
+**Why:** Jordan calls this the admins' central hub for the BC replacement.
+**How to apply:** keep every filter in the URL; counts for sorts via one GROUP BY, never per row; tolerant
+reads before Run Migrations. Related: [[project-replace-bc]], [[reference-data-map]].
+
+**Goods In + Submissions keyed on Customer (2026-10-23, pushed to staging, needs Run Migrations):**
+Jordan: "BC first: Goods In picks from the BC customers; new people are created in BC then copied in.
+Build it so the Hub can take over at switch day." Switch = \`CUSTOMERS_OWNER=hub\` on Railway →
+\`HUB_OWNS_CUSTOMERS\` (lib/customers/ownership.ts). Until then: no Edit / no New customer in the Hub;
+check-in picker shows "Not on the system?" → Fetch new customers from BC (lib/actions/customers-pull.ts,
+reuses copyCustomerPage, last 3 days). Submissions make a Hub PROSPECT (source "hub", by email —
+lib/customers/prospects.ts) that the nightly contacts copy adopts. GoodsInReceipt.person = Customer;
+\`customer\` JSON = printed snapshot. Full rules: RULES.md → "Goods In and Submissions use \`Customer\`".
+`,
+  },
+  {
     filename: "project_own_ai_research.md",
     content: `---
 name: own-ai-research-2026-10-01

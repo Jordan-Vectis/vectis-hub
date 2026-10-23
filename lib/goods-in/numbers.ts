@@ -24,7 +24,7 @@ export class NumberingNotSetError extends Error {
 
 async function exists(tx: Tx, key: CounterKey, n: string): Promise<boolean> {
   if (key === "receipt") return !!(await tx.goodsInReceipt.findUnique({ where: { id: n }, select: { id: true } }))
-  if (key === "vendor") return !!(await tx.goodsInCustomer.findUnique({ where: { vendorNo: n }, select: { contactId: true } }))
+  if (key === "vendor") return !!(await tx.goodsInCustomer.findUnique({ where: { vendorNo: n }, select: { customerId: true } }))
   return !!(await tx.goodsInContainer.findUnique({ where: { id: n }, select: { id: true } }))
 }
 

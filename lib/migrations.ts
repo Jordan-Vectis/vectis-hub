@@ -2545,6 +2545,48 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "WarehouseReceiptTote_vendorNo_idx" ON "WarehouseReceiptTote"("vendorNo")`,
   `CREATE INDEX IF NOT EXISTS "WarehouseTote_vendorNo_idx" ON "WarehouseTote"("vendorNo")`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLot_vendor_idx" ON "CatalogueLot"("vendor")`,
+  // One customer database (2026-10-23): Goods In and Submissions keyed to Customer, not the old Contact.
+  // Re-keys GoodsInCustomer / GoodsInAgreement (0 rows on production) and adds customerId to receipts and submissions.
+  `ALTER TABLE "GoodsInReceipt" ADD COLUMN IF NOT EXISTS "customerId" TEXT`,
+  `ALTER TABLE "GoodsInReceipt" ALTER COLUMN "contactId" DROP NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInReceipt_customerId_idx" ON "GoodsInReceipt"("customerId")`,
+  `DO $ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GoodsInReceipt_customerId_fkey') THEN
+    ALTER TABLE "GoodsInReceipt" ADD CONSTRAINT "GoodsInReceipt_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $`,
+  `ALTER TABLE "GoodsInCustomer" DROP CONSTRAINT IF EXISTS "GoodsInCustomer_contactId_fkey"`,
+  `DO $ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'GoodsInCustomer' AND column_name = 'contactId') THEN
+    ALTER TABLE "GoodsInCustomer" RENAME COLUMN "contactId" TO "customerId";
+  END IF;
+END $`,
+  `DELETE FROM "GoodsInCustomer" WHERE "customerId" NOT IN (SELECT "id" FROM "Customer")`,
+  `DO $ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GoodsInCustomer_customerId_fkey') THEN
+    ALTER TABLE "GoodsInCustomer" ADD CONSTRAINT "GoodsInCustomer_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $`,
+  `ALTER TABLE "GoodsInAgreement" DROP CONSTRAINT IF EXISTS "GoodsInAgreement_contactId_fkey"`,
+  `DO $ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'GoodsInAgreement' AND column_name = 'contactId') THEN
+    ALTER TABLE "GoodsInAgreement" RENAME COLUMN "contactId" TO "customerId";
+  END IF;
+END $`,
+  `DELETE FROM "GoodsInAgreement" WHERE "customerId" NOT IN (SELECT "id" FROM "Customer")`,
+  `DO $ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GoodsInAgreement_customerId_fkey') THEN
+    ALTER TABLE "GoodsInAgreement" ADD CONSTRAINT "GoodsInAgreement_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $`,
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "customerId" TEXT`,
+  `ALTER TABLE "Submission" ALTER COLUMN "contactId" DROP NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS "Submission_customerId_idx" ON "Submission"("customerId")`,
+  `DO $ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Submission_customerId_fkey') THEN
+    ALTER TABLE "Submission" ADD CONSTRAINT "Submission_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
