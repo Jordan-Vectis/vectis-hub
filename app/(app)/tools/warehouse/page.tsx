@@ -12,6 +12,8 @@ import { Empty, ErrorBox, NotReady, PageHeader, StatusBadge, box, btn, btnGo, is
 import { londonDayStart, londonYmd, mondayOfYmd } from "./history/london-days"
 import { FromTo, MOVE_SELECT, MoveKindChip, findHref, moveItem, moveKind, type MoveRow } from "./history/move-parts"
 import { BOOKED_LIVE, NOT_DRAFT, carryOnHref } from "./receipts/_parts"
+import { HUB_MADE } from "@/lib/goods-in/source"
+import { mirrorStatus } from "@/lib/goods-in/bc-mirror"
 
 // Goods In — the dashboard. What the counter needs at a glance: book goods in, scan anything,
 // how much is waiting where, and what has just happened. Read straight from the Goods In tables
@@ -32,15 +34,17 @@ async function loadDashboard() {
   // A voided receipt's totes aren't real goods, and a check-in that hasn't been booked in yet (a
   // draft) isn't booked in at all — leave both out of every figure. A draft's createdAt becomes the
   // booking time when it is booked in, so "booked today" counts it on the day it really was.
-  const liveReceipt: Prisma.GoodsInReceiptWhereInput = BOOKED_LIVE
+  // BC's copied receipts (source "bc", lib/goods-in/bc-mirror.ts) are searchable in Receipts and Find
+  // but kept out of the counter's figures — they'd swamp "booked today" and the status tiles.
+  const liveReceipt: Prisma.GoodsInReceiptWhereInput = { AND: [BOOKED_LIVE, HUB_MADE] }
 
-  const [bookedToday, byStatus, cataloguedWeek, receipts, moves, counters, locations, mail, unfinished] = await Promise.all([
+  const [bookedToday, byStatus, cataloguedWeek, receipts, moves, counters, locations, mail, unfinished, bc] = await Promise.all([
     prisma.goodsInReceipt.count({ where: { createdAt: { gte: dayStart }, ...liveReceipt } }),
     prisma.goodsInContainer.groupBy({ by: ["status", "kind"], where: { receipt: liveReceipt }, _count: { _all: true } }),
     prisma.goodsInContainer.groupBy({ by: ["kind"], where: { status: "catalogued", updatedAt: { gte: weekStart }, receipt: liveReceipt }, _count: { _all: true } }),
     // Recent receipts are ones booked in; check-ins not finished have their own list.
     prisma.goodsInReceipt.findMany({
-      where: NOT_DRAFT,
+      where: { AND: [NOT_DRAFT, HUB_MADE] },
       take: 10,
       orderBy: { createdAt: "desc" },
       select: { id: true, customer: true, status: true, createdByName: true, createdAt: true, person: { select: { name: true, name2: true } }, containers: { select: { kind: true } } },
@@ -51,6 +55,7 @@ async function loadDashboard() {
     mailStatus(),
     // Never let this list stop the dashboard: a failure is shown as a quiet line instead.
     listUnfinishedCheckIns().catch(e => ({ ok: false as const, error: String((e as { message?: string })?.message ?? e).slice(0, 200) })),
+    mirrorStatus(),
   ])
 
   const status: Record<"booked" | "stored" | "bench", KindCount> = { booked: none(), stored: none(), bench: none() }
@@ -68,7 +73,7 @@ async function loadDashboard() {
 
   const haveSeries = new Set(counters.map(c => c.key))
   return {
-    bookedToday, status, catalogued, receipts, moves: moves as MoveRow[], locations, mail, unfinished,
+    bookedToday, status, catalogued, receipts, moves: moves as MoveRow[], locations, mail, unfinished, bc,
     missingSeries: NEEDED_SERIES.filter(k => !haveSeries.has(k)),
   }
 }
@@ -297,6 +302,12 @@ function Figures({ data }: { data: Data }) {
         The figures leave out voided receipts and check-ins not booked in yet, and the chip on each tile is the status it counts.
         &ldquo;Catalogued this week&rdquo; is totes and pallets marked catalogued since Monday.
       </p>
+      {data.bc.ready && (data.bc.bcReceipts > 0 || data.bc.bcTotes > 0) && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Plus {plural(data.bc.bcReceipts, "receipt")} and {plural(data.bc.bcTotes, "tote and pallet", "totes and pallets")} copied from Business Central
+          {data.bc.lastComplete ? ` (last copy ${ukDateTime(data.bc.lastComplete.completedAt ?? data.bc.lastComplete.startedAt)})` : ""} — in <Link href="/tools/warehouse/receipts?source=bc" className="underline">Receipts</Link> and Find, not in these figures.
+        </p>
+      )}
     </section>
   )
 }

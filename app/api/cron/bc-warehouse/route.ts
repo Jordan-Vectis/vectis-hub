@@ -261,6 +261,34 @@ async function runSync(full: boolean, secret: string): Promise<void> {
     results.auctionNames = res.ok ? { namesWritten: data.namesWritten ?? 0 } : { error: data.error ?? `HTTP ${res.status}` }
   } catch (e: any) { results.auctionNames = { error: e.message } }
 
+  // ── Goods In's copy of BC's receipts and totes (lib/goods-in/bc-mirror.ts) ──────────────
+  // Reads the tote tables the stages above have just refreshed, one page a call; changes only on
+  // an incremental run, everything on the FULL one. Writes Goods In's tables only, never BC.
+  {
+    let gmMore = true, gmTotes = 0, gmReceipts = 0, gmPasses = 0
+    let gmCursor: string | null = null, gmRun: string | null = null
+    while (gmMore && gmPasses < 200) {
+      try {
+        const res: Response = await fetch(`${base}/api/goods-in/bc-mirror`, {
+          method: "POST", headers,
+          body:   JSON.stringify({ cursor: gmCursor, full, runId: gmRun }),
+        })
+        const data: any = await res.json().catch(() => ({}))
+        if (!res.ok) { results.goodsInMirror = { error: data.error ?? `HTTP ${res.status}`, totes: gmTotes }; break }
+        gmTotes += data.totes ?? 0
+        gmReceipts += data.receipts ?? 0
+        gmMore = data.more === true
+        gmCursor = data.cursor ?? null
+        gmRun = data.runId ?? gmRun
+        gmPasses++
+      } catch (e: any) {
+        results.goodsInMirror = { error: e.message, totes: gmTotes }
+        break
+      }
+    }
+    if (!results.goodsInMirror) results.goodsInMirror = { totes: gmTotes, receipts: gmReceipts, passes: gmPasses }
+  }
+
   // ── Customers (people, sellers, buyers, website accounts, delivery addresses) ─
   // The Hub's own customer database, refreshed from BC until switch day. Same page-at-a-time
   // loop as the button on the Customers page (lib/customer-sync.ts). FULL (5am) run only: it reads

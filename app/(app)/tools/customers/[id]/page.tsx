@@ -9,6 +9,7 @@ import { getAgreement, type CustomerAgreement } from "@/lib/actions/goods-in-agr
 import { NOT_DRAFT } from "../../warehouse/receipts/_parts"
 import FeesAgreement from "../../warehouse/customers/[id]/fees-agreement"
 import VendorTermsText from "../../warehouse/customers/[id]/vendor-terms-text"
+import { FromBcBadge } from "../../warehouse/receipts/_parts"
 
 export const dynamic = "force-dynamic"
 
@@ -268,16 +269,16 @@ export default async function CustomerPage({ params, searchParams }: { params: P
     // keyed on the customer only after Run Migrations.
     const [receipts, totes, giReceipts] = await Promise.all([
       receiptsFor(c.vendorNo), totesFor(c.vendorNo),
-      prisma.goodsInReceipt.findMany({ where: { customerId: c.id, ...NOT_DRAFT }, orderBy: { createdAt: "desc" }, take: 200, select: { id: true, status: true, createdAt: true, createdByName: true, _count: { select: { containers: true } } } }).catch(() => null),
+      prisma.goodsInReceipt.findMany({ where: { customerId: c.id, ...NOT_DRAFT }, orderBy: { createdAt: "desc" }, take: 200, select: { id: true, status: true, createdAt: true, createdByName: true, source: true, _count: { select: { containers: true } } } }).catch(() => null),
     ])
     body = (
       <div className="space-y-4">
         <Card title={`Receipts (${receipts.length})`} right={<Link href="/tools/lot-lookup" className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline">Look up in Admin Centre →</Link>}>
           {receipts.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">{c.vendorNo ? "No receipts in the BC copy." : "Not a seller."}</p> : <ReceiptsTable receipts={receipts} />}
         </Card>
-        <Card title={`Booked in through Goods In${giReceipts ? ` (${giReceipts.length})` : ""}`} right={<Link href={`/tools/warehouse/customers/${encodeURIComponent(c.id)}`} className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline">Open in Goods In →</Link>}>
+        <Card title={`Receipts in Goods In's database${giReceipts ? ` (${giReceipts.length})` : ""}`} right={<Link href={`/tools/warehouse/customers/${encodeURIComponent(c.id)}`} className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline">Open in Goods In →</Link>}>
           {giReceipts === null ? <p className="text-sm text-gray-500 dark:text-gray-400">Goods In receipts can&apos;t be read until an admin presses Run Migrations.</p>
-            : giReceipts.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">Nothing booked in through the Hub&apos;s own check-in yet.</p>
+            : giReceipts.length === 0 ? <p className="text-sm text-gray-500 dark:text-gray-400">No receipts in Goods In&apos;s database yet — BC&apos;s are copied in nightly, the Hub&apos;s own appear when booked in.</p>
             : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -288,7 +289,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
                       <td className="py-1.5 pr-3">{day(r.createdAt) ?? "—"}</td>
                       <td className="py-1.5 pr-3 text-right font-mono">{r._count.containers}</td>
                       <td className="py-1.5 pr-3">{r.status === "void" ? "Void" : r.status === "closed" ? "Closed" : "Open"}</td>
-                      <td className="py-1.5">{r.createdByName ?? "—"}</td>
+                      <td className="py-1.5">{r.source === "bc" ? <FromBcBadge /> : r.createdByName ?? "—"}</td>
                     </tr>
                   ))}</tbody>
                 </table>

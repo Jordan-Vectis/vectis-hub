@@ -30,13 +30,15 @@ const statusFromLocation = (c: { locationCode: string | null; locationKind: stri
 
 type ScanNote = { tone: "ok" | "info" | "warn"; text: React.ReactNode }
 
-export default function ContainersTable({ receiptId, containers, highlight, isVoid = false, isDraft = false }: {
+export default function ContainersTable({ receiptId, containers, highlight, isVoid = false, isDraft = false, fromBc = false }: {
   receiptId: string
   containers: ContainerView[]
   /** The receipt is void: its totes keep their numbers, but no label is printed for them. */
   isVoid?: boolean
   /** The receipt is a check-in not booked in yet: what's in each tote is changed on the Check in screen. */
   isDraft?: boolean
+  /** Copied from Business Central and BC still owns it: read-only here, labels can be reprinted, moves are made in BC. */
+  fromBc?: boolean
   /** A tote/pallet to pick out (arrived from a scan on the receipts list). */
   highlight: string | null
 }) {
@@ -114,6 +116,7 @@ export default function ContainersTable({ receiptId, containers, highlight, isVo
               flashed={flash === c.id}
               isVoid={isVoid}
               isDraft={isDraft}
+              fromBc={fromBc}
             />
           ))}
         </table>
@@ -122,7 +125,7 @@ export default function ContainersTable({ receiptId, containers, highlight, isVo
   )
 }
 
-function ContainerRow({ c, open, onToggle, flashed, isVoid, isDraft }: { c: ContainerView; open: boolean; onToggle: () => void; flashed: boolean; isVoid: boolean; isDraft: boolean }) {
+function ContainerRow({ c, open, onToggle, flashed, isVoid, isDraft, fromBc }: { c: ContainerView; open: boolean; onToggle: () => void; flashed: boolean; isVoid: boolean; isDraft: boolean; fromBc: boolean }) {
   const router = useRouter()
   const refreshOnReturn = useRefreshOnReturn()
   const [editing, setEditing] = useState(false)
@@ -196,11 +199,11 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid, isDraft }: { c: Cont
         {/* What's in it — edited in place */}
         <td className={`${td} max-xl:p-0 max-md:order-3 md:max-xl:order-2 max-xl:col-span-2 xl:min-w-[13rem] xl:w-[30%]`}>
           <div className="xl:hidden text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">What&apos;s in it</div>
-          {isDraft ? (
+          {isDraft || fromBc ? (
             <div className="py-1.5">
               <span className={`block text-sm font-semibold ${category ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400 font-normal italic"}`}>{category || "No category"}</span>
               <span className={`block text-sm whitespace-pre-line ${description ? "text-gray-700 dark:text-gray-300" : "text-gray-500 dark:text-gray-400 italic"}`}>{description || "No description"}</span>
-              <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400">Changed in Check in until it&apos;s booked in.</span>
+              <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400">{fromBc ? "From BC — changed in BC until the Hub takes over." : "Changed in Check in until it's booked in."}</span>
             </div>
           ) : editing ? (
             <div
@@ -253,7 +256,7 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid, isDraft }: { c: Cont
               <span className={`${mono} font-semibold text-gray-900 dark:text-white`}>{c.locationCode}</span>
               {kindName && <span className="text-xs text-gray-500 dark:text-gray-400"> · {kindName}</span>}
               {c.locationName && <div className="text-xs text-gray-500 dark:text-gray-400">{c.locationName}</div>}
-              <div className="text-xs text-gray-500 dark:text-gray-400">Moved {ukDateTime(c.movedAt)}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{c.movedAt ? `Moved ${ukDateTime(c.movedAt)}` : fromBc ? "As at the last BC copy" : "Not moved here yet"}</div>
             </>
           ) : (
             <span className="text-sm text-gray-500 dark:text-gray-400">Not put away yet</span>
@@ -286,8 +289,8 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid, isDraft }: { c: Cont
             {isVoid
               ? <button type="button" className={btn} disabled title="A void receipt’s labels can’t be printed.">Print label</button>
               : <a href={`/api/goods-in/labels?containers=${encodeURIComponent(c.id)}`} target="_blank" rel="noopener" className={btn} onClick={refreshOnReturn}>Print label</a>}
-            <Link href={`/tools/warehouse/move?item=${encodeURIComponent(c.id)}`} className={btn}>Move</Link>
-            {!isDraft && !done && confirm === null && (
+            {!fromBc && <Link href={`/tools/warehouse/move?item=${encodeURIComponent(c.id)}`} className={btn}>Move</Link>}
+            {!isDraft && !fromBc && !done && confirm === null && (
               <>
                 <button type="button" className={btn} disabled={!!busy} onClick={() => (lotsN === 0 ? setConfirm("catalogued") : void setStatus("catalogued"))}>
                   {busy === "catalogued" ? "Saving…" : "Mark catalogued"}
@@ -295,7 +298,7 @@ function ContainerRow({ c, open, onToggle, flashed, isVoid, isDraft }: { c: Cont
                 <button type="button" className={btn} disabled={!!busy} onClick={() => setConfirm("returned")}>Mark returned</button>
               </>
             )}
-            {!isDraft && done && (
+            {!isDraft && !fromBc && done && (
               <button type="button" className={btn} disabled={!!busy} onClick={() => void setStatus(back)}>
                 {busy === back ? "Saving…" : `Undo — back to ${CONTAINER_STATUS[back].label.toLowerCase()}`}
               </button>

@@ -2605,6 +2605,16 @@ END $$`,
     ALTER TABLE "Submission" ADD CONSTRAINT "Submission_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
   END IF;
 END $$`,
+  // BC's receipts and totes copied INTO Goods In's own tables (2026-10-23, lib/goods-in/bc-mirror.ts):
+  // source "bc" = copied from Business Central, read-only until WAREHOUSE_OWNER=hub.
+  `ALTER TABLE "GoodsInReceipt" ADD COLUMN IF NOT EXISTS "source" TEXT`,
+  `ALTER TABLE "GoodsInReceipt" ADD COLUMN IF NOT EXISTS "bcSyncedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "GoodsInReceipt" ADD COLUMN IF NOT EXISTS "bcData" JSONB`,
+  `ALTER TABLE "GoodsInContainer" ADD COLUMN IF NOT EXISTS "source" TEXT`,
+  `ALTER TABLE "GoodsInContainer" ADD COLUMN IF NOT EXISTS "bcSyncedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "GoodsInContainer" ADD COLUMN IF NOT EXISTS "bcData" JSONB`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInReceipt_source_idx" ON "GoodsInReceipt"("source")`,
+  `CREATE INDEX IF NOT EXISTS "GoodsInContainer_source_idx" ON "GoodsInContainer"("source")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -13,6 +13,44 @@ import SetupBackups from "./setup-backups"
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reference_goods_in_bc_mirror.md",
+    content: `---
+name: reference-goods-in-bc-mirror
+description: "BC's receipts and totes copied INTO Goods In's own tables (2026-10-23) — one database like Customers, source \\"bc\\", read-only until WAREHOUSE_OWNER=hub; the mirror reads the Hub's BC copy tables, never BC. Read before touching Goods In receipts/totes or the BC warehouse sync"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: 0451a74a-15c6-4117-bb0a-374cbf0af74b
+  modified: 2026-10-23T15:51:42.633Z
+---
+
+Jordan (2026-10-23): "we need a similar thing for warehouse … ready for a transition so one day that is
+taken over in the hub that's searchable and editable". Offered two shapes; he chose **one database,
+like Customers** (not a separate read-only section over WarehouseItem/WarehouseTote).
+
+- \`lib/goods-in/bc-mirror.ts\` copies \`WarehouseTote\` + \`WarehouseReceiptTote\` (the Hub's BC copy, NOT
+  BC) into \`GoodsInReceipt\` / \`GoodsInContainer\` with \`source = "bc"\`, \`bcSyncedAt\`, \`bcData\`. Keyed on
+  BC's own numbers; \`person\` = Customer by vendorNo. INSERT … ON CONFLICT updates only rows already
+  "bc" — a Hub row is never overwritten (clashes named). Shell totes (no receipt, ~1,600) skipped.
+  Nothing deleted. Receipt status worked out (all totes catalogued → closed); tote status from the
+  catalogued tick / location kind; movedAt null ("as at the last BC copy").
+- Runs: nightly stage in \`/api/cron/bc-warehouse\` after the tote stages (changes-only; everything on
+  the 5am FULL) via \`/api/goods-in/bc-mirror\`; Goods In → Settings → "Business Central's receipts &
+  totes" (Copy changes / Copy everything, moving count + Stop). Runs = WarehouseSyncLog source
+  \`goods_in_mirror\`. Measured on sandbox: 23k totes, 9.1k receipts.
+- \`HUB_OWNS_WAREHOUSE\` (\`WAREHOUSE_OWNER=hub\`, lib/customers/ownership.ts): until then BC rows refuse
+  edit/add/notes/close/void/print/email and MOVES (moveItem + moveEverything skip them); labels can be
+  reprinted. Receipts list has a Booked in: Anywhere/Hub/BC filter + From BC badge; dashboard figures
+  count Hub-made rows only (\`HUB_MADE\`, lib/goods-in/source.ts).
+- Columns were added to Jack's tables (precedent: customerId the same day) — check-in saves fail
+  between deploy and Run Migrations. Lots are NOT part of this. Full rules: RULES.md → Goods In →
+  "BC's receipts and totes copied INTO Goods In".
+
+**How to apply:** any new Goods In write must check \`isFromBc(source) && !HUB_OWNS_WAREHOUSE\`; any new
+count on the dashboard/Settings uses \`HUB_MADE\`. Related: [[reference-customers-hub]], [[project-replace-bc]].
+`,
+  },
+  {
     filename: "reference_customers_hub.md",
     content: `---
 name: reference-customers-hub

@@ -113,3 +113,12 @@ export function StatusCounts({ containers }: { containers: { status: string | nu
     </span>
   )
 }
+
+/** A receipt or tote copied from Business Central (lib/goods-in/bc-mirror.ts) — read-only here until the Hub takes over. */
+export function FromBcBadge({ what = "From BC" }: { what?: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 dark:text-sky-200 whitespace-nowrap" title="Booked in Business Central and copied into the Hub nightly. Changes are made in BC until the Hub takes over.">
+      {what}
+    </span>
+  )
+}

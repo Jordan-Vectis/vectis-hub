@@ -1202,12 +1202,18 @@ model GoodsInReceipt {
   printedAt       DateTime?
   emailedAt       DateTime?
   emailedTo       String?
+  // 2026-10-24: who made the row — "bc" = copied from Business Central by lib/goods-in/bc-mirror.ts
+  // (read-only here until WAREHOUSE_OWNER=hub), null/"hub" = booked in the Hub. bcData = what BC's copy had.
+  source          String?
+  bcSyncedAt      DateTime?
+  bcData          Json?
 
   containers GoodsInContainer[]
 
   @@index([contactId])
   @@index([createdAt])
   @@index([customerId])
+  @@index([source])
 }
 
 /// A tote or a pallet on a receipt — goods grouped by CATEGORY, not item. The id IS the tote or
@@ -1228,12 +1234,16 @@ model GoodsInContainer {
   createdByName  String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  source         String?    // "bc" = copied from Business Central (see GoodsInReceipt.source)
+  bcSyncedAt     DateTime?
+  bcData         Json?
 
   movements GoodsInMovement[]
 
   @@index([receiptId])
   @@index([locationCode])
   @@index([status])
+  @@index([source])
 }
 
 /// A place goods can be: a storage location, a cataloguing bench, a shelf for finished lots.

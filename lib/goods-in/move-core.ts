@@ -1,5 +1,7 @@
 import type { Prisma } from "@/app/generated/prisma/client"
 import { STATUS_FOR_KIND, normaliseCode, type ContainerKind, type ContainerStatus, type LocationKind } from "@/lib/goods-in/model"
+import { HUB_OWNS_WAREHOUSE } from "@/lib/customers/ownership"
+import { isFromBc } from "@/lib/goods-in/source"
 
 // Goods In — the ONE place a single tote, pallet or lot is moved to a location. SERVER ONLY (a
 // plain module, not "use server": it takes a transaction and is called by server code only).
@@ -111,6 +113,9 @@ export async function moveItem(tx: Prisma.TransactionClient, me: Mover, rawItem:
   const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "GoodsInContainer" WHERE "id" = ${item} FOR UPDATE`
   const container = locked.length ? await tx.goodsInContainer.findUnique({ where: { id: item } }) : null
   if (container) {
+    // Booked in BC: BC wouldn't know about a move made here, and the next copy would write BC's
+    // location back over it — so until the Hub owns the warehouse records it is moved in BC.
+    if (isFromBc(container.source) && !HUB_OWNS_WAREHOUSE) return refuse(`${item} was booked in Business Central — move it in BC until the Hub takes over (the Hub's copy follows at the next copy).`)
     if (container.locationCode === locationCode) return refuse(`${item} is already at ${locationCode}.`)
     const containerKind: ContainerKind = container.kind === "pallet" ? "pallet" : "tote"
     if (after) {

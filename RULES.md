@@ -1997,6 +1997,55 @@ the same way, never as an export of an actions file.
     (`parseLocationCode`); "last used" and "ever used" from `GoodsInMovement`. Removing is confirmed
     in the page (Confirm / Cancel), never with `window.confirm`.
 
+### 🗄 BC's receipts and totes copied INTO Goods In — BC first until switch day (2026-10-23)
+
+Jordan: *"we need a similar thing for warehouse … pulling into its own separate section ready for a
+transition so one day that is taken over in the hub that's searchable and editable"*, and chose
+**one database, like Customers** over a separate read-only section on the BC copy tables. So
+Business Central's receipts and totes are copied INTO `GoodsInReceipt` / `GoodsInContainer` every
+night, and Goods In's Receipts list, Find, the handheld's lookup and the customer pages show BC's
+and the Hub's together. Migration `20261023170000_goods_in_bc_source` (**NEEDS Run Migrations** —
+⚠ between the deploy and the banner, check-in saves fail: Prisma reads the new columns back).
+
+- **`source`** on both tables: `"bc"` = copied from BC; null / `"hub"` = booked in the Hub
+  (`lib/goods-in/source.ts`: `isFromBc`, `HUB_MADE`, `FROM_BC`). `bcSyncedAt` = when the copy last
+  touched it, `bcData` = everything BC's copy had. A BC row is keyed on BC's own number (R…, T…, P…).
+- **The copy** is `lib/goods-in/bc-mirror.ts` (`mirrorBcPage`): it reads the Hub's OWN BC copy
+  tables — `WarehouseTote` + `WarehouseReceiptTote`, filled by the BC Warehouse Data Sync — **never BC
+  itself, and writes nothing to BC** (the Goods In rule stands). One page (1,000 totes) a call, keyset
+  on the tote number; the nightly `/api/cron/bc-warehouse` drives it after the tote stages
+  (changes-only on an incremental run, everything on the 5am FULL), and Goods In → Settings →
+  **Business Central's receipts & totes** has Copy changes / Copy everything with a count that moves
+  and a Stop (design rule 7b; actions in `lib/actions/goods-in-mirror.ts`, route
+  `/api/goods-in/bc-mirror`). Runs are `WarehouseSyncLog` rows, source `goods_in_mirror`.
+  - ⚠⚠ **A row booked in the Hub is NEVER written over**: the `INSERT … ON CONFLICT` updates only
+    rows whose `source` is already `"bc"`. A BC number landing on a Hub row is counted and named
+    (`hubClashes`) — the series carry on from BC's, so it means a series was set too low.
+  - A tote on no receipt in BC (a shell tote, ~1,600) is skipped — a container must sit on a receipt.
+    Nothing is ever deleted: a tote gone from BC keeps its row, its `bcSyncedAt` stops moving.
+  - Worked out, not copied: a receipt's status (every tote catalogued → closed, else open — BC has no
+    receipt status); a tote's (BC's catalogued tick → catalogued; at a location the Hub knows → that
+    kind's status; an unknown code → stored; no location → booked). `movedAt` stays null (BC gives no
+    time) — the screens say "as at the last BC copy". The receipt's `customer` snapshot is only the
+    seller's name and number; its `person` is the Customer with that `vendorNo`, when there is one.
+- ⚠⚠ **BC rows are read-only until `WAREHOUSE_OWNER=hub`** (`HUB_OWNS_WAREHOUSE` in
+  `lib/customers/ownership.ts` — the same switch pattern as customers). Refused with
+  `BC_OWNS_WAREHOUSE_MESSAGE`: `addContainers`, `updateContainer`, `updateReceipt` (notes, close,
+  void) and `markReceiptSent` for printing/emailing; and **moving a BC tote** — `moveItem` refuses
+  (Scan to move, the handheld, Check what's here), `moveEverything` leaves BC totes where they are.
+  BC wouldn't know about a move made here, and the next copy would write BC's location back. **Tote
+  labels CAN be reprinted** from the Hub. The receipt page shows a BC receipt whole with a From BC
+  badge and no edit controls; the Receipts list has a **Booked in: Anywhere · In the Hub · In BC**
+  filter. On switch day the flag opens them all up — nothing to migrate.
+- **The dashboard's figures count Hub-made rows only** (`HUB_MADE`) — 9,000 BC receipts would swamp
+  "booked today" and the status tiles — with one line under them saying how many came from BC and
+  when; Settings' "last given" numbers read Hub-made rows too. The Customers hub's Receipts tab lists
+  Goods In's receipts with a From BC badge beside the BC-copy receipts it already showed.
+- Known limits: a BC tote's location can be a day old (the copy is nightly), so a location holding
+  only BC totes can't be removed until the next copy agrees it is empty; movements aren't mirrored
+  (BC Warehouse → Location History still answers); lots are untouched by this (WarehouseItem,
+  CatalogueLot and the BC Database page stay as they are).
+
 ### 📱 Goods In → the handheld scanner: `/scan` and the Vectis Scanner app (2026-10-16)
 
 Jack: *"Right now we use scanners to locate things — they're Newland scanners. I need to make a hand

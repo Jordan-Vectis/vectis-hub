@@ -9,6 +9,7 @@ import { LOCATION_KINDS, STATUS_FOR_KIND, normaliseCode, type LocationKind } fro
 import { LOCATION_CODE_HELP, LOCATION_CODE_RULE, MAX_BULK_LOCATIONS, compareCodes, defaultLocationName } from "@/lib/goods-in/location-codes"
 import type { Result } from "@/lib/actions/goods-in"
 import { goodsHere } from "@/lib/goods-in/lookup-core"
+import { HUB_OWNS_WAREHOUSE } from "@/lib/customers/ownership"
 
 // Goods In → Locations: the many-at-once tools — add a run or a pasted list, remove, switch on or
 // off, change kind or names, edit one, empty a location into another, and list what is at some
@@ -425,6 +426,7 @@ export async function moveEverything(fromCode: string, toCode: string, note?: st
       const containers = await tx.$queryRaw<{ id: string; status: string | null }[]>`
         SELECT "id", "status" FROM "GoodsInContainer"
         WHERE "locationCode" = ${from} AND ("status" IS NULL OR "status" <> 'returned')
+          AND ("source" IS DISTINCT FROM 'bc' OR ${HUB_OWNS_WAREHOUSE}::boolean)
         ORDER BY "id"
         FOR UPDATE`
       // Lots whose LATEST move is to `from` (a lot's shelf is its latest move). Each new move carries

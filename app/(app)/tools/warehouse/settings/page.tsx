@@ -7,6 +7,10 @@ import { appOrigin, CALLBACK_PATH, graphClientId, mailStatus } from "@/lib/goods
 import { Empty, ErrorBox, isMissingTable, NotReady, PageHeader } from "../_components/ui"
 import NumberSeries, { type SeriesItem } from "./number-series"
 import MailPanel from "./mail-panel"
+import BcMirrorPanel from "./bc-mirror-panel"
+import { mirrorStatus } from "@/lib/goods-in/bc-mirror"
+import { HUB_MADE, HUB_MADE_CONTAINER } from "@/lib/goods-in/source"
+import { HUB_OWNS_WAREHOUSE } from "@/lib/customers/ownership"
 
 export const dynamic = "force-dynamic"
 
@@ -35,15 +39,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   let series: SeriesItem[]
   let mail: Awaited<ReturnType<typeof mailStatus>>
+  let mirror: Awaited<ReturnType<typeof mirrorStatus>>
   try {
-    const [counters, status, lastReceipt, lastTote, lastPallet] = await Promise.all([
+    // "Last given" means given by the Hub's own series — BC's copied receipts and totes carry BC's numbers.
+    const [counters, status, lastReceipt, lastTote, lastPallet, bc] = await Promise.all([
       readCounters(),
       mailStatus(),
-      prisma.goodsInReceipt.findFirst({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, createdAt: true } }),
-      prisma.goodsInContainer.findFirst({ where: { kind: "tote" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, createdAt: true } }),
-      prisma.goodsInContainer.findFirst({ where: { kind: "pallet" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, createdAt: true } }),
+      prisma.goodsInReceipt.findFirst({ where: HUB_MADE, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, createdAt: true } }),
+      prisma.goodsInContainer.findFirst({ where: { kind: "tote", ...HUB_MADE_CONTAINER }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, createdAt: true } }),
+      prisma.goodsInContainer.findFirst({ where: { kind: "pallet", ...HUB_MADE_CONTAINER }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, createdAt: true } }),
+      mirrorStatus(),
     ])
     mail = status
+    mirror = bc
     const set = new Map(counters.map(c => [c.key, c]))
     const last = { receipt: lastReceipt, tote: lastTote, pallet: lastPallet, vendor: null } as const
     series = COUNTER_KEYS.map(key => {
@@ -79,6 +87,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         origin={origin}
         clientId={graphClientId()}
         flash={sp.mail === "connected" ? { ok: true } : sp.mail === "error" ? { ok: false, reason: (sp.reason ?? "").slice(0, 400) } : null}
+      />
+      <BcMirrorPanel
+        hubOwns={HUB_OWNS_WAREHOUSE}
+        status={{
+          ...mirror,
+          lastComplete: mirror.lastComplete ? { ...mirror.lastComplete, startedAt: mirror.lastComplete.startedAt.toISOString(), completedAt: mirror.lastComplete.completedAt?.toISOString() ?? null } : null,
+          lastRun: mirror.lastRun ? { ...mirror.lastRun, startedAt: mirror.lastRun.startedAt.toISOString() } : null,
+        }}
       />
     </div>
   )

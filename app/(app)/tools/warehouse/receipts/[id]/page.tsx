@@ -6,7 +6,9 @@ import { getGoodsInUser, atLeast } from "@/lib/goods-in/access"
 import { getDepartmentAccess, canSeeAuction } from "@/lib/departments"
 import { THROWN_AWAY_NOTE, labelsGivenUp, normaliseCode, type CustomerSnapshot } from "@/lib/goods-in/model"
 import { ErrorBox, NotReady, PageHeader, StatusKey, box, isMissingTable, mono, ukDateTime } from "../../_components/ui"
-import { CarryOnLink, RECEIPT_STATUS, ReceiptStatusBadge, StatusCounts, kindCounts, receiptStatus } from "../_parts"
+import { CarryOnLink, FromBcBadge, RECEIPT_STATUS, ReceiptStatusBadge, StatusCounts, kindCounts, receiptStatus } from "../_parts"
+import { isFromBc } from "@/lib/goods-in/source"
+import { HUB_OWNS_WAREHOUSE } from "@/lib/customers/ownership"
 import ReceiptActions from "./receipt-actions"
 import DraftBanner from "./draft-banner"
 import ContainersTable from "./containers-table"
@@ -25,7 +27,11 @@ import { CATEGORY_LIST_ID, type ContainerView, type LotView } from "./types"
 // emailed, closed, voided or added to until it's booked in, and its notes are written at Check & book in.
 //
 // ⚠ Never shows bank details — the Hub doesn't hold any (the printed receipt's bank form is blank).
-// Nothing here reads or writes Business Central.
+// A receipt copied from Business Central (source "bc", lib/goods-in/bc-mirror.ts) opens here too since
+// 2026-10-23: shown whole, with a From BC badge and a note, but until the Hub owns the warehouse records
+// (WAREHOUSE_OWNER=hub) nothing on it can be changed, added, moved, printed or emailed from the Hub —
+// BC is in charge and the next copy would write its version back. Tote labels can still be reprinted.
+// Nothing here reads or writes Business Central itself.
 
 export const dynamic = "force-dynamic"
 
@@ -111,11 +117,14 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
   // A check-in thrown away after labels were printed (or a tote moved) is kept as void with this note
   // (discardCheckIn's wording). It was never booked in, so it isn't offered back as a booked receipt.
   const thrownAway = isVoid && (r.notes ?? "").includes(THROWN_AWAY_NOTE)
+  const fromBc = isFromBc(r.source)
+  const bcLocked = fromBc && !HUB_OWNS_WAREHOUSE
   const lotsMade = containers.reduce((n, c) => n + c.lots.length, 0)
   const labelsPrinted = containers.filter(c => c.labelPrintedAt).length
   const highlightRaw = sp.tote ? normaliseCode(sp.tote) : null
   const highlight = highlightRaw && containers.some(c => c.id === highlightRaw) ? highlightRaw : null
-  const shown = snap ?? live
+  // A BC receipt's snapshot is only the seller's name and number — their record now says more.
+  const shown = fromBc ? live : (snap ?? live)
   const customerName = shown.name || liveName
 
   return (
@@ -126,6 +135,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
         intro={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <ReceiptStatusBadge status={r.status} />
+            {fromBc && <FromBcBadge />}
             <span>{isDraft ? "Check-in started" : "Booked"} {ukDateTime(r.createdAt)}{r.createdByName ? <> by <span className="font-medium text-gray-700 dark:text-gray-200">{r.createdByName}</span></> : null}</span>
             <span aria-hidden>·</span>
             <span className="font-medium text-gray-700 dark:text-gray-200">{customerName}</span>
@@ -134,6 +144,18 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           </span>
         }
       />
+
+      {fromBc && (
+        <div role="note" className="mb-4 rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-100 px-4 py-3 text-sm leading-relaxed">
+          <p className="font-semibold">Booked in Business Central</p>
+          <p>
+            Copied into the Hub {r.bcSyncedAt ? <>({ukDateTime(r.bcSyncedAt)})</> : null} from BC&apos;s receipt and tote records, so it can be found and read here.
+            {bcLocked
+              ? " Until the Hub takes over the warehouse records, it is changed in BC — nothing on it can be edited, added to, moved, printed or emailed from here (tote labels can be reprinted). The Hub's copy follows at the next nightly copy."
+              : " The Hub owns the warehouse records now, so it can be changed here like any other receipt."}
+          </p>
+        </div>
+      )}
 
       {isVoid && (
         <div role="note" className="mb-4 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-200 px-4 py-3 text-sm leading-relaxed">
@@ -163,7 +185,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
         />
       )}
 
-      <ReceiptActions
+      {!bcLocked && <ReceiptActions
         id={r.id}
         status={status}
         canVoid={atLeast(me, "manager") && !thrownAway}
@@ -172,10 +194,10 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
         containerCount={containers.length}
         unprintedLabels={containers.filter(c => !c.labelPrintedAt).map(c => c.id)}
         userName={me.name}
-      />
+      />}
 
       {/* What has gone out, and when (a check-in not booked in yet has only labels to print) */}
-      {(!isDraft || containers.length > 0) && (
+      {!fromBc && (!isDraft || containers.length > 0) && (
         <p className="-mt-3 mb-6 text-sm text-gray-600 dark:text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
           {!isDraft && (
             <>
@@ -217,17 +239,17 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
             No totes or pallets on this receipt.{status === "open" ? " Add them below." : isDraft ? " Add them when you carry on checking in." : ""}
           </div>
         ) : (
-          <ContainersTable receiptId={r.id} containers={containers} highlight={highlight} isVoid={isVoid} isDraft={isDraft} />
+          <ContainersTable receiptId={r.id} containers={containers} highlight={highlight} isVoid={isVoid} isDraft={isDraft} fromBc={bcLocked} />
         )}
 
         <div className="mt-4">
-          {status === "open" && <AddContainers receiptId={r.id} categoriesListId={CATEGORY_LIST_ID} />}
+          {status === "open" && !bcLocked && <AddContainers receiptId={r.id} categoriesListId={CATEGORY_LIST_ID} />}
           {isDraft && (
             <p className="text-sm text-gray-500 dark:text-gray-400">
               To add, change or remove totes and pallets, <CarryOnLink receiptId={r.id} className="inline-flex items-center min-h-11 font-medium text-indigo-700 dark:text-indigo-300 underline">carry on checking in</CarryOnLink>.
             </p>
           )}
-          {status === "closed" && (
+          {status === "closed" && !bcLocked && (
             <p className="text-sm text-gray-500 dark:text-gray-400">This receipt is closed. Reopen it (button at the top) to add more totes or pallets.</p>
           )}
         </div>
@@ -262,7 +284,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
             {isDraft
               ? "As it will go on the receipt — brought up to date from their record when it's booked in."
-              : snap ? "As printed on the receipt." : "No copy was kept on this receipt — this is their record as it is now."}
+              : fromBc ? "The seller as Business Central has them (the Hub's customer database)." : snap ? "As printed on the receipt." : "No copy was kept on this receipt — this is their record as it is now."}
           </p>
 
           <p className="font-semibold text-gray-900 dark:text-white">{[shown.salutation, shown.name || liveName].filter(Boolean).join(" ")}</p>
@@ -303,7 +325,7 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
             {isDraft
               ? "The terms it will be booked in on. They can be changed for this receipt at Check & book in."
-              : "Agreed when the goods were booked in, as printed on the receipt."}
+              : fromBc ? "Booked in Business Central — its terms are on the receipt in BC and aren't copied here." : "Agreed when the goods were booked in, as printed on the receipt."}
           </p>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
             <dt className="text-gray-500 dark:text-gray-400">Commission</dt>
@@ -347,6 +369,11 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
             <>
               <p className={`text-sm whitespace-pre-line ${r.notes ? "text-gray-800 dark:text-gray-200" : "text-gray-500 dark:text-gray-400 italic"}`}>{r.notes || "None yet"}</p>
               <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Notes are added at Check &amp; book in. Staff only — not printed on the receipt.</p>
+            </>
+          ) : bcLocked ? (
+            <>
+              <p className={`text-sm whitespace-pre-line ${r.notes ? "text-gray-800 dark:text-gray-200" : "text-gray-500 dark:text-gray-400 italic"}`}>{r.notes || "None"}</p>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Booked in BC — notes are changed there until the Hub takes over.</p>
             </>
           ) : (
             <NotesEditor receiptId={r.id} notes={r.notes} />
@@ -442,7 +469,7 @@ async function load(id: string, me: { id: string; role: string }) {
     id: c.id, kind: c.kind, category: c.category, description: c.description, status: c.status,
     locationCode: c.locationCode, locationKind: c.locationKind, locationName: c.locationCode ? locName.get(c.locationCode) ?? null : null,
     movedAt: c.movedAt?.toISOString() ?? null, labelPrintedAt: c.labelPrintedAt?.toISOString() ?? null,
-    createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(), createdByName: c.createdByName,
+    createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(), createdByName: c.createdByName, source: c.source,
     lots: byTote.get(c.id) ?? [],
   }))
 
@@ -455,7 +482,8 @@ async function load(id: string, me: { id: string; role: string }) {
     email: p?.email ?? null, mobile: p?.mobile ?? null, phone: p?.phone ?? null, vatRegNo: p?.vatRegNo ?? null, vendorNo: p?.vendorNo ?? p?.goodsInCustomer?.vendorNo ?? null,
   }
   const snap = asSnapshot(r.customer)
-  const changed = snap ? [...new Set(FIELD_WORDS.filter(([k]) => !same(snap[k], live[k])).map(([, w]) => w))] : []
+  // A BC receipt's snapshot is only a name and number, so "changed since" would be noise there.
+  const changed = snap && !isFromBc(r.source) ? [...new Set(FIELD_WORDS.filter(([k]) => !same(snap[k], live[k])).map(([, w]) => w))] : []
 
   const categories = catRows.map(c => c.category).filter((c): c is string => !!c)
 

@@ -16,6 +16,8 @@ import { HUB_OWNS_CUSTOMERS, BC_OWNS_MESSAGE } from "@/lib/customers/ownership"
 import { AGREEMENT_UNREAD, findAgreement } from "@/lib/goods-in/agreement"
 import { moveItem } from "@/lib/goods-in/move-core"
 import { findCode } from "@/lib/goods-in/lookup-core"
+import { HUB_OWNS_WAREHOUSE } from "@/lib/customers/ownership"
+import { BC_OWNS_WAREHOUSE_MESSAGE, isFromBc } from "@/lib/goods-in/source"
 
 // Goods In — every write, and the reads the screens share. SERVER ONLY (server actions).
 //
@@ -257,10 +259,11 @@ export async function addContainers(receiptId: string, containers: ContainerInpu
     if (rows.length === 0) return { ok: false, error: "Nothing to add." }
     if (rows.length > 200) return { ok: false, error: "That's more than 200 totes and pallets at once — add them in two goes." }
     const ids = await prisma.$transaction(async tx => {
-      const r = await tx.goodsInReceipt.findUnique({ where: { id: receiptId }, select: { status: true } })
+      const r = await tx.goodsInReceipt.findUnique({ where: { id: receiptId }, select: { status: true, source: true } })
       if (!r) throw new Error("That receipt couldn't be found.")
       if (r.status === "void") throw new Error("That receipt has been voided.")
       if (r.status === "draft") throw new Error(NOT_BOOKED_YET)
+      if (isFromBc(r.source) && !HUB_OWNS_WAREHOUSE) throw new Error(BC_OWNS_WAREHOUSE_MESSAGE)
       const out: string[] = []
       for (const row of rows) {
         const [id] = await takeNumbers(tx, row.kind, 1)
@@ -282,9 +285,10 @@ export async function updateContainer(id: string, patch: { category?: string | n
     // A tote on a check-in that isn't booked in yet belongs to the Check in screen: its next save
     // would write over a category or description changed here, and it can't be catalogued or
     // returned before it's booked in. (Moving it is still allowed — that's moveTo.)
-    const cur = await prisma.goodsInContainer.findUnique({ where: { id }, select: { receipt: { select: { status: true } } } })
+    const cur = await prisma.goodsInContainer.findUnique({ where: { id }, select: { source: true, receipt: { select: { status: true, source: true } } } })
     if (!cur) return { ok: false, error: `${id} couldn't be found.` }
     if (cur.receipt.status === "draft") return { ok: false, error: NOT_BOOKED_YET }
+    if ((isFromBc(cur.source) || isFromBc(cur.receipt.source)) && !HUB_OWNS_WAREHOUSE) return { ok: false, error: BC_OWNS_WAREHOUSE_MESSAGE }
     await prisma.goodsInContainer.update({
       where: { id },
       data: {
@@ -308,11 +312,12 @@ export async function updateReceipt(id: string, patch: { notes?: string | null; 
   try {
     const me = await who()
     if (patch.status && !["open", "closed", "void"].includes(patch.status)) return { ok: false, error: "Unknown receipt status." }
-    const cur = await prisma.goodsInReceipt.findUnique({ where: { id }, select: { status: true, notes: true } })
+    const cur = await prisma.goodsInReceipt.findUnique({ where: { id }, select: { status: true, notes: true, source: true } })
     if (!cur) return { ok: false, error: "That receipt couldn't be found." }
     // Nothing here — notes, close, void — changes a check-in that isn't booked in yet; Check in
     // throws one away instead (discardCheckIn in goods-in-checkin.ts).
     if (cur.status === "draft") return { ok: false, error: NOT_BOOKED_YET }
+    if (isFromBc(cur.source) && !HUB_OWNS_WAREHOUSE) return { ok: false, error: BC_OWNS_WAREHOUSE_MESSAGE }
     // A check-in thrown away after a label was printed is kept as void for the record. It was never
     // booked in, so it can't be brought back as if it had been.
     const thrownAway = cur.status === "void" && (cur.notes ?? "").includes(THROWN_AWAY_NOTE)
@@ -356,9 +361,11 @@ export async function updateReceipt(id: string, patch: { notes?: string | null; 
 export async function markReceiptSent(id: string, how: { printed?: boolean; emailedTo?: string | null; labels?: boolean }): Promise<Result> {
   try {
     await who()
-    const cur = await prisma.goodsInReceipt.findUnique({ where: { id }, select: { status: true } })
+    const cur = await prisma.goodsInReceipt.findUnique({ where: { id }, select: { status: true, source: true } })
     if (!cur) return { ok: false, error: "That receipt couldn't be found." }
     if (cur.status === "draft") return { ok: false, error: NOT_BOOKED_YET }
+    // A BC receipt is printed and emailed from BC until switch day; its tote labels can be reprinted here.
+    if ((how.printed || how.emailedTo) && isFromBc(cur.source) && !HUB_OWNS_WAREHOUSE) return { ok: false, error: BC_OWNS_WAREHOUSE_MESSAGE }
     const now = new Date()
     if (how.printed || how.emailedTo) {
       await prisma.goodsInReceipt.update({ where: { id }, data: { ...(how.printed ? { printedAt: now } : {}), ...(how.emailedTo ? { emailedAt: now, emailedTo: how.emailedTo } : {}) } })

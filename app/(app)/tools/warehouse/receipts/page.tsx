@@ -9,8 +9,9 @@ import { normaliseCode } from "@/lib/goods-in/model"
 import {
   Empty, ErrorBox, NotReady, OkBox, PageHeader, StatusKey, btn, btnGo, box, input, isMissingTable, label, mono, td, th, ukDate, ukDateTime,
 } from "../_components/ui"
-import { CarryOnLink, ReceiptStatusBadge, ReceiptStatusKey, StatusCounts, kindCounts, receiptStatus } from "./_parts"
+import { CarryOnLink, FromBcBadge, ReceiptStatusBadge, ReceiptStatusKey, StatusCounts, kindCounts, receiptStatus } from "./_parts"
 import SearchBox from "./search-box"
+import { FROM_BC, HUB_MADE, isFromBc } from "@/lib/goods-in/source"
 
 // Goods In → Receipts. Every receipt the Hub has booked, newest first, 50 a page, with where its
 // totes and pallets have got to. Server-rendered: the filters are a plain GET form, so a link to a
@@ -21,7 +22,9 @@ import SearchBox from "./search-box"
 // is listed too — marked "Not booked in yet", with Carry on checking in — and has its own filter.
 // "Open" means booked in and still being added to, so it never includes a draft.
 //
-// Nothing here reads or writes Business Central.
+// Receipts booked in Business Central are here too since 2026-10-23 — copied in nightly
+// (lib/goods-in/bc-mirror.ts), marked "From BC", filtered with "Booked in". Nothing here reads or
+// writes Business Central itself.
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Receipts · Goods In" }
@@ -30,10 +33,13 @@ const PAGE_SIZE = 50
 const STATUSES = ["all", "draft", "open", "closed", "void"] as const
 type StatusFilter = (typeof STATUSES)[number]
 const STATUS_LABEL: Record<StatusFilter, string> = { all: "All", draft: "Not booked in yet", open: "Open", closed: "Closed", void: "Void" }
+const SOURCES = ["all", "hub", "bc"] as const
+type SourceFilter = (typeof SOURCES)[number]
+const SOURCE_LABEL: Record<SourceFilter, string> = { all: "Anywhere", hub: "In the Hub", bc: "In BC" }
 
 /** `id` is what the old prototype's links (e.g. from Contacts) pass — treated as a search, so a Goods In receipt number still opens.
  *  `gone` is a check-in just thrown away from its receipt page (it no longer exists, so it lands here). */
-type SP = { q?: string; status?: string; from?: string; to?: string; page?: string; id?: string; gone?: string }
+type SP = { q?: string; status?: string; source?: string; from?: string; to?: string; page?: string; id?: string; gone?: string }
 
 /** "14:02", London time — the second line under the booked date. */
 const ukTime = (d: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" }).format(d)
@@ -62,6 +68,7 @@ type Row = {
   vendorNo: string | null
   status: string | null
   createdByName: string | null
+  source: string | null
   printedAt: Date | null
   emailedAt: Date | null
   emailedTo: string | null
@@ -87,6 +94,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
   // A scanned lot barcode or location isn't a receipt — the empty list then offers Find instead.
   const looksLikeCode = /\d/.test(code) && !/\s/.test(q) && code.length <= 24
   const status: StatusFilter = (STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as StatusFilter) : "all"
+  const source: SourceFilter = (SOURCES as readonly string[]).includes(sp.source ?? "") ? (sp.source as SourceFilter) : "all"
   const fromStr = /^\d{4}-\d{2}-\d{2}$/.test(sp.from ?? "") ? sp.from! : ""
   const toStr = /^\d{4}-\d{2}-\d{2}$/.test(sp.to ?? "") ? sp.to! : ""
   const from = londonStartOfDay(fromStr)
@@ -128,6 +136,8 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
       }
       if (status === "open") and.push({ OR: [{ status: "open" }, { status: null }] })
       else if (status !== "all") and.push({ status })
+      if (source === "bc") and.push({ source: FROM_BC })
+      else if (source === "hub") and.push(HUB_MADE)
       if (from) and.push({ createdAt: { gte: from } })
       if (toExclusive) and.push({ createdAt: { lt: toExclusive } })
       const where: Prisma.GoodsInReceiptWhereInput = and.length ? { AND: and } : {}
@@ -147,7 +157,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
         select: {
-          id: true, createdAt: true, vendorNo: true, status: true, createdByName: true, printedAt: true, emailedAt: true, emailedTo: true,
+          id: true, createdAt: true, vendorNo: true, status: true, createdByName: true, source: true, printedAt: true, emailedAt: true, emailedTo: true,
           customer: true, customerId: true,
           person: { select: { name: true, name2: true } },
           containers: { select: { kind: true, status: true } },
@@ -156,7 +166,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
       rows = found.map(r => {
         const snap = r.customer && typeof r.customer === "object" && !Array.isArray(r.customer) ? (r.customer as { name?: unknown }) : null
         return {
-          id: r.id, createdAt: r.createdAt, vendorNo: r.vendorNo, status: r.status, createdByName: r.createdByName,
+          id: r.id, createdAt: r.createdAt, vendorNo: r.vendorNo, status: r.status, createdByName: r.createdByName, source: r.source,
           printedAt: r.printedAt, emailedAt: r.emailedAt, emailedTo: r.emailedTo,
           customerName: personName(r.person, snap),
           customerId: r.customerId,
@@ -178,11 +188,11 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
   if (goTo) redirect(goTo)
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const filtered = !!(q || status !== "all" || fromStr || toStr)
+  const filtered = !!(q || status !== "all" || source !== "all" || fromStr || toStr)
   const href = (over: Partial<Record<keyof SP, string | number | null>>) => {
     const p = new URLSearchParams()
-    const merged: Record<string, string | number | null | undefined> = { q, status: status === "all" ? null : status, from: fromStr, to: toStr, page: null, ...over }
-    for (const [k, v] of Object.entries(merged)) if (v !== null && v !== undefined && v !== "" && !(k === "status" && v === "all") && !(k === "page" && Number(v) <= 1)) p.set(k, String(v))
+    const merged: Record<string, string | number | null | undefined> = { q, status: status === "all" ? null : status, source: source === "all" ? null : source, from: fromStr, to: toStr, page: null, ...over }
+    for (const [k, v] of Object.entries(merged)) if (v !== null && v !== undefined && v !== "" && !((k === "status" || k === "source") && v === "all") && !(k === "page" && Number(v) <= 1)) p.set(k, String(v))
     const s = p.toString()
     return `/tools/warehouse/receipts${s ? `?${s}` : ""}`
   }
@@ -224,8 +234,28 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
                 )
               })}
             </div>
+            <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Booked in">
+              <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 mr-1">Booked in</span>
+              {SOURCES.map(s => {
+                const on = s === source
+                return (
+                  <Link
+                    key={s}
+                    href={href({ source: s })}
+                    aria-current={on ? "page" : undefined}
+                    className={`inline-flex items-center justify-center min-h-11 px-4 rounded-lg border text-sm font-medium transition-colors ${on
+                      ? "bg-indigo-600 border-indigo-600 text-white"
+                      : "border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+                  >
+                    {SOURCE_LABEL[s]}
+                  </Link>
+                )
+              })}
+              <span className="text-xs text-gray-500 dark:text-gray-400">BC&apos;s receipts are copied in nightly and read-only here until the Hub takes over.</span>
+            </div>
             <Form action="/tools/warehouse/receipts" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end">
               {status !== "all" && <input type="hidden" name="status" value={status} />}
+              {source !== "all" && <input type="hidden" name="source" value={source} />}
               <div className="sm:col-span-2 lg:col-span-1">
                 <label htmlFor="rq" className={label}>Search</label>
                 <SearchBox defaultValue={q} />
@@ -296,7 +326,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{r.customerName}</p>
                             {r.vendorNo && <p className={`${mono} text-xs text-gray-500 dark:text-gray-400`}>Vendor {r.vendorNo}</p>}
                           </div>
-                          <ReceiptStatusBadge status={r.status} />
+                          <span className="flex flex-col items-end gap-1"><ReceiptStatusBadge status={r.status} />{isFromBc(r.source) && <FromBcBadge />}</span>
                         </div>
                         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-700 dark:text-gray-200">
                           <span className="font-medium">{draft && r.containers.length === 0 ? "Nothing added yet" : kindCounts(r.containers)}</span>
@@ -347,6 +377,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
                               {r.id}
                             </Link>
                             {receiptStatus(r.status) !== "open" && <div className="mt-1"><ReceiptStatusBadge status={r.status} /></div>}
+                            {isFromBc(r.source) && <div className="mt-1"><FromBcBadge /></div>}
                             {draft && <div><CarryOnLink receiptId={r.id} className="inline-flex items-center min-h-11 text-sm font-semibold text-indigo-700 dark:text-indigo-300 underline whitespace-nowrap" /></div>}
                           </td>
                           <td className={`${td} whitespace-nowrap`}>

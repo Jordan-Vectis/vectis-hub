@@ -33,5 +33,7 @@ export type ContainerView = {
   /** Changes on every save — lets a row show what was just saved until the page's fresh copy arrives. */
   updatedAt: string
   createdByName: string | null
+  /** "bc" when copied from Business Central (read-only until the Hub takes over). */
+  source: string | null
   lots: LotView[]
 }
