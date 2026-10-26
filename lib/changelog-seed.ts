@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5686ace99720f882ed86c393a4a657d5fe772602","author":"Jordan Orange","date":"2026-10-23T17:08:11+01:00","subject":"Goods In: Totes & pallets — the warehouse database, searchable, filterable, sortable, editable, exportable"},
   {"sha":"31e716cef67c8ce7df2656bffbde41cb05c1af71","author":"jack-vectis","date":"2026-10-23T16:52:33+01:00","subject":"Paid, not collected: shipment column fits on an iPad, honest not-read wording, no wasted BC reads"},
   {"sha":"0c20d6c34d74e472ecbfc95bbb7cbed10b3d232a","author":"Jordan Orange","date":"2026-10-23T16:53:04+01:00","subject":"Goods In: BC's receipts and totes copied into the Hub's own tables — BC first until switch day"},
   {"sha":"83af5d357e5c8a834b6dd35d8ce06ce526b1a2f8","author":"jack-vectis","date":"2026-10-23T16:44:05+01:00","subject":"Paid, not collected: collection docket, shipment number and who packed it, with a Shipment filter"},

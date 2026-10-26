@@ -97,10 +97,15 @@ const INVOICES_PER_CALL = 20
 const MAX_PAGES = 400
 /** bcPageWithNext asks BC for pages of this size. */
 const PAGE_SIZE = 500
-/** A run's time budget for reading BC: 12 minutes for Check BC now, the most allowed for the nightly
- *  run (nobody is waiting on it, and a slow BC night shouldn't leave the same buyers unread). Capped
- *  under UNCOLLECTED_RUN_STALE_MINUTES so a live run is never taken as dead. */
-const DEFAULT_BUDGET_MS = 12 * 60_000
+/** A run's time budget for reading BC: 20 minutes for Check BC now (12 until 2026-10-26 — on a Monday
+ *  morning BC answered slowly enough that 12 read only half the buyers, and the shipments not at all),
+ *  the most allowed for the nightly run (nobody is waiting on it, and a slow BC night shouldn't leave
+ *  the same buyers unread). Capped under UNCOLLECTED_RUN_STALE_MINUTES so a live run is never taken as
+ *  dead: 20 + the shipment read's own slot + saving stays inside SAVE_STOP_MS. */
+const DEFAULT_BUDGET_MS = 20 * 60_000
+/** The shipment read's own slot (its own deadline): it runs even when the time for reading BC above has
+ *  run out — the buyers that run DID judge still get their dockets read — and never takes time from it. */
+const SHIPMENT_BUDGET_MS = 90_000
 const MAX_BUDGET_MS = Math.max(60_000, (UNCOLLECTED_RUN_STALE_MINUTES - 5) * 60_000)
 /** Saving stops this long after the run began, whatever is left, so the run always finishes (and
  *  lets go of its lock) before UNCOLLECTED_RUN_STALE_MINUTES would let a second one start. */
@@ -525,7 +530,7 @@ export type FindOptions = {
   lookbackMonths?: number
   /** Called as the work moves along — counts only. */
   onProgress?: (p: FeedProgress) => void
-  /** The whole run's time budget (default 12 minutes, at most 25). */
+  /** The whole run's time budget (default 20 minutes, at most 25). */
   budgetMs?: number
   /** Renews the BC sign-in if BC answers 401 part-way (getBCTokenAny / getBCToken). */
   refreshToken?: () => Promise<string | null>
@@ -1606,13 +1611,16 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
     // Before Run Migrations there's nowhere to keep them — no BC time is spent reading them (writeShipping
     // then says Run Migrations is needed).
     const shipTable = dockets.length > 0 && (await shippingTableThere())
-    if (shipTable && !ctx.outOfTime && !stopBy()) {
+    if (shipTable && !stopBy()) {
+      // Its own slot (SHIPMENT_BUDGET_MS): read even when the run's time for reading BC has gone, so the
+      // buyers it did judge still get their shipments; and its running out never marks the run itself.
+      const shipCtx = makeCtx(ctx.token, { budgetMs: SHIPMENT_BUDGET_MS, refreshToken: opts.refreshToken, isStopped: () => !!stopBy() })
       let unreadDockets = 0
       let doneDockets = 0
       await eachLimit(chunk(dockets, PLACES_PER_CALL), BC_CONCURRENCY, async (batch) => {
         try {
-          if (ctx.outOfTime) throw ctx.stopped ? new Stopped() : new OutOfTime()
-          for (const [d, ss] of await readShipments(ctx, batch)) shipmentsOf.set(d, ss)
+          if (shipCtx.outOfTime) throw shipCtx.stopped ? new Stopped() : new OutOfTime()
+          for (const [d, ss] of await readShipments(shipCtx, batch)) shipmentsOf.set(d, ss)
         } catch {
           unreadDockets += batch.length
         }
@@ -1621,9 +1629,7 @@ export async function syncUncollected(opts: SyncOptions): Promise<UncollectedSyn
       })
       if (unreadDockets) shipNote = `The shipment requests on ${many(unreadDockets, "collection docket")} couldn't be read (BC didn't answer, or the time ran out) — those cases keep what was read before.`
     } else if (shipTable) {
-      shipNote = stopBy()
-        ? "It was stopped before the shipment requests were read — the cases keep what was read before."
-        : "There was no time left to read the shipment requests this run — the cases keep what was read before."
+      shipNote = "It was stopped before the shipment requests were read — the cases keep what was read before."
     }
 
     // ── Save every candidate — until a Stop, or the run has gone on so long that a second one

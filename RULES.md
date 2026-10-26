@@ -2783,7 +2783,8 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     now (verified live 2026-10-23 — above; one at a time if BC refuses the batch; each buyer's read
     straight after its invoice lines). ≤ 3 calls at once, backoff on 429 / 502 / 503 / 504, a 401
     renews the sign-in once (the company lookup's "BC API companies 401" too), and a time budget for
-    reading BC: **25 minutes for the nightly run, 12 for Check BC now** — never more, under the
+    reading BC: **25 minutes for the nightly run, 20 for Check BC now** (12 until 2026-10-26, when BC on
+    a Monday morning was slow enough that 12 read only half the buyers) — never more, under the
     30-minute stale rule below; saving stops 28 minutes in (`SAVE_STOP_MS`), whatever is left, so a
     run always ends before a second could be let in.
   - **Each run starts at a different buyer** (`rotate`, by the run's sequence number — the count of
@@ -3046,7 +3047,9 @@ storage charges start, and a timeline of every call, email, letter, note and cha
     Cancelled), `EVA_ShipmentDate`, `EVA_TrackingNo`, and `PTE_InternalReference` (PTE table-extension
     55008 — the card's "Internal Reference") = **who packed it**. Its type is always "Collection" (enum
     75761 has one value). ⚠ `SHIPMENT_SELECT` never asks for the request's name, address, email or phone.
-    - **The BC check reads them** before saving (while the time for reading BC is still there): every
+    - **The BC check reads them** before saving, in a slot of their own (`SHIPMENT_BUDGET_MS`, 90 s —
+      read even when the run's time for reading BC has run out, so the buyers it did judge still get
+      theirs, and never counted against the run): every
       candidate's dockets, `EVA_DocumentNo eq … or …` up to 20 a call (one at a time if BC refuses the
       batch); and after saving writes **`UncollectedShipping`** (one row per case — its own table,
       **NEEDS Run Migrations**; cascade on the case): `collectionNos`, `shipments` (every request, JSON),
