@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { getAccountsAccess } from "@/lib/accounts-auth"
+import { startAgainSite } from "@/lib/uncollected-settings"
 import { lastSyncRun, listCases } from "@/lib/actions/uncollected"
 import {
   GONE_LOCATIONS, QUERY_LOCATIONS, UNCOLLECTED_AFTER_DAYS, UNCOLLECTED_LOOKBACK_MONTHS, UNCOLLECTED_NIGHTLY_AT, locationListWords,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/uncollected"
 import BcCheck from "./bc-check"
 import UncollectedPanel from "./panel-client"
+import StartAgain from "./start-again"
 import StorageSettingsBox from "./storage-settings"
 import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 
@@ -34,6 +36,8 @@ export default async function UncollectedPage({ searchParams }: { searchParams: 
   const sp = await searchParams
   const filter = parseUncollectedFilter(sp)
   const [res, check] = await Promise.all([listCases(filter), lastSyncRun()])
+  // "Start again from BC" — the test sites only (staging, sandbox); the action checks again.
+  const site = startAgainSite()
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl desk:max-w-[1600px] mx-auto">
@@ -55,6 +59,7 @@ export default async function UncollectedPage({ searchParams }: { searchParams: 
           />
           <UncollectedPanel list={res.data} />
           <StorageSettingsBox settings={res.data.storageSettings} />
+          {site && <StartAgain site={site} />}
         </>
       ) : res.notReady ? (
         <NeedsMigrations />

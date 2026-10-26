@@ -81,6 +81,14 @@ const defaultsInfo = (over: Partial<StorageSettingsInfo>): StorageSettingsInfo =
  * The storage charge settings. Never throws: before Run Migrations → the defaults, `ready: false`;
  * no row yet → the defaults, `saved: false`; a fault → the defaults, `readFailed: true`.
  */
+/** The test site this Hub is (RAILWAY_ENVIRONMENT_NAME "staging" or "sandbox"), or null — on
+ *  production, a dev machine or anything not named. "Start again from BC" exists only where this
+ *  answers a name: an ALLOWLIST, so an unknown or missing name can never wipe a live list. */
+export function startAgainSite(): string | null {
+  const env = (process.env.RAILWAY_ENVIRONMENT_NAME ?? "").trim().toLowerCase()
+  return env === "staging" || env === "sandbox" ? env : null
+}
+
 export async function readStorageSettings(): Promise<StorageSettingsInfo> {
   try {
     const row = await prisma.uncollectedSettings.findUnique({ where: { id: SETTINGS_ID } })

@@ -11,6 +11,7 @@ import {
 } from "@/lib/uncollected-feed"
 import {
   countStartMoves, readCaseStorageFlags, readStorageSettings, readStorageStartOwner, saveStorageSettings as saveSettingsRow,
+  startAgainSite,
   storageOwedOnOpenCases,
   type CaseStorageFlags, type StorageSettingsSaved,
 } from "@/lib/uncollected-settings"
@@ -29,7 +30,7 @@ import {
   type UncollectedField, type UncollectedFilter, type UncollectedInput, type UncollectedLastContact, type UncollectedList,
   type UncollectedPatch, type UncollectedResult, type UncollectedSort, type UncollectedStatus, type UncollectedSyncRunInfo,
   type UncollectedTotals, type UncollectedShipment, type UncollectedShippingInfo, type ShipFilter,
-  isShipFilter,
+  isShipFilter, START_AGAIN_WORD,
 } from "@/lib/uncollected"
 
 // Accounts → Paid, not collected — every read and write. SERVER ONLY.
@@ -608,6 +609,33 @@ export async function getCase(id: string): Promise<UncollectedResult<Uncollected
     }
   } catch (e) {
     return fail(e, "get", "That case couldn't be read just now — please try again.")
+  }
+}
+
+/**
+ * "Start again from BC" — TEST SITES ONLY (staging, sandbox; startAgainSite — never production): deletes
+ * EVERY case on this list (from BC and by hand, open and closed) with its timeline and shipping (both
+ * cascade), and every BC check run, so the next Check BC now reads everything fresh from BC (Jack,
+ * 2026-10-26: "why don't we wipe the data and I do a fresh import"). The storage settings stay. Admins
+ * only, START_AGAIN_WORD typed, and never while a check is running here. Written to the server's log.
+ */
+export async function startAgainFromBc(word: string): Promise<UncollectedResult<{ cases: number; runs: number }>> {
+  try {
+    const who = await requireAdmin()
+    const site = startAgainSite()
+    if (!site) throw new Refusal("Starting again is only allowed on the test sites (staging and sandbox) — never on the live Hub.")
+    if (typeof word !== "string" || word.trim().toUpperCase() !== START_AGAIN_WORD) throw new Refusal(`Type ${START_AGAIN_WORD} to confirm.`)
+    if (uncollectedSyncNow()) throw new Refusal("A BC check is running — wait for it to finish (or stop it), then start again.")
+    const [cases, runs] = await prisma.$transaction(async (tx) => {
+      const c = await tx.uncollectedPaid.deleteMany({})   // timelines and shipping go with them (cascade)
+      const r = await tx.uncollectedSyncRun.deleteMany({})
+      return [c.count, r.count] as const
+    }, { timeout: 120_000 })
+    console.info("uncollected start again", JSON.stringify({ site, byId: who.id, byName: who.name, at: new Date().toISOString(), cases, runs }))
+    revalidate()
+    return { ok: true, data: { cases, runs } }
+  } catch (e) {
+    return fail(e, "start again", "Nothing was deleted — something went wrong. Please try again.")
   }
 }
 

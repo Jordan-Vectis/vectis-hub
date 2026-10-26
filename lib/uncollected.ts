@@ -1169,6 +1169,9 @@ export type UncollectedShippingInfo = {
   checkedAt: string
 }
 
+/** "Start again from BC" (test sites only): what has to be typed to confirm it. */
+export const START_AGAIN_WORD = "START AGAIN"
+
 /** A shipment request counts unless it was cancelled. */
 export const isLiveShipment = (s: Pick<UncollectedShipment, "status">): boolean => s.status.trim().toLowerCase() !== "cancelled"
 

@@ -3070,6 +3070,14 @@ storage charges start, and a timeline of every call, email, letter, note and cha
       sideways there (review, 2026-10-23). A case not read says why: "Added by hand — not read from BC",
       or "Not read yet" — never a promise that the next check reads it. The check doesn't spend BC time
       reading shipments before Run Migrations (`shippingTableThere`).
+- **"Start again from BC" — TEST SITES ONLY** (2026-10-26 — Jack: *"why don't we wipe the data and I do a
+  fresh import"*). A box at the foot of the panel, shown only when `startAgainSite()` (lib/uncollected-
+  settings.ts) names the site — an ALLOWLIST: RAILWAY_ENVIRONMENT_NAME exactly "staging" or "sandbox";
+  production, a dev machine or no name never get it — and `startAgainFromBc` checks again on the server.
+  Admins only; type START AGAIN; refused while a check is running here. It deletes EVERY case on the list
+  (from BC and by hand, open and closed — their timelines and shipping go with them, cascade) and every
+  `UncollectedSyncRun`, in one transaction; the storage settings stay; the deletion is written to the
+  server's log. Then Check BC now reads everything fresh. ⚠ Never widen it to production.
 - On a `bc` row the Hub refuses changes to `BC_OWNED_FIELDS` ("change it in BC") and refuses Delete
   (the feed would bring it back — close it instead). A manual case can be deleted, confirmed in the
   page. Contact details, chase dates, storage start and notes stay the Hub's own (a storage start a

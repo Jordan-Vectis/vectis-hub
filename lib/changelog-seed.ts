@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-23, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-26, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4de14bc6a78098664216d3f48e09b1e1adbd5faa","author":"jack-vectis","date":"2026-10-26T09:10:20Z","subject":"Paid, not collected: Check BC now gets 20 minutes, and the shipment read its own slot"},
   {"sha":"5686ace99720f882ed86c393a4a657d5fe772602","author":"Jordan Orange","date":"2026-10-23T17:08:11+01:00","subject":"Goods In: Totes & pallets — the warehouse database, searchable, filterable, sortable, editable, exportable"},
   {"sha":"31e716cef67c8ce7df2656bffbde41cb05c1af71","author":"jack-vectis","date":"2026-10-23T16:52:33+01:00","subject":"Paid, not collected: shipment column fits on an iPad, honest not-read wording, no wasted BC reads"},
   {"sha":"0c20d6c34d74e472ecbfc95bbb7cbed10b3d232a","author":"Jordan Orange","date":"2026-10-23T16:53:04+01:00","subject":"Goods In: BC's receipts and totes copied into the Hub's own tables — BC first until switch day"},
