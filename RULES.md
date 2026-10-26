@@ -31,6 +31,12 @@ The app is hosted on **Railway**, not Vercel. Never reference a `.vercel.app` UR
 - Staging: https://vectis-staging.up.railway.app
 - Auto-deploys: push to `main` → production, push to `staging` → staging environment on Railway
 - Never tell the user to open a `vercel.app` URL for any reason
+- ⚠ **The build's memory is set in `package.json`'s `build` script** (`--max-old-space-size`), not the
+  Dockerfile — the Dockerfile's `NODE_OPTIONS` is what the RUNNING server gets. The type-check inside
+  `next build` grows with the code: 2 GB (Jordan, 2026-04-15) was outgrown on 2026-10-26, when the
+  Refunds push failed both deploys with *"JavaScript heap out of memory"* during "Running TypeScript"
+  (a full type-check then used ~2.3–2.8 GB). Raised to 4 GB. A deploy that fails ~4 minutes in with no
+  code error from a local `next build` is this — run the local build with the same limit to confirm.
 
 ## Public site is login-gated (2026-07-09)
 
