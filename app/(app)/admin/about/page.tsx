@@ -1212,37 +1212,27 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
-// ─── New-developer intro ───────────────────────────────────────────────────────
-// Written for a person on their first day (two developers started 2026-10-26), not as a rulebook:
-// what you'll be coding in, what you'll need accounts for, and how your first change gets out.
+// ─── Intro ─────────────────────────────────────────────────────────────────────
+// For someone new: what the Hub is and does, what it's written in, what it runs on. Nothing else.
 
 const STACK: [string, string][] = [
-  ["TypeScript", "Front end, back end and scripts — one language for everything, in strict mode."],
-  ["React 19 with Next.js 16", "Pages are server components; add 'use client' only for the interactive parts. Forms talk to the server through server actions. Heads-up: this Next.js is newer than most tutorials and blog posts, so when something looks different, check its own docs in node_modules/next/dist/docs."],
-  ["Tailwind CSS v4", "Utility classes, no separate stylesheets. The dark theme is the default, so build dark first and check light after. Screens use the full width and big tap targets — a lot of the Hub is used on iPads, standing up."],
-  ["Prisma 7 with PostgreSQL", "The data model is prisma/schema.prisma; the generated client is in app/generated/prisma. Plain SQL through Prisma is fine where it reads better than the query builder."],
-  ["Node 22 or newer", "A small custom server (server.js) starts Next.js and, on production only, the live-auction sockets and the overnight jobs (the Business Central copy, backups, the accounts check)."],
+  ["TypeScript", "Front end, back end and scripts."],
+  ["React 19 with Next.js 16", "The web framework (App Router — server components and server actions)."],
+  ["Tailwind CSS v4", "Styling. The dark theme is the default."],
+  ["Prisma 7 with PostgreSQL", "The database layer; plain SQL where it reads better."],
+  ["Node.js 22+", "The runtime, with a small custom server for the live-auction sockets and the scheduled jobs."],
 ]
 
 const SERVICES: [string, string][] = [
-  ["VS Code, Git, Node", "Clone the repo, npm install, npx next dev — the Hub runs at localhost:3000 with your own login. Any editor is fine; VS Code is what we use."],
-  ["GitHub", "The code. Two branches matter: staging (where we all work) and main (production)."],
-  ["Railway", "Hosting. A push to staging deploys the staging and sandbox sites; a push to main deploys production. Environment variables and logs live here."],
-  ["Neon", "The PostgreSQL database, with a branch for staging and one for the sandbox (a copy of production's data to try things on)."],
-  ["Cloudflare R2", "File storage — photos, PDFs, screen recordings, nightly backups. Used through the AWS S3 SDK with signed links."],
-  ["Business Central (Evo-auction)", "The auction system the business has run on for years and the Hub is gradually replacing. The Hub reads from it through its API; the BC button in the top bar signs you in. You can read its source code in IT Tools → BC Source and poke its API in BC API Viewer."],
-  ["Google Gemini and Anthropic Claude", "The AI behind lot descriptions, Lens, Valuations and the Help box. Keys are already set up; which model each tool uses is chosen in Admin → AI Models, not in code."],
-  ["Microsoft 365", "Mailboxes the Hub reads from and sends through (IT tickets, condition reports, receipts) via Microsoft Graph."],
-]
-
-const WORKFLOW: string[] = [
-  "Read RULES.md before you change anything. It's long, but every rule in it exists because something went wrong without it, and it says what. Ask Jordan when a request seems to go against one.",
-  "Work on the staging branch and pull before you push — several people push every day.",
-  "Before every push run npx tsc --noEmit -p . and npx next build, then npm run changelog:seed. The seed folds into your commit so the deploy is named after your work and shows up in Admin → Patches & Changes.",
-  "Changed the database? Add a migration file under prisma/migrations and the same SQL to the MIGRATIONS array in lib/migrations.ts. After the deploy, an admin presses the amber Run Migrations banner; you don't run anything by hand. Prefer a new table to a new column on a busy one (User, CatalogueLot, Contact).",
-  "Your local .env points at the real database, not a copy. Run pages with npx next dev (it skips server.js, so none of the overnight jobs can run from your machine) and treat it as live data.",
-  "Only Jordan pushes to main. Say when something is ready on staging and he'll take it to production.",
-  "Stuck or lost? This page describes every section; the Help box in the top bar answers 'where do I…'; Admin → Memory is the log of decisions and why they were made.",
+  ["GitHub", "Source control. Two branches: staging (test sites) and main (production)."],
+  ["Railway", "Hosting and environment variables."],
+  ["Neon", "The PostgreSQL database, with branches for staging and a sandbox."],
+  ["Cloudflare R2", "File storage — photos, PDFs, recordings, backups."],
+  ["Microsoft Business Central (Evo-auction)", "The auction system the Hub reads from and is gradually replacing."],
+  ["Google Gemini and Anthropic Claude", "The AI models behind lot descriptions, Lens, Valuations and the Help box."],
+  ["Microsoft 365", "Mailboxes the Hub reads from and sends through, via Microsoft Graph."],
+  ["Android (Capacitor)", "The Vectis Scanner app for the warehouse handhelds, built by GitHub Actions."],
+  ["VS Code, Git, Node", "Local development: npm install, then npx next dev."],
 ]
 
 function NewDeveloperIntro() {
@@ -1253,39 +1243,31 @@ function NewDeveloperIntro() {
       <button type="button" onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" aria-expanded={open}>
         <span className="text-2xl">🧭</span>
         <div className="flex-1 min-w-0">
-          <h2 id="new-dev-heading" className="font-semibold text-gray-900 dark:text-gray-100">New to the Hub? Start here</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">What it&apos;s written in, what it runs on, and how a change reaches staff.</p>
+          <h2 id="new-dev-heading" className="font-semibold text-gray-900 dark:text-gray-100">What the Hub is</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">What it does, what it&apos;s written in, what it runs on.</p>
         </div>
         <Chevron open={open} />
       </button>
       {open && (
         <div className="border-t border-gray-100 dark:border-gray-700 px-6 py-5 space-y-6 text-sm text-gray-700 dark:text-gray-300">
           <p className="leading-relaxed max-w-4xl">
-            Welcome. The Hub is Vectis&apos;s internal web app — one site that runs cataloguing and AI descriptions, the warehouse (Goods In), customers, the live auction clerk, accounts, facilities and IT&apos;s own tools.
-            It is gradually taking over from Business Central, the auction system the business has run on for years. It is one codebase and one database, and you&apos;ll spend almost all your time in TypeScript.
-            Much of it was built with an AI coding assistant working to the same written rules you&apos;ll work to, so the code is consistent and well commented — read the comment at the top of a file first; it usually says why the file exists and what not to change.
+            The Vectis Hub is the auction house&apos;s internal web app. It covers cataloguing and AI-written descriptions, photography, the warehouse (Goods In), customers, submissions and valuations, the live auction clerk, accounts, facilities, reporting and IT&apos;s tools — one codebase and one database, gradually taking over from Business Central, the auction system the business has run on for years.
           </p>
           <div className="grid gap-6 lg:grid-cols-2">
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">What you&apos;ll be writing</h3>
+              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Languages &amp; framework</h3>
               <ul className="space-y-2">
                 {STACK.map(([k, v]) => <li key={k} className="flex gap-3"><span className="text-blue-400 mt-0.5 shrink-0">◆</span><span><b className="text-gray-900 dark:text-gray-100">{k}</b> — {v}</span></li>)}
               </ul>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Programs &amp; accounts you&apos;ll need (ask Jordan)</h3>
+              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Programs &amp; services</h3>
               <ul className="space-y-2">
                 {SERVICES.map(([k, v]) => <li key={k} className="flex gap-3"><span className="text-blue-400 mt-0.5 shrink-0">◆</span><span><b className="text-gray-900 dark:text-gray-100">{k}</b> — {v}</span></li>)}
               </ul>
             </div>
           </div>
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Your first week</h3>
-            <ol className="space-y-2 list-decimal pl-5">
-              {WORKFLOW.map((w, i) => <li key={i} className="leading-relaxed pl-1">{w}</li>)}
-            </ol>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Everything below is per section: what it does, what it relies on, and the rules behind it — open the one you&apos;re about to work on.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">The sections below describe each part of the Hub: what it does, what it relies on, and the rules behind it. RULES.md in the repository has the full working rules.</p>
         </div>
       )}
     </section>
