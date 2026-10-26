@@ -87,6 +87,38 @@ It is allowed to stay public **only because of these constraints. Keep every one
 - `AccidentReport` rows are **only ever read inside the Hub** (`/tools/first-aid`, behind the
   `FIRST_AID` app permission). Never surface them publicly.
 
+## Public refund form — a deliberate exception (2026-10-26)
+
+`/refund` (Accounts → Refunds) is reachable **without logging in**, on purpose: it is the Hub's own
+replacement for the Microsoft Form customers reach from vectis.co.uk (Jack, 2026-10-26: "the form link
+will need to come out of the hub instead of using the Microsoft form"). Requests land in
+`/tools/refunds`, admins only.
+
+It is allowed to stay public **only because of these constraints. Keep every one of them:**
+
+- **EXACT-match allowlist entry, not a prefix** — `"/refund"` in `publicExact` (`auth.config.ts`), like
+  `/first-aid`. ⚠ Never move it into the prefix list.
+- **Top-level route (`app/refund`), never inside `app/(app)`**, and **no links from it into the Hub**.
+- **No public GET endpoint, nothing read back.** The page shows no record. `?sent=1` / `?problem=<word>`
+  (the route's answer to a browser that sent the form without its script) are fixed words only —
+  nothing the customer typed is ever put in an address. The `<form>` keeps `method="post"` +
+  `encType="multipart/form-data"` + `action="/api/public/refund-request"` for that reason.
+- **One unauthenticated write**: `POST /api/public/refund-request` (already-public prefix). Write-only —
+  it answers `{ok:true}` and nothing else: not the id, not the RF number (it's sequential and would
+  give away how many requests Vectis has had). Honeypot `hp_ref` and >10 an hour from one address →
+  saved but flagged suspect, never refused. Hard refusals only for floods: 60 attempts an hour per
+  address counted before the body is read, 3 requests in flight at once, 30 saved an hour per
+  address, 300 an hour overall. The address is the LAST X-Forwarded-For hop (Railway's), **hashed
+  with `AUTH_SECRET`, never stored raw**.
+- **Photos live under `refund-photos/` in R2 and are only ever opened through the admin-only
+  `/api/refunds/photo`.** ⚠ Never add `refund-photos/` to `/api/public/photo`'s prefix list.
+- `Refund` rows are only ever read inside the Hub, behind the admin check. Never bank or card details:
+  the form refuses them (`looksLikeBankDetails`), and the old-log import takes them out of every cell
+  before saving.
+- ⚠ The Hub's general photo routes (`/api/image`, `/api/catalogue/signed-url`, `/api/catalogue/photo-proxy`)
+  sign or stream any key for anyone signed in, so each REFUSES a key starting `refund-photos/` — a
+  customer's damage photos are for admins only. Keep that guard on any new route of that kind.
+
 ## Design philosophy — read before building ANY screen
 
 Every rule here exists because it was got wrong, more than once. Each one names the failure.
@@ -3265,6 +3297,46 @@ keeping the lots here they will be charged per lot"*.
   - The **"Storage charges" settings box** (above).
 
 ---
+## 💷 Accounts → Refunds (2026-10-26)
+
+Jack: *"here is our current refund log … customers requesting issues, partial refunds or returns … make
+it better with the data you have"* and *"I want it all to be in the Hub, nice and clean"* — the Refunds
+tile in Admin & Operations (`/tools/refunds`, card `REFUNDS`, **admins only** like Paid, not collected:
+no appKey; every action re-checks `getAccountsAccess().isAdmin` on the server). It replaces the
+SharePoint "Refund Log" the Microsoft Form filled: requests come from the Hub's own public form
+(`/refund`, above), are added by staff (vendor payouts and the like), or were imported once from the old
+log. The words, money rules and shapes are `lib/refunds.ts` (plain, client-safe); the shared server
+helpers `lib/refunds-server.ts`; staff actions `lib/actions/refunds.ts`; BC look-ups `lib/refunds-bc.ts`;
+the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
+
+- **Tables `Refund`, `RefundLot`, `RefundEvent`** (cascade) — **NEEDS Run Migrations**; until then the
+  panel says so and the form answers 503. Nothing was added to `Customer`, `Contact` or `User`
+  (`customerId` is a plain id, matched from the C-number by `matchCustomerId`).
+- **The reference** `RF0042` is `Refund.ref`: max + 1 under `pg_advisory_xact_lock(hashtext('refund-ref'))`
+  inside the creating transaction (`nextRefundRef`). It is shown to STAFF only — the public form never
+  returns it (it's sequential).
+- **Statuses**: New · Being looked at · Waiting for the item to come back · Agreed — to pay · Paid ·
+  Declined · Closed another way (Declined and Closed need a reason). **Complete for accounts** is a
+  separate tick, only once Paid. A status change only wins if the status is still the one the page
+  showed. Unknown statuses read as New.
+- ⚠ **The money** (checked against every row of the old log): commission = the buyer's premium, **27%
+  of the hammer inc VAT** (`BUYERS_PREMIUM_INC_VAT`, overridable per lot); a lot refunds N% of hammer +
+  commission, N% of the hammer only, or a set amount (`lotRefundPence`); postage refunded is added on
+  top. Only a WHOLE total is saved (`refundTotalToSave`) — while any lot can't be worked out the total is
+  null and the list says "Not worked out", never a partial figure as if complete. All money in pence.
+- **Fill from BC** (read only, the admin's own BC sign-in): `Auction_Lines_Excel` for the buyer's
+  C-number and the sale (or the auction date), the sold lots whose numbers the request names — it
+  PROPOSES lots with hammer and description; nothing is saved until Save.
+- **The old-log import** (admins, a collapsed card on the panel): the SharePoint CSV, decoded in the
+  browser as Windows-1252, parsed by column NAME, idempotent by `importKey` (sha256 of a row
+  fingerprint) — a row already imported is never changed, a row changed in SharePoint since is refused
+  ("make the change in the Hub"); bank/card details are taken out of every cell before saving; Date and
+  Auction date are UK day-first, "Date processed" is US month-first (SharePoint's export). Batches of
+  50 with a Stop. The admin chooses whether old rows "dealt with" but never processed count as done.
+- The search is never in the URL (it's usually a name or email) — sent to `listRefunds` and kept in the
+  tab's sessionStorage, as on Paid, not collected. Export CSV is made in the browser from what's shown.
+- Listed in `lib/data-map.ts` (customer data) and in `lib/help-map.ts` as "Refunds (Accounts)".
+
 ## 🔐 Two-factor login (2026-10-22)
 
 Jordan: a tick box per person — *"Could we set it up as a tick box in the user panel would make

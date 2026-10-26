@@ -5,6 +5,7 @@ import { r2 } from "@/lib/r2"
 import { GetObjectCommand } from "@aws-sdk/client-s3"
 import { needsJpegCopy } from "@/lib/media"
 import { ensureJpegCopy } from "@/lib/media-convert"
+import { REFUND_PHOTO_PREFIX } from "@/lib/refunds"
 
 // Streams a lot photo out of R2 behind the login.
 //
@@ -19,6 +20,8 @@ export async function GET(req: NextRequest) {
 
     const key = req.nextUrl.searchParams.get("key")
     if (!key) return new NextResponse("Missing key", { status: 400 })
+    // ⚠ Refund photos (customers' damage photos) are admins-only: only /api/refunds/photo serves them.
+    if (key.trim().toLowerCase().startsWith(REFUND_PHOTO_PREFIX)) return new NextResponse("Not found", { status: 404 })
 
     // iPhone HEIC, scanner TIFF and camera RAW (an Induction slide image, say): a person's browser gets
     // the JPEG copy, as most browsers can't show the original (lib/media-convert.ts). ⚠ Background jobs

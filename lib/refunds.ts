@@ -183,6 +183,29 @@ export function refundTotalPence(lots: RefundLotMoney[], postagePence: number | 
   return { totalPence: total + Math.max(0, Math.round(postagePence ?? 0)), missing }
 }
 
+/**
+ * What a request's SAVED total becomes when its lots or postage are saved — one rule for the Lots &
+ * money card (shown as you type) and the server (what's saved). Only a WHOLE total is ever saved:
+ *  • a lot that can't be worked out → null ("Not worked out" in the list, the CSV and the tiles) —
+ *    never a part-sum that reads as the whole; the card still shows "at least £…" (`worked`);
+ *  • no lots and no postage → null (nothing to work it out from);
+ *  • ⚠ an old-log request keeps the total it has (`saved`) until its lots can work out a whole one:
+ *    the log often gave one total for several lots, or lots it couldn't name ("N/A", a sentence), so
+ *    the lots alone can't say it — a partial sum (or the postage alone) must never replace it (`kept`).
+ */
+export function refundTotalToSave(
+  lots: RefundLotMoney[],
+  postagePence: number | null,
+  saved: { source: RefundSource; totalPence: number | null },
+): { totalPence: number | null; worked: number; missing: number; kept: boolean } {
+  const { totalPence: worked, missing } = refundTotalPence(lots, postagePence)
+  if (saved.source === "import" && saved.totalPence != null && (!lots.length || missing > 0)) {
+    return { totalPence: saved.totalPence, worked, missing, kept: true }
+  }
+  if (missing > 0 || (!lots.length && postagePence == null)) return { totalPence: null, worked, missing, kept: false }
+  return { totalPence: worked, worked, missing: 0, kept: false }
+}
+
 /** "£1,234.56" / "1234.56" / "£-" / "NA" → pence, or null. Commas and £ ignored; anything else null. */
 export function poundsToPence(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? Math.round(v * 100) : null
