@@ -3332,7 +3332,27 @@ the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
   null and the list says "Not worked out", never a partial figure as if complete. All money in pence.
 - **Fill from BC** (read only, the admin's own BC sign-in): `Auction_Lines_Excel` for the buyer's
   C-number and the sale (or the auction date), the sold lots whose numbers the request names — it
-  PROPOSES lots with hammer and description; nothing is saved until Save.
+  PROPOSES lots with hammer, description, barcode and receipt; nothing is saved until Save.
+- **A lot row looks itself up** (2026-10-26 — Jack: *"when the lot number and the sale has been filled
+  in the barcode number and receipt number pull in with it along with hammer price"*): on the Lots &
+  money card, once a row has a sale (or the request an auction date) and a lot number, `lookUpRefundLots`
+  (`lookUpLotsInBc`, read only) runs ~0.7 s after the typing stops — `Auction_Lines_Excel` by sale + lot
+  (`EVA_LotNo` as a number, then as text, then the whole sale if BC refuses both — its type isn't pinned
+  down) for the hammer, unique ID, description and buyer, then `Receipt_Lines_Excel` by unique ID for
+  `PTE_InternalBarcode` and `EVA_ReceiptNo` (`RefundLot.barcode` / `receiptNo` — **NEEDS Run
+  Migrations**). ⚠ The barcode is the one for THAT sale (a lot gets a new barcode each sale it goes
+  into: the one starting with the sale code, or its only one unless that plainly carries another
+  sale's code — never a guess between two; the receipt is the chosen barcode's line's). A box is
+  filled only when blank or still holding BC's own value (each row keeps what BC put in it, `BcFill`;
+  saved per box as `RefundLot.hammerFromBc` / `descriptionFromBc` — older lots, with only `fromBc`,
+  count as typed) — a hammer typed by hand is never overwritten (BC's is shown with "Use BC's"), and a
+  saved row looked up for its barcode only gets what it's missing; changing a row's
+  sale or lot takes the other lot's BC values out at once, so no other lot's hammer can be saved
+  against it. A lot BC shows bought by someone else is still filled, with that said. Only rows that
+  are new or whose sale/lot changed are looked up on their own — opening a request never changes its
+  boxes; saved rows without a barcode (the old log's, or saved before this) have **🏷️ Get barcodes
+  from BC**. Save waits while a lookup is pending. Signing in to BC from the card opens a new tab
+  (leaving would lose unsaved lots).
 - **The old-log import** (admins, a collapsed card on the panel): the SharePoint CSV, decoded in the
   browser as Windows-1252, parsed by column NAME, idempotent by `importKey` (sha256 of a row
   fingerprint) — a row already imported is never changed, a row changed in SharePoint since is refused

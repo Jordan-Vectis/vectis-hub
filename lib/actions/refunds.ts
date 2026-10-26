@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
 import { deleteObjectsFromR2 } from "@/lib/r2"
-import { BC_CODE_RE, findRefundLotsInBc, type RefundBcFound } from "@/lib/refunds-bc"
+import { BC_CODE_RE, findRefundLotsInBc, lookUpLotsInBc, type RefundBcFound, type RefundLotAsk, type RefundLotLookup } from "@/lib/refunds-bc"
 import { isMissingRefunds, matchCustomerId, nextRefundRef, tidyCustomerNo, writeRefundEvent } from "@/lib/refunds-server"
 import { BANK_DETAILS_REFUSED, UNCOLLECTED_BC_NOT_CONNECTED, dayToStored, daysBetween, formatDay, isDay, londonDay } from "@/lib/uncollected"
 import {
@@ -33,8 +33,9 @@ import { isEmailShape } from "@/lib/refunds-public"
 //  • ⚠ Customer personal data — never bank or card details: every box is trimmed, cut to its limit
 //    (REFUND_LIMITS) and refused if it looks like bank or card details (looksLikeBankDetails). The
 //    timeline never keeps an old email or old notes when they're changed.
-//  • ⚠ Business Central is READ ONLY. One thing here goes near it — lotsFromBc, with the admin's OWN
-//    BC sign-in (getBCToken), through lib/refunds-bc.ts. It only PROPOSES lots; nothing is saved until
+//  • ⚠ Business Central is READ ONLY. Two things here go near it — lotsFromBc ("Fill from BC") and
+//    lookUpRefundLots (a row's sale + lot number → its hammer, barcode and receipt), with the admin's
+//    OWN BC sign-in (getBCToken), through lib/refunds-bc.ts. They only PROPOSE; nothing is saved until
 //    the admin presses Save on the Lots & money card (saveRefundLots). Nothing is ever written to BC.
 //  • The money rules are lib/refunds.ts (lotRefundPence / refundTotalPence — 27% commission inc VAT);
 //    the request's totalPence is worked out from its lots and postage whenever either is saved, by
@@ -223,6 +224,9 @@ export type RefundLotInput = {
   saleCode?: string | null
   lotNo: string
   uniqueId?: string | null
+  /** BC's Internal Barcode and receipt number — as BC gave them (lookUpRefundLots / Fill from BC). */
+  barcode?: string | null
+  receiptNo?: string | null
   description?: string | null
   hammerPence?: number | null
   /** null = 27% of the hammer (commissionFor). */
@@ -231,6 +235,11 @@ export type RefundLotInput = {
   percent?: number | null
   setAmountPence?: number | null
   fromBc?: boolean
+  /** Which box holds BC's value — a box typed in by hand is never replaced by a BC lookup. */
+  hammerFromBc?: boolean
+  descriptionFromBc?: boolean
+  /** BC's receipt lines were read for this sale + lot (barcode found or not). */
+  refsRead?: boolean
 }
 
 const FIELD_LABELS: Record<RefundField, string> = {
@@ -483,8 +492,10 @@ export async function getRefund(id: string): Promise<RefundResult<RefundDetail>>
         lots: r.lots.map((l) => {
           const money = lotMoney(l)
           return {
-            id: l.id, saleCode: l.saleCode, lotNo: l.lotNo, uniqueId: l.uniqueId, description: l.description,
+            id: l.id, saleCode: l.saleCode, lotNo: l.lotNo, uniqueId: l.uniqueId, barcode: l.barcode, receiptNo: l.receiptNo,
+            description: l.description,
             ...money, amountPence: lotRefundPence(money), fromBc: l.fromBc,
+            hammerFromBc: l.hammerFromBc, descriptionFromBc: l.descriptionFromBc, refsRead: l.refsRead,
           }
         }),
         events: r.events.map((e) => ({ id: e.id, kind: e.kind, text: e.text, byName: e.byName, at: e.at.toISOString() })),
@@ -874,13 +885,18 @@ function lotOf(v: RefundLotInput, n: number) {
     saleCode: saleOf(v.saleCode),
     lotNo,
     uniqueId: line(v.uniqueId, `${what}'s unique ID`, 40),
+    barcode: line(v.barcode, `${what}'s barcode`, 40)?.toUpperCase() ?? null,
+    receiptNo: line(v.receiptNo, `${what}'s receipt number`, 40)?.toUpperCase() ?? null,
     description: line(v.description, `${what}'s description`, 300),
     hammerPence: penceOf(v.hammerPence, `${what}'s hammer`),
     commissionPence: penceOf(v.commissionPence, `${what}'s commission`),
     basis: v.basis,
     percent,
     setAmountPence: penceOf(v.setAmountPence, `${what}'s set amount`),
-    fromBc: v.fromBc === true,
+    fromBc: v.fromBc === true || v.hammerFromBc === true || v.descriptionFromBc === true,
+    hammerFromBc: v.hammerFromBc === true,
+    descriptionFromBc: v.descriptionFromBc === true,
+    refsRead: v.refsRead === true,
   }
 }
 
@@ -985,6 +1001,45 @@ export async function lotsFromBc(id: string): Promise<RefundResult<RefundBcFound
   if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
   try {
     return { ok: true, data: await findRefundLotsInBc(token, ask) }
+  } catch (e) {
+    return bcFailure(e)
+  }
+}
+
+/**
+ * The Lots & money card's rows, looked up by their sale and lot number (Jack, 2026-10-26: "when the lot
+ * number and the sale has been filled in, the barcode number and receipt number pull in with it along
+ * with hammer price"): each lot's hammer, description and unique ID, its barcode for that sale and its
+ * receipt. A row with no sale uses the request's auction date. For a buyer's request, a lot BC shows
+ * bought by someone else is still answered, with that said. READ ONLY, the admin's own BC sign-in —
+ * nothing is saved until Save on the card.
+ */
+export async function lookUpRefundLots(id: string, asks: RefundLotAsk[]): Promise<RefundResult<RefundLotLookup[]>> {
+  let clean: RefundLotAsk[]
+  let ctx: { auctionDate: string | null; customerNo: string | null; party: RefundParty }
+  try {
+    await requireAdmin()
+    if (!Array.isArray(asks) || !asks.length) throw new Refusal("There's no lot to look up.")
+    if (asks.length > REFUND_LIMITS.lots) throw new Refusal(`That's more than ${REFUND_LIMITS.lots} lots — one request can hold ${REFUND_LIMITS.lots} at most.`)
+    clean = asks.map((a, i) => {
+      if (!a || typeof a !== "object" || typeof a.key !== "string" || !a.key || a.key.length > 64) throw new Refusal("The lots couldn't be read — please try again.")
+      return {
+        key: a.key,
+        saleCode: line(a.saleCode, `row ${i + 1}'s sale`, REFUND_LIMITS.saleCode)?.toUpperCase() ?? null,
+        lotNo: line(a.lotNo, `row ${i + 1}'s lot number`, 12)?.toUpperCase().replace(/\s+/g, "") ?? "",
+      }
+    })
+    const r = await prisma.refund.findUnique({ where: { id: idOf(id) }, select: { party: true, customerNo: true, auctionDate: true } })
+    if (!r) throw new Refusal(NOT_FOUND)
+    ctx = { auctionDate: r.auctionDate ? londonDay(r.auctionDate) : null, customerNo: tidyCustomerNo(r.customerNo), party: partyOf(r.party) }
+  } catch (e) {
+    return fail(e, "bc lookup", "That request couldn't be read just now — please try again.")
+  }
+
+  const token = await getBCToken().catch(() => null)
+  if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
+  try {
+    return { ok: true, data: await lookUpLotsInBc(token, clean, ctx) }
   } catch (e) {
     return bcFailure(e)
   }

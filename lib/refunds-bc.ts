@@ -1,14 +1,22 @@
 // Accounts → Refunds: a request's lots looked up in Business Central — READ ONLY. Server only (it
 // reads BC with a token the caller got from getBCToken — the admin's OWN BC sign-in). Not a "use
-// server" file: lib/actions/refunds.ts (lotsFromBc) checks the admin and the request, then asks here.
+// server" file: lib/actions/refunds.ts (lotsFromBc, lookUpRefundLots) checks the admin and the
+// request, then asks here.
 //
-// One read of Auction_Lines_Excel: the buyer's lots in the request's sale (EVA_AuctionNo) or, with no
-// sale code, at the request's auction date (EVA_AuctionDate). Sold lots only (hammer over £0, not
-// withdrawn). Lots whose number is on the request ("808 & 809") are kept; with none given, all of
-// them. Each becomes a PROPOSAL — hammer, 27% commission, description, unique ID, sale — that the
-// admin can use on the Lots & money card; nothing is saved until they press Save there.
-// ⚠ Nothing is ever written to BC. ⚠ Only fields verified on Auction_Lines_Excel go in the $select
-// (one unverified field and BC answers 400 to the whole request — RULES.md, BC field names).
+// "Fill from BC" (findRefundLotsInBc) — one read of Auction_Lines_Excel: the buyer's lots in the
+// request's sale (EVA_AuctionNo) or, with no sale code, at the request's auction date
+// (EVA_AuctionDate). Sold lots only (hammer over £0, not withdrawn). Lots whose number is on the
+// request ("808 & 809") are kept; with none given, all of them. Each becomes a PROPOSAL — hammer, 27%
+// commission, description, unique ID, sale, barcode, receipt — that the admin can use on the Lots &
+// money card; nothing is saved until they press Save there.
+//
+// One lot by its sale and number (lookUpLotsInBc — Jack, 2026-10-26: "when the lot number and the
+// sale has been filled in, the barcode number and receipt number pull in with it along with hammer
+// price"): Auction_Lines_Excel for the sale's lot (hammer, unique ID, description, buyer), then
+// Receipt_Lines_Excel for that unique ID (receiptRefsFor: the Internal Barcode — the one for THAT
+// sale, a lot gets a new barcode each sale it goes into — and the receipt number).
+// ⚠ Nothing is ever written to BC. ⚠ Only fields verified on each endpoint go in its $select (one
+// unverified field and BC answers 400 to the whole request — RULES.md, BC field names).
 
 import { bcFetchAll } from "@/lib/bc"
 import { commissionFor, type RefundLotRow } from "@/lib/refunds"
@@ -28,8 +36,9 @@ export const BC_CODE_RE = /^[A-Za-z0-9][A-Za-z0-9\-_/.]{0,39}$/
  *  day has to be read instead (a big sale is a few thousand lines). */
 const FALLBACK_MAX_ROWS = 12_000
 
-/** A lot BC shows sold to the buyer — what the Lots & money card offers to use. */
-export type RefundBcProposal = Omit<RefundLotRow, "id"> & { saleName: string | null; auctionDate: string | null }
+/** A lot BC shows sold to the buyer — what the Lots & money card offers to use. `refsRead` false when
+ *  its receipt line couldn't be read (so the barcode is worth asking for again). */
+export type RefundBcProposal = Omit<RefundLotRow, "id"> & { saleName: string | null; auctionDate: string | null; refsRead: boolean }
 
 export type RefundBcAsk = {
   /** The C-number — BC's EVA_BuyerNo. */
@@ -120,6 +129,8 @@ export async function findRefundLotsInBc(token: string, ask: RefundBcAsk): Promi
       auctionDate: bcDay(r.EVA_AuctionDate) || null,
       lotNo,
       uniqueId: str(r.EVA_UniqueID) || null,
+      barcode: null,
+      receiptNo: null,
       description: str(r.EVA_ShortDescription).slice(0, 300) || null,
       hammerPence,
       commissionPence: commissionFor(hammerPence),
@@ -128,6 +139,9 @@ export async function findRefundLotsInBc(token: string, ask: RefundBcAsk): Promi
       setAmountPence: null,
       amountPence: null,
       fromBc: true,
+      hammerFromBc: true,
+      descriptionFromBc: true,
+      refsRead: true,
     })
   }
   sold.sort(byLot)
@@ -150,11 +164,13 @@ export async function findRefundLotsInBc(token: string, ask: RefundBcAsk): Promi
 
   const wanted = lotNumbersFrom(ask.lotsText)
   if (!wanted.length) {
+    const refsLine = await withReceiptRefs(token, sold)
     return {
       lots: sold,
       note: say(
         `The request doesn't give lot numbers BC can match, so every lot BC shows sold to ${who} in ${inWords} is offered (${plural(sold.length, "lot")}) — untick the ones it isn't about.`,
         unsoldLine,
+        refsLine,
       ),
     }
   }
@@ -169,12 +185,318 @@ export async function findRefundLotsInBc(token: string, ask: RefundBcAsk): Promi
       ),
     }
   }
+  const refsLine = await withReceiptRefs(token, picked)
   return {
     lots: picked,
     note: say(
       `BC shows ${plural(picked.length, "lot")} sold to ${who} in ${inWords} matching the request (${picked.map((l) => l.lotNo).join(", ")}).`,
       missing.length > 0 && `Not found in BC: ${missing.join(", ")} — check the lot numbers.`,
       unsoldLine,
+      refsLine,
     ),
   }
+}
+
+/** Fills each proposal's barcode and receipt from its receipt line, in place (`lots` are the
+ *  caller's own copies). Best effort: a failed read leaves them blank and says so (the hammer and the
+ *  rest still stand) — never fails the lookup. */
+async function withReceiptRefs(token: string, lots: RefundBcProposal[]): Promise<string | null> {
+  const ids = lots.map((l) => l.uniqueId).filter((id): id is string => !!id)
+  let refs = new Map<string, ReceiptRefs>()
+  let failed = false
+  if (ids.length) {
+    try {
+      refs = await receiptRefsFor(token, ids)
+    } catch (e) {
+      failed = true
+      console.error("refunds BC receipt lines error:", e)
+    }
+  }
+  for (const l of lots) {
+    const r = l.uniqueId ? refs.get(l.uniqueId.toUpperCase()) : undefined
+    l.barcode = r ? barcodeForSale(r.barcodes, l.saleCode) : null
+    l.receiptNo = receiptFor(r, l.barcode) ?? receiptOfUniqueId(l.uniqueId)
+    l.refsRead = !failed
+  }
+  return failed ? "BC's receipt lines couldn't be read just now, so the barcodes aren't filled in — the rest is." : null
+}
+
+// ─── Barcodes and receipts (Receipt_Lines_Excel) ────────────────────────────────────────────
+
+/** Verified on Receipt_Lines_Excel: EVA_UniqueID and PTE_InternalBarcode (live 2026-10-23 —
+ *  R008018-138 → F078196, RECEIPT_LINE_SELECT in lib/uncollected-feed-match.ts); EVA_ReceiptNo is read
+ *  off the same endpoint by the warehouse pages (unsold items, collections due, the receipt-lines sync). */
+const RECEIPT_SELECT = "EVA_UniqueID,EVA_ReceiptNo,PTE_InternalBarcode"
+/** Unique ids per Receipt_Lines_Excel call (`EVA_UniqueID eq '…' or …`). */
+const IDS_PER_CALL = 20
+
+/** A unique id's Internal Barcodes (one per sale the item has been in — distinct, upper case), the
+ *  receipt each of its lines gives (by barcode), and the first receipt number any line gives. */
+export type ReceiptRefs = { barcodes: string[]; receiptByBarcode: Record<string, string | null>; receiptNo: string | null }
+
+/** The receipt number for the chosen barcode's line — else the first any of the lines gives. */
+export function receiptFor(refs: ReceiptRefs | undefined, barcode: string | null): string | null {
+  if (!refs) return null
+  return (barcode ? refs.receiptByBarcode[barcode] : null) ?? refs.receiptNo
+}
+
+const isBc400 = (e: unknown) => /\bBC API 400\b/.test(String((e as { message?: string })?.message ?? ""))
+
+/**
+ * Each unique id's barcodes and receipt number off Receipt_Lines_Excel — keyed by the id upper case.
+ * IDS_PER_CALL ids a call; if BC refuses the batched filter (400), one id at a time. An id with no
+ * receipt line isn't in the answer. Throws on any other BC failure (the caller decides what it means).
+ */
+export async function receiptRefsFor(token: string, uniqueIds: string[]): Promise<Map<string, ReceiptRefs>> {
+  const ids = [...new Map(uniqueIds.map((s) => str(s)).filter(Boolean).map((s) => [s.toUpperCase(), s])).values()]
+  const out = new Map<string, ReceiptRefs>()
+  const take = (rows: Record<string, unknown>[]) => {
+    for (const r of rows) {
+      const key = str(r.EVA_UniqueID).toUpperCase()
+      if (!key) continue
+      const had: ReceiptRefs = out.get(key) ?? { barcodes: [], receiptByBarcode: {}, receiptNo: null }
+      const barcode = str(r.PTE_InternalBarcode).toUpperCase()
+      const receipt = str(r.EVA_ReceiptNo).toUpperCase() || null
+      if (barcode && !had.barcodes.includes(barcode)) had.barcodes.push(barcode)
+      if (barcode && !had.receiptByBarcode[barcode]) had.receiptByBarcode[barcode] = receipt
+      if (!had.receiptNo) had.receiptNo = receipt
+      out.set(key, had)
+    }
+  }
+  const ask = (part: string[]) =>
+    bcFetchAll(token, "Receipt_Lines_Excel", part.map((id) => `EVA_UniqueID eq ${odataString(id)}`).join(" or "), RECEIPT_SELECT)
+  let oneByOne = false
+  for (let i = 0; i < ids.length; i += IDS_PER_CALL) {
+    const part = ids.slice(i, i + IDS_PER_CALL)
+    if (!oneByOne && part.length > 1) {
+      try { take(await ask(part)); continue } catch (e) { if (!isBc400(e)) throw e; oneByOne = true }
+    }
+    for (const id of part) take(await ask([id]))
+  }
+  return out
+}
+
+/** A sale code shaped like the ones barcodes carry (F078), and a barcode that carries one (F078196). */
+const SALE_SHAPED = /^[A-Z]\d{3}$/
+const BARCODE_SALE = /^([A-Z]\d{3})\d/
+
+/**
+ * Of a lot's Internal Barcodes, the one for this sale. A barcode follows the sale the item went into
+ * (F078380 in F078, F083155 in F083 — memory: barcodes are sale-scoped), so: the only one that starts
+ * with the sale's code; else, when the item has only ever had one, that one — unless it plainly carries
+ * ANOTHER sale's code (the item was re-entered and only its later line is left); else null — never a
+ * guess between two.
+ */
+export function barcodeForSale(barcodes: string[], saleCode: string | null): string | null {
+  const sale = str(saleCode).toUpperCase()
+  const mine = sale ? barcodes.filter((b) => b.startsWith(sale)) : []
+  if (mine.length === 1) return mine[0]
+  if (mine.length || barcodes.length !== 1) return null
+  const carries = BARCODE_SALE.exec(barcodes[0])?.[1]
+  return sale && SALE_SHAPED.test(sale) && carries && carries !== sale ? null : barcodes[0]
+}
+
+/** "R008018-138" → "R008018": the receipt a BC unique id is numbered from — the fallback when its
+ *  receipt line has no EVA_ReceiptNo. null for any other shape. */
+export function receiptOfUniqueId(uniqueId: string | null | undefined): string | null {
+  const m = /^([A-Z]{1,3}\d{3,9})-\d{1,6}$/i.exec(str(uniqueId))
+  return m ? m[1].toUpperCase() : null
+}
+
+// ─── One lot by its sale and number ─────────────────────────────────────────────────────────
+
+/** A lot to look up: the card row's key (to send the answer back to it), the sale (or null — then the
+ *  request's auction date) and the lot number ("808", "366A"). */
+export type RefundLotAsk = { key: string; saleCode: string | null; lotNo: string }
+
+/** What BC has for one asked lot. `found` false → only `note` says why. `note` on a found lot is a
+ *  caution (not sold, withdrawn, sold to someone else, BC has it with a suffix). */
+export type RefundLotLookup = {
+  key: string
+  found: boolean
+  saleCode: string | null
+  saleName: string | null
+  auctionDate: string | null
+  lotNo: string | null
+  uniqueId: string | null
+  description: string | null
+  /** null when BC shows no hammer (not sold). */
+  hammerPence: number | null
+  barcode: string | null
+  receiptNo: string | null
+  /** Who BC shows bought it (EVA_BuyerNo), upper case. */
+  buyerNo: string | null
+  /** false when BC's receipt lines couldn't be read — the barcode is worth asking for again. */
+  refsRead: boolean
+  note: string | null
+}
+
+export type RefundLotContext = {
+  /** YYYY-MM-DD — used for a lot with no sale code. */
+  auctionDate: string | null
+  /** The request's C-number — told apart when BC shows the lot bought by someone else (buyers only). */
+  customerNo: string | null
+  party: "buyer" | "vendor"
+}
+
+/** "808" → { num: "808", suffix: "" }; "366a" → { num: "366", suffix: "A" }; null when it isn't a lot
+ *  number BC could hold (digits, then at most two letters). Leading zeros dropped. */
+export function lotParts(lotNo: string): { num: string; suffix: string } | null {
+  const m = /^0*(\d{1,6})([A-Z]{0,2})$/.exec(str(lotNo).toUpperCase().replace(/\s+/g, ""))
+  if (!m || m[1] === "0") return null
+  return { num: String(Number(m[1])), suffix: m[2] }
+}
+
+/** Lot numbers per Auction_Lines_Excel call (`… and (EVA_LotNo eq 1 or EVA_LotNo eq 2 …)`). */
+const LOTS_PER_CALL = 20
+
+/**
+ * The Auction_Lines_Excel rows for these lot numbers in a sale (or on a day). EVA_LotNo's type isn't
+ * pinned down in the Hub's notes, so: as a number first (EVA_LotNo eq 808); if BC refuses that (400), as
+ * text ('808'); if it refuses that too, the whole sale or day, with the lots picked out here (at most
+ * FALLBACK_MAX_ROWS — a big sale is a few thousand lines).
+ */
+async function rowsForLots(token: string, where: string, nums: string[]): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = []
+  const wanted = new Set(nums)
+  let form: "number" | "text" | "all" = "number"
+  for (let i = 0; i < nums.length && form !== "all"; i += LOTS_PER_CALL) {
+    const part = nums.slice(i, i + LOTS_PER_CALL)
+    for (;;) {
+      const lots = part.map((n) => `EVA_LotNo eq ${form === "number" ? n : odataString(n)}`).join(" or ")
+      try {
+        out.push(...await bcFetchAll(token, "Auction_Lines_Excel", `${where} and (${lots})`, LOT_SELECT))
+        break
+      } catch (e) {
+        if (!isBc400(e)) throw e
+        if (form === "number") { form = "text"; continue }
+        form = "all"
+        break
+      }
+    }
+  }
+  if (form !== "all") return out
+  const rows: Record<string, unknown>[] = await bcFetchAll(token, "Auction_Lines_Excel", where, LOT_SELECT)
+  if (rows.length > FALLBACK_MAX_ROWS) throw new Error("BC wouldn't look the lot numbers up on their own, and the whole sale is too big to read here.")
+  return rows.filter((r) => wanted.has(lotNoOf(r.EVA_LotNo, "")))
+}
+
+const notFound = (key: string, note: string): RefundLotLookup => ({
+  key, found: false, saleCode: null, saleName: null, auctionDate: null, lotNo: null, uniqueId: null, description: null,
+  hammerPence: null, barcode: null, receiptNo: null, buyerNo: null, refsRead: true, note,
+})
+
+/**
+ * Each asked lot as BC has it — its hammer, unique ID, description and buyer from Auction_Lines_Excel,
+ * then its barcode (for that sale) and receipt from Receipt_Lines_Excel. Asks are grouped: one sale (or
+ * one day, for lots with no sale) a call, LOTS_PER_CALL lots at a time. A lot with no sale and no
+ * auction date on the request, or a number that isn't one, comes back not found with why. On a day with
+ * the same lot number in more than one sale, the request's buyer picks it (if they bought one of them);
+ * otherwise it asks for the sale rather than guess. Throws on a BC failure reading the lots (the caller
+ * words it); the barcode read is best effort (blank, and said, if it fails).
+ */
+export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: RefundLotContext): Promise<RefundLotLookup[]> {
+  const buyer = ctx.party === "buyer" ? str(ctx.customerNo).toUpperCase() || null : null
+  const answers = new Map<string, RefundLotLookup>()
+  type Want = { ask: RefundLotAsk; num: string; suffix: string; sale: string | null }
+  const groups = new Map<string, { where: string; inWords: string; wants: Want[] }>()
+  for (const ask of asks) {
+    const parts = lotParts(ask.lotNo)
+    if (!parts) { answers.set(ask.key, notFound(ask.key, `"${ask.lotNo}" isn't a lot number BC could have — digits, then a letter if it has one (366A).`)); continue }
+    const sale = str(ask.saleCode).toUpperCase() || null
+    if (sale && !BC_CODE_RE.test(sale)) { answers.set(ask.key, notFound(ask.key, `"${sale}" doesn't look like a BC sale code (for example F118).`)); continue }
+    if (!sale && !ctx.auctionDate) { answers.set(ask.key, notFound(ask.key, "Fill in the sale (for example F118) to look this lot up in BC.")); continue }
+    // ⚠ A date is unquoted in BC's OData filters (EVA_AuctionDate eq 2026-01-14), a code is quoted.
+    const gk = sale ? `sale:${sale}` : `day:${ctx.auctionDate}`
+    const g = groups.get(gk) ?? {
+      where: sale ? `EVA_AuctionNo eq ${odataString(sale)}` : `EVA_AuctionDate eq ${ctx.auctionDate}`,
+      inWords: sale ?? `the sale on ${formatDay(`${ctx.auctionDate}T12:00:00Z`)}`,
+      wants: [],
+    }
+    g.wants.push({ ask, num: parts.num, suffix: parts.suffix, sale })
+    groups.set(gk, g)
+  }
+
+  const found: RefundLotLookup[] = []
+  for (const g of groups.values()) {
+    const rows = await rowsForLots(token, g.where, [...new Set(g.wants.map((w) => w.num))])
+    for (const w of g.wants) {
+      const same = rows.filter((r) => lotNoOf(r.EVA_LotNo, "") === w.num)
+      let hits = same.filter((r) => str(r.EVA_LotSuffix).toUpperCase() === w.suffix)
+      let suffixNote: string | null = null
+      if (!hits.length && !w.suffix) {
+        // "366" when BC only has 366A (or only 366A and 366B — then which is said, not guessed).
+        const suffixed = [...new Set(same.map((r) => lotNoOf(r.EVA_LotNo, r.EVA_LotSuffix)))]
+        if (suffixed.length === 1) { hits = same; suffixNote = `BC has it as lot ${suffixed[0]}.` }
+        else if (suffixed.length > 1) { answers.set(w.ask.key, notFound(w.ask.key, `BC has more than one lot ${w.num} in ${g.inWords} (${suffixed.join(", ")}) — put the letter on the lot number.`)); continue }
+      }
+      if (hits.length > 1) {
+        const sales = [...new Set(hits.map((r) => str(r.EVA_AuctionNo).toUpperCase()).filter(Boolean))]
+        const theirs = buyer ? hits.filter((r) => str(r.EVA_BuyerNo).toUpperCase() === buyer) : []
+        if (theirs.length === 1) hits = theirs
+        else if (sales.length > 1) { answers.set(w.ask.key, notFound(w.ask.key, `Lot ${w.ask.lotNo.toUpperCase()} was in more than one sale on that day (${sales.join(", ")}) — fill in the sale.`)); continue }
+        else {
+          // One sale with the lot on more than one line (re-offered): the sold line, if there's just one.
+          const soldLines = hits.filter((x) => Number(x.EVA_HammerPrice ?? 0) > 0 && !bcTrue(x.EVA_WithdrawLot))
+          if (soldLines.length > 1) { answers.set(w.ask.key, notFound(w.ask.key, `BC has lot ${w.ask.lotNo.toUpperCase()} in ${g.inWords} sold more than once — look it up in BC.`)); continue }
+          hits = soldLines.length ? soldLines : [hits[0]]
+        }
+      }
+      const r = hits[0]
+      if (!r) { answers.set(w.ask.key, notFound(w.ask.key, `BC has no lot ${w.ask.lotNo.toUpperCase()} in ${g.inWords} — check the sale and the lot number.`)); continue }
+
+      const saleCode = str(r.EVA_AuctionNo).toUpperCase() || w.sale
+      const lotNo = lotNoOf(r.EVA_LotNo, r.EVA_LotSuffix)
+      const hammer = Number(r.EVA_HammerPrice ?? 0)
+      const sold = Number.isFinite(hammer) && hammer > 0 && !bcTrue(r.EVA_WithdrawLot)
+      const buyerNo = str(r.EVA_BuyerNo).toUpperCase() || null
+      const notes = [suffixNote]
+      if (bcTrue(r.EVA_WithdrawLot)) notes.push("BC shows it withdrawn — no hammer to refund from.")
+      else if (!sold) notes.push("BC shows it unsold — no hammer.")
+      else if (buyer && buyerNo && buyerNo !== buyer) notes.push(`BC shows it bought by ${buyerNo}, not ${buyer} — check the sale and the lot.`)
+      const lookup: RefundLotLookup = {
+        key: w.ask.key,
+        found: true,
+        saleCode,
+        saleName: str(r.EVA_AuctionName) || null,
+        auctionDate: bcDay(r.EVA_AuctionDate) || null,
+        lotNo,
+        uniqueId: str(r.EVA_UniqueID) || null,
+        description: str(r.EVA_ShortDescription).slice(0, 300) || null,
+        hammerPence: sold ? Math.round(hammer * 100) : null,
+        barcode: null,
+        receiptNo: receiptOfUniqueId(str(r.EVA_UniqueID)),
+        buyerNo,
+        refsRead: true,
+        note: notes.filter(Boolean).join(" ") || null,
+      }
+      answers.set(w.ask.key, lookup)
+      found.push(lookup)
+    }
+  }
+
+  // The barcodes and receipts, in one go — best effort.
+  const ids = found.map((l) => l.uniqueId).filter((id): id is string => !!id)
+  if (ids.length) {
+    let refs: Map<string, ReceiptRefs> | null = null
+    try {
+      refs = await receiptRefsFor(token, ids)
+    } catch (e) {
+      console.error("refunds BC receipt lines error:", e)
+    }
+    for (const l of found) {
+      const r = refs && l.uniqueId ? refs.get(l.uniqueId.toUpperCase()) : undefined
+      l.barcode = r ? barcodeForSale(r.barcodes, l.saleCode) : null
+      l.receiptNo = receiptFor(r, l.barcode) ?? receiptOfUniqueId(l.uniqueId)
+      l.refsRead = !!refs
+      const add = (s: string) => { l.note = [l.note, s].filter(Boolean).join(" ") }
+      if (!refs) add("BC's receipt lines couldn't be read just now, so the barcode isn't filled in — retype the lot number to try again.")
+      else if (r && !l.barcode && r.barcodes.length) {
+        add(r.barcodes.length > 1
+          ? `It has had ${r.barcodes.length} barcodes (${r.barcodes.join(", ")}) and none is plainly this sale's, so none is filled in.`
+          : `BC's only barcode for it (${r.barcodes[0]}) is another sale's, so it isn't filled in.`)
+      }
+    }
+  }
+  return asks.map((a) => answers.get(a.key) ?? notFound(a.key, "BC couldn't be asked about this lot."))
 }

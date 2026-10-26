@@ -2696,6 +2696,13 @@ END $$`,
   `DO $$ BEGIN
     ALTER TABLE "RefundEvent" ADD CONSTRAINT "RefundEvent_refundId_fkey" FOREIGN KEY ("refundId") REFERENCES "Refund"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Refunds (2026-10-26): each lot's BC barcode and receipt number, pulled from BC with its hammer, and
+  // which of its boxes BC filled (a box typed in by hand is never replaced by a BC lookup).
+  `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "barcode" TEXT`,
+  `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "receiptNo" TEXT`,
+  `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "hammerFromBc" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "descriptionFromBc" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "refsRead" BOOLEAN NOT NULL DEFAULT false`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

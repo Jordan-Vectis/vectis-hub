@@ -2652,6 +2652,10 @@ model RefundLot {
   saleCode        String?
   lotNo           String
   uniqueId        String?
+  /// BC's Internal Barcode for the lot in that sale (PTE_InternalBarcode — F078196).
+  barcode         String?
+  /// BC's receipt the lot came in on (EVA_ReceiptNo — R008018).
+  receiptNo       String?
   description     String?
   hammerPence     Int?
   /// null = 27% of the hammer (commissionFor).
@@ -2661,6 +2665,12 @@ model RefundLot {
   percent         Float?
   setAmountPence  Int?
   fromBc          Boolean  @default(false)
+  /// Which box BC filled (2026-10-26) — a box typed in by hand is never replaced by a BC lookup.
+  hammerFromBc      Boolean @default(false)
+  descriptionFromBc Boolean @default(false)
+  /// BC's receipt lines were read for the sale + lot it was saved with — a lot BC has no barcode for
+  /// isn't offered under "Get barcodes from BC" again.
+  refsRead          Boolean @default(false)
 
   @@index([refundId])
 }

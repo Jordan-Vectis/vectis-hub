@@ -231,6 +231,9 @@ export type RefundLotRow = {
   /** "366" or "366A". */
   lotNo: string
   uniqueId: string | null
+  /** BC's Internal Barcode for the lot in that sale (F078196), and its receipt (R008018). */
+  barcode: string | null
+  receiptNo: string | null
   description: string | null
   hammerPence: number | null
   commissionPence: number | null
@@ -241,6 +244,11 @@ export type RefundLotRow = {
   amountPence: number | null
   /** true = hammer / description were filled from BC. */
   fromBc: boolean
+  /** Which of them (2026-10-26 on — older lots only have fromBc, and count as typed in). */
+  hammerFromBc: boolean
+  descriptionFromBc: boolean
+  /** BC's receipt lines were read for the sale + lot it was saved with (barcode found or not). */
+  refsRead: boolean
 }
 
 export type RefundEventRow = { id: string; kind: string; text: string | null; byName: string | null; at: string }

@@ -6,11 +6,15 @@ import { prisma } from "@/lib/prisma"
 
 type Tx = Prisma.TransactionClient
 
-/** One of the refund tables isn't there yet (Run Migrations) — never any other fault. */
+/** One of the refund tables — or a column added to one since (RefundLot.barcode, 2026-10-26) — isn't
+ *  there yet (Run Migrations: code deploys at once, the database only changes when it's pressed).
+ *  Never any other fault. */
 export function isMissingRefunds(e: unknown): boolean {
-  const err = e as { code?: string; message?: string; meta?: { code?: string; message?: string } } | null
+  const err = e as { code?: string; message?: string; meta?: { code?: string; message?: string; column?: string } } | null
   if (err?.code === "P2021" || err?.code === "42P01" || err?.meta?.code === "42P01") return true
-  return /"?Refund(Lot|Event)?"?\W{0,3}\s*does not exist/i.test(`${err?.message ?? ""} ${err?.meta?.message ?? ""}`)
+  const text = `${err?.message ?? ""} ${err?.meta?.message ?? ""} ${err?.meta?.column ?? ""}`
+  if ((err?.code === "P2022" || err?.code === "42703" || err?.meta?.code === "42703") && /\bRefund(Lot|Event)?\b/.test(text)) return true
+  return /"?Refund(Lot|Event)?"?\W{0,3}\s*does not exist/i.test(text)
 }
 
 /**
