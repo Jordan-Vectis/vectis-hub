@@ -5,11 +5,13 @@ import { revalidatePath } from "next/cache"
 import type { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getAccountsAccess } from "@/lib/accounts-auth"
-import { CLOSED_REFUND_STATUSES, REFUNDS_ADMINS_ONLY, REFUNDS_NOT_READY, REFUNDS_PATH, type RefundResult } from "@/lib/refunds"
+import {
+  CLOSED_REFUND_STATUSES, REFUNDS_ADMINS_ONLY, REFUNDS_NOT_READY, REFUNDS_PATH, REFUND_STATUS_META, type RefundResult,
+} from "@/lib/refunds"
 import { isMissingRefunds, matchCustomerId, nextRefundRef, tidyCustomerNo, writeRefundEvent } from "@/lib/refunds-server"
 import {
   REFUND_LOG_MAX_CHARS, parseRefundLog, refundLogStatus, sortRefundLogRows,
-  type ParsedRefundRow, type RefundLogImported, type RefundLogPreview, type RefundLogSkip,
+  type ParsedRefundRow, type RefundLogImported, type RefundLogPreview, type RefundLogReopen, type RefundLogSkip,
 } from "@/lib/refunds-import"
 import { dayToStored, isDay } from "@/lib/uncollected"
 
@@ -36,7 +38,9 @@ import { dayToStored, isDay } from "@/lib/uncollected"
 //  • Most of the log was dealt with ("Liv") but never given a Date processed or Complete for accounts.
 //    The admin chooses in the preview whether those come in DONE (the ones that came in before a day
 //    they pick — refundLogStatus) or open; the choice is sent with every slice, and each request's
-//    timeline says when its status was the choice rather than the log.
+//    timeline says when its status was the choice rather than the log. The box's default is "bring them
+//    all in open" (Jack, 2026-10-26: "leave them unticked for now"), and reopenCountedDone undoes the
+//    other choice for requests nobody has touched since.
 //  • Missing tables → { ok: false, notReady: true } until Run Migrations.
 
 type Who = { id: string; name: string }
@@ -137,6 +141,14 @@ export async function previewRefundLog(text: string): Promise<RefundResult<Refun
 const IMPORTED_BY = "Old refund log"
 /** Who "ticked" complete for accounts on a row counted done at import (the log never said). */
 const COUNTED_DONE_BY = "Import (old log: dealt with)"
+/** In the first timeline line of every request counted done at import (importedWords) — other notes,
+ *  such as bank details taken out, can follow it, so it's looked for with `contains`. */
+const CHOSEN_AT_IMPORT = "(chosen at import)"
+/** In that line when the choice made it Paid (importedWords) — otherwise it was made Closed. */
+const COUNTED_PAID_WORDS = "came in as Paid"
+/** The words of the timeline line reopenCountedDone writes — how a later look counts it as done already. */
+const BROUGHT_BACK_OPEN = "brought back open"
+const REOPENED_WHY = ": the import had counted it as done, but the old log never said it was processed"
 
 /** The timeline's first line: imported — and anything the import decided rather than the log said. */
 function importedWords(r: ParsedRefundRow, s: ReturnType<typeof refundLogStatus>): string {
@@ -144,8 +156,8 @@ function importedWords(r: ParsedRefundRow, s: ReturnType<typeof refundLogStatus>
   if (s.countedDone) {
     const by = r.dealtWithName ? `dealt with by ${r.dealtWithName}` : "dealt with"
     parts.push(s.status === "paid"
-      ? `the log says ${by} but has no Date processed or Complete for accounts, so it came in as Paid and complete for accounts (chosen at import)`
-      : `the log says ${by} but has no amount, Date processed or Complete for accounts, so it came in as Closed (chosen at import)`)
+      ? `the log says ${by} but has no Date processed or Complete for accounts, so it ${COUNTED_PAID_WORDS} and complete for accounts ${CHOSEN_AT_IMPORT}`
+      : `the log says ${by} but has no amount, Date processed or Complete for accounts, so it came in as Closed ${CHOSEN_AT_IMPORT}`)
   } else if (s.status === "declined") {
     parts.push("its Solution says there was no refund, so it came in as Declined")
   }
@@ -282,5 +294,86 @@ export async function importRefundLog(text: string, max?: number, doneBefore?: s
       }
     }
     return fail(e, "import", "Nothing was imported — something went wrong. Please try again.")
+  }
+}
+
+/**
+ * Undoes "Count them as done" (2026-10-26: the first import on staging went in with it while Jack
+ * wanted those rows left open). An imported request whose status was the import's CHOICE rather than
+ * the log's — its first timeline line contains CHOSEN_AT_IMPORT, and says which (COUNTED_PAID_WORDS or
+ * Closed) — goes back to the status the log gave it, but ONLY while it's untouched: still in the very
+ * status the import chose, as the import left it (Paid with the import's own accounts tick, or Closed
+ * with none; no date processed), and nothing at all on its timeline since. Counted Paid → To pay
+ * (complete for accounts comes off); counted Closed → Being looked at. Each one's timeline says so — and
+ * that line (BROUGHT_BACK_OPEN … REOPENED_WHY) is how a later look counts it as done already, never as
+ * changed. Each row is locked first and its timeline counted afresh, so something done to it at the
+ * same moment (a note, an edit) is seen and the row left alone.
+ * Anything a person has touched is left alone and counted. `apply` false only counts — nothing written.
+ */
+export async function reopenCountedDone(apply: boolean): Promise<RefundResult<RefundLogReopen>> {
+  let reopened = 0
+  try {
+    const who = await requireAdmin()
+    const marked = await prisma.refundEvent.findMany({
+      where: { kind: "created", text: { contains: CHOSEN_AT_IMPORT }, refund: { source: "import" } },
+      select: { refundId: true, text: true },
+    })
+    const chosen = new Map(marked.map((m) => [m.refundId, (m.text ?? "").includes(COUNTED_PAID_WORDS) ? "paid" as const : "closed" as const]))
+    const found = chosen.size
+      ? await prisma.refund.findMany({
+        where: { id: { in: [...chosen.keys()] } },
+        select: {
+          id: true, status: true, processedAt: true, accountsDoneBy: true,
+          events: { where: { kind: { not: "created" } }, select: { kind: true, text: true } },
+        },
+      })
+      : []
+    const asLeft = (r: (typeof found)[number]) => {
+      const choice = chosen.get(r.id)
+      return r.events.length === 0 && r.status === choice && r.processedAt == null
+        && r.accountsDoneBy === (choice === "paid" ? COUNTED_DONE_BY : null)
+    }
+    const alreadyReopened = found.filter((r) => r.events.some((ev) => ev.kind === "status"
+      && (ev.text ?? "").includes(BROUGHT_BACK_OPEN) && (ev.text ?? "").endsWith(REOPENED_WHY))).length
+    const todo = found.filter(asLeft)
+    const changed = found.length - todo.length - alreadyReopened
+    if (apply !== true) return { ok: true, data: { reopen: todo.length, changedSince: changed, alreadyReopened } }
+
+    for (let i = 0; i < todo.length; i += IMPORT_BATCH) {
+      const batch = todo.slice(i, i + IMPORT_BATCH)
+      reopened += await prisma.$transaction(async (tx) => {
+        let n = 0
+        for (const r of batch) {
+          const from = chosen.get(r.id) === "paid" ? "paid" : "closed"
+          const to = from === "paid" ? "agreed" : "looking"
+          // The same test again, under the row's lock: the lock waits out anything being saved to it right
+          // now, and the count after it sees that (each statement reads afresh) — so it's left alone.
+          await tx.$queryRaw`SELECT "id" FROM "Refund" WHERE "id" = ${r.id} FOR UPDATE`
+          if (await tx.refundEvent.count({ where: { refundId: r.id, kind: { not: "created" } } }) > 0) continue
+          const done = await tx.refund.updateMany({
+            where: {
+              id: r.id, status: from, processedAt: null, accountsDoneBy: from === "paid" ? COUNTED_DONE_BY : null,
+              events: { none: { kind: { not: "created" } } },
+            },
+            data: { status: to, closedAt: null, accountsDoneAt: null, accountsDoneBy: null },
+          })
+          if (done.count === 0) continue
+          const tick = from === "paid" ? ", complete for accounts taken off" : ""
+          await writeRefundEvent(tx, r.id, "status",
+            `${REFUND_STATUS_META[from].label} → ${REFUND_STATUS_META[to].label} — ${BROUGHT_BACK_OPEN}${tick}${REOPENED_WHY}`, who)
+          n++
+        }
+        return n
+      }, TX_OPTIONS)
+    }
+    if (reopened) revalidate()
+    return { ok: true, data: { reopen: reopened, changedSince: changed + (todo.length - reopened), alreadyReopened } }
+  } catch (e) {
+    if (reopened > 0) {
+      revalidate()
+      logSafely("reopen (part-way)", e)
+      return { ok: false, error: `${reopened.toLocaleString("en-GB")} were brought back open, then something went wrong. Press Find them again for the rest — one already brought back is never changed twice.` }
+    }
+    return fail(e, "reopen", "Nothing was changed — something went wrong. Please try again.")
   }
 }

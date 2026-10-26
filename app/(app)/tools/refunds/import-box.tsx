@@ -3,9 +3,9 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useRef, useState } from "react"
-import { importRefundLog, previewRefundLog } from "@/lib/actions/refunds-import"
+import { importRefundLog, previewRefundLog, reopenCountedDone } from "@/lib/actions/refunds-import"
 import { REFUNDS_PATH, REFUND_STATUSES, REFUND_STATUS_META, refundFilterQuery } from "@/lib/refunds"
-import { REFUND_LOG_MAX_CHARS, refundLogStatus, type RefundLogPreview } from "@/lib/refunds-import"
+import { REFUND_LOG_MAX_CHARS, refundLogStatus, type RefundLogPreview, type RefundLogReopen } from "@/lib/refunds-import"
 import { addDays, formatDay, isDay, londonDay } from "@/lib/uncollected"
 
 // Refunds → "Import the old refund log (SharePoint CSV)". Admins only (the actions check again).
@@ -18,9 +18,10 @@ import { addDays, formatDay, isDay, londonDay } from "@/lib/uncollected"
 // only ever adds what isn't in yet — a request already in is never changed.
 //
 // Most of the old log was dealt with ("Liv") but never given a Date processed or Complete for accounts,
-// so the preview asks what to do with those: count the ones that came in before a day as done (Paid and
-// complete for accounts with an amount, Closed without), or bring them all in open. Without that, three
-// hundred finished requests would land in To pay and Being looked at, to be closed one by one.
+// so the preview asks what to do with those: bring them all in open (the DEFAULT — Jack, 2026-10-26:
+// "leave them unticked for now"), or count the ones that came in before a day as done (Paid and complete
+// for accounts with an amount, Closed without). "Came in as done by the import?" below undoes the second
+// choice for requests nobody has touched since (reopenCountedDone).
 //
 // The file is decoded HERE, not on the server: the old log is Windows-1252 (£ is byte 0xA3, smart
 // quotes 0x92–0x94), so it's read as that unless it starts with a UTF-8 BOM or is valid UTF-8 through
@@ -81,12 +82,16 @@ export default function ImportBox() {
   const [progress, setProgress] = useState<{ done: number; of: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<Done | null>(null)
-  // The choice for rows dealt with but never processed.
-  const [countDone, setCountDone] = useState(true)
+  // The choice for rows dealt with but never processed — open unless the admin chooses otherwise.
+  const [countDone, setCountDone] = useState(false)
   const [doneBefore, setDoneBefore] = useState("")
   // Stop: read by the import loop between slices.
   const stop = useRef(false)
   const [stopping, setStopping] = useState(false)
+  // "Came in as done by the import?" below: neither runs while the other does, and a finished import
+  // starts it afresh (its count would be stale).
+  const [reopening, setReopening] = useState(false)
+  const [imports, setImports] = useState(0)
 
   async function choose(file: File | null) {
     setText(null); setPreview(null); setError(null); setDone(null); setProgress(null)
@@ -170,7 +175,7 @@ export default function ImportBox() {
       setBusy(null)
       setProgress(null)
       setStopping(false)
-      if (total > 0) router.refresh()
+      if (total > 0) { router.refresh(); setImports((n) => n + 1) }
     }
   }
 
@@ -188,16 +193,16 @@ export default function ImportBox() {
 
       <div className="mt-3 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
         <input
-          type="file" accept=".csv,text/csv" disabled={busy != null}
+          type="file" accept=".csv,text/csv" disabled={busy != null || reopening}
           onChange={(e) => choose(e.target.files?.[0] ?? null)}
           aria-label="The refund log CSV"
           className="file-input min-h-11"
         />
-        <button type="button" onClick={check} disabled={!text || busy != null} className={btn}>
+        <button type="button" onClick={check} disabled={!text || busy != null || reopening} className={btn}>
           {busy === "checking" ? "Checking…" : busy === "reading" ? "Reading the file…" : "Check file"}
         </button>
         {preview && preview.toImport > 0 && (
-          <button type="button" onClick={runImport} disabled={busy != null} className={btnGo}>
+          <button type="button" onClick={runImport} disabled={busy != null || reopening} className={btnGo}>
             {busy === "importing" ? "Importing…" : `Import ${plural(preview.toImport, "request")}`}
           </button>
         )}
@@ -276,7 +281,94 @@ export default function ImportBox() {
           {error}
         </p>
       )}
+
+      <ReopenCounted key={imports} blocked={busy != null} onBusy={setReopening} />
     </section>
+  )
+}
+
+/** "Came in as done by the import?" — finds the imported requests the import counted as done (its
+ *  choice, not the log's) that nobody has touched since, then brings them back open on a second press.
+ *  `blocked` while an import runs; `onBusy` tells the import box while this one does. */
+function ReopenCounted({ blocked, onBusy }: { blocked: boolean; onBusy: (busy: boolean) => void }) {
+  const router = useRouter()
+  const [busy, setBusyState] = useState<null | "finding" | "reopening">(null)
+  const [found, setFound] = useState<RefundLogReopen | null>(null)
+  const [done, setDone] = useState<RefundLogReopen | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const setBusy = (b: null | "finding" | "reopening") => { setBusyState(b); onBusy(b != null) }
+
+  async function find() {
+    if (busy || blocked) return
+    setBusy("finding"); setError(null); setDone(null); setFound(null)
+    try {
+      const res = await reopenCountedDone(false)
+      if (!res.ok) { setError(res.error); return }
+      setFound(res.data)
+    } catch {
+      setError("The Hub didn't answer — check your connection and try again.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function reopen() {
+    if (busy || blocked || !found?.reopen) return
+    setBusy("reopening"); setError(null)
+    try {
+      const res = await reopenCountedDone(true)
+      // Some may have gone back before a failure — the count shown would be stale either way.
+      setFound(null)
+      if (!res.ok) { setError(res.error); router.refresh(); return }
+      setDone(res.data)
+      router.refresh()
+    } catch {
+      setFound(null)
+      setError("The Hub didn't answer — press Find them again to see where it stands.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Came in as done by the import?</p>
+      <p className={`text-xs mt-1 max-w-3xl ${muted}`}>
+        If old rows were imported with <b>Count them as done</b>, this brings the ones nobody has touched since back open, the way
+        the log left them: <b>To pay</b> (complete for accounts taken off) or <b>Being looked at</b>. Each one&apos;s timeline says so.
+      </p>
+      <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+        <button type="button" onClick={find} disabled={busy != null || blocked} className={btn}>
+          {busy === "finding" ? "Looking…" : "Find them"}
+        </button>
+        {found && found.reopen > 0 && (
+          <button type="button" onClick={reopen} disabled={busy != null || blocked} className={btnGo}>
+            {busy === "reopening" ? "Bringing them back open…" : `Bring ${plural(found.reopen, "request")} back open`}
+          </button>
+        )}
+      </div>
+      {found && (
+        <p role="status" className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+          {found.reopen > 0
+            ? <>{plural(found.reopen, "request")} came in as done because of the import&apos;s choice, not the log — nothing is changed until you press Bring back open.</>
+            : <>None to bring back — no imported request is still counted as done by the import and untouched.</>}
+          {found.alreadyReopened > 0 && <> {plural(found.alreadyReopened, "request")} {found.alreadyReopened === 1 ? "was" : "were"} brought back open already.</>}
+          {found.changedSince > 0 && <> {plural(found.changedSince, "other")} {found.changedSince === 1 ? "was" : "were"} counted as done but someone has worked on {found.changedSince === 1 ? "it" : "them"} since, so {found.changedSince === 1 ? "it's" : "they're"} left alone.</>}
+        </p>
+      )}
+      {done && (
+        <p role="status" className="mt-2 rounded-xl border px-4 py-3 text-sm border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">
+          ✓ {plural(done.reopen, "request")} brought back open
+          {done.changedSince > 0 && <> ({plural(done.changedSince, "other")} left alone — worked on since)</>} —{" "}
+          <Link href={REFUNDS_PATH} prefetch={false} className={inlineLink}>see the open list</Link>
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="mt-2 rounded-xl border px-4 py-3 text-sm border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-200">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 

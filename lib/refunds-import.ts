@@ -157,6 +157,16 @@ export type RefundLogImported = {
   remaining: number
 }
 
+/** What "bring back open" finds (when only looking) or did — reopenCountedDone. */
+export type RefundLogReopen = {
+  /** Imported requests counted as done by the import's choice and untouched since (brought back open). */
+  reopen: number
+  /** Counted as done at import, but someone has done anything to them since — left alone. */
+  changedSince: number
+  /** Brought back open already, by an earlier press. */
+  alreadyReopened: number
+}
+
 // ─── Text ───────────────────────────────────────────────────────────────────────────────────
 
 /** Smart quotes, dashes, non-breaking and zero-width spaces made plain; the decoder's replacement

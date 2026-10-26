@@ -3338,7 +3338,15 @@ the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
   fingerprint) — a row already imported is never changed, a row changed in SharePoint since is refused
   ("make the change in the Hub"); bank/card details are taken out of every cell before saving; Date and
   Auction date are UK day-first, "Date processed" is US month-first (SharePoint's export). Batches of
-  50 with a Stop. The admin chooses whether old rows "dealt with" but never processed count as done.
+  50 with a Stop. The admin chooses whether old rows "dealt with" but never processed count as done —
+  ⚠ the DEFAULT is "bring them all in open" (Jack, 2026-10-26: *"leave them unticked for now"*; the
+  first staging import went in counted-done by accident). **"Came in as done by the import?"** in the
+  same card (`reopenCountedDone`) brings those back open — To pay (the import's accounts tick taken off)
+  or Being looked at — but only ones untouched since: still in the status the import chose and NOTHING
+  on their timeline after the import's line (checked again under a row lock). It finds them by the
+  "(chosen at import)" words IN that line (other notes can follow them; "came in as Paid" says which
+  choice), and counts ones it already reopened by its own "brought back open … never said it was
+  processed" line — keep those words.
 - The search is never in the URL (it's usually a name or email) — sent to `listRefunds` and kept in the
   tab's sessionStorage, as on Paid, not collected. Export CSV is made in the browser from what's shown.
 - Listed in `lib/data-map.ts` (customer data) and in `lib/help-map.ts` as "Refunds (Accounts)".
