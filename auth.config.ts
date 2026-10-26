@@ -46,7 +46,7 @@ export const authConfig: NextAuthConfig = {
       // RULES.md → Goods In → handheld scanner → "Scanner sign-in cards".
       // "/two-factor/setup": reached from the login form after a correct password, guarded by its own
       // 15-minute set-up pass cookie (lib/two-factor.ts) — it never gives a Hub session.
-      const publicExact = ["/first-aid", "/scan", "/scan/sw", "/two-factor/setup"]
+      const publicExact = ["/first-aid", "/scan", "/scan/sw", "/two-factor/setup", "/refund"]
       const bare = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname
       if (publicExact.includes(bare)) return true
 

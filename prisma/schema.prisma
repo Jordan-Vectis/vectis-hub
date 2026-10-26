@@ -2574,6 +2574,112 @@ model UncollectedPaid {
 /// PTE_InternalReference = who packed it). One row per case, written by the BC check; BC is read only.
 /// Its own table so nothing is added to UncollectedPaid. `shipmentNos` / `packedBy` leave cancelled
 /// requests out; `shipments` keeps every one: [{ no, docket, status, packedBy, date, trackingNo }].
+/// Accounts → Refunds (Jack, 2026-10-26): one request — a buyer asking for a refund, a part refund or
+/// a return (the Hub's public form at /refund, replacing the Microsoft Form), a vendor owed a payout
+/// (added by staff), or a row of the old SharePoint Refund Log (imported once — importKey). Admins work
+/// it in the Hub: status, who is dealing with it, the lots and the money (RefundLot, worked out from
+/// BC), postage, the accounts ref code, paid, complete for accounts. Money in pence. See lib/refunds.ts.
+model Refund {
+  id              String        @id @default(cuid())
+  /// The request's own number, shown "RF0042" (refundRefWords) — max + 1 under an advisory lock.
+  ref             Int           @unique
+  /// "form" | "staff" | "import".
+  source          String        @default("form")
+  /// Imported rows only: a fingerprint of the old log row, so importing again never duplicates.
+  importKey       String?       @unique
+  receivedAt      DateTime      @default(now())
+  name            String
+  email           String?
+  /// The customer's C-number, when known.
+  customerNo      String?
+  /// The Hub's Customers record, when customerNo matched one.
+  customerId      String?
+  /// "buyer" | "vendor".
+  party           String        @default("buyer")
+  saleCode        String?
+  /// A London day, stored at 12:00 UTC.
+  auctionDate     DateTime?
+  /// The lot number(s) as given ("808", "123 & 124").
+  lotsText        String?
+  reason          String        @default("other")
+  details         String?
+  /// R2 keys under refund-photos/<id>/ — shown only through the admin-only photo route.
+  photoKeys       String[]      @default([])
+  status          String        @default("new")
+  /// "refund" | "return" | "payout".
+  solution        String?
+  /// The % agreed, as words ("20%", "Set amount", "10% (hammer only)") — the old log's column.
+  percentText     String?
+  hammerPence     Int?
+  commissionPence Int?
+  postagePence    Int?
+  totalPence      Int?
+  /// The accounts reference code (the old log's "Ref Code").
+  refCode         String?
+  dealtWithName   String?
+  dealtWithId     String?
+  /// When it was refunded / paid out ("Date processed").
+  processedAt     DateTime?
+  /// "Complete for accounts" — when, and who ticked it.
+  accountsDoneAt  DateTime?
+  accountsDoneBy  String?
+  notes           String?
+  /// Imported rows: the old log's cells as they were.
+  importedRaw     Json?
+  /// Public form only: the sender's IP hashed with AUTH_SECRET (never the raw IP) — for rate limits.
+  ipHash          String?
+  /// Public form only: sent with the honeypot filled, or by an address over the hourly limit.
+  suspect         Boolean       @default(false)
+  closedAt        DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  lots            RefundLot[]
+  events          RefundEvent[]
+
+  @@index([status])
+  @@index([receivedAt])
+  @@index([customerNo])
+  @@index([ipHash, receivedAt])
+}
+
+/// One lot on a refund and what it refunds (lib/refunds.ts lotRefundPence): % of hammer + commission,
+/// % of the hammer only, or a set amount. Hammer and description filled from BC when found (fromBc).
+model RefundLot {
+  id              String   @id @default(cuid())
+  refundId        String
+  refund          Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  position        Int      @default(0)
+  saleCode        String?
+  lotNo           String
+  uniqueId        String?
+  description     String?
+  hammerPence     Int?
+  /// null = 27% of the hammer (commissionFor).
+  commissionPence Int?
+  /// "percent" | "hammer_only" | "set".
+  basis           String   @default("percent")
+  percent         Float?
+  setAmountPence  Int?
+  fromBc          Boolean  @default(false)
+
+  @@index([refundId])
+}
+
+/// Everything done on a refund — status changes, notes, who picked it up, amounts agreed, paid,
+/// complete for accounts — with who and when.
+model RefundEvent {
+  id       String   @id @default(cuid())
+  refundId String
+  refund   Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  kind     String
+  text     String?
+  byId     String?
+  byName   String?
+  at       DateTime @default(now())
+
+  @@index([refundId, at])
+}
+
 model UncollectedShipping {
   caseId        String          @id
   case          UncollectedPaid @relation(fields: [caseId], references: [id], onDelete: Cascade)

@@ -348,6 +348,16 @@ export const DESTINATIONS: Destination[] = [
   // uncollected buyers — never bare "collection", "storage" or "invoice". "uncollected lots" is shared
   // with BC Warehouse (Collections Due) on purpose, so neither side is refused with the other's.
   // No `ask`, so the suggestions stay as they were. Apostrophes are spaces in matchScore ("haven t").
+  // Refunds (2026-10-26) — admin-only like Paid, not collected. Keywords all name a refund, a return
+  // or a payout, never bare "damaged" or "missing" (a cataloguer's condition questions must not match).
+  {
+    name: "Refunds (Accounts)", href: "/tools/refunds", app: "ACCOUNTS", adminOnly: true,
+    what: "💷 Refunds (admins only, its own tile in Admin & Operations): every refund, part-refund and return request — from the public refund form customers fill in on the website (it replaces the Microsoft Form), vendor payouts added by staff, and the old SharePoint refund log imported once. Each has a reference (RF0042), who sent it, buyer or vendor, the sale, lots and auction date, why (damaged in transit, missing parts, described incorrectly, lost…), what they wrote and their photos. Work it through: being looked at, waiting for the item back, agreed to pay, paid, declined or closed; who is dealing with it; refund, return or payout; the lots filled from BC with the refund worked out (a % of hammer + 27% commission, % of hammer only, or a set amount, plus postage); the accounts ref code; paid; and Complete for accounts. Filter, search and export the list.",
+    also: [
+      "refunds", "refund requests", "refund log", "refund form", "part refund", "partial refund", "return request", "returns log",
+      "customer refund", "buyer refund", "vendor payout", "payout to vendor", "refund complete for accounts", "damaged in transit refund",
+    ],
+  },
   {
     name: "Paid, not collected (Accounts)", href: "/tools/accounts/uncollected", app: "ACCOUNTS", adminOnly: true,
     what: "Accounts → 📦 Paid, not collected (admins only): the buyers who have paid for their lots but haven't collected them. Filled automatically from BC every morning at 08:30 — a lot sold to them, on an invoice BC shows as paid in full, still not collected 28 days (4 weeks) after it was paid, one case per invoice, marked From BC — and 🔄 Check BC now runs the same check straight away with your own BC sign-in (it only reads BC, and Stop stops it part-way, keeping what it saved); the line at the top says when BC was last checked and what it found. A case from BC shows 'Paid by' (the day BC settled the invoice) and lists its lots live from BC with where BC has each one now, and closes itself when BC shows them collected (ticked, or scanned to a location like COLLECTED or SHIPPED; a lot at MISSING or QUERY isn't charged and the case says to check it). Tiles show the open cases, lots and money waiting, the longest wait and the chases due; filter by status and by how long they've waited, search by name, buyer number, sale or invoice, and export the list. Add a buyer by hand too, then open any case to change its details, log a call, email, letter or note with the next chase date, set the date storage charges start from, and move it on — waiting, been in touch, collection or delivery arranged, storage charges apply, collected (which closes it), or closed another way (with a reason).",

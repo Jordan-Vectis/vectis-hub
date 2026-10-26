@@ -366,6 +366,21 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     allUsers:           false,
   },
   {
+    // Accounts → Refunds as its own tile (Jack, 2026-10-26): refund, part-refund and return requests
+    // from the Hub's public refund form, vendor payouts, and the old refund log. Admin-only — no appKey.
+    key:                "REFUNDS",
+    href:               "/tools/refunds",
+    defaultLabel:       "Refunds",
+    defaultDescription: "Refund, part-refund and return requests from the website's refund form, and vendor payouts — worked out from BC, from first look to paid and complete for accounts.",
+    icon:               "💷",
+    border:             "border-rose-500",
+    iconBg:             "text-rose-400",
+    btnBg:              "bg-rose-600 hover:bg-rose-500",
+    glow:               "hover:shadow-rose-900/40",
+    group:              "OPERATIONS",
+    allUsers:           false,
+  },
+  {
     key:                "CONDITION_REPORTS",
     href:               "/tools/condition-reports",
     defaultLabel:       "Conditions Reports",
