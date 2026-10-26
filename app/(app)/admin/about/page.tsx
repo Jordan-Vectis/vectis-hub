@@ -1213,38 +1213,36 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 // ─── New-developer intro ───────────────────────────────────────────────────────
-// Two developers started on 2026-10-26: what the Hub is written in, what it runs on, and how a
-// change gets to staff — the shortest honest version. Detail lives in RULES.md (CLAUDE.md pulls it
-// in), the shared memory page and the sections below.
+// Written for a person on their first day (two developers started 2026-10-26), not as a rulebook:
+// what you'll be coding in, what you'll need accounts for, and how your first change gets out.
 
 const STACK: [string, string][] = [
-  ["TypeScript everywhere", "One language, front and back. Strict types; npx tsc --noEmit -p . must pass before every push."],
-  ["Next.js 16 (App Router) + React 19", "Server components by default, 'use client' only where the browser needs it. Server actions return { ok, error } — never throw at a user (production redacts the message). ⚠ This Next is newer than most training data: read node_modules/next/dist/docs before writing anything unfamiliar (AGENTS.md)."],
-  ["Tailwind CSS v4", "Dark mode is the DEFAULT (html.dark); light is the toggle. Every screen is checked dark first, full width, ~44px touch targets — much of the Hub runs on shared iPads."],
-  ["Prisma 7 + PostgreSQL on Neon", "prisma/schema.prisma is the model; the client is generated into app/generated/prisma. Raw SQL where it's clearer (tagged templates — never string-built). Neon branches: production, Staging, Sandbox."],
-  ["Node 22+ with a custom server.js", "Boots Next plus Socket.IO (live auction), the cron loops (BC sync, backups, the uncollected check) and the migration runner — all gated to production."],
-  ["NextAuth v5 (beta)", "Credentials login, JWT in a cookie, optional two-factor (authenticator app). proxy.ts is the middleware; /api routes check auth themselves."],
+  ["TypeScript", "Front end, back end and scripts — one language for everything, in strict mode."],
+  ["React 19 with Next.js 16", "Pages are server components; add 'use client' only for the interactive parts. Forms talk to the server through server actions. Heads-up: this Next.js is newer than most tutorials and blog posts, so when something looks different, check its own docs in node_modules/next/dist/docs."],
+  ["Tailwind CSS v4", "Utility classes, no separate stylesheets. The dark theme is the default, so build dark first and check light after. Screens use the full width and big tap targets — a lot of the Hub is used on iPads, standing up."],
+  ["Prisma 7 with PostgreSQL", "The data model is prisma/schema.prisma; the generated client is in app/generated/prisma. Plain SQL through Prisma is fine where it reads better than the query builder."],
+  ["Node 22 or newer", "A small custom server (server.js) starts Next.js and, on production only, the live-auction sockets and the overnight jobs (the Business Central copy, backups, the accounts check)."],
 ]
 
 const SERVICES: [string, string][] = [
-  ["Railway", "Hosting. push to staging → the staging and sandbox services; push to main → production. Builds take a few minutes; environment variables live there (DATABASE_URL, AUTH_SECRET, CUSTOMERS_OWNER, WAREHOUSE_OWNER…)."],
-  ["Neon", "The Postgres database, with point-in-time branches. The sandbox is staging's code on a branch of production's data."],
-  ["Cloudflare R2", "Files: photos, PDFs, recordings, backups — through the AWS S3 SDK with presigned URLs."],
-  ["Microsoft Business Central (Evo-auction)", "The auction system the Hub is gradually replacing. Read through its OData / Evo APIs with a per-user OAuth token (the BC button in the top bar) or the one background sign-in; the AL source is readable in IT Tools → BC Source and the API in BC API Viewer."],
-  ["Google Gemini + Anthropic Claude", "The AI behind descriptions, Lens, Valuations, the Help box. Which model each tool uses is set in Admin → AI Models, never hard-coded."],
-  ["Microsoft Graph", "Mailboxes (IT, condition reports, receipts) with delegated permissions."],
-  ["GitHub + GitHub Actions", "The repository, and the build of the Vectis Scanner Android app (Capacitor 7, JDK 21). AutoHotkey scripts (the BC import macro, the Auto Clerk) live beside the app and read screens by coordinates."],
-  ["Claude Code", "Most of the Hub was built with it. RULES.md is its rulebook and yours; Admin → Claude Memory is the shared record of decisions. The same rules apply whoever — or whatever — writes the code."],
+  ["VS Code, Git, Node", "Clone the repo, npm install, npx next dev — the Hub runs at localhost:3000 with your own login. Any editor is fine; VS Code is what we use."],
+  ["GitHub", "The code. Two branches matter: staging (where we all work) and main (production)."],
+  ["Railway", "Hosting. A push to staging deploys the staging and sandbox sites; a push to main deploys production. Environment variables and logs live here."],
+  ["Neon", "The PostgreSQL database, with a branch for staging and one for the sandbox (a copy of production's data to try things on)."],
+  ["Cloudflare R2", "File storage — photos, PDFs, screen recordings, nightly backups. Used through the AWS S3 SDK with signed links."],
+  ["Business Central (Evo-auction)", "The auction system the business has run on for years and the Hub is gradually replacing. The Hub reads from it through its API; the BC button in the top bar signs you in. You can read its source code in IT Tools → BC Source and poke its API in BC API Viewer."],
+  ["Google Gemini and Anthropic Claude", "The AI behind lot descriptions, Lens, Valuations and the Help box. Keys are already set up; which model each tool uses is chosen in Admin → AI Models, not in code."],
+  ["Microsoft 365", "Mailboxes the Hub reads from and sends through (IT tickets, condition reports, receipts) via Microsoft Graph."],
 ]
 
 const WORKFLOW: string[] = [
-  "Read RULES.md first. It is deliberate decisions, not defaults, with the failure each rule prevents. When a request conflicts with a rule, stop and discuss — never silently override, never leave a rule stale.",
-  "Work on the staging branch. Pull before every push — someone else pushes most days. Never push to main unless Jordan says so.",
-  "Before every push: npx tsc --noEmit -p ., npx next build, then npm run changelog:seed (it folds into your commit so the deploy is named after your work and appears in Admin → Patches & Changes).",
-  "A database change = a migration SQL file + the same statements in lib/migrations.ts. Deploy, then an admin presses the amber Run Migrations banner. New tables, never columns on User, CatalogueLot or Contact.",
-  "Your local .env points at the REAL database. Run pages with npx next dev (it skips server.js); never run the boot jobs locally.",
-  "Every new screen: dark first, full width, 44px targets, a key for any colour or symbol, real progress on anything slow (a count that moves, a Stop), never a '0' that could mean 'couldn't tell'.",
-  "British English throughout. It is the Hub — not 'the CRM'. Business Central is BC.",
+  "Read RULES.md before you change anything. It's long, but every rule in it exists because something went wrong without it, and it says what. Ask Jordan when a request seems to go against one.",
+  "Work on the staging branch and pull before you push — several people push every day.",
+  "Before every push run npx tsc --noEmit -p . and npx next build, then npm run changelog:seed. The seed folds into your commit so the deploy is named after your work and shows up in Admin → Patches & Changes.",
+  "Changed the database? Add a migration file under prisma/migrations and the same SQL to the MIGRATIONS array in lib/migrations.ts. After the deploy, an admin presses the amber Run Migrations banner; you don't run anything by hand. Prefer a new table to a new column on a busy one (User, CatalogueLot, Contact).",
+  "Your local .env points at the real database, not a copy. Run pages with npx next dev (it skips server.js, so none of the overnight jobs can run from your machine) and treat it as live data.",
+  "Only Jordan pushes to main. Say when something is ready on staging and he'll take it to production.",
+  "Stuck or lost? This page describes every section; the Help box in the top bar answers 'where do I…'; Admin → Memory is the log of decisions and why they were made.",
 ]
 
 function NewDeveloperIntro() {
@@ -1263,31 +1261,31 @@ function NewDeveloperIntro() {
       {open && (
         <div className="border-t border-gray-100 dark:border-gray-700 px-6 py-5 space-y-6 text-sm text-gray-700 dark:text-gray-300">
           <p className="leading-relaxed max-w-4xl">
-            The Vectis Hub is the auction house&apos;s internal web app: cataloguing and AI descriptions, the warehouse (Goods In), customers, the live auction clerk, accounts, facilities and IT tools — one Next.js app, one Postgres database, hosted on Railway, step by step taking over from Business Central.
-            It is a <b>TypeScript / Next.js / Prisma</b> codebase: the same language in the browser, on the server and in the scripts, with Tailwind for styling and Postgres on Neon for data.
-            Most of it has been built with Claude Code against a written rulebook (RULES.md), and the rulebook is the first thing to read.
+            Welcome. The Hub is Vectis&apos;s internal web app — one site that runs cataloguing and AI descriptions, the warehouse (Goods In), customers, the live auction clerk, accounts, facilities and IT&apos;s own tools.
+            It is gradually taking over from Business Central, the auction system the business has run on for years. It is one codebase and one database, and you&apos;ll spend almost all your time in TypeScript.
+            Much of it was built with an AI coding assistant working to the same written rules you&apos;ll work to, so the code is consistent and well commented — read the comment at the top of a file first; it usually says why the file exists and what not to change.
           </p>
           <div className="grid gap-6 lg:grid-cols-2">
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Languages &amp; framework</h3>
+              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">What you&apos;ll be writing</h3>
               <ul className="space-y-2">
                 {STACK.map(([k, v]) => <li key={k} className="flex gap-3"><span className="text-blue-400 mt-0.5 shrink-0">◆</span><span><b className="text-gray-900 dark:text-gray-100">{k}</b> — {v}</span></li>)}
               </ul>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Programs &amp; services</h3>
+              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Programs &amp; accounts you&apos;ll need (ask Jordan)</h3>
               <ul className="space-y-2">
                 {SERVICES.map(([k, v]) => <li key={k} className="flex gap-3"><span className="text-blue-400 mt-0.5 shrink-0">◆</span><span><b className="text-gray-900 dark:text-gray-100">{k}</b> — {v}</span></li>)}
               </ul>
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">How a change gets to staff</h3>
+            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Your first week</h3>
             <ol className="space-y-2 list-decimal pl-5">
               {WORKFLOW.map((w, i) => <li key={i} className="leading-relaxed pl-1">{w}</li>)}
             </ol>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Everything below is per section: what it does, what it relies on, and the rules behind it. The 💬 Help box in the top bar answers &ldquo;where do I…&rdquo; for the tools you can open.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Everything below is per section: what it does, what it relies on, and the rules behind it — open the one you&apos;re about to work on.</p>
         </div>
       )}
     </section>

@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c2ca96a45c6504cad80a30d6d488bba58043d073","author":"Jordan Orange","date":"2026-10-26T14:44:39Z","subject":"About: brought up to date, with a new-developer intro"},
   {"sha":"d9dccf7f83c4b78939ac9e5198265b45e8a167cb","author":"jack-vectis","date":"2026-10-26T13:03:45Z","subject":"Refunds: old rows come in open by default, and a button brings back the ones counted done"},
   {"sha":"b3d7822f4e7c9b5625741d118f056db6e69ddf82","author":"jack-vectis","date":"2026-10-26T11:16:01Z","subject":"Build: give next build 4 GB, so the type-check stops running out of memory"},
   {"sha":"0576102c488e5a06571f80d2bea722eee532f654","author":"jack-vectis","date":"2026-10-26T10:56:13Z","subject":"Refunds: a Refunds tile for admins, the Hub's own public refund form, and the old refund log imported"},
