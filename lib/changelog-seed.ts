@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f293989306431a8833f30433c0dfc4f62d8eb766","author":"Jordan Orange","date":"2026-10-26T10:17:13Z","subject":"Activity timer: Friday-to-Monday gaps no longer read an hour out across the clock change"},
   {"sha":"080196d6fe6e725a08b238a6f0d0d70ebc6a9145","author":"jack-vectis","date":"2026-10-26T09:22:30Z","subject":"Paid, not collected: Start again from BC, on the test sites only"},
   {"sha":"4de14bc6a78098664216d3f48e09b1e1adbd5faa","author":"jack-vectis","date":"2026-10-26T09:10:20Z","subject":"Paid, not collected: Check BC now gets 20 minutes, and the shipment read its own slot"},
   {"sha":"5686ace99720f882ed86c393a4a657d5fe772602","author":"Jordan Orange","date":"2026-10-23T17:08:11+01:00","subject":"Goods In: Totes & pallets — the warehouse database, searchable, filterable, sortable, editable, exportable"},
