@@ -15,8 +15,10 @@ export const FULL_DAY_WORK_MS = 8 * 60 * 60 * 1000
 // The client's workingMsBetween reads the browser's local clock, which for staff
 // IS London. On the server (Railway = UTC) that's wrong by the BST/GMT offset, so
 // server code (the gap report + the create-lot gate) uses these London-explicit
-// versions instead. Gaps are same-day (8h+ excluded), so a single offset sample
-// is safe — the only imprecision would be a gap straddling a clock change.
+// versions instead. ⚠ The offset is worked out PER DAY (sampled at that day's
+// midday), never once for a whole gap: a Friday→Monday gap straddles the clock
+// change twice a year, and one offset for both ends read every cross-change gap an
+// hour too long in October (and an hour too short in March) — 2026-10-26.
 
 function londonOffsetMs(utcMs: number): number {
   // London wall-clock for this instant, parsed back as if local, minus UTC.
@@ -70,23 +72,27 @@ export function assessGap(sinceMs: number, nowMs: number, thresholdMs: number): 
   return { gate, idleMs, reason: gate ? "OVER_THRESHOLD" : "UNDER_THRESHOLD" }
 }
 
+function isLondonWorkday(utcMs: number): boolean {
+  const wd = new Date(utcMs).toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "short" })
+  return wd !== "Sat" && wd !== "Sun"
+}
+
 // Working ms (Mon–Fri 09:00–17:00 Europe/London) between two UTC instants.
+// Walks London days; each day's 09:00/17:00 comes from that day's own offset, so a
+// gap across the BST/GMT change (Fri 23 Oct 16:30 BST → Mon 26 Oct 09:15 GMT = 45m)
+// is measured right. One offset for the whole gap made that 105m.
 export function workingMsLondon(startMs: number, endMs: number): number {
   if (endMs <= startMs) return 0
-  const off = londonOffsetMs(startMs)
-  const s = startMs + off, e = endMs + off   // shift so UTC hours read as London wall clock
   let total = 0
-  const cur = new Date(s); cur.setUTCHours(0, 0, 0, 0)
+  let anchor = startMs
   for (let i = 0; i < 60; i++) {
-    if (cur.getTime() > e) break
-    const wd = cur.getUTCDay()
-    if (wd >= 1 && wd <= 5) {
-      const ws = new Date(cur); ws.setUTCHours(9, 0, 0, 0)
-      const we = new Date(cur); we.setUTCHours(17, 0, 0, 0)
-      const overlap = Math.min(e, we.getTime()) - Math.max(s, ws.getTime())
+    const ws = londonWorkStartMs(anchor), we = londonWorkEndMs(anchor)
+    if (ws > endMs) break
+    if (isLondonWorkday(anchor)) {
+      const overlap = Math.min(endMs, we) - Math.max(startMs, ws)
       if (overlap > 0) total += overlap
     }
-    cur.setUTCDate(cur.getUTCDate() + 1)
+    anchor = we + 8 * 60 * 60 * 1000   // 17:00 + 8h → ~01:00 next London day, safe across a DST change
   }
   return total
 }
@@ -118,8 +124,7 @@ export function splitIdleByWorkingDay(startMs: number, workingMs: number): IdleD
   for (let i = 0; i < 400 && remaining > 0; i++) {
     const wStart = londonWorkStartMs(anchor)
     const wEnd   = londonWorkEndMs(anchor)
-    const wd = new Date(anchor).toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "short" })
-    if (wd !== "Sat" && wd !== "Sun") {
+    if (isLondonWorkday(anchor)) {
       const segStart = Math.max(anchor, wStart)   // first day starts at the real time; later days at 09:00
       const avail = wEnd - segStart
       if (avail > 0) {
