@@ -38,7 +38,10 @@ const APPS: App[] = [
           "appPermissions is a JSON object of shape Record<string, { role: string }> — keys are app identifiers, values hold app-specific sub-roles (e.g. warehouse role: 'manager').",
           "Auth split: auth.config.ts (Edge-safe, no Prisma) used in middleware/proxy; auth.ts (full, with Prisma) used in server components and API routes.",
           "trustHost: true is set in auth.config.ts — required for Railway's dynamic domain.",
-          "The middleware file is proxy.ts (not middleware.ts) — Next.js renamed the convention.",
+          "The middleware file is proxy.ts (not middleware.ts) — Next.js renamed the convention. It skips /api — every API route checks auth itself.",
+          "Two-factor login (2026-10-22): a tick box per person in Users & Permissions. Authenticator-app codes (TOTP, Node crypto, lib/two-factor.ts), 'remember this device' for 30 days, admin Reset for a lost phone. No backup codes by decision. Its own table, UserTwoFactor — never columns on User.",
+          "Login attempts are rate-limited; the Access Log (/admin/access-log) records refusals.",
+          "The live-auction clerk controls are gated by the Auction Controller app permission on the Hub login — the shared clerk password was removed (2026-10-22).",
         ],
       },
       {
@@ -513,32 +516,42 @@ const APPS: App[] = [
   // ─── WAREHOUSE (INTERNAL) ────────────────────────────────────────────────
   {
     key: "warehouse",
-    icon: "🏭",
-    name: "Warehouse (Internal)",
+    icon: "📦",
+    name: "Goods In",
     path: "/tools/warehouse",
-    overview: "Internal Vectis warehouse management for tracking physical items independent of Business Central. Manages inbound receipts, container locations, and movement history.",
+    overview: "The Hub's own warehouse check-in (Jack, 2026-10-15), replacing the April prototype. Book a customer's goods in onto a receipt as totes and pallets, print labels, put them away, move them to benches, shelve lots — and, since 2026-10-23, every receipt and tote Business Central holds is copied in nightly too, so this is the one warehouse database.",
     howItWorks: [
       {
-        label: "Sub-sections",
+        label: "Screens",
         items: [
-          "Dashboard: stats (customer count, receipt count, open receipts, container count) and last 10 movements.",
-          "Inbound: log new receipts and containers arriving; link to a Contact record.",
-          "Locate: find where a specific container or item is by ID.",
-          "Lookup Location: browse all containers and items at a specific location code.",
-          "Customers: receipt history per customer — manager+ role.",
-          "Receipts: full list with containers and print functionality — manager+ role.",
-          "History: movement audit log (who moved what, when) — manager+ role.",
-          "Reports: warehouse statistics and summaries — admin role only.",
+          "Check in: Customer → What they've brought → Check & book in. Saves as it goes (a draft receipt); numbers are taken as rows are added; labels print from the goods step. Book in makes it real.",
+          "Receipts: every receipt, Hub and BC, with status and 'Booked in: Hub / BC' filters. Totes & pallets (2026-10-23): the whole warehouse database — search, side filters with counts, sort, edit in place, CSV export.",
+          "Customers: picks from the Hub's Customer table (every BC customer). Fees & agreement tab per customer: fees, usual reserve, signed vendor terms, special arrangement.",
+          "Move, Bench, Find, Locations (3,920-code list, bulk actions, 'Check what's here'), History, Reports (per-person output), Scanner cards, Settings (number series, mailbox, BC copy).",
+          "Handheld scanner: /scan + the Vectis Scanner Android app (Capacitor 7, scanner-app/) — offline queue, idempotent sync, sign-in cards, failed-scan pop-up.",
+        ],
+      },
+      {
+        label: "Business Central",
+        items: [
+          "Goods In never calls BC and never writes to it. BC's receipts and totes arrive through lib/goods-in/bc-mirror.ts, which reads the Hub's own BC copy tables (WarehouseTote, WarehouseReceiptTote) after the nightly BC Warehouse Data Sync.",
+          "A BC row has source = 'bc' and is read-only in the Hub until WAREHOUSE_OWNER=hub is set on Railway (switch day): no editing, adding, moving, printing or emailing — labels can be reprinted.",
+          "A row booked in the Hub is never overwritten by the copy. Nothing is deleted. Shell totes (no receipt in BC) are skipped.",
+          "Number series carry on from BC's and are set in Settings on the day BC stops; the vendor series is optional by design.",
         ],
       },
     ],
     dependsOn: [
-      "PostgreSQL — WarehouseReceipt, WarehouseContainer, WarehouseLocation, WarehouseMovement, Contact tables",
+      "PostgreSQL — GoodsInReceipt, GoodsInContainer, GoodsInMovement, GoodsInLocation, GoodsInCounter, GoodsInCustomer, GoodsInAgreement, GoodsInScanEvent, GoodsInScanAck, GoodsInScannerPass, GoodsInMailAuth; Customer for the person",
+      "Microsoft Graph (delegated Mail.Send.Shared) — emailing receipts from the receipts mailbox",
+      "pdf-lib + bwip-js — receipt PDF and 100×50 mm tote labels",
+      "Capacitor 7 / Android (JDK 21) — the scanner app, built by GitHub Actions",
     ],
     rules: [
-      "Three warehouse sub-roles: warehouse (Inbound/Locate/Lookup only), manager (+ Customers/Receipts/History), admin (full + Reports).",
-      "Warehouse sub-role is set per-user in App Access & Permissions via appPermissions JSON, separate from the main system role.",
-      "Receipt status: open or closed.",
+      "Three sub-roles via appPermissions.warehouse: warehouse, manager (void receipts, locations), admin (number series, mailbox, BC copy).",
+      "A customer's bank details are never stored or shown anywhere in the Hub.",
+      "A lot's shelf is its latest GoodsInMovement — never a column on the lot. Every move goes through moveItem in lib/goods-in/move-core.ts.",
+      "Dashboard figures count Hub-made rows only (HUB_MADE in lib/goods-in/source.ts); BC's copied rows are searchable, not counted.",
     ],
   },
 
@@ -598,30 +611,37 @@ const APPS: App[] = [
     icon: "👥",
     name: "Customers",
     path: "/tools/customers",
-    overview: "The Hub's own customer database (2026-10-20): every BC contact, seller and buyer, one record per person, copied from Business Central every night (5am) until the Hub takes over. Its own Customers permission. The old test Contacts page now redirects here; the sections below describe that old page.",
+    overview: "The Hub's own customer database and the admins' central hub for a person (2026-10-20/23): every BC contact, seller and buyer — one record per person, ONE customer number — copied from Business Central every night until the Hub takes over. Since 2026-10-23 Goods In and Submissions are keyed to it too, so a receipt, a tote, a submission and a note all hang off the same Customer row.",
     howItWorks: [
       {
-        label: "List & search",
+        label: "Screens",
         items: [
-          "Search by name, phone, email, postcode, address, or ID. 50 results per page.",
-          "Create new customers via modal. Salutation options: Mr, Mrs, Ms, Miss, Dr, Prof.",
+          "List: side filters (collapsible) kept in the URL, newest customer number first, a preview drawer for the tapped row. Sorting by a count groups the whole table once, never per row.",
+          "Customer page: header with the one number and Seller / Buyer / Website / Blocked badges, key figures, then tabs — Overview, Notes & calls, Receipts & totes, Lots, Buying, Website account, ID checks & terms, Fees & agreement, Everything BC sent.",
+          "Notes & calls: CustomerNote (note / call / email / visit, follow-up date, who wrote it). Bank or card details are refused.",
+          "Data check: counts, likely duplicates, missing email/postcode, odd contact numbers.",
         ],
       },
       {
-        label: "Customer detail overlay (4 tabs)",
+        label: "Business Central first — until switch day",
         items: [
-          "Details: salutation, name, contact info, address, notes, isSeller and isBuyer flags. Save button.",
-          "Seller/Warehouse: linked warehouse receipts with status, containers, link to warehouse tool.",
-          "Buyer/CRM: linked submissions with status, channel, date, link to submission.",
-          "Documents: print receipt, auction pre/post-sale advice, vendor statements.",
+          "The nightly copy (lib/customer-sync.ts, a stage of the 5am BC sync) reads five Evo feeds plus the Contact and Vendor cards; changes-only, everything on Sundays. Copy customers now / Copy changes / Carry on buttons for admins.",
+          "Nothing edits a BC-owned detail in the Hub until CUSTOMERS_OWNER=hub is set on Railway. Goods In picks from the BC customers; a new person is made in BC, then 'Fetch new customers from BC' (lib/actions/customers-pull.ts) brings them in within seconds.",
+          "The one exception: a Submissions enquiry from someone BC hasn't got makes a Hub prospect (Customer.source = 'hub', no number), which the nightly copy adopts by email the day BC gets them (lib/customers/prospects.ts).",
+          "Bank details are never stored (they go to Sage). Every field BC sent is kept whole in bcContact / bcVendor / bcBuyer / bcWeb and CustomerBcCard.",
         ],
       },
     ],
     dependsOn: [
-      "PostgreSQL — Contact, WarehouseReceipt, Submission, CustomerAccount tables",
-      "BC sync for initial contact data",
+      "PostgreSQL — Customer, CustomerShipTo, CustomerBcCard, CustomerNote, CustomerSyncState; the BC copy tables for receipts, totes and lots",
+      "Business Central — Evo base API (contacts, vendors, customers, webCustomers, shipToAddresses) and the Contact_Card_Excel / Vendor_Card_Excel services, through the one background sign-in (getBCTokenAny)",
     ],
-    rules: [],
+    rules: [
+      "A person has ONE number — never bring back separate Seller no. / Buyer no. columns.",
+      "Access is getCustomersUser() / requireCustomers() (lib/customers/access.ts): the EFFECTIVE session, permissions read fresh from the database.",
+      "Measured before building: per-row receipt/lot counts were 7.9 s a page without the vendorNo indexes; scanning BC card JSON for a flag is 2.8 s — hence no high-risk / ID filters yet.",
+      "The old Contact table stays only for old test submissions and receipts. Nothing new is written to it.",
+    ],
   },
 
   // ─── DATABASES ────────────────────────────────────────────────────────────
@@ -927,7 +947,8 @@ const APPS: App[] = [
           "Create users: role-default permissions (RoleDefault table) auto-applied for COLLECTIONS and CATALOGUER roles on creation.",
           "Edit: name, email, username, role, departmentId, allowedApps[], appPermissions (JSON).",
           "appPermissions JSON shape: Record<string, { role: string }> — e.g. { warehouse: { role: 'manager' } }.",
-          "App access and hub cards are grouped by section (Cataloguing & AI, Business Central, Operations, Auction) to match the hub page layout.",
+          "App access and hub cards are grouped by section (Cataloguing & AI, Marketing, Business Central, Admin & Operations, Facilities, Auction, IT & Admin) to match the hub page layout.",
+          "Two-factor login card per person: Require two-factor tick, Reset two-factor (lost phone).",
           "Change password: admin sets new password (bcrypt 12 rounds).",
         ],
       },
@@ -964,19 +985,28 @@ const APPS: App[] = [
       {
         label: "Run Migrations",
         items: [
-          "POST /api/admin/run-migrations — admin-only. Runs SQL from MIGRATIONS array in sequence.",
-          "All statements use IF NOT EXISTS — safe to re-run at any time, will never drop or modify existing data.",
-          "Current migrations in the array:",
-          "1. ALTER TABLE CatalogueLot ADD COLUMN IF NOT EXISTS extraDetails TEXT",
-          "2. CREATE TABLE IF NOT EXISTS RoleDefault (role TEXT PRIMARY KEY, allowedApps TEXT[], appPermissions JSONB NOT NULL DEFAULT '{}')",
+          "The MIGRATIONS array lives in lib/migrations.ts (hundreds of statements). POST /api/admin/run-migrations runs EVERY statement in order, every time, so each must be idempotent (IF NOT EXISTS, ON CONFLICT, guarded DO blocks). A failure is recorded and the rest carry on.",
+          "MIGRATIONS_HASH is a fingerprint of the array; when it differs from what the database last recorded, the amber banner appears on every admin page — the admin presses Run it now. Nobody types commands.",
+          "Every migration is BOTH a prisma/migrations/<timestamp>_<name>/migration.sql file (prisma migrate deploy applies it at boot on Railway) AND the same statements appended to the array.",
+          "New tables, never columns on the hot tables (User, CatalogueLot, Contact): Prisma reads a new column back on every save, so a shipped-but-unmigrated column breaks saves — and a new User column can lock everyone out.",
         ],
       },
       {
         label: "Claude Memory",
         items: [
-          "Reads Claude's memory .md files from ~/.claude/projects/C--Dev-apps/memory/ via Node.js fs/promises.",
-          "Parses YAML frontmatter (name, type, description). Renders body with basic markdown. Type badges colour-coded: user=blue, feedback=amber, project=green, reference=purple.",
-          "Returns { unavailable: true } if directory not found — shows a notice on Railway.",
+          "The shared, committed record of the project's Claude memory: the ENTRIES array in app/(app)/admin/memory/page.tsx (a SERVER component — never 'use client', or every entry ships in the JS bundle).",
+          "Each developer's local Claude memory drifts; the rule is to compare it with this page on the staging branch at the start of a session, and to update an entry here in the same push as the memory file it mirrors.",
+        ],
+      },
+      {
+        label: "Also under Admin",
+        items: [
+          "Status Centre (/admin/status) — 'is it us or a supplier?': one read-only check per service, a 5-minute loop on production only, and the 🔔 bell for admins (2 bad checks in a row rings it).",
+          "Feedback (/admin/feedback) — surveys for staff: written answers, named, audience per survey, 'fill it out later'.",
+          "Backup (/admin/backup) — every table, streamed to R2 as one JSONL file per table plus a manifest, nightly; restore is generic upsert-only.",
+          "Patches & Changes (/admin/changes) — the release history from the committed changelog seed; npm run changelog:seed before every push.",
+          "Data & Compliance (/admin/compliance) and the DPIA; the data map (lib/data-map.ts) has one plain-English sentence per Prisma table and a self-check.",
+          "Access Log, Lot Log (every lot mutation via lib/lot-log.ts), AI Models (which Gemini/Claude model each tool uses, plus the one fallback), Documents, Announcements, Devices, Terms (iPad AUP), Training records, Activity timer and Idle timer settings.",
         ],
       },
     ],
@@ -992,9 +1022,75 @@ const APPS: App[] = [
       "User roles: ADMIN, COLLECTIONS, CATALOGUER.",
       "New users automatically receive role-default permissions from RoleDefault table.",
       "Prisma migrate deploy runs on startup via server.js. If it fails silently, use the Run Migrations button.",
-      "Every new DB migration must also be added to the MIGRATIONS array in /api/admin/run-migrations so it can be applied manually.",
-      "All SQL in MIGRATIONS must use IF NOT EXISTS — the endpoint must be safe to re-run at any time.",
+      "Every new DB migration is a SQL file AND an entry in the MIGRATIONS array in lib/migrations.ts; the amber banner applies it.",
+      "Every statement in MIGRATIONS must be safe to re-run at any time — the runner runs them all, every press.",
     ],
+  },
+
+  // ─── ACCOUNTS ─────────────────────────────────────────────────────────────
+  {
+    key: "accounts",
+    icon: "💷",
+    name: "Accounts",
+    path: "/tools/accounts",
+    overview: "Finance's working tools: statement and invoice reconciliation (with a tablet 'Simple mode' for a non-technical staffer), Reserves, and Paid, not collected (2026-10-22) — buyers who paid but haven't collected, filled from BC every morning at 08:30, with storage charges per lot after the free days.",
+    howItWorks: [
+      {
+        label: "Paid, not collected",
+        items: [
+          "One case per paid invoice whose lots are still here 28+ days after payment; BC is read only (invoices, invoice lines, lot locations), never written. 'Gone' = BC's Collected tick OR a GONE location (COLLECTED, SHIPPED…); QUERY locations (MISSING…) flag the case instead.",
+          "Statuses waiting → contacted → arranged → storage → collected / closed; a timeline of every call, letter, note and change; storage = lots × rate × days (or weeks) + VAT, worked out live, never stored; waive / resume with a reason.",
+          "Admins only, like Reserves. The maths and words live in lib/uncollected.ts; the BC feed in lib/uncollected-feed.ts (+ pure matching rules in lib/uncollected-feed-match.ts).",
+        ],
+      },
+    ],
+    dependsOn: [
+      "PostgreSQL — UncollectedPaid, UncollectedPaidEvent, UncollectedSyncRun, UncollectedSettings, UncollectedShipping; the Accounts tables",
+      "Business Central — Auction_Lines_Excel, salesInvoices, salesInvoiceLines, Receipt_Lines_Excel (read only)",
+    ],
+    rules: [
+      "Never bank or card details in any box (looksLikeBankDetails refuses them). Never a customer's name in a URL.",
+      "The Hub never charges anything in BC and never stores money — figures are for staff to raise the charge.",
+    ],
+  },
+
+  // ─── FACILITIES ───────────────────────────────────────────────────────────
+  {
+    key: "facilities",
+    icon: "🏠",
+    name: "Facilities",
+    path: "/tools/vans",
+    overview: "The building and its kit: Vans (three collection vans — sign out/in with mileage, due dates), Site Plan and First Aid (first aiders, kits, accident reports; /first-aid is public by exact-match allowlist, deliberately), Induction (slides and signed forms on a tablet for someone with no account).",
+    howItWorks: [
+      {
+        label: "The one deliberate public page",
+        items: [
+          "/first-aid is reachable logged out so agency staff and visitors can find a first aider — an EXACT-match entry in publicExact (auth.config.ts), a top-level route outside app/(app), no links into the Hub, one write-only report endpoint with rate limits and a hashed IP.",
+        ],
+      },
+    ],
+    dependsOn: ["PostgreSQL — Van tables, FirstAider / FirstAidKit / FirstAidInfo / AccidentReport, Induction tables"],
+    rules: ["Everything in the FirstAider / FirstAidKit / FirstAidInfo models is world-readable — never put anything confidential in them.", "First aid is green and white (ISO 7010), never red."],
+  },
+
+  // ─── IT & ADMIN TOOLS ─────────────────────────────────────────────────────
+  {
+    key: "it-tools",
+    icon: "🛠️",
+    name: "IT Tools, IT Help, Tickets & Training",
+    path: "/tools/it-tools",
+    overview: "IT's own kit: Screen Recorder and Screenshots (saved to R2, annotate, copy, download), Craft Apps (self-hosted installers, never fetched from GitHub), BC Source (the Evo-auction AL code, read in-app), IT Help (answers computer problems from knowledge articles and tickets), the Job Board (fed from the IT mailbox), Tickets, and Training (a course per panel with records).",
+    howItWorks: [
+      {
+        label: "Patterns to copy",
+        items: [
+          "Big files go straight to R2 on a presigned PUT, then register; a retry never re-uploads; the save is idempotent on key; only a definite 404 means 'nothing was saved'.",
+          "Everyone signed in can use IT Tools (allUsers) — so its Help-box entries are ungated too.",
+        ],
+      },
+    ],
+    dependsOn: ["Cloudflare R2 (AWS SDK S3 client) — recordings, screenshots, installers", "Microsoft Graph — the IT and condition-report mailboxes (polled every 5 minutes on production)"],
+    rules: ["R2 insists every multipart part but the last is the SAME size (8 MiB) — don't 'simplify' lib/r2-multipart.ts."],
   },
 
   // ─── DATABASE SCHEMA ─────────────────────────────────────────────────────
@@ -1097,7 +1193,7 @@ const APPS: App[] = [
     rules: [
       "Prisma generate runs at build time (npm run build). prisma migrate deploy runs at startup.",
       "DATABASE_URL is NOT available at build time on Railway — only at runtime.",
-      "Every new migration must also be added to /api/admin/run-migrations as a safety net.",
+      "Every new migration must also be added to the MIGRATIONS array in lib/migrations.ts — the amber Run Migrations banner is how it reaches production.",
       "All run-migrations SQL must use IF NOT EXISTS — safe to re-run at any time.",
     ],
   },
@@ -1113,6 +1209,88 @@ function Chevron({ open }: { open: boolean }) {
     >
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
     </svg>
+  )
+}
+
+// ─── New-developer intro ───────────────────────────────────────────────────────
+// Two developers started on 2026-10-26: what the Hub is written in, what it runs on, and how a
+// change gets to staff — the shortest honest version. Detail lives in RULES.md (CLAUDE.md pulls it
+// in), the shared memory page and the sections below.
+
+const STACK: [string, string][] = [
+  ["TypeScript everywhere", "One language, front and back. Strict types; npx tsc --noEmit -p . must pass before every push."],
+  ["Next.js 16 (App Router) + React 19", "Server components by default, 'use client' only where the browser needs it. Server actions return { ok, error } — never throw at a user (production redacts the message). ⚠ This Next is newer than most training data: read node_modules/next/dist/docs before writing anything unfamiliar (AGENTS.md)."],
+  ["Tailwind CSS v4", "Dark mode is the DEFAULT (html.dark); light is the toggle. Every screen is checked dark first, full width, ~44px touch targets — much of the Hub runs on shared iPads."],
+  ["Prisma 7 + PostgreSQL on Neon", "prisma/schema.prisma is the model; the client is generated into app/generated/prisma. Raw SQL where it's clearer (tagged templates — never string-built). Neon branches: production, Staging, Sandbox."],
+  ["Node 22+ with a custom server.js", "Boots Next plus Socket.IO (live auction), the cron loops (BC sync, backups, the uncollected check) and the migration runner — all gated to production."],
+  ["NextAuth v5 (beta)", "Credentials login, JWT in a cookie, optional two-factor (authenticator app). proxy.ts is the middleware; /api routes check auth themselves."],
+]
+
+const SERVICES: [string, string][] = [
+  ["Railway", "Hosting. push to staging → the staging and sandbox services; push to main → production. Builds take a few minutes; environment variables live there (DATABASE_URL, AUTH_SECRET, CUSTOMERS_OWNER, WAREHOUSE_OWNER…)."],
+  ["Neon", "The Postgres database, with point-in-time branches. The sandbox is staging's code on a branch of production's data."],
+  ["Cloudflare R2", "Files: photos, PDFs, recordings, backups — through the AWS S3 SDK with presigned URLs."],
+  ["Microsoft Business Central (Evo-auction)", "The auction system the Hub is gradually replacing. Read through its OData / Evo APIs with a per-user OAuth token (the BC button in the top bar) or the one background sign-in; the AL source is readable in IT Tools → BC Source and the API in BC API Viewer."],
+  ["Google Gemini + Anthropic Claude", "The AI behind descriptions, Lens, Valuations, the Help box. Which model each tool uses is set in Admin → AI Models, never hard-coded."],
+  ["Microsoft Graph", "Mailboxes (IT, condition reports, receipts) with delegated permissions."],
+  ["GitHub + GitHub Actions", "The repository, and the build of the Vectis Scanner Android app (Capacitor 7, JDK 21). AutoHotkey scripts (the BC import macro, the Auto Clerk) live beside the app and read screens by coordinates."],
+  ["Claude Code", "Most of the Hub was built with it. RULES.md is its rulebook and yours; Admin → Claude Memory is the shared record of decisions. The same rules apply whoever — or whatever — writes the code."],
+]
+
+const WORKFLOW: string[] = [
+  "Read RULES.md first. It is deliberate decisions, not defaults, with the failure each rule prevents. When a request conflicts with a rule, stop and discuss — never silently override, never leave a rule stale.",
+  "Work on the staging branch. Pull before every push — someone else pushes most days. Never push to main unless Jordan says so.",
+  "Before every push: npx tsc --noEmit -p ., npx next build, then npm run changelog:seed (it folds into your commit so the deploy is named after your work and appears in Admin → Patches & Changes).",
+  "A database change = a migration SQL file + the same statements in lib/migrations.ts. Deploy, then an admin presses the amber Run Migrations banner. New tables, never columns on User, CatalogueLot or Contact.",
+  "Your local .env points at the REAL database. Run pages with npx next dev (it skips server.js); never run the boot jobs locally.",
+  "Every new screen: dark first, full width, 44px targets, a key for any colour or symbol, real progress on anything slow (a count that moves, a Stop), never a '0' that could mean 'couldn't tell'.",
+  "British English throughout. It is the Hub — not 'the CRM'. Business Central is BC.",
+]
+
+function NewDeveloperIntro() {
+  const [open, setOpen] = useState(true)
+  const box = "rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+  return (
+    <section className={`${box} mb-6 overflow-hidden`} aria-labelledby="new-dev-heading">
+      <button type="button" onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" aria-expanded={open}>
+        <span className="text-2xl">🧭</span>
+        <div className="flex-1 min-w-0">
+          <h2 id="new-dev-heading" className="font-semibold text-gray-900 dark:text-gray-100">New to the Hub? Start here</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">What it&apos;s written in, what it runs on, and how a change reaches staff.</p>
+        </div>
+        <Chevron open={open} />
+      </button>
+      {open && (
+        <div className="border-t border-gray-100 dark:border-gray-700 px-6 py-5 space-y-6 text-sm text-gray-700 dark:text-gray-300">
+          <p className="leading-relaxed max-w-4xl">
+            The Vectis Hub is the auction house&apos;s internal web app: cataloguing and AI descriptions, the warehouse (Goods In), customers, the live auction clerk, accounts, facilities and IT tools — one Next.js app, one Postgres database, hosted on Railway, step by step taking over from Business Central.
+            It is a <b>TypeScript / Next.js / Prisma</b> codebase: the same language in the browser, on the server and in the scripts, with Tailwind for styling and Postgres on Neon for data.
+            Most of it has been built with Claude Code against a written rulebook (RULES.md), and the rulebook is the first thing to read.
+          </p>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Languages &amp; framework</h3>
+              <ul className="space-y-2">
+                {STACK.map(([k, v]) => <li key={k} className="flex gap-3"><span className="text-blue-400 mt-0.5 shrink-0">◆</span><span><b className="text-gray-900 dark:text-gray-100">{k}</b> — {v}</span></li>)}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Programs &amp; services</h3>
+              <ul className="space-y-2">
+                {SERVICES.map(([k, v]) => <li key={k} className="flex gap-3"><span className="text-blue-400 mt-0.5 shrink-0">◆</span><span><b className="text-gray-900 dark:text-gray-100">{k}</b> — {v}</span></li>)}
+              </ul>
+            </div>
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">How a change gets to staff</h3>
+            <ol className="space-y-2 list-decimal pl-5">
+              {WORKFLOW.map((w, i) => <li key={i} className="leading-relaxed pl-1">{w}</li>)}
+            </ol>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Everything below is per section: what it does, what it relies on, and the rules behind it. The 💬 Help box in the top bar answers &ldquo;where do I…&rdquo; for the tools you can open.</p>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -1143,13 +1321,15 @@ export default function AboutPage() {
     : APPS
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">About — How the App Works</h1>
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">About — How the Hub Works</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Documentation for every section — what it does, what it relies on, and the rules that must be followed.
         </p>
       </div>
+
+      <NewDeveloperIntro />
 
       <div className="flex items-center gap-3 mb-6">
         <input

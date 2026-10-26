@@ -19,6 +19,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"d9dccf7f83c4b78939ac9e5198265b45e8a167cb","author":"jack-vectis","date":"2026-10-26T13:03:45Z","subject":"Refunds: old rows come in open by default, and a button brings back the ones counted done"},
+  {"sha":"b3d7822f4e7c9b5625741d118f056db6e69ddf82","author":"jack-vectis","date":"2026-10-26T11:16:01Z","subject":"Build: give next build 4 GB, so the type-check stops running out of memory"},
+  {"sha":"0576102c488e5a06571f80d2bea722eee532f654","author":"jack-vectis","date":"2026-10-26T10:56:13Z","subject":"Refunds: a Refunds tile for admins, the Hub's own public refund form, and the old refund log imported"},
   {"sha":"10a80650d866a40bc3bc61b9e76f5c847ce73c6f","author":"jack-vectis","date":"2026-10-26T09:44:54Z","subject":"Refunds: the tables, shared rules, tile and public path (foundation)"},
   {"sha":"ba276851a820abef11f11f2723354060784cc1f2","author":"Jordan Orange","date":"2026-10-26T10:22:33Z","subject":"Memory: build from PowerShell, not the Bash sandbox"},
   {"sha":"f293989306431a8833f30433c0dfc4f62d8eb766","author":"Jordan Orange","date":"2026-10-26T10:17:13Z","subject":"Activity timer: Friday-to-Monday gaps no longer read an hour out across the clock change"},
