@@ -7,7 +7,7 @@ import {
 } from "@/lib/actions/refunds"
 import type { RefundBcFound, RefundBcProposal, RefundLotLookup } from "@/lib/refunds-bc"
 import {
-  REFUND_BASES, REFUND_BASIS_LABELS, REFUND_LIMITS, REFUNDS_PATH, commissionFor, formatPence, isRefundBasis, lotRefundPence,
+  REFUND_BASES, REFUND_BASIS_LABELS, REFUND_LIMITS, REFUNDS_PATH, commissionFor, formatPence, isRefundBasis, isSaleCode, lotRefundPence,
   poundsToPence, refundTotalToSave,
   type RefundBasis, type RefundDetail, type RefundLotMoney,
 } from "@/lib/refunds"
@@ -232,7 +232,7 @@ export default function LotsCard({ r }: { r: RefundDetail }) {
    *  date) to find it in — and no answer from BC yet for this sale + lot. */
   const askable = (x: Row) => {
     const lot = x.lotNo.trim().toUpperCase().replace(/\s+/g, "")
-    if (!LOT_NO_RE.test(lot) || (!x.saleCode.trim() && !r.auctionDate)) return false
+    if (!LOT_NO_RE.test(lot) || (!x.saleCode.trim() && !isSaleCode(r.saleCode) && !r.auctionDate)) return false
     return !(x.bc?.sig === lotSig(x) && x.bc.refsDone)
   }
   // The rows that want looking up now: askable, not being (or just) looked up as this sale + lot, and
@@ -570,7 +570,7 @@ export default function LotsCard({ r }: { r: RefundDetail }) {
         </p>
       ) : (
         <p className={`text-xs ${muted} -mt-1 mb-3`}>
-          {bcWhyNot ?? <>Fill in a lot&apos;s sale{r.auctionDate ? " (or leave it blank for the auction date)" : ""} and number and its hammer, barcode and receipt number come in from BC.</>}
+          {bcWhyNot ?? <>Fill in a lot&apos;s sale{isSaleCode(r.saleCode) ? ` (or leave it blank for the request's, ${r.saleCode.trim().toUpperCase()})` : r.auctionDate ? " (or leave it blank for the auction date)" : ""} and number and its hammer, barcode and receipt number come in from BC.</>}
         </p>
       )}
 

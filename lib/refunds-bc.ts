@@ -19,7 +19,7 @@
 // unverified field and BC answers 400 to the whole request — RULES.md, BC field names).
 
 import { bcFetchAll } from "@/lib/bc"
-import { commissionFor, type RefundLotRow } from "@/lib/refunds"
+import { commissionFor, isSaleCode, type RefundLotRow } from "@/lib/refunds"
 import { formatDay } from "@/lib/uncollected"
 import { bcDay, bcTrue, lotNoOf, odataString } from "@/lib/uncollected-feed-match"
 
@@ -332,7 +332,9 @@ export type RefundLotLookup = {
 }
 
 export type RefundLotContext = {
-  /** YYYY-MM-DD — used for a lot with no sale code. */
+  /** The request's own sale (upper case) — used for a lot row with no sale code of its own. */
+  saleCode: string | null
+  /** YYYY-MM-DD — used for a lot with no sale code (and no sale on the request). */
   auctionDate: string | null
   /** The request's C-number — told apart when BC shows the lot bought by someone else (buyers only). */
   customerNo: string | null
@@ -403,7 +405,8 @@ export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: R
   for (const ask of asks) {
     const parts = lotParts(ask.lotNo)
     if (!parts) { answers.set(ask.key, notFound(ask.key, `"${ask.lotNo}" isn't a lot number BC could have — digits, then a letter if it has one (366A).`)); continue }
-    const sale = str(ask.saleCode).toUpperCase() || null
+    // The row's own sale; else the request's, when it's a real sale code ("N/A" never is) — else its date.
+    const sale = str(ask.saleCode).toUpperCase() || (isSaleCode(ctx.saleCode) ? ctx.saleCode.trim().toUpperCase() : null)
     if (sale && !BC_CODE_RE.test(sale)) { answers.set(ask.key, notFound(ask.key, `"${sale}" doesn't look like a BC sale code (for example F118).`)); continue }
     if (!sale && !ctx.auctionDate) { answers.set(ask.key, notFound(ask.key, "Fill in the sale (for example F118) to look this lot up in BC.")); continue }
     // ⚠ A date is unquoted in BC's OData filters (EVA_AuctionDate eq 2026-01-14), a code is quoted.
@@ -499,4 +502,155 @@ export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: R
     }
   }
   return asks.map((a) => answers.get(a.key) ?? notFound(a.key, "BC couldn't be asked about this lot."))
+}
+
+// ─── A request's sale, matched from its buyer, date and lots ────────────────────────────────
+
+/** A request with no sale code, as the matcher is asked about it. */
+export type RefundSaleAsk = {
+  /** The C-number (tidied) — BC's EVA_BuyerNo for a buyer. */
+  customerNo: string | null
+  party: "buyer" | "vendor"
+  /** YYYY-MM-DD — the auction date the request gives, or null. */
+  auctionDate: string | null
+  /** YYYY-MM-DD — the day it came in (with no auction date, the sale is looked for in the months before). */
+  receivedAt: string
+  /** The lot numbers the request is about — its lot rows' (or, with none, its lots box's). */
+  lotNos: string[]
+}
+
+/** One of the request's lots as BC has it in the matched sale (`lotNo` normalised: 808, 366A). */
+export type RefundSaleLot = { lotNo: string; uniqueId: string | null; description: string | null }
+
+export type RefundSaleMatch =
+  | { ok: true; saleCode: string; saleName: string | null; saleDate: string | null; how: string; lots: RefundSaleLot[] }
+  | { ok: false; kind: "cant" | "none" | "ambiguous"; why: string }
+
+/** How far back, with no auction date, a buyer's lots are looked for before the day the request came in. */
+const NO_DATE_WINDOW_DAYS = 183
+
+const dayShift = (day: string, days: number) => new Date(Date.parse(`${day}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+const inDays = (day: string) => formatDay(`${day}T12:00:00Z`)
+const soldRow = (r: Record<string, unknown>) => Number(r.EVA_HammerPrice ?? 0) > 0 && !bcTrue(r.EVA_WithdrawLot)
+const saleOfRow = (r: Record<string, unknown>) => str(r.EVA_AuctionNo).toUpperCase()
+const rowLot = (r: Record<string, unknown>) => lotNoOf(r.EVA_LotNo, r.EVA_LotSuffix)
+const salesIn = (rows: Record<string, unknown>[]) => [...new Set(rows.map(saleOfRow).filter(Boolean))].sort()
+
+/** "0808" → "808", "366a" → "366A" — or null when it isn't a lot number. */
+export function normLotNo(lotNo: string): string | null {
+  const p = lotParts(lotNo)
+  return p ? `${p.num}${p.suffix}` : null
+}
+
+/** The buyer's lines in BC for a filter — or null when BC refuses the buyer filter (400). */
+async function buyerRows(token: string, where: string): Promise<Record<string, unknown>[] | null> {
+  try {
+    return await bcFetchAll(token, "Auction_Lines_Excel", where, LOT_SELECT)
+  } catch (e) {
+    if (isBc400(e)) return null
+    throw e
+  }
+}
+
+/** The sale a barcode carries (F078196 → F078), or null when it isn't shaped like one. */
+export const barcodeSaleOf = (barcode: string | null | undefined): string | null => BARCODE_SALE.exec(str(barcode).toUpperCase())?.[1] ?? null
+
+/**
+ * The one sale a request is about, from BC (READ ONLY) — or why there isn't one. Only ever ONE sale
+ * that fits is taken; anything else is said, never guessed (it's run over the whole old log at once,
+ * so a wrong match would quietly put the wrong sale on accounts records). It needs the buyer's
+ * C-number — a date and a lot number alone fit nearly any sale that day, so those are listed instead:
+ *  • with a date: their sold lots that day. With lot numbers, the one sale holding ALL of them — or,
+ *    only when they bought NOTHING dated that day, the day before (a two-day sale keeps its FIRST day
+ *    in BC), again all of them in one sale. With no lot numbers, the only sale they bought in that day
+ *    — and none in another sale dated the day before (a two-day sale could still have been running).
+ *    (If BC refuses the buyer filter, the lots on that day are read and the buyer picked out here.)
+ *  • with no date: their sold lots with the request's numbers in the NO_DATE_WINDOW_DAYS before it
+ *    came in — the one sale holding all of them.
+ * Vendors' requests aren't matched (BC's auction lines are by buyer).
+ */
+export async function matchSaleInBc(token: string, ask: RefundSaleAsk): Promise<RefundSaleMatch> {
+  if (ask.party === "vendor") return { ok: false, kind: "cant", why: "a vendor's request — BC's auction lines are found by buyer" }
+  const buyer = ask.customerNo && BC_CODE_RE.test(ask.customerNo) ? ask.customerNo.toUpperCase() : null
+  if (!buyer) return { ok: false, kind: "cant", why: "no C-number — a date and lot number alone fit nearly any sale that day; add the C-number, then match again" }
+  const wanted = [...new Set(ask.lotNos.map(normLotNo).filter((l): l is string => !!l))]
+  const nums = [...new Set(wanted.map((l) => lotParts(l)!.num))]
+  const lotWords = wanted.length === 1 ? `lot ${wanted[0]}` : `lots ${wanted.join(", ")}`
+
+  /** The sales (among sold rows) holding every wanted lot. */
+  const holdingAll = (sold: Record<string, unknown>[]) =>
+    salesIn(sold).filter((s) => wanted.every((w) => sold.some((r) => saleOfRow(r) === s && sameLot(w, rowLot(r)))))
+  /** The request's lots in a sale — only a lot number that's exactly one lot there. */
+  const lotsIn = (sold: Record<string, unknown>[], sale: string): RefundSaleLot[] => {
+    const out: RefundSaleLot[] = []
+    for (const w of wanted) {
+      const hits = sold.filter((r) => saleOfRow(r) === sale && sameLot(w, rowLot(r)))
+      if (hits.length !== 1) continue
+      out.push({ lotNo: w, uniqueId: str(hits[0].EVA_UniqueID) || null, description: str(hits[0].EVA_ShortDescription).slice(0, 300) || null })
+    }
+    return out
+  }
+  const found = (sold: Record<string, unknown>[], sale: string, how: string): RefundSaleMatch => {
+    const first = sold.find((r) => saleOfRow(r) === sale)
+    return { ok: true, saleCode: sale, saleName: str(first?.EVA_AuctionName) || null, saleDate: bcDay(first?.EVA_AuctionDate) || null, how, lots: lotsIn(sold, sale) }
+  }
+  /** With lot numbers: the one sale holding all of them, else why not. */
+  const byLots = (sold: Record<string, unknown>[], where: string): RefundSaleMatch => {
+    const fit = holdingAll(sold)
+    if (fit.length === 1) return found(sold, fit[0], `the one sale ${where} holding ${lotWords}`)
+    if (fit.length > 1) return { ok: false, kind: "ambiguous", why: `${lotWords} ${wanted.length === 1 ? "is" : "are"} in ${fit.length} sales ${where} (${fit.join(", ")})` }
+    const some = salesIn(sold.filter((r) => wanted.some((w) => sameLot(w, rowLot(r)))))
+    return some.length
+      ? { ok: false, kind: "none", why: `no one sale ${where} holds all of ${lotWords} (some are in ${some.join(", ")}) — check the lot numbers` }
+      : { ok: false, kind: "none", why: `BC shows none of ${lotWords} ${where}` }
+  }
+
+  if (ask.auctionDate) {
+    const where = `bought by ${buyer} on ${inDays(ask.auctionDate)}`
+    let rows = await buyerRows(token, `EVA_BuyerNo eq ${odataString(buyer)} and EVA_AuctionDate eq ${ask.auctionDate}`)
+    let buyerFilterRefused = false
+    if (!rows) {
+      // BC refused the buyer filter: the request's lots on that day, the buyer picked out here.
+      if (!nums.length) return { ok: false, kind: "cant", why: "BC wouldn't look the buyer's lots up, and the request gives no lot numbers" }
+      buyerFilterRefused = true
+      rows = (await rowsForLots(token, `EVA_AuctionDate eq ${ask.auctionDate}`, nums)).filter((r) => str(r.EVA_BuyerNo).toUpperCase() === buyer)
+    }
+    const sold = rows.filter(soldRow)
+    const before = dayShift(ask.auctionDate, -1)
+    if (!wanted.length) {
+      const all = salesIn(sold)
+      if (all.length > 1) return { ok: false, kind: "ambiguous", why: `${all.length} sales ${where} (${all.join(", ")}) and the request gives no lot numbers` }
+      if (!all.length) return { ok: false, kind: "none", why: `BC shows no lots ${where}` }
+      // A two-day sale dated the day before could still have been running that day — any other sale
+      // of theirs dated then makes it more than one.
+      const prev = await buyerRows(token, `EVA_BuyerNo eq ${odataString(buyer)} and EVA_AuctionDate eq ${before}`)
+      if (!prev) return { ok: false, kind: "cant", why: "BC wouldn't look the buyer's lots up for the day before, to be sure it's the only sale" }
+      const others = salesIn(prev.filter(soldRow)).filter((s) => s !== all[0])
+      if (others.length) return { ok: false, kind: "ambiguous", why: `${buyer} bought in ${all[0]} that day and in ${others.join(", ")} dated the day before (a two-day sale) — the request gives no lot numbers to tell them apart` }
+      return found(sold, all[0], `the only sale ${where}`)
+    }
+    const got = byLots(sold, where)
+    // The day before only when they bought NOTHING dated that day — any lot of theirs that day means it
+    // was a real sale day for them, and the lot numbers just don't fit.
+    if (got.ok || got.kind === "ambiguous" || buyerFilterRefused || sold.length > 0) return got
+    // Nothing of theirs that day: a two-day sale keeps its FIRST day in BC — the day before, all lots required.
+    const prev = await buyerRows(token, `EVA_BuyerNo eq ${odataString(buyer)} and EVA_AuctionDate eq ${before}`)
+    if (prev) {
+      const prevSold = prev.filter(soldRow)
+      const fit = holdingAll(prevSold)
+      if (fit.length === 1) {
+        return found(prevSold, fit[0], `the one sale bought by ${buyer} on ${inDays(before)} holding ${lotWords} — the day before the request's auction date (a two-day sale is dated by its first day)`)
+      }
+    }
+    return got
+  }
+
+  // No date: their lots with the request's numbers in the months before it came in.
+  if (!nums.length) return { ok: false, kind: "cant", why: "no auction date and no lot numbers to find the sale by" }
+  const from = dayShift(ask.receivedAt, -NO_DATE_WINDOW_DAYS)
+  const rows = await buyerRows(token, `EVA_BuyerNo eq ${odataString(buyer)} and (${nums.map((n) => `EVA_LotNo eq ${n}`).join(" or ")})`)
+    ?? await buyerRows(token, `EVA_BuyerNo eq ${odataString(buyer)} and (${nums.map((n) => `EVA_LotNo eq ${odataString(n)}`).join(" or ")})`)
+  if (!rows) return { ok: false, kind: "cant", why: "BC wouldn't look the buyer's lots up by number" }
+  const recent = rows.filter((r) => { const d = bcDay(r.EVA_AuctionDate); return soldRow(r) && !!d && d >= from && d <= ask.receivedAt })
+  return byLots(recent, `bought by ${buyer} in the six months before it came in`)
 }

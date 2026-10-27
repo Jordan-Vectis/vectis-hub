@@ -6,14 +6,18 @@ import { prisma } from "@/lib/prisma"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
 import { deleteObjectsFromR2 } from "@/lib/r2"
-import { BC_CODE_RE, findRefundLotsInBc, lookUpLotsInBc, type RefundBcFound, type RefundLotAsk, type RefundLotLookup } from "@/lib/refunds-bc"
+import {
+  BC_CODE_RE, barcodeForSale, barcodeSaleOf, findRefundLotsInBc, lookUpLotsInBc, matchSaleInBc, normLotNo, receiptFor,
+  receiptOfUniqueId, receiptRefsFor, type ReceiptRefs, type RefundBcFound, type RefundLotAsk, type RefundLotLookup,
+} from "@/lib/refunds-bc"
+import { parseLotNumbers } from "@/lib/refunds-import"
 import { isMissingRefunds, matchCustomerId, nextRefundRef, tidyCustomerNo, writeRefundEvent } from "@/lib/refunds-server"
 import { BANK_DETAILS_REFUSED, UNCOLLECTED_BC_NOT_CONNECTED, dayToStored, daysBetween, formatDay, isDay, londonDay } from "@/lib/uncollected"
 import {
   CLOSED_REFUND_STATUSES, OPEN_REFUND_STATUSES, REFUND_LIMITS, REFUND_PARTY_LABELS, REFUND_PHOTO_PREFIX, REFUND_REASONS,
   REFUND_REASON_LABELS, REFUND_SOLUTION_LABELS, REFUND_SOURCES, REFUND_STATUSES, REFUND_STATUS_META, REFUNDS_ADMINS_ONLY,
   REFUNDS_NOT_READY, REFUNDS_PATH,
-  commissionFor, formatPence, isRefundBasis, isRefundParty, isRefundReason, isRefundSolution, isRefundSort, isRefundStatus,
+  commissionFor, formatPence, isRefundBasis, isRefundParty, isRefundReason, isRefundSolution, isRefundSort, isRefundStatus, isSaleCode,
   looksLikeBankDetails, lotRefundPence, refundRefWords, refundStatusOf, refundTotalToSave,
   type RefundBasis, type RefundDetail, type RefundFilter, type RefundFilterRead, type RefundList, type RefundListItem,
   type RefundLotMoney, type RefundParty, type RefundReason, type RefundResult, type RefundSolution, type RefundSort,
@@ -1016,7 +1020,7 @@ export async function lotsFromBc(id: string): Promise<RefundResult<RefundBcFound
  */
 export async function lookUpRefundLots(id: string, asks: RefundLotAsk[]): Promise<RefundResult<RefundLotLookup[]>> {
   let clean: RefundLotAsk[]
-  let ctx: { auctionDate: string | null; customerNo: string | null; party: RefundParty }
+  let ctx: { saleCode: string | null; auctionDate: string | null; customerNo: string | null; party: RefundParty }
   try {
     await requireAdmin()
     if (!Array.isArray(asks) || !asks.length) throw new Refusal("There's no lot to look up.")
@@ -1029,9 +1033,12 @@ export async function lookUpRefundLots(id: string, asks: RefundLotAsk[]): Promis
         lotNo: line(a.lotNo, `row ${i + 1}'s lot number`, 12)?.toUpperCase().replace(/\s+/g, "") ?? "",
       }
     })
-    const r = await prisma.refund.findUnique({ where: { id: idOf(id) }, select: { party: true, customerNo: true, auctionDate: true } })
+    const r = await prisma.refund.findUnique({ where: { id: idOf(id) }, select: { party: true, customerNo: true, saleCode: true, auctionDate: true } })
     if (!r) throw new Refusal(NOT_FOUND)
-    ctx = { auctionDate: r.auctionDate ? londonDay(r.auctionDate) : null, customerNo: tidyCustomerNo(r.customerNo), party: partyOf(r.party) }
+    ctx = {
+      saleCode: r.saleCode?.trim().toUpperCase() || null,
+      auctionDate: r.auctionDate ? londonDay(r.auctionDate) : null, customerNo: tidyCustomerNo(r.customerNo), party: partyOf(r.party),
+    }
   } catch (e) {
     return fail(e, "bc lookup", "That request couldn't be read just now — please try again.")
   }
@@ -1044,6 +1051,223 @@ export async function lookUpRefundLots(id: string, asks: RefundLotAsk[]): Promis
     return bcFailure(e)
   }
 }
+
+// ─── Matching the sale (F / E number) from BC ───────────────────────────────────────────────
+
+const NO_SALE: Prisma.RefundWhereInput = { OR: [{ saleCode: null }, { saleCode: "" }] }
+
+/** How many requests have no sale code — what "Match sales from BC" offers to look up. */
+export async function refundSalesToMatch(): Promise<RefundResult<{ count: number }>> {
+  try {
+    await requireAdmin()
+    return { ok: true, data: { count: await prisma.refund.count({ where: NO_SALE }) } }
+  } catch (e) {
+    return fail(e, "sales to match", "The requests couldn't be counted just now — please try again.")
+  }
+}
+
+export type RefundSalesMatched = {
+  matched: { id: string; ref: number; saleCode: string; lots: number }[]
+  notMatched: { id: string; ref: number; kind: "cant" | "none" | "ambiguous"; why: string }[]
+  /** The highest request number looked at — the next slice starts after it (null: none were left). */
+  lastRef: number | null
+  /** Requests with no sale after lastRef. */
+  remaining: number
+  /** BC's receipt lines couldn't be read, so this slice's barcodes weren't filled in. */
+  barcodesFailed: boolean
+}
+
+/** Requests looked at per call — the box asks slice by slice so its count moves (and Stop works). */
+const MATCH_MAX = 20
+
+/** A BC failure that would fail every request alike (signed out, not allowed, busy, down, too slow, no
+ *  network) — the slice stops and says so, to carry on later. Any other failure is that one request's,
+ *  and the run goes on past it. */
+const bcWideFailure = (e: unknown) =>
+  /\bBC API (401|403|429|5\d\d)\b|timeout|aborted|fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN/i.test(String((e as { message?: string })?.message ?? ""))
+
+/**
+ * "Match sales from BC" (Jack, 2026-10-26: "the sale is either an F/E number but these say no sale or
+ * it's a date — can you match it and import it"): for the next `max` requests with no sale code after
+ * request number `afterRef`, works out the sale each was in and saves it on the request and its lots.
+ *  • A request whose lot rows already carry ONE sale (a person's, or the card's BC lookup) takes that —
+ *    BC isn't asked; lots carrying different sales → listed, never chosen between.
+ *  • Otherwise BC is asked (READ ONLY, the admin's own sign-in — matchSaleInBc): only a sale that's the
+ *    ONLY one fitting the C-number, auction date and lot numbers. The lot numbers are the lot rows'
+ *    (a row that isn't a lot number → listed, never dropped); with no rows, the lots box's only when
+ *    ALL of it reads as lot numbers (parseLotNumbers — "2 items" is not lot 2).
+ *  • A lot is given the sale — and its unique ID, barcode for that sale, receipt and description where
+ *    blank — only when BC shows THAT lot in it and it's the same item: its unique ID, a barcode typed on
+ *    it (which carries its sale) and a receipt typed on it must all agree with BC's.
+ *  • ⚠ Money is never changed, and nothing a person entered is replaced; a request changed in any way
+ *    while it was being looked up (its updatedAt — a lots save, an edit, a note) is left for the next run.
+ * Each request's timeline says what was matched and how. Ones that can't be matched are answered with
+ * why — including one BC couldn't be asked about (the run goes on past it).
+ */
+export async function matchRefundSales(afterRef: number, max: number): Promise<RefundResult<RefundSalesMatched>> {
+  type Picked = {
+    id: string; ref: number; party: string; customerNo: string | null; auctionDate: Date | null; receivedAt: Date; lotsText: string | null
+    updatedAt: Date
+    lots: { lotNo: string; saleCode: string | null; uniqueId: string | null }[]
+  }
+  let who: Who
+  let picked: Picked[]
+  try {
+    who = await requireAdmin()
+    const after = Number.isInteger(afterRef) && afterRef > 0 ? afterRef : 0
+    const take = Math.min(MATCH_MAX, Math.max(1, Math.floor(Number(max)) || 1))
+    picked = await prisma.refund.findMany({
+      where: { ref: { gt: after }, ...NO_SALE },
+      orderBy: { ref: "asc" },
+      take,
+      select: {
+        id: true, ref: true, party: true, customerNo: true, auctionDate: true, receivedAt: true, lotsText: true, updatedAt: true,
+        lots: { select: { lotNo: true, saleCode: true, uniqueId: true } },
+      },
+    })
+  } catch (e) {
+    return fail(e, "match sales", "The requests couldn't be read just now — please try again.")
+  }
+  const lastRef = picked.length ? picked[picked.length - 1].ref : null
+  const remainingAfter = async () => (lastRef == null ? 0 : prisma.refund.count({ where: { ref: { gt: lastRef }, ...NO_SALE } }))
+  if (!picked.length) return { ok: true, data: { matched: [], notMatched: [], lastRef, remaining: 0, barcodesFailed: false } }
+
+  type Answer =
+    | { r: Picked; from: "lots"; saleCode: string }
+    | { r: Picked; from: "bc"; m: Extract<Awaited<ReturnType<typeof matchSaleInBc>>, { ok: true }> }
+  const answers: Answer[] = []
+  const notMatched: RefundSalesMatched["notMatched"] = []
+  const norm = (lotNo: string) => normLotNo(lotNo) ?? lotNo.toUpperCase().replace(/\s+/g, "")
+
+  // The ones whose lots already say the sale need no BC.
+  const toAsk: Picked[] = []
+  for (const r of picked) {
+    const theirs = [...new Set(r.lots.map((l) => l.saleCode?.trim().toUpperCase()).filter((s): s is string => !!s))]
+    if (theirs.length === 1 && isSaleCode(theirs[0])) answers.push({ r, from: "lots", saleCode: theirs[0] })
+    else if (theirs.length > 1) notMatched.push({ id: r.id, ref: r.ref, kind: "ambiguous", why: `its lots already say more than one sale (${theirs.join(", ")})` })
+    else toAsk.push(r)
+  }
+
+  let token: string | null = null
+  if (toAsk.length) {
+    token = await getBCToken().catch(() => null)
+    if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
+  }
+
+  // Every read first — a BC failure that would fail them all stops the slice before anything is written.
+  let refs: Map<string, ReceiptRefs> | null = null
+  let barcodesFailed = false
+  try {
+    for (const r of toAsk) {
+      const rowLots = r.lots.map((l) => l.lotNo)
+      const notALot = rowLots.find((l) => !normLotNo(l))
+      if (notALot) {
+        notMatched.push({ id: r.id, ref: r.ref, kind: "cant", why: `its lot row "${notALot}" isn't a lot number — correct it on the request, then match again` })
+        continue
+      }
+      try {
+        const m = await matchSaleInBc(token!, {
+          customerNo: tidyCustomerNo(r.customerNo),
+          party: partyOf(r.party),
+          auctionDate: r.auctionDate ? londonDay(r.auctionDate) : null,
+          receivedAt: londonDay(r.receivedAt),
+          lotNos: rowLots.length ? rowLots : parseLotNumbers(r.lotsText ?? undefined),
+        })
+        if (m.ok) answers.push({ r, from: "bc", m })
+        else notMatched.push({ id: r.id, ref: r.ref, kind: m.kind, why: m.why })
+      } catch (e) {
+        if (bcWideFailure(e)) throw e
+        console.error(`refunds match sales — RF${r.ref} error:`, e)
+        notMatched.push({ id: r.id, ref: r.ref, kind: "cant", why: "BC couldn't be asked about it just now — it's left for the next run" })
+      }
+    }
+    // The barcodes and receipts for every lot BC placed — and any unique ID a lot row already has.
+    const ids = answers.flatMap((a) => (a.from === "bc"
+      ? [...a.m.lots.map((l) => l.uniqueId), ...a.r.lots.map((l) => l.uniqueId)].filter((id): id is string => !!id)
+      : []))
+    if (ids.length) {
+      try {
+        refs = await receiptRefsFor(token!, ids)
+      } catch (e) {
+        if (bcWideFailure(e)) throw e
+        barcodesFailed = true
+        console.error("refunds match sales — receipt lines error:", e)
+      }
+    } else refs = new Map()
+  } catch (e) {
+    return bcFailure(e)
+  }
+
+  const matched: RefundSalesMatched["matched"] = []
+  try {
+    for (const a of answers) {
+      const r = a.r
+      const saleCode = a.from === "lots" ? a.saleCode : a.m.saleCode
+      const result = await prisma.$transaction(async (tx) => {
+        // Only while it still says what it was looked up by — an edit meanwhile leaves it for next time.
+        const n = await tx.refund.updateMany({
+          where: { id: r.id, ...NO_SALE, updatedAt: r.updatedAt },
+          data: { saleCode },
+        })
+        if (!n.count) return null
+        const words: string[] = []
+        let filled = 0
+        if (a.from === "bc") {
+          const lots = await tx.refundLot.findMany({
+            where: { refundId: r.id },
+            select: { id: true, lotNo: true, saleCode: true, uniqueId: true, barcode: true, receiptNo: true, description: true },
+          })
+          const missing: string[] = []
+          for (const lot of lots) {
+            if (lot.saleCode?.trim()) continue   // given a sale already (a person's, or another lookup's)
+            const hit = a.m.lots.find((h) => h.lotNo === norm(lot.lotNo))
+            // The same item: no unique ID, barcode or receipt on the row says otherwise.
+            const typedBarcodeSale = barcodeSaleOf(lot.barcode)
+            const hitReceipt = receiptOfUniqueId(hit?.uniqueId)
+            const sameItem = !!hit
+              && (!lot.uniqueId || !hit.uniqueId || lot.uniqueId.toUpperCase() === hit.uniqueId.toUpperCase())
+              && (!lot.barcode || !typedBarcodeSale || typedBarcodeSale === saleCode)
+              && (!lot.receiptNo || !hitReceipt || lot.receiptNo.trim().toUpperCase() === hitReceipt)
+            if (!hit || !sameItem) { missing.push(lot.lotNo); continue }
+            const data: Prisma.RefundLotUpdateInput = { saleCode }
+            const uid = lot.uniqueId ?? hit.uniqueId
+            if (!lot.uniqueId && hit.uniqueId) data.uniqueId = hit.uniqueId
+            const rr = uid && refs ? refs.get(uid.toUpperCase()) : undefined
+            if (uid && refs && rr) {
+              const barcode = barcodeForSale(rr.barcodes, saleCode)
+              if (!lot.barcode && barcode) data.barcode = barcode
+              if (!lot.receiptNo) {
+                const receipt = receiptFor(rr, (data.barcode as string | undefined) ?? lot.barcode) ?? receiptOfUniqueId(uid)
+                if (receipt) data.receiptNo = receipt
+              }
+              data.refsRead = true
+            }
+            if (!lot.description?.trim() && hit.description) { data.description = hit.description; data.descriptionFromBc = true; data.fromBc = true }
+            // Only while the lot is still as it was read (no sale yet) — never over a person's edit.
+            const u = await tx.refundLot.updateMany({ where: { id: lot.id, OR: [{ saleCode: null }, { saleCode: "" }] }, data: data as Prisma.RefundLotUpdateManyMutationInput })
+            if (u.count) filled++
+          }
+          words.push(`Sale ${saleCode}${a.m.saleName ? ` (${a.m.saleName})` : ""} matched from BC — ${a.m.how}`)
+          if (filled) words.push(`${plural(filled, "lot")} given the sale, with BC's unique ID, barcode and receipt where BC has them`)
+          if (missing.length) words.push(`not placed in it by BC, so left without a sale: lot ${missing.join(", ")}`)
+        } else {
+          words.push(`Sale ${saleCode} — the sale its lots already have`)
+        }
+        await writeRefundEvent(tx, r.id, "edit", `${words.join("; ")}.`, who)
+        return filled
+      }, { maxWait: 15_000, timeout: 60_000 })
+      if (result == null) notMatched.push({ id: r.id, ref: r.ref, kind: "cant", why: "it was changed while it was being looked up — it's left for the next run" })
+      else matched.push({ id: r.id, ref: r.ref, saleCode, lots: result })
+    }
+    if (matched.length) revalidate()
+    notMatched.sort((x, y) => x.ref - y.ref)
+    return { ok: true, data: { matched, notMatched, lastRef, remaining: await remainingAfter(), barcodesFailed } }
+  } catch (e) {
+    if (matched.length) revalidate()
+    return fail(e, "match sales", `${matched.length ? `${plural(matched.length, "sale")} in this batch were saved, then s` : "S"}omething went wrong saving a matched sale — press Match again to carry on (a request given its sale isn't looked at again).`)
+  }
+}
+
 
 // ─── Notes, and deleting ────────────────────────────────────────────────────────────────────
 

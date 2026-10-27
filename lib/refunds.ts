@@ -126,6 +126,11 @@ export const REFUND_PHOTO_PREFIX = "refund-photos/"
 
 // ─── The reference ──────────────────────────────────────────────────────────────────────────
 
+/** A BC sale code — F078, E050: a letter or two, then three or four digits. A request's sale that
+ *  isn't one ("N/A", "TBC") is never used to look lots up by. */
+export const SALE_CODE_RE = /^[A-Z]{1,2}\d{3,4}$/
+export const isSaleCode = (v: unknown): v is string => typeof v === "string" && SALE_CODE_RE.test(v.trim().toUpperCase())
+
 /** "RF0042" — the request's own number (Refund.ref), what the customer is shown and quotes. */
 export const refundRefWords = (ref: number | null | undefined): string => (ref == null ? "—" : `RF${String(ref).padStart(4, "0")}`)
 

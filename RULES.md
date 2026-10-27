@@ -3353,6 +3353,22 @@ the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
   boxes; saved rows without a barcode (the old log's, or saved before this) have **🏷️ Get barcodes
   from BC**. Save waits while a lookup is pending. Signing in to BC from the card opens a new tab
   (leaving would lose unsaved lots).
+- **🔗 Match sales from BC** (a collapsed card on the panel — 2026-10-26, Jack: *"the sale is either an
+  F/E number but these say no sale or it's a date — can you match it and import it"*): every request
+  with no sale code gets one: from its lot rows if they already carry ONE sale (BC not asked), else
+  BC (`matchRefundSales` → `matchSaleInBc`, read only) — ⚠ it needs the buyer's C-number (a date and a
+  lot number alone fit nearly any sale that day): C-number + auction date → the one sale of theirs
+  that day holding ALL the request's lot numbers (only if they bought NOTHING dated that day → the day
+  before, all lots required — a two-day sale is dated by its first day; no lot numbers → their only
+  sale that day, and none in another sale dated the day before); C-number, no date → the one sale
+  holding all the lots in the six months before it came in. The lot numbers are the lot rows' (a row
+  that isn't a lot number stops it); with no rows, the lots box's only when ALL of it reads as lot
+  numbers (`parseLotNumbers` — "2 items" is not lot 2). A lot row's typed barcode or receipt for
+  another item keeps it out; a request changed in any way mid-run (`updatedAt`) is left for the next.
+  ⚠ Only a sale that's the **only one** fitting is saved; a lot gets the sale (and its unique ID,
+  barcode, receipt, description where blank) only when BC places THAT lot in it; money is never
+  changed, nothing a person entered is replaced, and a request edited mid-run is left for the next.
+  The rest are listed with why (vendors aren't matched). Slices of 8, with Stop / Carry on.
 - **The old-log import** (admins, a collapsed card on the panel): the SharePoint CSV, decoded in the
   browser as Windows-1252, parsed by column NAME, idempotent by `importKey` (sha256 of a row
   fingerprint) — a row already imported is never changed, a row changed in SharePoint since is refused

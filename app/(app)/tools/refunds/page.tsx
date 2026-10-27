@@ -5,6 +5,7 @@ import { listRefunds } from "@/lib/actions/refunds"
 import { REFUND_FORM_PATH, parseRefundFilter } from "@/lib/refunds"
 import FormLink from "./form-link"
 import ImportBox from "./import-box"
+import MatchSales from "./match-sales"
 import RefundsPanel from "./panel-client"
 import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 
@@ -60,6 +61,16 @@ export default async function RefundsPage({ searchParams }: { searchParams: Sear
       )}
 
       <FormLink url={formUrl} />
+
+      {/* Requests with no sale code (the old log's, the form's) — their F / E number matched from BC. */}
+      {res.ok && <details className={`${card} group mt-5`}>
+        <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 min-h-11 px-4 sm:px-5 py-3 text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <span className="transition-transform group-open:rotate-90" aria-hidden>▸</span> Match sales from BC
+        </summary>
+        <div className="px-4 sm:px-5 pb-5">
+          <MatchSales />
+        </div>
+      </details>}
 
       {/* The old SharePoint log, brought over once (re-importing never duplicates — each row's importKey). */}
       {res.ok && <details className={`${card} group mt-5`}>
