@@ -630,9 +630,22 @@ export async function matchSaleInBc(token: string, ask: RefundSaleAsk): Promise<
       return found(sold, all[0], `the only sale ${where}`)
     }
     const got = byLots(sold, where)
+    if (got.ok) {
+      // A two-day sale dated the day before could still have been running that day — if one of theirs
+      // then holds all the same lots too, it's more than one sale, not this one.
+      const prevDay = buyerFilterRefused
+        ? (await rowsForLots(token, `EVA_AuctionDate eq ${before}`, nums)).filter((r) => str(r.EVA_BuyerNo).toUpperCase() === buyer)
+        : await buyerRows(token, `EVA_BuyerNo eq ${odataString(buyer)} and EVA_AuctionDate eq ${before}`)
+      if (!prevDay) return { ok: false, kind: "cant", why: "BC wouldn't look the buyer's lots up for the day before, to be sure it's the only sale" }
+      const others = holdingAll(prevDay.filter(soldRow)).filter((s) => s !== got.saleCode)
+      if (others.length) {
+        return { ok: false, kind: "ambiguous", why: `${lotWords} ${wanted.length === 1 ? "is" : "are"} in ${got.saleCode} that day and in ${others.join(", ")} dated the day before (a two-day sale) — check which` }
+      }
+      return got
+    }
     // The day before only when they bought NOTHING dated that day — any lot of theirs that day means it
     // was a real sale day for them, and the lot numbers just don't fit.
-    if (got.ok || got.kind === "ambiguous" || buyerFilterRefused || sold.length > 0) return got
+    if (got.kind === "ambiguous" || buyerFilterRefused || sold.length > 0) return got
     // Nothing of theirs that day: a two-day sale keeps its FIRST day in BC — the day before, all lots required.
     const prev = await buyerRows(token, `EVA_BuyerNo eq ${odataString(buyer)} and EVA_AuctionDate eq ${before}`)
     if (prev) {
