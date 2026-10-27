@@ -3365,6 +3365,14 @@ the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
   that isn't a lot number stops it); with no rows, the lots box's only when ALL of it reads as lot
   numbers (`parseLotNumbers` — "2 items" is not lot 2). A lot row's typed barcode or receipt for
   another item keeps it out; a request changed in any way mid-run (`updatedAt`) is left for the next.
+  ⚠⚠ **BC moves a refunded / returned lot's buyer to the house account `C000079`** (`RETURNS_ACCOUNT` —
+  25 of 30 refunded lots checked on 2026-10-27: same sale, lot and hammer as the log, buyer C000079),
+  so the customer's C-number no longer finds it. When the buyer's lines don't show the lots, the lots
+  on the date bought by the buyer OR C000079 are taken — only when every lot is there once in one
+  sale AND their hammers add up to EXACTLY the request's (the log's own hammer) (`matchViaReturns`).
+  An ambiguous slash date in the log (5/8/2026) is also tried the other way round (`otherReadingOf`) —
+  but ONLY by that hammer-confirmed rule, both days together (a lot on both days → listed, not guessed);
+  the buyer-only rules never run on a guessed date.
   ⚠ Only a sale that's the **only one** fitting is saved; a lot gets the sale (and its unique ID,
   barcode, receipt, description where blank) only when BC places THAT lot in it; money is never
   changed, nothing a person entered is replaced, and a request edited mid-run is left for the next.

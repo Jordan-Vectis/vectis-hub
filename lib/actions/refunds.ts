@@ -1080,6 +1080,23 @@ export type RefundSalesMatched = {
 /** Requests looked at per call — the box asks slice by slice so its count moves (and Stop works). */
 const MATCH_MAX = 20
 
+/**
+ * The old log's "Auction Date" read the other way round, when it was an ambiguous slash date — the log
+ * mixes UK and US (5/8/2026: the import read 5 August; BC had 8 May) — as YYYY-MM-DD, or null. Only
+ * when the import's own reading is the day-first one (so this is the month-first one).
+ */
+function otherReadingOf(raw: Record<string, string> | null, auctionDate: Date | null): string | null {
+  if (!raw || !auctionDate) return null
+  const cell = Object.entries(raw).find(([k]) => k.trim().toLowerCase() === "auction date")?.[1] ?? ""
+  const m = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/.exec(cell)
+  if (!m) return null
+  const a = Number(m[1]), b = Number(m[2])
+  if (a > 12 || b > 12 || a === b || a < 1 || b < 1) return null
+  const pad = (n: number) => String(n).padStart(2, "0")
+  if (londonDay(auctionDate) !== `${m[3]}-${pad(b)}-${pad(a)}`) return null   // not the day-first reading
+  return `${m[3]}-${pad(a)}-${pad(b)}`
+}
+
 /** A BC failure that would fail every request alike (signed out, not allowed, busy, down, too slow, no
  *  network) — the slice stops and says so, to carry on later. Any other failure is that one request's,
  *  and the run goes on past it. */
@@ -1107,7 +1124,7 @@ const bcWideFailure = (e: unknown) =>
 export async function matchRefundSales(afterRef: number, max: number): Promise<RefundResult<RefundSalesMatched>> {
   type Picked = {
     id: string; ref: number; party: string; customerNo: string | null; auctionDate: Date | null; receivedAt: Date; lotsText: string | null
-    updatedAt: Date
+    updatedAt: Date; hammerPence: number | null; importedRaw: Prisma.JsonValue
     lots: { lotNo: string; saleCode: string | null; uniqueId: string | null }[]
   }
   let who: Who
@@ -1122,6 +1139,7 @@ export async function matchRefundSales(afterRef: number, max: number): Promise<R
       take,
       select: {
         id: true, ref: true, party: true, customerNo: true, auctionDate: true, receivedAt: true, lotsText: true, updatedAt: true,
+        hammerPence: true, importedRaw: true,
         lots: { select: { lotNo: true, saleCode: true, uniqueId: true } },
       },
     })
@@ -1172,6 +1190,8 @@ export async function matchRefundSales(afterRef: number, max: number): Promise<R
           auctionDate: r.auctionDate ? londonDay(r.auctionDate) : null,
           receivedAt: londonDay(r.receivedAt),
           lotNos: rowLots.length ? rowLots : parseLotNumbers(r.lotsText ?? undefined),
+          hammerPence: r.hammerPence,
+          otherDate: otherReadingOf(rawCells(r.importedRaw), r.auctionDate),
         })
         if (m.ok) answers.push({ r, from: "bc", m })
         else notMatched.push({ id: r.id, ref: r.ref, kind: m.kind, why: m.why })

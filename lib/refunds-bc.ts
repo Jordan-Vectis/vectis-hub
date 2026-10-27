@@ -19,7 +19,7 @@
 // unverified field and BC answers 400 to the whole request — RULES.md, BC field names).
 
 import { bcFetchAll } from "@/lib/bc"
-import { commissionFor, isSaleCode, type RefundLotRow } from "@/lib/refunds"
+import { commissionFor, formatPence, isSaleCode, type RefundLotRow } from "@/lib/refunds"
 import { formatDay } from "@/lib/uncollected"
 import { bcDay, bcTrue, lotNoOf, odataString } from "@/lib/uncollected-feed-match"
 
@@ -517,6 +517,12 @@ export type RefundSaleAsk = {
   receivedAt: string
   /** The lot numbers the request is about — its lot rows' (or, with none, its lots box's). */
   lotNos: string[]
+  /** The request's hammer in pence (for the old log's, the log's own figure — all its lots together),
+   *  or null. What confirms a lot BC has since moved to the returns account (matchViaReturns). */
+  hammerPence: number | null
+  /** The auction date read the other way round, when the log's was an ambiguous slash date (5/8/2026:
+   *  8 May as well as 5 August) — YYYY-MM-DD, or null. */
+  otherDate: string | null
 }
 
 /** One of the request's lots as BC has it in the matched sale (`lotNo` normalised: 808, 366A). */
@@ -567,9 +573,10 @@ export const barcodeSaleOf = (barcode: string | null | undefined): string | null
  *    (If BC refuses the buyer filter, the lots on that day are read and the buyer picked out here.)
  *  • with no date: their sold lots with the request's numbers in the NO_DATE_WINDOW_DAYS before it
  *    came in — the one sale holding all of them.
- * Vendors' requests aren't matched (BC's auction lines are by buyer).
+ * Vendors' requests aren't matched (BC's auction lines are by buyer). matchSaleInBc (below) adds the
+ * other reading of an ambiguous date, and lots BC has moved to the returns account.
  */
-export async function matchSaleInBc(token: string, ask: RefundSaleAsk): Promise<RefundSaleMatch> {
+async function matchByBuyer(token: string, ask: RefundSaleAsk): Promise<RefundSaleMatch> {
   if (ask.party === "vendor") return { ok: false, kind: "cant", why: "a vendor's request — BC's auction lines are found by buyer" }
   const buyer = ask.customerNo && BC_CODE_RE.test(ask.customerNo) ? ask.customerNo.toUpperCase() : null
   if (!buyer) return { ok: false, kind: "cant", why: "no C-number — a date and lot number alone fit nearly any sale that day; add the C-number, then match again" }
@@ -666,4 +673,74 @@ export async function matchSaleInBc(token: string, ask: RefundSaleAsk): Promise<
   if (!rows) return { ok: false, kind: "cant", why: "BC wouldn't look the buyer's lots up by number" }
   const recent = rows.filter((r) => { const d = bcDay(r.EVA_AuctionDate); return soldRow(r) && !!d && d >= from && d <= ask.receivedAt })
   return byLots(recent, `bought by ${buyer} in the six months before it came in`)
+}
+
+/**
+ * The account BC moves a lot's buyer to once it has been refunded or returned — the customer's own
+ * C-number is gone from the line after that, so the buyer's lines no longer show it. Seen on 25 of 30
+ * refunded lots checked on 27 Oct 2026 (same sale, lot and hammer as the old log; buyer C000079).
+ */
+export const RETURNS_ACCOUNT = "C000079"
+
+/**
+ * When the buyer's own lines don't show the request's lots: the lots on the day (and on the other
+ * reading of an ambiguous date), bought by the buyer OR by the returns account — and only taken when
+ * the request's OWN hammer confirms them: every lot exactly once in one sale, their hammers adding up
+ * to exactly the request's. One sale across all the days tried → it; more → listed. null when nothing
+ * fits that way (no hammer on the request, no lot numbers, or no sale whose hammer agrees).
+ */
+async function matchViaReturns(token: string, ask: RefundSaleAsk, buyer: string, days: string[]): Promise<RefundSaleMatch | null> {
+  if (ask.hammerPence == null || ask.hammerPence <= 0) return null
+  const wanted = [...new Set(ask.lotNos.map(normLotNo).filter((l): l is string => !!l))]
+  if (!wanted.length) return null
+  const nums = [...new Set(wanted.map((l) => lotParts(l)!.num))]
+  const lotWords = wanted.length === 1 ? `lot ${wanted[0]}` : `lots ${wanted.join(", ")}`
+  const hits: { day: string; sale: string; lines: Record<string, unknown>[] }[] = []
+  for (const day of days) {
+    const rows = (await rowsForLots(token, `EVA_AuctionDate eq ${day}`, nums))
+      .filter((r) => soldRow(r) && [buyer, RETURNS_ACCOUNT].includes(str(r.EVA_BuyerNo).toUpperCase()))
+    for (const sale of salesIn(rows)) {
+      const per = wanted.map((w) => rows.filter((r) => saleOfRow(r) === sale && sameLot(w, rowLot(r))))
+      if (per.some((l) => l.length !== 1)) continue   // every lot, exactly once, in that one sale
+      const total = per.reduce((s, l) => s + Math.round(Number(l[0].EVA_HammerPrice ?? 0) * 100), 0)
+      if (total === ask.hammerPence) hits.push({ day, sale, lines: per.map((l) => l[0]) })
+    }
+  }
+  if (!hits.length) return null
+  const sales = [...new Set(hits.map((h) => h.sale))]
+  if (sales.length > 1) {
+    return { ok: false, kind: "ambiguous", why: `${lotWords} with the request's hammer (${formatPence(ask.hammerPence)}) are in ${sales.join(", ")} on those days — check which` }
+  }
+  const h = hits[0]
+  const moved = h.lines.some((r) => str(r.EVA_BuyerNo).toUpperCase() === RETURNS_ACCOUNT)
+  return {
+    ok: true,
+    saleCode: h.sale,
+    saleName: str(h.lines[0].EVA_AuctionName) || null,
+    saleDate: bcDay(h.lines[0].EVA_AuctionDate) || null,
+    how: `${lotWords} on ${inDays(h.day)} in ${h.sale}${moved ? ` — BC now has ${wanted.length === 1 ? "it" : "them"} on the returns account (${RETURNS_ACCOUNT}) after the refund` : ""}, and the hammer (${formatPence(ask.hammerPence)}) matches the request`
+      + (ask.auctionDate && h.day !== ask.auctionDate ? ` — the log's date read month-first (${inDays(h.day)}, not ${inDays(ask.auctionDate)})` : ""),
+    lots: wanted.map((w, i) => ({
+      lotNo: w,
+      uniqueId: str(h.lines[i].EVA_UniqueID) || null,
+      description: str(h.lines[i].EVA_ShortDescription).slice(0, 300) || null,
+    })),
+  }
+}
+
+/**
+ * The one sale a request is about (see matchByBuyer for the rules) — and, when the buyer's own lines
+ * that day don't show its lots, the lots on the day bought by the buyer or moved to the returns
+ * account, CONFIRMED BY THE REQUEST'S OWN HAMMER (matchViaReturns). The other reading of an ambiguous
+ * log date (5/8/2026 — 8 May as well as 5 August) is only ever tried that hammer-confirmed way, both
+ * days together — a guessed date on its own is never enough (an empty day can just mean the lot was
+ * moved to the returns account). Never more than one sale fitting is taken.
+ */
+export async function matchSaleInBc(token: string, ask: RefundSaleAsk): Promise<RefundSaleMatch> {
+  const first = await matchByBuyer(token, ask)
+  if (first.ok || first.kind !== "none" || !ask.auctionDate || !ask.customerNo) return first
+  const buyer = ask.customerNo.toUpperCase()
+  const other = ask.otherDate && ask.otherDate !== ask.auctionDate ? ask.otherDate : null
+  const via = await matchViaReturns(token, ask, buyer, other ? [ask.auctionDate, other] : [ask.auctionDate])
+  return via ?? first
 }
