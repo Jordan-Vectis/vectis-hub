@@ -3057,6 +3057,26 @@ model SitePlan {
 // The three collection vans: what's due, what's been done, who has it out. Deliberately
 // small (Jordan, 2026-10-02: "not some massive vehicle management system just something
 // basic"), with a sign-out.
+/// Admin & Operations → Barcode Labels: one PDF of Lot ID labels made (2026-10-28) — the sale, the
+/// running numbers, who and when — so the next run for a sale carries on from the last number.
+model BarcodeLabelRun {
+  id         String   @id @default(cuid())
+  saleCode   String
+  /// YYYY-MM-DD as printed on the labels; null = no date line.
+  saleDate   String?
+  fromNo     Int
+  toNo       Int
+  count      Int
+  /// The first sheet started on this label (1–65).
+  startAt    Int      @default(1)
+  madeById   String?
+  madeByName String
+  madeAt     DateTime @default(now())
+
+  @@index([saleCode, madeAt])
+  @@index([madeAt])
+}
+
 model Van {
   id       String @id @default(cuid())
   name     String

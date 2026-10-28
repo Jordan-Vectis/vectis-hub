@@ -276,6 +276,7 @@ export const DATA_MAP: DataMapArea[] = [
       { model: "Van", what: "One of the collection vans: registration, details, last known mileage, when its MOT, tax, service and insurance are due, and whether it is still in service." },
       { model: "VanRecord", personal: "staff", what: "One MOT, service, repair, tax or insurance entry on a van, with the cost, the garage, any attached invoice or certificate, and who recorded it." },
       { model: "VanTrip", personal: "staff", what: "A van sign-out: which staff member took it, when, what for, the mileage out and back, and when it came back." },
+      { model: "BarcodeLabelRun", personal: "staff", what: "One PDF of Lot ID barcode labels made on Barcode Labels: the sale and its date, the first and last running number, where on the first sheet it started, and who made it when." },
       { model: "AuctionScheduleStaff", personal: "staff", what: "The people on the Auctioneering Schedule's list: a name and whether they auction, clerk on the Saleroom and/or clerk on Vectis." },
       { model: "AuctionSchedule", personal: "staff", what: "One sale's auctioneering schedule: the start time and the names of who auctions, who clerks each hour on each platform, late cover and telephone bids." },
       { model: "AuctionScheduleDefault", personal: "staff", what: "The names pinned to the same slot every week, one set per weekday, used to fill in each new week." },

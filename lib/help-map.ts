@@ -202,7 +202,7 @@ export const DESTINATIONS: Destination[] = [
     ask: "How do I book a customer's goods in?",
     name: "Goods In → Book in", href: "/tools/warehouse/check-in", app: "WAREHOUSE",
     what: "Book a customer's goods in at the counter, in three steps — Customer, What they've brought, Check & book in. Find the customer in the customer database (or add them), then list their goods as totes and pallets grouped by category, not item by item — \"5x boxes of comics\" is one tote. Each tote and pallet gets its number as soon as its row is added, so its barcode label can be printed right there on the goods step (Print labels prints every one not printed yet; each row has its own Print / Reprint). The customer's usual commission, fees and reserve are used automatically, and any special arrangement agreed with them is shown on the last step; change the terms for one receipt there, or for good on the customer's Fees & agreement tab. Press Book in, then print or email the receipt. A check-in left part-way is kept as \"not booked in yet\" — carry on with it from Check in, the Receipts list, the Goods In dashboard or the customer's page, or throw it away.",
-    also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "customer bringing in", "print tote labels at check in", "tote number at check in", "unfinished check in", "carry on checking in", "check in not booked in", "not booked in yet", "throw away a check in"],
+    also: ["book in", "booking in", "book goods in", "goods in", "check in goods", "checking goods in", "new receipt", "tote labels", "pallet labels", "tote barcode labels", "pallet barcode labels", "customer bringing in", "print tote labels at check in", "tote number at check in", "unfinished check in", "carry on checking in", "check in not booked in", "not booked in yet", "throw away a check in"],
   },
   // The warehouse database (2026-10-23). ⚠ Named "Tote list", never "Warehouse" or "Stock": a BC
   // Warehouse user asking about "the warehouse" must not be refused with Goods In.
@@ -291,13 +291,24 @@ export const DESTINATIONS: Destination[] = [
     name: "Goods In → Locations & labels", href: "/tools/warehouse/locations", app: "WAREHOUSE",
     what: "Every storage location, cataloguing bench and shelf Goods In can put things in. Filter the list by kind, aisle, bay, shelf, what is there now and when each was last used (or not used); sort by last used or date added; see how many totes, pallets and lots are at each; export the list, or everything at the ticked locations, to a spreadsheet; and print barcode labels. Tick locations (shift-click for a run, or scan their labels) and move everything at them to one other location in one go. Open a location to see what is there and its recent moves, move everything at it elsewhere, export what is there, or check the shelf by scanning what is really on it. Managers add one location, a whole range (an aisle's bays and shelves, benches, cabinet shelves) or a pasted list (a saved CSV works), switch locations off or on, change their kind or give them their usual names many at a time, replace a location's code with a new one, and remove them — a location that was never used is deleted, one used before is switched off so its history stays, and one with goods still there is refused until they are moved out.",
     also: [
-      "location labels", "location label", "add a location", "new location", "shelf labels", "bench labels",
+      "location labels", "location label", "location barcode labels", "print location barcodes", "add a location", "new location", "shelf labels", "bench labels",
       "remove a location", "delete a location", "remove locations", "delete locations", "switch off a location",
       "switch a location off", "add a range of locations", "add a whole aisle", "paste a list of locations",
       "move everything out of a location", "empty a location", "goods in locations",
       // matchScore turns punctuation into spaces, so these are written without apostrophes.
       "check a location", "stock check a location", "check what is at a location", "empty an aisle", "clear an aisle",
       "export what is at a location", "replace a location code", "change a location code", "rename locations",
+    ],
+  },
+  // Barcode Labels (2026-10-28) — the Lot ID labels a sale's items are tagged with, replacing the Word
+  // mail merge. Not "labels" alone (Packing owns it) and nothing hyphenated.
+  {
+    name: "Barcode Labels", href: "/tools/barcodes", app: "BARCODES",
+    what: "🏷️ Barcode Labels (Admin & Operations): print a sale's Lot ID barcode labels — X160001, X160002 and on — on the Avery L7651 sheets (65 a sheet), laid out exactly like the old Word mail merge. Pick the sale (its date fills in), say the first number and how many (1, 5 or 10 sheets in one tap), and press Print: the PDF opens in a new tab to print at Actual size. The first number carries on from the last labels printed for that sale, numbers already printed are pointed out, a part-used sheet can start on any label, a test print on plain paper checks the lining up, and anything printed before can be printed again.",
+    // Lot ID words only — tote, pallet and location labels are Goods In's (they carry those words too).
+    also: [
+      "lot id labels", "lot labels", "lot barcode labels", "lot id barcodes", "sale barcode labels", "sale barcodes",
+      "avery labels", "avery sheets", "barcode mail merge", "lot stickers", "print lot ids",
     ],
   },
   {

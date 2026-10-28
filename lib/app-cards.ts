@@ -562,4 +562,19 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     group:              "OPERATIONS",
     appKey:             "VANS",
   },
+  {
+    // Lot ID barcode labels for a sale on Avery sheets — the Word mail merge's job (Jack, 2026-10-28:
+    // "it currently uses a mail merge and it confuses most people"). Granted per person (BARCODES).
+    key:                "BARCODES",
+    href:               "/tools/barcodes",
+    defaultLabel:       "Barcode Labels",
+    defaultDescription: "Print a sale's Lot ID barcode labels on the Avery sheets — pick the sale and how many, then print. No mail merge.",
+    icon:               "🏷️",
+    border:             "border-sky-500",
+    iconBg:             "text-sky-400",
+    btnBg:              "bg-sky-600 hover:bg-sky-500",
+    glow:               "hover:shadow-sky-900/40",
+    group:              "OPERATIONS",
+    appKey:             "BARCODES",
+  },
 ]

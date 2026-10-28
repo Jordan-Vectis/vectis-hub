@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"fbd790c2e8e55ebb7f12e6ba354e26f6268f4426","author":"jack-vectis","date":"2026-10-28T16:48:47Z","subject":"Refunds: full stop in Check the money's summary"},
+  {"sha":"5130be89f6457970be9ac9589e881b0e47931129","author":"Jordan Orange","date":"2026-10-28T15:48:44Z","subject":"Auctioneering Schedule: gridlines on every cell so the two columns show"},
   {"sha":"04b4c5c6ac50a915200374d804e6ffe89386c155","author":"Jordan Orange","date":"2026-10-28T15:37:00Z","subject":"Auctioneering Schedule: PDF and Excel print Saleroom and Vectis as separate columns"},
   {"sha":"c24fc8780ad728d24ff6be5952d4793691296cff","author":"Jordan Orange","date":"2026-10-28T15:33:39Z","subject":"Auctioneering Schedule: Saleroom and Vectis as separate columns, lighter rows"},
   {"sha":"d68847fb559a504f3a4c5494188ffd5201ade16e","author":"Jordan Orange","date":"2026-10-28T15:15:07Z","subject":"Auctioneering Schedule: empty boxes are blank, like the spreadsheet"},

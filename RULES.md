@@ -3417,6 +3417,42 @@ the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
   tab's sessionStorage, as on Paid, not collected. Export CSV is made in the browser from what's shown.
 - Listed in `lib/data-map.ts` (customer data) and in `lib/help-map.ts` as "Refunds (Accounts)".
 
+## 🏷️ Barcode Labels (2026-10-28)
+
+Jack, 2026-10-28: *"in Admin and Operations we need a new barcode panel — an easy way to print them,
+it currently uses a mail merge and it confuses most people"* and *"it needs to follow the exact
+template to fit on the sheets — we print around 600 per sale"*.
+- **What it makes:** a sale's Lot ID labels (sale code + running number, at least 3 digits — X160001,
+  `barcodeOf`) on **Avery L7651** (A4, 5 × 13 = 65 a sheet, 38.1 × 21.2 mm), as ONE PDF
+  (`lib/barcode-labels-pdf.ts`, pdf-lib, server side — never pdfkit). Each label: the sale date
+  (dd/mm/yyyy, 8 pt), the Code 39 barcode, the number 24 pt bold — the Word template's
+  "Avery_38x21-R EDIT.docx" (an Excel "LotID Label Generator" fed it Barcode + Sale_Date).
+- ⚠ **The positions are the template's, to the twip** (`SHEET` in `lib/barcode-labels.ts`): table 567 tw
+  (10.0 mm) from the top and 346 tw (6.1 mm) from the left — Word 2013 layout, no table indent, so the
+  first column starts AT the margin — columns 2160 tw (38.1 mm) with 143 tw (2.52 mm) gaps, rows exactly
+  1200 tw (21.17 mm), 72 tw cell padding. Checked against Avery's published L7651 grid: every label
+  lands on its sticker. Don't "tidy" these numbers. Printed at **Actual size** (100 %), never "fit".
+- ⚠ **The barcode is Code 39 drawn as vector bars** (`lib/code39.ts`, checked against bwip-js for all
+  43 characters), the SAME size as the template's Libre Barcode 39 font at 22 pt — measured from the
+  font: narrow bar 0.03 em = 0.2328 mm, wide 3 × narrow, bars 0.59 em (≈ 4.6 mm) — so the scanners
+  (`lib/photo-prep-barcode.ts` reads Code39, `/scan`) read them as before. A longer code that wouldn't
+  fit the label gets narrower bars (`barNarrowFor`), and a smaller number.
+- **The page** (`/tools/barcodes`, tile "Barcode Labels" in Admin & Operations, app key **BARCODES** —
+  grant it per person in Users & Permissions; admins have it): pick the sale (BC's copy — WarehouseItem,
+  upcoming sales included — plus the Hub's sales, four months back to a year ahead; or type a code),
+  its date fills in; the first number carries on from the last run printed for that sale; how many
+  (1 / 5 / 10 sheets in a tap, at most 1,300 = 20 sheets); "start on label" for a part-used sheet; a
+  preview of the first label; Print posts a form into a new tab (inside the tap — iPad Safari).
+  **Test on plain paper** draws each label's edges and isn't logged.
+- **The log** (`BarcodeLabelRun` — **NEEDS Run Migrations**): every real print, so numbers already printed
+  are pointed out (never refused — reprinting spoilt labels is normal) and "Print again" refills the
+  boxes. Best effort: a log that can't be written never stops the labels.
+- The route (`POST /api/barcodes/labels`) checks the BARCODES app itself (`requireBarcodes` — /api is
+  outside the login gate) and only answers this Hub's own pages (`fromThisHub`); a refusal is plain text
+  for the new tab. Nothing touches Business Central.
+- Listed in `lib/data-map.ts` (Facilities) and in `lib/help-map.ts` as "Barcode Labels" (not the word
+  "labels" alone — Packing owns it). ⚠ `/tools/barcode-sorter` is an unrelated old stub.
+
 ## 🔐 Two-factor login (2026-10-22)
 
 Jordan: a tick box per person — *"Could we set it up as a tick box in the user panel would make
