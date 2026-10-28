@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"3bda9570b2708c213ba2e08de71292e41fa76ffe","author":"Jordan Orange","date":"2026-10-28T14:31:18Z","subject":"Redeploy: Railway marked 8d17cf02's build failed after it had exported the image"},
+  {"sha":"8d17cf02c3bc0731cbea49294e38c8768d299c8e","author":"Jordan Orange","date":"2026-10-28T13:13:11Z","subject":"Auctioneering Schedule: equal sale columns, the sale name wraps under the day"},
   {"sha":"3978f58080ada30fbf720a7f32cfcb8176725d7f","author":"Jordan Orange","date":"2026-10-28T12:57:26Z","subject":"Auctioneering Schedule: count every lot allocated to a sale, numbered or not"},
   {"sha":"4f83ec944341cddc780e76a106db11c85714a66a","author":"Jordan Orange","date":"2026-10-28T12:31:24Z","subject":"Auctioneering Schedule: the week's sales are exactly what the BC Database page lists"},
   {"sha":"f846f6e74a617d50c94aa7133e0afcc5a06f3ec9","author":"Jordan Orange","date":"2026-10-28T12:23:53Z","subject":"Auctioneering Schedule: laid out like the old spreadsheet"},

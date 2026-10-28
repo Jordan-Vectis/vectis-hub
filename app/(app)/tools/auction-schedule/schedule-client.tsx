@@ -261,7 +261,7 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
     const { ok, ...dnd } = dropProps(p, side)
     return (
       <span {...dnd} onClick={() => picked && place(p, picked)} className={`inline-flex items-center min-h-9 min-w-16 rounded px-1 ${targetCls(ok)}`}>
-        {cell ? nameText(p, cell) : <span className="text-gray-400 dark:text-gray-600" title={side === "saleroom" ? "Saleroom" : "Vectis"}>—</span>}
+        {cell ? nameText(p, cell) : null}
       </span>
     )
   }
@@ -273,7 +273,6 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
     return (
       <div {...dnd} onClick={() => picked && place({ sale, field }, picked)} className={`flex flex-wrap items-center gap-x-1 min-h-9 rounded px-1 -mx-1 ${targetCls(ok)}`}>
         {cells.map((c, i) => <span key={c.name} className="contents">{i > 0 && <span className="text-gray-400 dark:text-gray-500">/</span>}{nameText({ sale, field, name: c.name }, c)}</span>)}
-        {!cells.length && <span className="text-gray-400 dark:text-gray-600">—</span>}
       </div>
     )
   }
@@ -315,7 +314,6 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
         <span className={muted}>📌 Pinned — the same person in that box every week</span>
         <span className={muted}>🔒 Locked — fixed for this sale; Fill and Clear leave it alone</span>
         <span className="text-amber-700 dark:text-amber-300">Amber name — on Saleroom and Vectis at the same time</span>
-        <span className={muted}>— empty</span>
         <span className={`ml-auto ${saveState === "error" ? "text-red-600 dark:text-red-400 font-semibold" : muted}`}>
           {saveState === "saving" ? "Saving…" : saveState === "error" ? `Not saved: ${saveError}` : "All changes saved"}
           {saveState === "error" && <button className="ml-2 underline" onClick={() => flush()}>Try again</button>}
@@ -366,7 +364,8 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
                         <input aria-label="Time" className={`${plain} w-28 text-gray-600 dark:text-gray-400`} value={timeOf(i)} onChange={e => setTime(i, e.target.value)} />
                       </td>
                       {sales.map(s => <td key={s.id} className={CELL}>
-                        {days[s.id]?.slots[i] ? <span className="inline-flex items-center gap-1">{slotHalf(s.id, i, "saleroom")}<span className="text-gray-400 dark:text-gray-500">/</span>{slotHalf(s.id, i, "vectis")}</span> : null}
+                        {/* Empty boxes are blank, like the spreadsheet (Jordan, 2026-10-28) — the slash only once a name is in. */}
+                        {days[s.id]?.slots[i] ? <span className="inline-flex items-center gap-1">{slotHalf(s.id, i, "saleroom")}{(days[s.id].slots[i].saleroom || days[s.id].slots[i].vectis) && <span className="text-gray-400 dark:text-gray-500">/</span>}{slotHalf(s.id, i, "vectis")}</span> : null}
                       </td>)}
                     </tr>
                   ))}
