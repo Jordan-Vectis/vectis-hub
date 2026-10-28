@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"47a2c0267193fccc538dbafd4b64db22bcca29b1","author":"Jordan Orange","date":"2026-10-28T11:36:08Z","subject":"Auctioneering Schedule: the week's sales with who auctions and clerks, drag and drop, pinned regulars, PDF"},
   {"sha":"ca5db803e7630a599bed3f1bb3816a11fe4cb44f","author":"jack-vectis","date":"2026-10-28T10:28:11Z","subject":"Redeploy staging: the 44a60598 deploy failed on Railway after 36 seconds (sandbox built the same commit fine)"},
   {"sha":"44a6059805ad9c72a08ad536122ef48dd09ab1b3","author":"jack-vectis","date":"2026-10-28T10:07:47Z","subject":"Refunds: commission is what BC charged; check the money; fix the day it came in"},
   {"sha":"73f2bbc3c838afa481a2a441e20120f4526441c5","author":"jack-vectis","date":"2026-10-27T09:45:08Z","subject":"Refunds: Match sales from BC finds lots BC moved to the returns account"},

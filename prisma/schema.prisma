@@ -3708,7 +3708,7 @@ model AuctionScheduleStaff {
 // One sale's schedule (lib/auction-schedule.ts DaySchedule). No row = never edited; the page
 // builds it from the pinned defaults for that weekday.
 model AuctionSchedule {
-  auctionId String   @id
+  auctionId String   @id // the sale CODE (F131) — sales come from BC, many have no Hub sale
   data      Json
   updatedBy String   @default("")
   updatedAt DateTime @updatedAt

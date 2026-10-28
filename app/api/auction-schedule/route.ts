@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isMissingTable } from "@/lib/prisma-errors"
-import { canSeeAuction, getDepartmentAccess } from "@/lib/departments"
 import { cleanDay, mondayOf, ukYmd } from "@/lib/auction-schedule"
-import { readDefaults, readSchedules, requireSchedule, salesForWeek } from "@/lib/auction-schedule-server"
+import { canEditSale, readDefaults, readSchedules, requireSchedule, salesForWeek } from "@/lib/auction-schedule-server"
 
 // /api/auction-schedule — AUCTION_SCHEDULE app permission, checked fresh.
-// GET ?week=YYYY-MM-DD → the week's sales, their saved schedules, the pinned defaults, the staff list.
+// GET ?week=YYYY-MM-DD → the week's sales (from the website data), their saved schedules, the pinned defaults, the staff list.
 // PUT { auctionId, data } → save one sale's schedule.
 // PUT { defaults } → save the pinned weekly defaults (all weekdays at once).
 
@@ -48,11 +47,11 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    const auctionId = String(b.auctionId ?? "")
-    const sale = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { id: true, auctionType: true } })
-    if (!sale) return NextResponse.json({ error: "That sale no longer exists" }, { status: 404 })
+    // The sale CODE (F131) — sales come from the website data, many have no Hub sale.
+    const auctionId = String(b.auctionId ?? "").trim().toUpperCase()
+    if (!/^[A-Z0-9]{2,12}$/.test(auctionId)) return NextResponse.json({ error: "Not a sale code" }, { status: 400 })
     // Same department rule as the list — saving must not be a way round it.
-    if (!canSeeAuction(await getDepartmentAccess(who.userId, who.role), sale)) return NextResponse.json({ error: "No access to that sale" }, { status: 403 })
+    if (!(await canEditSale(auctionId, who))) return NextResponse.json({ error: "No access to that sale" }, { status: 403 })
     const data = cleanDay(b.data) as any
     await prisma.auctionSchedule.upsert({
       where: { auctionId },

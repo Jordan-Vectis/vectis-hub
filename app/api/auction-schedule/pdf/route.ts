@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib"
 import { embedVectisLogo } from "@/lib/pdf-logo"
-import { isMissingTable } from "@/lib/prisma-errors"
-import { dayLabel, fromDefaults, mondayOf, ukYmd, weekdayOf, weekEnding, type Cell, type DaySchedule } from "@/lib/auction-schedule"
-import { readDefaults, readSchedules, requireSchedule, salesForWeek } from "@/lib/auction-schedule-server"
+import { mondayOf, scheduleRows, ukYmd, weekEnding } from "@/lib/auction-schedule"
+import { requireSchedule, weekForPrint } from "@/lib/auction-schedule-server"
 
 // GET /api/auction-schedule/pdf?week=YYYY-MM-DD — the week laid out like the old spreadsheet,
 // A4 landscape, one column per sale. pdf-lib only (RULES: never pdfkit).
@@ -34,41 +33,13 @@ function wrap(font: PDFFont, size: number, text: string, width: number): string[
   return out.length ? out : [""]
 }
 
-const names = (cells: Cell[]) => cells.map(c => c.name).join(" / ")
-const pair = (a: Cell | null, b: Cell | null) => (a || b ? `${a?.name ?? "-"} / ${b?.name ?? "-"}` : "")
-
 export async function GET(req: NextRequest) {
   try {
     const who = await requireSchedule()
     const raw = req.nextUrl.searchParams.get("week") ?? ""
     const monday = mondayOf(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ukYmd(new Date()))
-    const sales = await salesForWeek(monday, who)
-    let saved: Record<string, DaySchedule> = {}
-    let defaults = {}
-    try {
-      ;[saved, defaults] = await Promise.all([readSchedules(sales.map(s => s.id)), readDefaults()])
-    } catch (e: any) {
-      if (!isMissingTable(e)) throw e
-    }
-    const days = sales.map(s => saved[s.id] ?? fromDefaults((defaults as any)[String(weekdayOf(s.date))]))
-
-    // Rows of [label, one text per sale, small?]. Slot rows use the longest slot list.
-    const rows: { label: string; cells: string[]; small?: boolean }[] = [
-      { label: "Sale", cells: sales.map(s => dayLabel(s.date)) },
-      { label: "Sale No.", cells: sales.map(s => s.code) },
-      { label: "No. of Lots", cells: sales.map(s => String(s.lots)) },
-      { label: "Start Time", cells: days.map(d => d.startTime) },
-      { label: "Auctioneers", cells: days.map(d => names(d.auctioneers)) },
-      { label: "", cells: sales.map(s => s.name), small: true },
-      { label: "Clicking:", cells: sales.map(() => "Saleroom / Vectis") },
-    ]
-    const slotCount = Math.max(0, ...days.map(d => d.slots.length))
-    for (let i = 0; i < slotCount; i++) {
-      const time = days.find(d => d.slots[i])?.slots[i]?.time ?? ""
-      rows.push({ label: time, cells: days.map(d => (d.slots[i] ? pair(d.slots[i].saleroom, d.slots[i].vectis) : "")) })
-    }
-    rows.push({ label: "Late (if required)", cells: days.map(d => names(d.late)) })
-    rows.push({ label: "Telephone Bids", cells: days.map(d => names(d.phones)) })
+    const { sales, days } = await weekForPrint(monday, who)
+    const rows = scheduleRows(sales, days)
 
     const doc = await PDFDocument.create()
     const font = await doc.embedFont(StandardFonts.Helvetica)
@@ -103,7 +74,7 @@ export async function GET(req: NextRequest) {
         const cellLines = r.cells.map(c => wrap(font, s, c, colW - PAD * 2))
         const labelLines = wrap(font, s, r.label, LABEL_W - PAD * 2)
         const h = Math.max(1, labelLines.length, ...cellLines.map(l => l.length)) * lineH(s) + PAD * 2
-        if (ri % 2 === 0) page.drawRectangle({ x: MARGIN, y: y - h, width: tableW, height: h, color: SHADE })
+        if (r.shaded) page.drawRectangle({ x: MARGIN, y: y - h, width: tableW, height: h, color: SHADE })
         labelLines.forEach((l, i) => page.drawText(l, { x: MARGIN + PAD, y: y - PAD - s - i * lineH(s), size: s, font, color: INK }))
         cellLines.forEach((lines, ci) => lines.forEach((l, i) =>
           page.drawText(l, { x: MARGIN + LABEL_W + ci * colW + PAD, y: y - PAD - s - i * lineH(s), size: s, font, color: INK })))

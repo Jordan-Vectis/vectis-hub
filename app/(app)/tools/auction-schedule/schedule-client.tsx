@@ -302,7 +302,10 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
               <button className={btn} onClick={() => setConfirmClear(false)}>Cancel</button>
             </>
           : <button className={btn} onClick={() => setConfirmClear(true)} disabled={!sales.length || loading}>Clear unlocked</button>}
-        <a className={btnGo + " inline-flex items-center"} href={`/api/auction-schedule/pdf?week=${monday}`} target="_blank" rel="noopener noreferrer">🖨 PDF</a>
+        {/* The exports read what is SAVED, so they wait for the last change to reach the Hub. */}
+        {(["pdf", "xlsx"] as const).map(kind => saveState === "saved"
+          ? <a key={kind} className={btnGo + " inline-flex items-center"} href={`/api/auction-schedule/${kind}?week=${monday}`} target={kind === "pdf" ? "_blank" : undefined} rel="noopener noreferrer">{kind === "pdf" ? "🖨 PDF" : "📊 Excel"}</a>
+          : <button key={kind} className={btnGo} disabled title="Waiting for the last change to save">{kind === "pdf" ? "🖨 PDF" : "📊 Excel"}</button>)}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-3 text-xs">
@@ -329,7 +332,7 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
         <div className={`${box} flex-1 min-w-0 overflow-x-auto p-3`}>
           {loading ? <p className={`p-6 ${muted}`}>Loading the week…</p>
             : loadError ? <p className="p-6 text-red-600 dark:text-red-400">Couldn&apos;t load the week: {loadError} <button className="underline" onClick={() => load(monday)}>Try again</button></p>
-            : !sales.length ? <p className={`p-6 ${muted}`}>No sales are dated in this week. Sales appear here from Auction Manager once their date falls in the week.</p>
+            : !sales.length ? <p className={`p-6 ${muted}`}>No sales are dated in this week. Sales and lot counts come from the website data collected at Databases → BC Database (Update the BC lots) — a sale shows here once it has been collected, upcoming ones included.</p>
             : (
               <table className="w-full border-separate border-spacing-0">
                 <thead>
