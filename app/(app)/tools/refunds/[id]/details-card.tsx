@@ -5,10 +5,10 @@ import { useState, useTransition, type ReactNode } from "react"
 import { updateRefund, type RefundPatch } from "@/lib/actions/refunds"
 import {
   REFUND_LIMITS, REFUND_PARTIES, REFUND_PARTY_LABELS, REFUND_REASONS, REFUND_REASON_LABELS, REFUND_SOLUTIONS, REFUND_SOLUTION_LABELS,
-  REFUND_SOURCE_LABELS, type RefundDetail,
+  REFUND_SOURCE_LABELS, oldLogCell, type RefundDetail,
 } from "@/lib/refunds"
 import { mailtoHref } from "@/lib/refunds-public"
-import { formatDay } from "@/lib/uncollected"
+import { dateInputValue, formatDay, londonDay } from "@/lib/uncollected"
 import { Flash, NO_ANSWER, btn, btnGo, card, cardTitle, input, label, muted, type FlashMessage } from "../ui"
 
 // The request's details — shown, then edited in place (Edit details → Save). Only the boxes the person
@@ -16,11 +16,13 @@ import { Flash, NO_ANSWER, btn, btnGo, card, cardTitle, input, label, muted, typ
 // now, so something changed elsewhere meanwhile is never written back with its old value. The server
 // answers which really changed, and "nothing changed" is said as such (design rule 7). Postage and the
 // ref code are on the Lots & money card, beside the money they belong to.
+// The day it came in can be put right too (Jack, 2026-10-28 — the old log mixed UK and US dates, so
+// "8/12/2026" came in as 8 December): a day in the future, or before the auction date, is said.
 
-type EditField = "name" | "email" | "customerNo" | "party" | "saleCode" | "auctionDate" | "lotsText" | "reason" | "details" | "solution" | "percentText" | "notes"
+type EditField = "name" | "email" | "customerNo" | "party" | "saleCode" | "auctionDate" | "receivedAt" | "lotsText" | "reason" | "details" | "solution" | "percentText" | "notes"
 type Form = Record<EditField, string>
 
-const FIELDS: EditField[] = ["name", "email", "customerNo", "party", "saleCode", "auctionDate", "lotsText", "reason", "details", "solution", "percentText", "notes"]
+const FIELDS: EditField[] = ["name", "email", "customerNo", "party", "saleCode", "auctionDate", "receivedAt", "lotsText", "reason", "details", "solution", "percentText", "notes"]
 
 function formOf(r: RefundDetail): Form {
   return {
@@ -30,6 +32,7 @@ function formOf(r: RefundDetail): Form {
     party: r.party,
     saleCode: r.saleCode ?? "",
     auctionDate: r.auctionDate ?? "",
+    receivedAt: dateInputValue(r.receivedAt),
     lotsText: r.lotsText ?? "",
     reason: r.reason,
     details: r.details ?? "",
@@ -39,7 +42,7 @@ function formOf(r: RefundDetail): Form {
   }
 }
 
-export default function DetailsCard({ r }: { r: RefundDetail }) {
+export default function DetailsCard({ r, today }: { r: RefundDetail; today: string }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Form>(() => formOf(r))
@@ -66,6 +69,10 @@ export default function DetailsCard({ r }: { r: RefundDetail }) {
     }
     if (patch.name !== undefined && !patch.name.trim()) {
       setMsg({ tone: "error", text: "The name can't be blank." })
+      return
+    }
+    if (patch.receivedAt !== undefined && !patch.receivedAt.trim()) {
+      setMsg({ tone: "error", text: "The date it came in can't be blank." })
       return
     }
     setMsg(null)
@@ -131,6 +138,9 @@ export default function DetailsCard({ r }: { r: RefundDetail }) {
             </Box>
             <Box label="Sale"><input value={form.saleCode} onChange={set("saleCode")} maxLength={REFUND_LIMITS.saleCode} placeholder="e.g. F118" autoComplete="off" className={`${input} font-mono`} /></Box>
             <Box label="Auction date"><input type="date" value={form.auctionDate} onChange={set("auctionDate")} className={input} /></Box>
+            {/* The calendar stops at today only once the day is being changed — a misread day in the future
+                (the old log's) mustn't block saving the other boxes. The server refuses a future day either way. */}
+            <Box label="Came in"><input type="date" value={form.receivedAt} onChange={set("receivedAt")} max={form.receivedAt !== opened.receivedAt ? today : undefined} required className={input} /></Box>
             <Box label="Lot number(s)"><input value={form.lotsText} onChange={set("lotsText")} maxLength={REFUND_LIMITS.lotsText} placeholder="e.g. 808 & 809" autoComplete="off" className={input} /></Box>
             <Box label="Reason">
               <select value={form.reason} onChange={set("reason")} className={input}>
@@ -166,7 +176,26 @@ export default function DetailsCard({ r }: { r: RefundDetail }) {
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
         {REFUND_SOURCE_LABELS[r.source]} · came in {formatDay(r.receivedAt)} · last changed {formatDay(r.updatedAt)}
       </p>
+      <DateCheck r={r} today={today} />
     </section>
+  )
+}
+
+/** A day it came in that can't be right — after today, or before its auction — said, with what the
+ *  old log's Date cell said (it mixed UK and US dates). Put right under Edit details. */
+function DateCheck({ r, today }: { r: RefundDetail; today: string }) {
+  const came = londonDay(r.receivedAt)
+  const wrong = came > today ? "that's in the future"
+    : r.auctionDate && came < r.auctionDate ? `before its auction date (${formatDay(`${r.auctionDate}T12:00:00Z`)}) — one of them is wrong`
+      : null
+  if (!wrong) return null
+  const logDate = r.source === "import" ? oldLogCell(r.importedRaw, "date") : ""
+  return (
+    <p role="note" className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+      ⚠ It says it came in on {formatDay(r.receivedAt)} — {wrong}.
+      {logDate && <> The old log&apos;s date was &ldquo;{logDate}&rdquo;{/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(logDate) ? " — it may be US-style, month first" : ""}.</>}{" "}
+      Put it right under Edit details.
+    </p>
   )
 }
 

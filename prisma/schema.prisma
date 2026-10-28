@@ -2671,6 +2671,8 @@ model RefundLot {
   /// BC's receipt lines were read for the sale + lot it was saved with — a lot BC has no barcode for
   /// isn't offered under "Get barcodes from BC" again.
   refsRead          Boolean @default(false)
+  /// The commission box holds what BC charged (2026-10-28 — buyer's premium + any web premium, inc VAT).
+  commissionFromBc  Boolean @default(false)
 
   @@index([refundId])
 }

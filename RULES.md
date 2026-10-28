@@ -3330,6 +3330,27 @@ the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
   commission, N% of the hammer only, or a set amount (`lotRefundPence`); postage refunded is added on
   top. Only a WHOLE total is saved (`refundTotalToSave`) — while any lot can't be worked out the total is
   null and the list says "Not worked out", never a partial figure as if complete. All money in pence.
+  ⚠⚠ **27% is only the standard premium — the commission is what BC CHARGED** (2026-10-28, Jack: *"use
+  BC's actual charge"*): an online bidder also paid BC's **web premium** (4.95% + VAT — 32.94% in all;
+  28 of the old log's lots had 27% where BC charged it). `bcCommissionOf` = (`EVA_BuyerPremiumEarned` +
+  `EVA_WebPremium`) each + 20% VAT, as the invoice adds them (checked against buyers' invoices). On a lot
+  BC moved to the returns account (C000079) BC zeroes the premium but keeps the web premium — the premium
+  is put back at `STANDARD_PREMIUM_RATE` 22.5% (what those buyers' invoices showed). A lookup fills a
+  BLANK (or still-BC's) commission box with it, only beside BC's own hammer, saved as
+  `RefundLot.commissionFromBc` (**NEEDS Run Migrations**); a blank box is still worked out at 27%.
+  Buyers only — a vendor's payout isn't worked from the buyer's premium.
+- ⚠ **Only flag, never change** (2026-10-28, Jack: *"only flag — I'll check each one"*): opening a
+  request CHECKS its saved lots against BC (`lookUpRefundLots(…, check)` — no barcode read) and says
+  BC's hammer / commission beside any that differ or are missing, with "Use BC's" — a commission's only
+  on an OPEN request (a paid or closed one is left as it was). The Lots & money card says when the old
+  log's total isn't what its lots work out at, or the saved total (the list's) isn't. **🔎 Check the
+  money** (a collapsed card on the panel — `checkRefundMoney`, slices of 10, Stop / Carry on) goes
+  through every request and LISTS the ones to look at (BC's figures, the sums, lots that can't be worked
+  out, no lots, a day it came in in the future or before its sale) — it writes nothing. The day it came
+  in (`receivedAt`) can be put right under Edit details (the old log mixed UK and US dates — RF0420
+  "8/12/2026" came in as 8 December): never blank or in the future, never after the date processed or
+  closed; an old-log request closed "on the day it came in" moves its closed day with it; the timeline
+  says the day it was before.
 - **Fill from BC** (read only, the admin's own BC sign-in): `Auction_Lines_Excel` for the buyer's
   C-number and the sale (or the auction date), the sold lots whose numbers the request names — it
   PROPOSES lots with hammer, description, barcode and receipt; nothing is saved until Save.
@@ -3348,7 +3369,8 @@ the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
   count as typed) — a hammer typed by hand is never overwritten (BC's is shown with "Use BC's"), and a
   saved row looked up for its barcode only gets what it's missing; changing a row's
   sale or lot takes the other lot's BC values out at once, so no other lot's hammer can be saved
-  against it. A lot BC shows bought by someone else is still filled, with that said. Only rows that
+  against it. A lot BC shows bought by someone else is still filled, with that said (one on the returns
+  account, C000079, is a refund's own — said as that, not as someone else's). Only rows that
   are new or whose sale/lot changed are looked up on their own — opening a request never changes its
   boxes; saved rows without a barcode (the old log's, or saved before this) have **🏷️ Get barcodes
   from BC**. Save waits while a lookup is pending. Signing in to BC from the card opens a new tab

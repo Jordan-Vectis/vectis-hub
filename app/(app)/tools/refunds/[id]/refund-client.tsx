@@ -37,7 +37,8 @@ export default function RefundView({ r, today, backHref, me }: { r: RefundDetail
             <PartyBadge party={r.party} />
             <SourceBadge source={r.source} />
             {r.suspect && <SuspectBadge />}
-            <span>Came in {formatDateTime(r.receivedAt)}</span>
+            {/* A day set without a time (the old log, or a day put right) is kept as 12:00 UTC — no made-up time is shown. */}
+            <span>Came in {r.receivedAt.endsWith("T12:00:00.000Z") ? formatDay(r.receivedAt) : formatDateTime(r.receivedAt)}</span>
             <span className={!closed && r.daysOpen > 14 ? "font-semibold text-red-600 dark:text-red-400" : undefined}>
               {closed ? `closed after ${plural(r.daysOpen, "day")}` : `${plural(r.daysOpen, "day")} open`}
             </span>
@@ -53,7 +54,7 @@ export default function RefundView({ r, today, backHref, me }: { r: RefundDetail
       <div className="flex flex-col gap-4">
         <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           <div className="min-w-0 lg:col-start-2 lg:row-start-1"><StatusCard r={r} today={today} me={me} /></div>
-          <div className="min-w-0 lg:col-start-1 lg:row-start-1"><DetailsCard r={r} /></div>
+          <div className="min-w-0 lg:col-start-1 lg:row-start-1"><DetailsCard r={r} today={today} /></div>
         </div>
         <div className="min-w-0"><LotsCard r={r} /></div>
         <div className="grid gap-4 lg:grid-cols-2 lg:items-start">

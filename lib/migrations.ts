@@ -2703,6 +2703,8 @@ END $$`,
   `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "hammerFromBc" BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "descriptionFromBc" BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "refsRead" BOOLEAN NOT NULL DEFAULT false`,
+  // Refunds (2026-10-28): the commission box holds what BC charged (buyer's premium + any web premium).
+  `ALTER TABLE "RefundLot" ADD COLUMN IF NOT EXISTS "commissionFromBc" BOOLEAN NOT NULL DEFAULT false`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

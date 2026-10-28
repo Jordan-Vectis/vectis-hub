@@ -6,7 +6,7 @@
 // "Fill from BC" (findRefundLotsInBc) — one read of Auction_Lines_Excel: the buyer's lots in the
 // request's sale (EVA_AuctionNo) or, with no sale code, at the request's auction date
 // (EVA_AuctionDate). Sold lots only (hammer over £0, not withdrawn). Lots whose number is on the
-// request ("808 & 809") are kept; with none given, all of them. Each becomes a PROPOSAL — hammer, 27%
+// request ("808 & 809") are kept; with none given, all of them. Each becomes a PROPOSAL — hammer, BC's
 // commission, description, unique ID, sale, barcode, receipt — that the admin can use on the Lots &
 // money card; nothing is saved until they press Save there.
 //
@@ -15,19 +15,50 @@
 // price"): Auction_Lines_Excel for the sale's lot (hammer, unique ID, description, buyer), then
 // Receipt_Lines_Excel for that unique ID (receiptRefsFor: the Internal Barcode — the one for THAT
 // sale, a lot gets a new barcode each sale it goes into — and the receipt number).
+// The commission is what BC CHARGED (bcCommissionOf — Jack, 2026-10-28: "use BC's actual charge"): the
+// buyer's premium plus, for an online bidder, the web premium, both + VAT — not a flat 27%.
 // ⚠ Nothing is ever written to BC. ⚠ Only fields verified on each endpoint go in its $select (one
 // unverified field and BC answers 400 to the whole request — RULES.md, BC field names).
 
 import { bcFetchAll } from "@/lib/bc"
-import { commissionFor, formatPence, isSaleCode, type RefundLotRow } from "@/lib/refunds"
+import { RETURNS_ACCOUNT, formatPence, isSaleCode, type RefundLotRow } from "@/lib/refunds"
 import { formatDay } from "@/lib/uncollected"
 import { bcDay, bcTrue, lotNoOf, odataString } from "@/lib/uncollected-feed-match"
 
-/** Verified on Auction_Lines_Excel (2026-10-22, the BC API viewer). */
+/** Verified on Auction_Lines_Excel (2026-10-22, the BC API viewer; the premium fields 2026-10-28). */
 const LOT_SELECT = [
   "EVA_AuctionNo", "EVA_AuctionName", "EVA_AuctionDate", "EVA_UniqueID", "EVA_LotNo", "EVA_LotSuffix",
   "EVA_ShortDescription", "EVA_HammerPrice", "EVA_BuyerNo", "EVA_WithdrawLot",
+  "EVA_BuyerPremiumEarned", "EVA_WebPremium",
 ].join(",")
+
+/** BC's buyer's premium, ex VAT, as a % of the hammer — every buyer's line checked on 2026-10-28 had it.
+ *  Only used to put back the premium BC took off a lot it moved to the returns account. */
+export const STANDARD_PREMIUM_RATE = 22.5
+
+/** VAT on the buyer's premium and the web premium (both standard rated — the invoices add 20%). */
+const premiumIncVat = (pence: number) => Math.round(pence * 1.2)
+
+/**
+ * What BC charged the buyer on top of the hammer, inc VAT, in pence — EVA_BuyerPremiumEarned plus
+ * EVA_WebPremium (an online bidder's 4.95%), each + VAT, as the invoice adds them (checked against
+ * buyers' invoices on 2026-10-28). On a lot BC moved to the returns account (C000079) after a refund,
+ * BC zeroes the premium but keeps the web premium: the premium is put back at STANDARD_PREMIUM_RATE
+ * (`rebuilt`) — what those buyers' invoices showed. null when BC shows no hammer.
+ */
+export function bcCommissionOf(r: Record<string, unknown>): { pence: number; web: boolean; rebuilt: boolean; words: string } | null {
+  const hammer = Number(r.EVA_HammerPrice ?? 0)
+  if (!Number.isFinite(hammer) || hammer <= 0) return null
+  const pence = (v: unknown) => { const n = Number(v ?? 0); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0 }
+  const web = pence(r.EVA_WebPremium)
+  let premium = pence(r.EVA_BuyerPremiumEarned)
+  const rebuilt = premium === 0 && str(r.EVA_BuyerNo).toUpperCase() === RETURNS_ACCOUNT
+  if (rebuilt) premium = Math.round((Math.round(hammer * 100) * STANDARD_PREMIUM_RATE) / 100)
+  const words = rebuilt
+    ? `the ${STANDARD_PREMIUM_RATE}% premium + VAT${web ? " and the web premium + VAT" : ""} — BC took the premium off when the lot went to the returns account (${RETURNS_ACCOUNT})`
+    : premium === 0 && !web ? "BC charged no premium on it" : `buyer's premium${web ? " + web premium (bid online)" : ""}, inc VAT`
+  return { pence: premiumIncVat(premium) + premiumIncVat(web), web: web > 0, rebuilt, words }
+}
 
 /** A buyer or sale number fit to ask BC about (BC's numbers are letters, digits, - _ / .). */
 export const BC_CODE_RE = /^[A-Za-z0-9][A-Za-z0-9\-_/.]{0,39}$/
@@ -38,7 +69,13 @@ const FALLBACK_MAX_ROWS = 12_000
 
 /** A lot BC shows sold to the buyer — what the Lots & money card offers to use. `refsRead` false when
  *  its receipt line couldn't be read (so the barcode is worth asking for again). */
-export type RefundBcProposal = Omit<RefundLotRow, "id"> & { saleName: string | null; auctionDate: string | null; refsRead: boolean }
+export type RefundBcProposal = Omit<RefundLotRow, "id"> & {
+  saleName: string | null
+  auctionDate: string | null
+  refsRead: boolean
+  /** What BC's commission is made of (bcCommissionOf), for the card to say. */
+  commissionWords: string | null
+}
 
 export type RefundBcAsk = {
   /** The C-number — BC's EVA_BuyerNo. */
@@ -123,6 +160,7 @@ export async function findRefundLotsInBc(token: string, ask: RefundBcAsk): Promi
     const lotNo = lotNoOf(r.EVA_LotNo, r.EVA_LotSuffix)
     if (!lotNo) { unsold++; continue }
     const hammerPence = Math.round(hammer * 100)
+    const commission = bcCommissionOf(r)
     sold.push({
       saleCode: str(r.EVA_AuctionNo).toUpperCase() || sale,
       saleName: str(r.EVA_AuctionName) || null,
@@ -133,7 +171,8 @@ export async function findRefundLotsInBc(token: string, ask: RefundBcAsk): Promi
       receiptNo: null,
       description: str(r.EVA_ShortDescription).slice(0, 300) || null,
       hammerPence,
-      commissionPence: commissionFor(hammerPence),
+      commissionPence: commission?.pence ?? null,
+      commissionWords: commission?.words ?? null,
       basis: "percent",
       percent: null,
       setAmountPence: null,
@@ -141,6 +180,7 @@ export async function findRefundLotsInBc(token: string, ask: RefundBcAsk): Promi
       fromBc: true,
       hammerFromBc: true,
       descriptionFromBc: true,
+      commissionFromBc: commission != null,
       refsRead: true,
     })
   }
@@ -322,6 +362,10 @@ export type RefundLotLookup = {
   description: string | null
   /** null when BC shows no hammer (not sold). */
   hammerPence: number | null
+  /** What BC charged on top of the hammer, inc VAT (bcCommissionOf) — null when not sold. */
+  commissionPence: number | null
+  /** What that commission is made of, in words. */
+  commissionWords: string | null
   barcode: string | null
   receiptNo: string | null
   /** Who BC shows bought it (EVA_BuyerNo), upper case. */
@@ -385,7 +429,7 @@ async function rowsForLots(token: string, where: string, nums: string[]): Promis
 
 const notFound = (key: string, note: string): RefundLotLookup => ({
   key, found: false, saleCode: null, saleName: null, auctionDate: null, lotNo: null, uniqueId: null, description: null,
-  hammerPence: null, barcode: null, receiptNo: null, buyerNo: null, refsRead: true, note,
+  hammerPence: null, commissionPence: null, commissionWords: null, barcode: null, receiptNo: null, buyerNo: null, refsRead: true, note,
 })
 
 /**
@@ -395,9 +439,10 @@ const notFound = (key: string, note: string): RefundLotLookup => ({
  * auction date on the request, or a number that isn't one, comes back not found with why. On a day with
  * the same lot number in more than one sale, the request's buyer picks it (if they bought one of them);
  * otherwise it asks for the sale rather than guess. Throws on a BC failure reading the lots (the caller
- * words it); the barcode read is best effort (blank, and said, if it fails).
+ * words it); the barcode read is best effort (blank, and said, if it fails). `refs: false` leaves the
+ * barcode and receipt read out (a check of the money — `refsRead` false, nothing said about it).
  */
-export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: RefundLotContext): Promise<RefundLotLookup[]> {
+export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: RefundLotContext, opts: { refs?: boolean } = {}): Promise<RefundLotLookup[]> {
   const buyer = ctx.party === "buyer" ? str(ctx.customerNo).toUpperCase() || null : null
   const answers = new Map<string, RefundLotLookup>()
   type Want = { ask: RefundLotAsk; num: string; suffix: string; sale: string | null }
@@ -456,7 +501,10 @@ export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: R
       const notes = [suffixNote]
       if (bcTrue(r.EVA_WithdrawLot)) notes.push("BC shows it withdrawn — no hammer to refund from.")
       else if (!sold) notes.push("BC shows it unsold — no hammer.")
-      else if (buyer && buyerNo && buyerNo !== buyer) notes.push(`BC shows it bought by ${buyerNo}, not ${buyer} — check the sale and the lot.`)
+      // A refunded or returned lot is moved to the returns account — a refund's own, not someone else's
+      // lot (the card says so from `buyerNo`).
+      else if (buyer && buyerNo && buyerNo !== buyer && buyerNo !== RETURNS_ACCOUNT) notes.push(`BC shows it bought by ${buyerNo}, not ${buyer} — check the sale and the lot.`)
+      const commission = sold ? bcCommissionOf(r) : null
       const lookup: RefundLotLookup = {
         key: w.ask.key,
         found: true,
@@ -467,10 +515,12 @@ export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: R
         uniqueId: str(r.EVA_UniqueID) || null,
         description: str(r.EVA_ShortDescription).slice(0, 300) || null,
         hammerPence: sold ? Math.round(hammer * 100) : null,
+        commissionPence: commission?.pence ?? null,
+        commissionWords: commission?.words ?? null,
         barcode: null,
         receiptNo: receiptOfUniqueId(str(r.EVA_UniqueID)),
         buyerNo,
-        refsRead: true,
+        refsRead: opts.refs !== false,
         note: notes.filter(Boolean).join(" ") || null,
       }
       answers.set(w.ask.key, lookup)
@@ -479,7 +529,7 @@ export async function lookUpLotsInBc(token: string, asks: RefundLotAsk[], ctx: R
   }
 
   // The barcodes and receipts, in one go — best effort.
-  const ids = found.map((l) => l.uniqueId).filter((id): id is string => !!id)
+  const ids = opts.refs === false ? [] : found.map((l) => l.uniqueId).filter((id): id is string => !!id)
   if (ids.length) {
     let refs: Map<string, ReceiptRefs> | null = null
     try {
@@ -675,12 +725,8 @@ async function matchByBuyer(token: string, ask: RefundSaleAsk): Promise<RefundSa
   return byLots(recent, `bought by ${buyer} in the six months before it came in`)
 }
 
-/**
- * The account BC moves a lot's buyer to once it has been refunded or returned — the customer's own
- * C-number is gone from the line after that, so the buyer's lines no longer show it. Seen on 25 of 30
- * refunded lots checked on 27 Oct 2026 (same sale, lot and hammer as the old log; buyer C000079).
- */
-export const RETURNS_ACCOUNT = "C000079"
+// RETURNS_ACCOUNT (C000079) lives in lib/refunds.ts, so the Lots & money card can say it too.
+export { RETURNS_ACCOUNT }
 
 /**
  * When the buyer's own lines don't show the request's lots: the lots on the day (and on the other

@@ -14,6 +14,9 @@
 // 27% of the hammer inc VAT (22.5% + VAT — £90 → £24.30); a refund of N% is N% of hammer + commission
 // (£90 + £24.30 at 20% = £22.86); "hammer only" is N% of the hammer alone; a set amount is that amount;
 // postage refunded is added on top. All money in PENCE.
+// ⚠ 27% is only the STANDARD premium: an online bidder also paid BC's web premium (32.94% in all), so
+// a lot looked up in BC takes the commission BC actually charged (lib/refunds-bc.ts bcCommissionOf —
+// Jack, 2026-10-28); a blank commission box is still worked out at 27% (commissionFor).
 
 import { formatPence, looksLikeBankDetails } from "@/lib/uncollected"
 
@@ -220,6 +223,29 @@ export function poundsToPence(v: unknown): number | null {
   return Math.round(Number(s) * 100)
 }
 
+/** The old log's cell under one of its column names, lower case (they have spaces round them:
+ *  " Hammer price "); "" when there's none. */
+export function oldLogCell(raw: Record<string, string> | null | undefined, name: string): string {
+  if (!raw) return ""
+  const k = Object.keys(raw).find((key) => key.trim().toLowerCase() === name)
+  return k ? String(raw[k] ?? "").trim() : ""
+}
+
+/**
+ * The account BC moves a lot's buyer to once it has been refunded or returned — the customer's own
+ * C-number is gone from the line after that, so the buyer's lines no longer show it. Seen on 25 of 30
+ * refunded lots checked on 27 Oct 2026 (same sale, lot and hammer as the old log; buyer C000079).
+ */
+export const RETURNS_ACCOUNT = "C000079"
+
+/** A lot's commission as the money rules use it: the box, or 27% of the hammer when it's blank. */
+export const commissionUsed = (l: Pick<RefundLotMoney, "hammerPence" | "commissionPence">): number | null =>
+  l.commissionPence ?? (l.hammerPence != null ? commissionFor(l.hammerPence) : null)
+
+/** A lot's commission isn't what BC charged — by more than a penny (the old log rounded some by one). */
+export const commissionDiffers = (ours: number | null | undefined, bc: number | null | undefined): boolean =>
+  ours != null && bc != null && Math.abs(ours - bc) > 1
+
 // ─── Shapes the actions send back (ISO strings, so they cross to the browser) ────────────────
 
 /** Every action answers this (a thrown server-action error is redacted in production). */
@@ -247,11 +273,13 @@ export type RefundLotRow = {
   setAmountPence: number | null
   /** lotRefundPence of the above. */
   amountPence: number | null
-  /** true = hammer / description were filled from BC. */
+  /** true = hammer / description / commission were filled from BC. */
   fromBc: boolean
   /** Which of them (2026-10-26 on — older lots only have fromBc, and count as typed in). */
   hammerFromBc: boolean
   descriptionFromBc: boolean
+  /** The commission is what BC charged (2026-10-28 on). */
+  commissionFromBc: boolean
   /** BC's receipt lines were read for the sale + lot it was saved with (barcode found or not). */
   refsRead: boolean
 }

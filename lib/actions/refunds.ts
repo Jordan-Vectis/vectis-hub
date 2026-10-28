@@ -7,8 +7,8 @@ import { getAccountsAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
 import { deleteObjectsFromR2 } from "@/lib/r2"
 import {
-  BC_CODE_RE, barcodeForSale, barcodeSaleOf, findRefundLotsInBc, lookUpLotsInBc, matchSaleInBc, normLotNo, receiptFor,
-  receiptOfUniqueId, receiptRefsFor, type ReceiptRefs, type RefundBcFound, type RefundLotAsk, type RefundLotLookup,
+  BC_CODE_RE, RETURNS_ACCOUNT, barcodeForSale, barcodeSaleOf, findRefundLotsInBc, lookUpLotsInBc, lotParts, matchSaleInBc, normLotNo,
+  receiptFor, receiptOfUniqueId, receiptRefsFor, type ReceiptRefs, type RefundBcFound, type RefundLotAsk, type RefundLotLookup,
 } from "@/lib/refunds-bc"
 import { parseLotNumbers } from "@/lib/refunds-import"
 import { isMissingRefunds, matchCustomerId, nextRefundRef, tidyCustomerNo, writeRefundEvent } from "@/lib/refunds-server"
@@ -17,8 +17,9 @@ import {
   CLOSED_REFUND_STATUSES, OPEN_REFUND_STATUSES, REFUND_LIMITS, REFUND_PARTY_LABELS, REFUND_PHOTO_PREFIX, REFUND_REASONS,
   REFUND_REASON_LABELS, REFUND_SOLUTION_LABELS, REFUND_SOURCES, REFUND_STATUSES, REFUND_STATUS_META, REFUNDS_ADMINS_ONLY,
   REFUNDS_NOT_READY, REFUNDS_PATH,
-  commissionFor, formatPence, isRefundBasis, isRefundParty, isRefundReason, isRefundSolution, isRefundSort, isRefundStatus, isSaleCode,
-  looksLikeBankDetails, lotRefundPence, refundRefWords, refundStatusOf, refundTotalToSave,
+  commissionDiffers, commissionFor, commissionUsed, formatPence, isRefundBasis, isRefundParty, isRefundReason, isRefundSolution, isRefundSort,
+  isRefundStatus, isSaleCode, looksLikeBankDetails, lotRefundPence, oldLogCell, poundsToPence, refundRefWords, refundStatusOf,
+  refundTotalPence, refundTotalToSave,
   type RefundBasis, type RefundDetail, type RefundFilter, type RefundFilterRead, type RefundList, type RefundListItem,
   type RefundLotMoney, type RefundParty, type RefundReason, type RefundResult, type RefundSolution, type RefundSort,
   type RefundSource, type RefundStatus, type RefundTotals,
@@ -201,10 +202,11 @@ export type RefundInput = {
 }
 
 export type RefundField =
-  | "name" | "email" | "customerNo" | "party" | "saleCode" | "auctionDate" | "lotsText" | "reason" | "details"
+  | "name" | "email" | "customerNo" | "party" | "saleCode" | "auctionDate" | "receivedAt" | "lotsText" | "reason" | "details"
   | "solution" | "percentText" | "postagePence" | "refCode" | "notes"
 
-/** The editable details — only the fields sent are changed; null or "" clears one (never the name). */
+/** The editable details — only the fields sent are changed; null or "" clears one (never the name or
+ *  the day it came in). */
 export type RefundPatch = Partial<{
   name: string
   email: string | null
@@ -213,6 +215,8 @@ export type RefundPatch = Partial<{
   saleCode: string | null
   /** YYYY-MM-DD. */
   auctionDate: string | null
+  /** YYYY-MM-DD — the day it came in (the old log mixed its date orders, so some came in misread). */
+  receivedAt: string
   lotsText: string | null
   reason: string
   details: string | null
@@ -242,12 +246,15 @@ export type RefundLotInput = {
   /** Which box holds BC's value — a box typed in by hand is never replaced by a BC lookup. */
   hammerFromBc?: boolean
   descriptionFromBc?: boolean
+  /** The commission box holds what BC charged (buyer's premium + any web premium, inc VAT). */
+  commissionFromBc?: boolean
   /** BC's receipt lines were read for this sale + lot (barcode found or not). */
   refsRead?: boolean
 }
 
 const FIELD_LABELS: Record<RefundField, string> = {
   name: "name", email: "email", customerNo: "C-number", party: "buyer or vendor", saleCode: "sale", auctionDate: "auction date",
+  receivedAt: "date it came in",
   lotsText: "lots", reason: "reason", details: "what happened", solution: "solution", percentText: "% agreed",
   postagePence: "postage refunded", refCode: "ref code", notes: "notes",
 }
@@ -499,7 +506,7 @@ export async function getRefund(id: string): Promise<RefundResult<RefundDetail>>
             id: l.id, saleCode: l.saleCode, lotNo: l.lotNo, uniqueId: l.uniqueId, barcode: l.barcode, receiptNo: l.receiptNo,
             description: l.description,
             ...money, amountPence: lotRefundPence(money), fromBc: l.fromBc,
-            hammerFromBc: l.hammerFromBc, descriptionFromBc: l.descriptionFromBc, refsRead: l.refsRead,
+            hammerFromBc: l.hammerFromBc, descriptionFromBc: l.descriptionFromBc, commissionFromBc: l.commissionFromBc, refsRead: l.refsRead,
           }
         }),
         events: r.events.map((e) => ({ id: e.id, kind: e.kind, text: e.text, byName: e.byName, at: e.at.toISOString() })),
@@ -563,7 +570,7 @@ export async function createRefund(input: RefundInput): Promise<RefundResult<{ i
 
 type Parsed = Partial<{
   name: string; email: string | null; customerNo: string | null; party: RefundParty; saleCode: string | null
-  auctionDate: Date | null; lotsText: string | null; reason: RefundReason; details: string | null; solution: RefundSolution | null
+  auctionDate: Date | null; receivedAt: Date; lotsText: string | null; reason: RefundReason; details: string | null; solution: RefundSolution | null
   percentText: string | null; postagePence: number | null; refCode: string | null; notes: string | null
 }>
 
@@ -584,6 +591,11 @@ function parsePatch(p: RefundPatch, today: string): Parsed {
   }
   if (sent("saleCode")) out.saleCode = saleOf(p.saleCode)
   if (sent("auctionDate")) out.auctionDate = dayOf(p.auctionDate, "the auction date", today)
+  if (sent("receivedAt")) {
+    const d = dayOf(p.receivedAt, "the date it came in", today, true)
+    if (!d) throw new Refusal("The date it came in can't be blank.")
+    out.receivedAt = d
+  }
   if (sent("lotsText")) out.lotsText = line(p.lotsText, "the lots", REFUND_LIMITS.lotsText)
   if (sent("reason")) {
     if (!isRefundReason(p.reason)) throw new Refusal("Pick a reason from the list.")
@@ -607,22 +619,25 @@ function sameDay(a: Date | null | undefined, b: Date | null | undefined): boolea
   return londonDay(a) === londonDay(b)
 }
 
-/** Two values of one field are the same (the auction date by its London day). */
+/** Two values of one field are the same (the dates by their London day — a form request keeps the
+ *  moment it came in unless its DAY is changed). */
 function same(f: RefundField, a: unknown, b: unknown): boolean {
-  if (f === "auctionDate") return sameDay(a as Date | null, b as Date | null)
+  if (f === "auctionDate" || f === "receivedAt") return sameDay(a as Date | null, b as Date | null)
   if (a == null || b == null) return a == null && b == null
   return a === b
 }
 
 /** How a change reads on the timeline. The working fields say their new value; the customer's own
  *  words and contact details don't (the timeline mustn't keep an old email or old notes). */
-function changePhrase(f: RefundField, v: unknown): string {
+function changePhrase(f: RefundField, v: unknown, was: unknown): string {
   const label = FIELD_LABELS[f]
   const to = (words: string | null) => (words == null ? `${label} cleared` : `${label} to ${words}`)
   switch (f) {
     case "customerNo": case "saleCode": case "refCode": return to((v as string | null) ?? null)
     case "party": return to(REFUND_PARTY_LABELS[v as RefundParty])
     case "auctionDate": return to(v ? formatDay(v as Date) : null)
+    // The day it was before, too — it's corrected when the old log's date was misread.
+    case "receivedAt": return `${to(formatDay(v as Date))} (was ${was ? formatDay(was as Date) : "none"})`
     case "lotsText": case "percentText": return to(v == null ? null : `“${v}”`)
     case "reason": return to(REFUND_REASON_LABELS[v as RefundReason])
     case "solution": return to(v ? REFUND_SOLUTION_LABELS[v as RefundSolution] : null)
@@ -671,6 +686,20 @@ export async function updateRefund(
     const data: Prisma.RefundUpdateManyMutationInput = {}
     for (const k of changed) (data as Record<string, unknown>)[k] = f[k] ?? null
     if (changed.includes("customerNo")) data.customerId = await matchCustomerId(f.customerNo ?? null)
+    if (changed.includes("receivedAt") && f.receivedAt) {
+      // An old-log request closed (or counted complete for accounts) "on the day it came in" — the import
+      // stamped it with that day for want of a date processed — moves with it, so its days open stay
+      // right. A stamp that is the date processed is a real day and stays. Otherwise it can't have come in
+      // after it was processed or closed.
+      const stampedWith = (d: Date | null) =>
+        d != null && d.getTime() === current.receivedAt.getTime() && current.processedAt?.getTime() !== d.getTime()
+      const closedWithIt = stampedWith(current.closedAt)
+      if (closedWithIt) data.closedAt = f.receivedAt
+      if (stampedWith(current.accountsDoneAt)) data.accountsDoneAt = f.receivedAt
+      const day = londonDay(f.receivedAt)
+      const after = [current.processedAt, closedWithIt ? null : current.closedAt].find((d) => d && londonDay(d) < day)
+      if (after) throw new Refusal(`It can't have come in after ${formatDay(after)}, when it was ${after === current.processedAt ? "processed" : "closed"} — check the date.`)
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       let total: RefundTotalSaved | null = null
@@ -683,7 +712,7 @@ export async function updateRefund(
       }
       const n = await tx.refund.updateMany({ where: { id: rid }, data })
       if (n.count === 0) throw new Refusal(NOT_FOUND)
-      await writeRefundEvent(tx, rid, "edit", `Changed ${changed.map((k) => changePhrase(k, f[k] ?? null)).join(", ")}${words}.`, who)
+      await writeRefundEvent(tx, rid, "edit", `Changed ${changed.map((k) => changePhrase(k, f[k] ?? null, current[k])).join(", ")}${words}.`, who)
       return { totalPence: total ? total.totalPence : current.totalPence, total }
     })
     revalidate()
@@ -897,9 +926,11 @@ function lotOf(v: RefundLotInput, n: number) {
     basis: v.basis,
     percent,
     setAmountPence: penceOf(v.setAmountPence, `${what}'s set amount`),
-    fromBc: v.fromBc === true || v.hammerFromBc === true || v.descriptionFromBc === true,
+    fromBc: v.fromBc === true || v.hammerFromBc === true || v.descriptionFromBc === true || v.commissionFromBc === true,
     hammerFromBc: v.hammerFromBc === true,
     descriptionFromBc: v.descriptionFromBc === true,
+    // Only a commission that's there can be BC's.
+    commissionFromBc: v.commissionFromBc === true && v.commissionPence != null,
     refsRead: v.refsRead === true,
   }
 }
@@ -970,7 +1001,7 @@ function bcFailure(e: unknown): Failure {
 /**
  * "Fill from BC": the lots BC shows sold to this request's buyer (its C-number) in its sale — or at
  * its auction date when it has no sale code — that are on the request ("808 & 809"; all of them when
- * it gives none), with hammer, 27% commission, description and unique ID. READ ONLY, with the admin's
+ * it gives none), with hammer, BC's commission, description and unique ID. READ ONLY, with the admin's
  * own BC sign-in. It only PROPOSES them: nothing is saved until Save on the Lots & money card.
  */
 export async function lotsFromBc(id: string): Promise<RefundResult<RefundBcFound>> {
@@ -1016,9 +1047,10 @@ export async function lotsFromBc(id: string): Promise<RefundResult<RefundBcFound
  * with hammer price"): each lot's hammer, description and unique ID, its barcode for that sale and its
  * receipt. A row with no sale uses the request's auction date. For a buyer's request, a lot BC shows
  * bought by someone else is still answered, with that said. READ ONLY, the admin's own BC sign-in —
- * nothing is saved until Save on the card.
+ * nothing is saved until Save on the card. `check` (the card opening): only the lots' hammer and
+ * commission, to say where the saved ones aren't BC's — the barcode read is left out.
  */
-export async function lookUpRefundLots(id: string, asks: RefundLotAsk[]): Promise<RefundResult<RefundLotLookup[]>> {
+export async function lookUpRefundLots(id: string, asks: RefundLotAsk[], check = false): Promise<RefundResult<RefundLotLookup[]>> {
   let clean: RefundLotAsk[]
   let ctx: { saleCode: string | null; auctionDate: string | null; customerNo: string | null; party: RefundParty }
   try {
@@ -1046,7 +1078,7 @@ export async function lookUpRefundLots(id: string, asks: RefundLotAsk[]): Promis
   const token = await getBCToken().catch(() => null)
   if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
   try {
-    return { ok: true, data: await lookUpLotsInBc(token, clean, ctx) }
+    return { ok: true, data: await lookUpLotsInBc(token, clean, ctx, { refs: check !== true }) }
   } catch (e) {
     return bcFailure(e)
   }
@@ -1288,6 +1320,187 @@ export async function matchRefundSales(afterRef: number, max: number): Promise<R
   }
 }
 
+
+// ─── Checking the money (against the old log and BC) ────────────────────────────────────────
+
+/** One thing the money check found. `kind` groups them on the card: BC says otherwise; the total
+ *  doesn't add up; lots that can't be worked out; a date that can't be right; nothing to check by. */
+export type RefundMoneyProblem = { kind: "bc" | "sums" | "incomplete" | "date" | "nolots"; text: string }
+
+export type RefundMoneyChecked = {
+  /** Requests looked at in this slice. */
+  checked: number
+  /** The ones with something to look at, each with what. */
+  flagged: { id: string; ref: number; status: RefundStatus; problems: RefundMoneyProblem[] }[]
+  /** The highest request number looked at — the next slice starts after it (null: none were left). */
+  lastRef: number | null
+  /** Requests after lastRef. */
+  remaining: number
+}
+
+/** Requests looked at per call (a BC read each, at most). */
+const CHECK_MAX = 25
+
+/** How many requests there are — what "Check the money" goes through. */
+export async function refundsToCheck(): Promise<RefundResult<{ count: number }>> {
+  try {
+    await requireAdmin()
+    return { ok: true, data: { count: await prisma.refund.count() } }
+  } catch (e) {
+    return fail(e, "requests to check", "The requests couldn't be counted just now — please try again.")
+  }
+}
+
+/**
+ * "Check the money" (Jack, 2026-10-28: "all of these need to be accurate — are they?" — and "only flag,
+ * I'll check each one"): the next `max` requests after request number `afterRef`, each checked — CHANGING
+ * NOTHING — for:
+ *  • BC (READ ONLY, the admin's own sign-in — lookUpLotsInBc, no barcode read): a lot whose hammer isn't
+ *    BC's, or is missing when BC has one; a buyer's lot whose commission isn't what BC charged (the
+ *    buyer's premium + any web premium, inc VAT — a blank box counts as its 27%); a lot BC doesn't have,
+ *    has as a different item or as someone else's (the returns account, C000079, is a refund's own);
+ *  • the sums: an old-log request whose lots work out a whole total that isn't the log's, or a saved
+ *    total that isn't what its lots work out at; lots that can't be worked out (no hammer, no %);
+ *  • the dates: came in after today, or before its sale.
+ * Declined and closed requests owe nothing, so only their dates and lots are checked. Answers the ones
+ * with something wrong; a request BC couldn't be asked about says so (the run goes on past it).
+ */
+export async function checkRefundMoney(afterRef: number, max: number): Promise<RefundResult<RefundMoneyChecked>> {
+  let picked: {
+    id: string; ref: number; status: string; source: string; party: string; customerNo: string | null; saleCode: string | null
+    auctionDate: Date | null; receivedAt: Date; totalPence: number | null; postagePence: number | null; importedRaw: Prisma.JsonValue
+    lots: { saleCode: string | null; lotNo: string; uniqueId: string | null; hammerPence: number | null; commissionPence: number | null; basis: string; percent: number | null; setAmountPence: number | null }[]
+  }[]
+  try {
+    await requireAdmin()
+    const after = Number.isInteger(afterRef) && afterRef > 0 ? afterRef : 0
+    const take = Math.min(CHECK_MAX, Math.max(1, Math.floor(Number(max)) || 1))
+    picked = await prisma.refund.findMany({
+      where: { ref: { gt: after } },
+      orderBy: { ref: "asc" },
+      take,
+      select: {
+        id: true, ref: true, status: true, source: true, party: true, customerNo: true, saleCode: true, auctionDate: true, receivedAt: true,
+        totalPence: true, postagePence: true, importedRaw: true,
+        lots: {
+          orderBy: [{ position: "asc" }, { id: "asc" }],
+          select: { saleCode: true, lotNo: true, uniqueId: true, hammerPence: true, commissionPence: true, basis: true, percent: true, setAmountPence: true },
+        },
+      },
+    })
+  } catch (e) {
+    return fail(e, "check money", "The requests couldn't be read just now — please try again.")
+  }
+  const lastRef = picked.length ? picked[picked.length - 1].ref : null
+  const remainingAfter = async () => (lastRef == null ? 0 : prisma.refund.count({ where: { ref: { gt: lastRef } } }))
+  if (!picked.length) return { ok: true, data: { checked: 0, flagged: [], lastRef, remaining: 0 } }
+
+  // A lot BC can be asked about: a lot number it could have, and a sale (its own, the request's, or the
+  // request's auction date) to find it in.
+  const canAsk = (r: (typeof picked)[number], l: (typeof picked)[number]["lots"][number]) =>
+    !!lotParts(l.lotNo) && (!!l.saleCode?.trim() || isSaleCode(r.saleCode) || !!r.auctionDate)
+  let token: string | null = null
+  if (picked.some((r) => r.lots.some((l) => canAsk(r, l)))) {
+    token = await getBCToken().catch(() => null)
+    if (!token) return { ok: false, error: UNCOLLECTED_BC_NOT_CONNECTED, needsBc: true }
+  }
+
+  const today = londonDay()
+  const flagged: RefundMoneyChecked["flagged"] = []
+  try {
+    for (const r of picked) {
+      const status = refundStatusOf(r.status)
+      const owes = status !== "declined" && status !== "closed"
+      const party = partyOf(r.party)
+      const problems: RefundMoneyProblem[] = []
+      const say = (kind: RefundMoneyProblem["kind"], text: string) => problems.push({ kind, text })
+      const money = r.lots.map(lotMoney)
+
+      // BC — what it has for each lot.
+      let saleDay: string | null = null
+      const asks = r.lots.flatMap((l, i) => (canAsk(r, l) ? [{ key: String(i), saleCode: l.saleCode?.trim().toUpperCase() || null, lotNo: l.lotNo }] : []))
+      if (asks.length && token) {
+        let found: RefundLotLookup[] | null = null
+        try {
+          found = await lookUpLotsInBc(token, asks, {
+            saleCode: r.saleCode?.trim().toUpperCase() || null,
+            auctionDate: r.auctionDate ? londonDay(r.auctionDate) : null,
+            customerNo: tidyCustomerNo(r.customerNo),
+            party,
+          }, { refs: false })
+        } catch (e) {
+          if (bcWideFailure(e)) throw e
+          console.error("refunds check money BC error:", e)
+          say("bc", "BC couldn't be asked about its lots just now — check again later")
+        }
+        const buyer = party === "buyer" ? tidyCustomerNo(r.customerNo) : null
+        const noHammer: string[] = []
+        for (const a of found ?? []) {
+          const l = r.lots[Number(a.key)]
+          const lot = `Lot ${l.lotNo}`
+          if (!a.found) { say("bc", `${lot}: ${a.note ?? "BC doesn't have it"}`); continue }
+          saleDay ??= a.auctionDate
+          if (l.uniqueId && a.uniqueId && l.uniqueId.toUpperCase() !== a.uniqueId.toUpperCase()) {
+            say("bc", `${lot}: BC's lot ${a.lotNo ?? l.lotNo} in ${a.saleCode ?? "that sale"} is a different item (${a.uniqueId}) from the one saved (${l.uniqueId})`)
+            continue
+          }
+          if (a.lotNo && a.lotNo !== l.lotNo.toUpperCase()) say("bc", `${lot}: BC has it as lot ${a.lotNo}`)
+          if (a.hammerPence == null) { say("bc", `${lot}: BC shows no hammer (unsold or withdrawn)`); continue }
+          if (buyer && a.buyerNo && a.buyerNo !== buyer && a.buyerNo !== RETURNS_ACCOUNT) say("bc", `${lot}: BC shows it bought by ${a.buyerNo}, not ${buyer}`)
+          // The money: only where something is owed, and the hammer is what it's worked from (not a set amount).
+          if (!owes || l.basis === "set") continue
+          if (l.hammerPence == null) { noHammer.push(`${l.lotNo} (${formatPence(a.hammerPence)})`); continue }
+          if (l.hammerPence !== a.hammerPence) say("bc", `${lot}: hammer ${formatPence(l.hammerPence)} here, ${formatPence(a.hammerPence)} in BC`)
+          // A buyer's commission is the premium BC charged them; a vendor's payout isn't worked from it.
+          const ours = commissionUsed(l)
+          if (party === "buyer" && l.hammerPence === a.hammerPence && commissionDiffers(ours, a.commissionPence)) {
+            say("bc", `${lot}: commission ${formatPence(ours)}${l.commissionPence == null ? " (27%, worked out)" : ""} here — BC charged ${formatPence(a.commissionPence)} (${a.commissionWords ?? "inc VAT"})`)
+          }
+        }
+        if (noHammer.length) say("bc", `No hammer on ${noHammer.length === 1 ? "lot" : "lots"} ${noHammer.join(", ")} — the figure in brackets is BC's`)
+      }
+      // Lots BC couldn't be asked about — never passed as checked.
+      if (owes) {
+        for (const l of r.lots) {
+          if (canAsk(r, l)) continue
+          say("incomplete", `Lot ${l.lotNo}: can't be checked in BC — ${lotParts(l.lotNo) ? "no sale on it or the request, and no auction date (Match sales from BC, or add the sale)" : "not a lot number BC could have"}`)
+        }
+      }
+
+      // The sums.
+      if (owes) {
+        const t = refundTotalPence(money, r.postagePence)
+        const logTotal = sourceOf(r.source) === "import" ? poundsToPence(oldLogCell(rawCells(r.importedRaw), "total to refund")) : null
+        if (!r.lots.length) {
+          // A total that's just the postage refunded adds up on its own.
+          if (r.totalPence != null && r.totalPence !== t.totalPence) say("nolots", `No lots on it, so its total (${formatPence(r.totalPence)}) can't be checked — add the lots`)
+        } else if (t.missing) {
+          const why = r.lots.flatMap((l, i) => (lotRefundPence(money[i]) == null
+            ? [`${l.lotNo} (${money[i].basis === "set" ? "no amount" : money[i].hammerPence == null ? (money[i].percent == null ? "no hammer or %" : "no hammer") : "no %"})`]
+            : []))
+          say("incomplete", `${plural(t.missing, "lot")} can't be worked out — ${why.join(", ")}${r.totalPence != null ? `; the total (${formatPence(r.totalPence)}) is ${logTotal === r.totalPence ? "the old log's" : "the one saved"}` : ""}`)
+        } else if (logTotal != null && t.totalPence !== logTotal) {
+          say("sums", `The old log's total was ${formatPence(logTotal)}, but its lots work out at ${formatPence(t.totalPence)}${r.totalPence != null && r.totalPence !== t.totalPence ? ` (the list shows ${formatPence(r.totalPence)})` : ""}`)
+        } else if (r.totalPence != null && r.totalPence !== t.totalPence) {
+          say("sums", `The saved total is ${formatPence(r.totalPence)}, but its lots work out at ${formatPence(t.totalPence)}`)
+        } else if (r.totalPence == null) {
+          say("sums", `Its lots work out at ${formatPence(t.totalPence)}, but no total is saved (the list says Not worked out) — open it and press Save`)
+        }
+      }
+
+      // The dates.
+      const came = londonDay(r.receivedAt)
+      const sale = saleDay ?? (r.auctionDate ? londonDay(r.auctionDate) : null)
+      if (came > today) say("date", `It says it came in on ${formatDay(r.receivedAt)} — that's in the future`)
+      else if (sale && came < sale) say("date", `It says it came in on ${formatDay(r.receivedAt)}, before its ${saleDay ? "sale" : "auction date"} (${formatDay(`${sale}T12:00:00Z`)}) — one of them is wrong`)
+
+      if (problems.length) flagged.push({ id: r.id, ref: r.ref, status, problems })
+    }
+  } catch (e) {
+    return bcFailure(e)
+  }
+  return { ok: true, data: { checked: picked.length, flagged, lastRef, remaining: await remainingAfter() } }
+}
 
 // ─── Notes, and deleting ────────────────────────────────────────────────────────────────────
 

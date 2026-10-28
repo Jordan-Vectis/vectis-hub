@@ -6,6 +6,7 @@ import { REFUND_FORM_PATH, parseRefundFilter } from "@/lib/refunds"
 import FormLink from "./form-link"
 import ImportBox from "./import-box"
 import MatchSales from "./match-sales"
+import MoneyCheck from "./money-check"
 import RefundsPanel from "./panel-client"
 import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 
@@ -62,6 +63,16 @@ export default async function RefundsPage({ searchParams }: { searchParams: Sear
 
       <FormLink url={formUrl} />
 
+      {/* Every request's money and dates checked against BC and the old log — listed, nothing changed. */}
+      {res.ok && <details className={`${card} group mt-5`}>
+        <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 min-h-11 px-4 sm:px-5 py-3 text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <span className="transition-transform group-open:rotate-90" aria-hidden>▸</span> Check the money
+        </summary>
+        <div className="px-4 sm:px-5 pb-5">
+          <MoneyCheck />
+        </div>
+      </details>}
+
       {/* Requests with no sale code (the old log's, the form's) — their F / E number matched from BC. */}
       {res.ok && <details className={`${card} group mt-5`}>
         <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 min-h-11 px-4 sm:px-5 py-3 text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -104,15 +115,23 @@ function HowItWorks() {
           accounts tick <b>Complete for accounts</b>.
         </li>
         <li>
-          <b>The money.</b> Commission is the buyer&apos;s premium, <b>27% of the hammer</b> including VAT. A refund of a percentage is that
-          percentage of hammer + commission (£90 + £24.30 at 20% = £22.86); &ldquo;hammer only&rdquo; is the percentage of the hammer alone;
-          a set amount is just that. Postage refunded is added on top. A total is only saved once every lot can be worked out —
-          until then the list says <b>Not worked out</b> (a request from the old log keeps the log&apos;s total until then).
+          <b>The money.</b> Commission is <b>what BC charged the buyer</b>: the buyer&apos;s premium, 27% of the hammer including VAT — plus,
+          for anyone who bid online, the web premium (32.94% in all). A lot looked up in BC takes BC&apos;s figure; a blank commission box is
+          worked out at 27%. A refund of a percentage is that percentage of hammer + commission (£90 + £24.30 at 20% = £22.86);
+          &ldquo;hammer only&rdquo; is the percentage of the hammer alone; a set amount is just that. Postage refunded is added on top. A total
+          is only saved once every lot can be worked out — until then the list says <b>Not worked out</b> (a request from the old log keeps
+          the log&apos;s total until then).
         </li>
         <li>
           <b>Fill from BC</b> looks up the buyer&apos;s lots in Business Central (their C-number, and the sale or auction date) with your own
           BC sign-in, and offers the hammer, commission and description for the lots on the request. It <b>only reads</b> BC — nothing
           is ever written to it — and nothing is saved until you press Save.
+        </li>
+        <li>
+          <b>Checking.</b> Opening a request checks its lots against BC: a hammer or commission that isn&apos;t BC&apos;s is said beside the lot,
+          with <b>Use BC&apos;s</b> (a paid or closed request&apos;s commission is left as it was). A total that doesn&apos;t match the old log&apos;s,
+          or a day it came in that can&apos;t be right, is said too — the day can be put right under Edit details. <b>Check the money</b> (above)
+          goes through every request and lists the ones to look at. Nothing is changed until you change it.
         </li>
         <li>
           <b>Never bank or card details</b> — not in a note, not in what happened. The Hub refuses anything that looks like them.
