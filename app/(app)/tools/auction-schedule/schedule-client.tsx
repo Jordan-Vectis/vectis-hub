@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import {
   addDays, blankDay, dayLabel, fromDefaults, mondayOf, weekdayOf, weekEnding,
   type Cell, type DaySchedule, type Defaults, type ScheduleSale,
@@ -222,11 +222,16 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
     }
   }
 
-  // ── The sheet (design A, 2026-10-28): plain text in banded cells, like the old spreadsheet. Names
-  // come from the staff list on the right — dragged, or tapped then tapped onto a cell. ──
-  const CELL = "border border-gray-300 dark:border-[#2a3447] px-2.5 py-1.5 align-middle whitespace-nowrap"
-  const BAND = "bg-[#dbe3f5] dark:bg-[#1a2640]"
-  const bandOf = (i: number) => (i % 2 === 0 ? BAND : "")
+  // ── The sheet. Names come from the staff list on the right — dragged, or tapped then tapped onto
+  // a cell. Jordan, 2026-10-28, on the first sheet: "you have copied the excel sheet too much …
+  // saleroom and Vectis should be separate columns" — so each sale is TWO columns, Saleroom | Vectis,
+  // under one sale header; a faint stripe instead of the spreadsheet's blue bands; a divider between
+  // sales. ──
+  const CELL = "border-b border-gray-200 dark:border-[#2a3447] px-3 py-2 align-middle whitespace-nowrap"
+  const SALE_L = "border-l-2 border-l-gray-300 dark:border-l-[#3a4a66]"   // the first column of each sale
+  const HEAD = "bg-[#dbe3f5] dark:bg-[#1a2640]"                           // the sale header only
+  const STRIPE = "bg-gray-50 dark:bg-white/[0.03]"
+  const stripeOf = (i: number) => (i % 2 === 1 ? STRIPE : "")
 
   function nameText(p: Path, cell: Cell) {
     const pinned = isPinned(p, cell.name)
@@ -260,9 +265,9 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
     const cell = days[sale]?.slots[index]?.[side] ?? null
     const { ok, ...dnd } = dropProps(p, side)
     return (
-      <span {...dnd} onClick={() => picked && place(p, picked)} className={`inline-flex items-center min-h-9 min-w-16 rounded px-1 ${targetCls(ok)}`}>
-        {cell ? nameText(p, cell) : null}
-      </span>
+      <td key={side} {...dnd} onClick={() => picked && place(p, picked)} className={`${CELL} ${side === "saleroom" ? SALE_L : ""} ${targetCls(ok)}`}>
+        <span className="flex items-center min-h-9">{cell ? nameText(p, cell) : null}</span>
+      </td>
     )
   }
 
@@ -282,10 +287,11 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
   const selCell = selected ? cellAt(selected) : null
   const selSale = selected ? sales.find(s => s.id === selected.sale) : null
   const label = `${CELL} w-40 text-sm text-gray-600 dark:text-gray-400`
+  const wide = `${CELL} ${SALE_L}`   // one cell across a sale's two columns
   // A text box that reads like the sheet's own text until it is tapped.
   const plain = "bg-transparent border-0 p-0 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 rounded"
   let row = 0
-  const next = () => bandOf(row++)
+  const next = () => stripeOf(row++)
 
   return (
     <div onClick={() => { if (selected) setSelected(null) }}>
@@ -335,42 +341,46 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
             : loadError ? <p className="p-6 text-red-600 dark:text-red-400">Couldn&apos;t load the week: {loadError} <button className="underline" onClick={() => load(monday)}>Try again</button></p>
             : !sales.length ? <p className={`p-6 ${muted}`}>No sales are dated in this week. The sales and lot counts are the same as Databases → BC Database — if a sale is missing here, it is missing there too (the BC copy has not got it yet).</p>
             : (
-              // table-fixed: every sale column the same width, whatever the sale is called (Jordan, 2026-10-28).
-              <table className="w-full min-w-[52rem] border-collapse table-fixed" onClick={e => e.stopPropagation()}>
-                <tbody>
-                  <tr className={next()}>
-                    <td className={label}>Sale</td>
-                    {sales.map(s => <td key={s.id} className={`${CELL} align-top`}>
+              // table-fixed: every column the same width, whatever the sale is called (Jordan, 2026-10-28).
+              <table className="w-full border-collapse table-fixed" style={{ minWidth: `${10 + sales.length * 2 * 9}rem` }} onClick={e => e.stopPropagation()}>
+                <thead>
+                  <tr>
+                    <th className={`${label} ${HEAD} text-left font-normal`}>Sale</th>
+                    {sales.map(s => <th key={s.id} colSpan={2} className={`${wide} ${HEAD} align-top text-left`}>
                       <div className="text-base font-bold text-gray-900 dark:text-white">{dayLabel(s.date)}</div>
-                      <div className={`text-xs leading-snug whitespace-normal ${muted}`} title={s.name}>{s.name}</div>
-                    </td>)}
+                      <div className={`text-xs font-normal leading-snug whitespace-normal ${muted}`} title={s.name}>{s.name}</div>
+                    </th>)}
                   </tr>
-                  <tr className={next()}><td className={label}>Sale No.</td>{sales.map(s => <td key={s.id} className={`${CELL} text-sm font-semibold text-gray-900 dark:text-white`}>{s.code}</td>)}</tr>
-                  <tr className={next()}><td className={label}>No. of Lots</td>{sales.map(s => <td key={s.id} className={`${CELL} text-sm text-gray-900 dark:text-white`}>{s.lots}</td>)}</tr>
+                </thead>
+                <tbody>
+                  <tr className={next()}><td className={label}>Sale No.</td>{sales.map(s => <td key={s.id} colSpan={2} className={`${wide} text-sm font-semibold text-gray-900 dark:text-white`}>{s.code}</td>)}</tr>
+                  <tr className={next()}><td className={label}>No. of Lots</td>{sales.map(s => <td key={s.id} colSpan={2} className={`${wide} text-sm text-gray-900 dark:text-white`}>{s.lots}</td>)}</tr>
                   <tr className={next()}>
                     <td className={label}>Start Time</td>
-                    {sales.map(s => <td key={s.id} className={CELL}>
+                    {sales.map(s => <td key={s.id} colSpan={2} className={wide}>
                       <input aria-label="Start time" className={`${plain} w-20`} value={days[s.id]?.startTime ?? ""} onChange={e => changeDay(s.id, d => { d.startTime = e.target.value })} />
                     </td>)}
                   </tr>
-                  <tr className={next()}><td className={label}>Auctioneers</td>{sales.map(s => <td key={s.id} className={CELL}>{listCell(s.id, "auctioneers")}</td>)}</tr>
+                  <tr className={next()}><td className={label}>Auctioneers</td>{sales.map(s => <td key={s.id} colSpan={2} className={wide}>{listCell(s.id, "auctioneers")}</td>)}</tr>
                   <tr className={next()}>
-                    <td className={label}>Clicking:</td>
-                    {sales.map(s => <td key={s.id} className={`${CELL} text-xs ${muted}`}>Saleroom / Vectis</td>)}
+                    <td className={label}>Clicking</td>
+                    {sales.map(s => <Fragment key={s.id}>
+                      <td className={`${CELL} ${SALE_L} text-[11px] font-semibold uppercase tracking-wide ${muted}`}>Saleroom</td>
+                      <td className={`${CELL} text-[11px] font-semibold uppercase tracking-wide ${muted}`}>Vectis</td>
+                    </Fragment>)}
                   </tr>
                   {Array.from({ length: slotCount }, (_, i) => (
                     <tr key={i} className={next()}>
                       <td className={label}>
                         <input aria-label="Time" className={`${plain} w-28 text-gray-600 dark:text-gray-400`} value={timeOf(i)} onChange={e => setTime(i, e.target.value)} />
                       </td>
-                      {sales.map(s => <td key={s.id} className={CELL}>
-                        {/* Empty boxes are blank, like the spreadsheet (Jordan, 2026-10-28) — the slash only once a name is in. */}
-                        {days[s.id]?.slots[i] ? <span className="inline-flex items-center gap-1">{slotHalf(s.id, i, "saleroom")}{(days[s.id].slots[i].saleroom || days[s.id].slots[i].vectis) && <span className="text-gray-400 dark:text-gray-500">/</span>}{slotHalf(s.id, i, "vectis")}</span> : null}
-                      </td>)}
+                      {sales.map(s => days[s.id]?.slots[i]
+                        ? <Fragment key={s.id}>{slotHalf(s.id, i, "saleroom")}{slotHalf(s.id, i, "vectis")}</Fragment>
+                        : <td key={s.id} colSpan={2} className={wide} />)}
                     </tr>
                   ))}
-                  <tr className={next()}><td className={label}>Late (if required)</td>{sales.map(s => <td key={s.id} className={`${CELL} text-xs`}>{listCell(s.id, "late")}</td>)}</tr>
-                  <tr className={next()}><td className={label}>Telephone Bids</td>{sales.map(s => <td key={s.id} className={CELL}>{listCell(s.id, "phones")}</td>)}</tr>
+                  <tr className={next()}><td className={label}>Late (if required)</td>{sales.map(s => <td key={s.id} colSpan={2} className={`${wide} text-xs`}>{listCell(s.id, "late")}</td>)}</tr>
+                  <tr className={next()}><td className={label}>Telephone Bids</td>{sales.map(s => <td key={s.id} colSpan={2} className={wide}>{listCell(s.id, "phones")}</td>)}</tr>
                 </tbody>
               </table>
             )}
