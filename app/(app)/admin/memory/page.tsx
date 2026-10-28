@@ -2285,6 +2285,31 @@ WARNING: the server action was always correct — it writes only fields that dif
 `,
   },
   {
+    filename: "auction_schedule.md",
+    content: `---
+name: reference_auction_schedule
+description: Auction → Auctioneering Schedule (/tools/auction-schedule, app key AUCTION_SCHEDULE) — replaces the weekly spreadsheet; sales come in by date, drag names on, 📌 pin weekly / 🔒 lock this sale, PDF; built 2026-10-28
+metadata:
+  type: reference
+---
+
+# Auction → Auctioneering Schedule (2026-10-28)
+
+Jordan: "we make this schedule every week and we want a system to do it instead". Replaces the Excel sheet (Auctioneering Schedule W/E …: Sale, Sale No., No. of Lots, Start Time, Auctioneers, sale name, Clicking Saleroom / Vectis per hour 09:30–17:00, Late (if required), Telephone Bids).
+
+- /tools/auction-schedule, home card in the AUCTION section (Jordan: "put it under auction"), app key AUCTION_SCHEDULE (admins automatically, others ticked in Users & Permissions).
+- One column per sale: CatalogueAuction rows whose auctionDate falls in the London week (Mon–Sun), department-filtered like every sale list (auctionWhere; saving re-checks canSeeAuction). Lots = Hub lot count. Week ending shown as the Friday.
+- Staff list (AuctionScheduleStaff): typed names with three ticks — Auctioneer, Saleroom, Vectis. Auctioneer box only takes auctioneers, Saleroom/Vectis boxes only those ticked; Late and Telephone Bids take anyone. Names are stored as TEXT in schedules, so removing someone never rewrites a past week.
+- "Pinned" means BOTH (Jordan's answer): 📌 = same person in that slot every week, stored per weekday in AuctionScheduleDefault (id "global"); a sale never edited is built from its weekday's pins. 🔒 = fixed for this sale only; "Fill from pinned" and "Clear unlocked" leave locked boxes alone.
+- Drag from the staff panel or from one box to another; on iPads tap a name, then tap a box. Tap a placed name for the action bar (Pin / Lock / Remove, 44px). Amber = same person on Saleroom and Vectis in the same hour.
+- Saves as you go (one PUT per sale, 0.6 s after the last change; "Not saved" + Try again on failure, beforeunload while unsaved). Last write wins if two people edit one sale at once.
+- PDF: /api/auction-schedule/pdf?week= — A4 landscape, laid out like the sheet, text shrinks to fit one page.
+- Tables AuctionScheduleStaff, AuctionSchedule (auctionId PK, JSON), AuctionScheduleDefault — NEEDS Run Migrations; until then the page loads the sales and says saving needs the update.
+- Shapes and date helpers: lib/auction-schedule.ts; server reads: lib/auction-schedule-server.ts.
+- Not built (ask first): a clash check across two sales on the same day, slot rows added/removed per sale (times are editable, one list for the week), BC's own lot count.
+`,
+  },
+  {
     filename: "vans.md",
     content: `---
 name: reference_vans

@@ -3692,3 +3692,32 @@ model CatalogueLotAiCheck {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 }
+
+// Auction → Auctioneering Schedule (2026-10-28): who runs and clerks each sale, week by week.
+// Replaces a spreadsheet made by hand every week. Names are stored as TEXT in the schedule, so
+// removing someone from the staff list never rewrites a past week.
+model AuctionScheduleStaff {
+  id         String   @id @default(cuid())
+  name       String
+  auctioneer Boolean  @default(false)
+  vectis     Boolean  @default(false) // can clerk on Vectis (Bidpath)
+  saleroom   Boolean  @default(false) // can clerk on the Saleroom
+  createdAt  DateTime @default(now())
+}
+
+// One sale's schedule (lib/auction-schedule.ts DaySchedule). No row = never edited; the page
+// builds it from the pinned defaults for that weekday.
+model AuctionSchedule {
+  auctionId String   @id
+  data      Json
+  updatedBy String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+// The pinned "same slot every week" names, one DaySchedule per weekday ("1" = Monday … "7").
+// Singleton row id "global".
+model AuctionScheduleDefault {
+  id        String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}

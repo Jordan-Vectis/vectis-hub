@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-26, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-28, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,12 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"ca5db803e7630a599bed3f1bb3816a11fe4cb44f","author":"jack-vectis","date":"2026-10-28T10:28:11Z","subject":"Redeploy staging: the 44a60598 deploy failed on Railway after 36 seconds (sandbox built the same commit fine)"},
+  {"sha":"44a6059805ad9c72a08ad536122ef48dd09ab1b3","author":"jack-vectis","date":"2026-10-28T10:07:47Z","subject":"Refunds: commission is what BC charged; check the money; fix the day it came in"},
+  {"sha":"73f2bbc3c838afa481a2a441e20120f4526441c5","author":"jack-vectis","date":"2026-10-27T09:45:08Z","subject":"Refunds: Match sales from BC finds lots BC moved to the returns account"},
+  {"sha":"9eaf881b719dad9fcc04b0e290323bdb482f75d2","author":"jack-vectis","date":"2026-10-27T09:22:07Z","subject":"Refunds: Match sales from BC also checks the day before when the lots fit that day"},
+  {"sha":"90ca5e4a797f22ca2b23274a1f059299d5441c10","author":"jack-vectis","date":"2026-10-27T09:12:12Z","subject":"Refunds: Match sales from BC fills in the F/E sale for requests that only have a date"},
+  {"sha":"1687c086cc153f5d72096e40fdf2f9ce2dcd092e","author":"Jordan Orange","date":"2026-10-26T16:50:00Z","subject":"About: the intro is just what the Hub is, its languages and its programs"},
   {"sha":"3c8691e16de43a50658603e487e653089c9d8338","author":"jack-vectis","date":"2026-10-26T15:43:34Z","subject":"Refunds: a lot's sale and number pull in its barcode, receipt number and hammer from BC"},
   {"sha":"4fee38d6040588a8f792ff6e082a17132b8d299a","author":"Jordan Orange","date":"2026-10-26T15:30:05Z","subject":"About: the new-developer intro written for a person, not a rulebook"},
   {"sha":"c2ca96a45c6504cad80a30d6d488bba58043d073","author":"Jordan Orange","date":"2026-10-26T14:44:39Z","subject":"About: brought up to date, with a new-developer intro"},
