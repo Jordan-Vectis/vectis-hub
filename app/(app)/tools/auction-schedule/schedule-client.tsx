@@ -6,7 +6,8 @@ import {
   type Cell, type DaySchedule, type Defaults, type ScheduleSale,
 } from "@/lib/auction-schedule"
 
-// Auction → Auctioneering Schedule. One column per sale in the week, like the old spreadsheet.
+// Auction → Auctioneering Schedule. Laid out like the old spreadsheet (design A, chosen 2026-10-28):
+// banded rows, names as plain text, the staff list on the right to drag or tap from.
 // 📌 = same person in that slot every week (weekday defaults); 🔒 = fixed for this sale only.
 
 type Staff = { id: string; name: string; auctioneer: boolean; vectis: boolean; saleroom: boolean }
@@ -221,7 +222,13 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
     }
   }
 
-  function chip(p: Path, cell: Cell) {
+  // ── The sheet (design A, 2026-10-28): plain text in banded cells, like the old spreadsheet. Names
+  // come from the staff list on the right — dragged, or tapped then tapped onto a cell. ──
+  const CELL = "border border-gray-300 dark:border-[#2a3447] px-2.5 py-1.5 align-middle whitespace-nowrap"
+  const BAND = "bg-[#dbe3f5] dark:bg-[#1a2640]"
+  const bandOf = (i: number) => (i % 2 === 0 ? BAND : "")
+
+  function nameText(p: Path, cell: Cell) {
     const pinned = isPinned(p, cell.name)
     const sel = samePath(selected, p)
     const clash = p.field === "slot" && days[p.sale]?.slots[p.index]?.[p.side === "saleroom" ? "vectis" : "saleroom"]?.name === cell.name
@@ -232,49 +239,41 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
         onDragStart={() => setDrag({ name: cell.name, from: p })}
         onDragEnd={() => setDrag(null)}
         onClick={e => { e.stopPropagation(); if (picked) { place(p.field === "slot" ? p : { sale: p.sale, field: p.field }, picked) } else setSelected(sel ? null : p) }}
-        title={clash ? "On both platforms at once" : undefined}
-        className={`min-h-9 max-w-full inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-left
-          ${sel ? "ring-2 ring-orange-500" : ""}
-          ${clash ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200" : "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"}`}
+        title={clash ? "On both platforms at once" : "Tap to pin, lock or remove"}
+        className={`min-h-9 inline-flex items-center gap-1 rounded px-1 -mx-1 text-sm text-left
+          ${sel ? "ring-2 ring-orange-500" : "hover:bg-black/5 dark:hover:bg-white/10"}
+          ${clash ? "text-amber-700 dark:text-amber-300 font-semibold" : "text-gray-900 dark:text-gray-100"}`}
       >
-        <span className="truncate">{cell.name}</span>
-        {pinned && <span aria-label="pinned every week">📌</span>}
-        {cell.locked && <span aria-label="locked for this sale">🔒</span>}
+        {cell.name}
+        {pinned && <span aria-label="pinned every week" className="text-xs">📌</span>}
+        {cell.locked && <span aria-label="locked for this sale" className="text-xs">🔒</span>}
       </button>
     )
   }
 
-  function slotBox(sale: string, index: number, side: Side) {
+  /** The look of a drop target while a name is being dragged or has been tapped. */
+  const targetCls = (ok: boolean) =>
+    (drag || picked) ? (ok ? "outline outline-2 outline-dashed outline-orange-400 -outline-offset-2 bg-orange-50/70 dark:bg-orange-950/40 cursor-pointer" : "opacity-40") : ""
+
+  function slotHalf(sale: string, index: number, side: Side) {
     const p: Path = { sale, field: "slot", index, side }
     const cell = days[sale]?.slots[index]?.[side] ?? null
     const { ok, ...dnd } = dropProps(p, side)
     return (
-      <div
-        {...dnd}
-        onClick={() => picked && place(p, picked)}
-        className={`min-h-11 flex items-center justify-center rounded-lg border p-1 transition-colors
-          ${(drag || picked) && ok ? "border-orange-400 border-dashed bg-orange-50 dark:bg-orange-950/30 cursor-pointer" : "border-gray-200 dark:border-gray-800"}
-          ${(drag || picked) && !ok ? "opacity-40" : ""}`}
-      >
-        {cell ? chip(p, cell) : <span className="text-xs text-gray-400 dark:text-gray-600">{side === "saleroom" ? "Saleroom" : "Vectis"}</span>}
-      </div>
+      <span {...dnd} onClick={() => picked && place(p, picked)} className={`inline-flex items-center min-h-9 min-w-16 rounded px-1 ${targetCls(ok)}`}>
+        {cell ? nameText(p, cell) : <span className="text-gray-400 dark:text-gray-600" title={side === "saleroom" ? "Saleroom" : "Vectis"}>—</span>}
+      </span>
     )
   }
 
-  function listBox(sale: string, field: ListField) {
+  function listCell(sale: string, field: ListField) {
     const kind: Kind = field === "auctioneers" ? "auctioneer" : "anyone"
     const { ok, ...dnd } = dropProps({ sale, field }, kind)
     const cells = days[sale]?.[field] ?? []
     return (
-      <div
-        {...dnd}
-        onClick={() => picked && place({ sale, field }, picked)}
-        className={`min-h-11 flex flex-wrap items-center gap-1 rounded-lg border p-1 transition-colors
-          ${(drag || picked) && ok ? "border-orange-400 border-dashed bg-orange-50 dark:bg-orange-950/30 cursor-pointer" : "border-gray-200 dark:border-gray-800"}
-          ${(drag || picked) && !ok ? "opacity-40" : ""}`}
-      >
-        {cells.map(c => <span key={c.name} className="contents">{chip({ sale, field, name: c.name }, c)}</span>)}
-        {!cells.length && <span className="text-xs text-gray-400 dark:text-gray-600 px-1">Drop names here</span>}
+      <div {...dnd} onClick={() => picked && place({ sale, field }, picked)} className={`flex flex-wrap items-center gap-x-1 min-h-9 rounded px-1 -mx-1 ${targetCls(ok)}`}>
+        {cells.map((c, i) => <span key={c.name} className="contents">{i > 0 && <span className="text-gray-400 dark:text-gray-500">/</span>}{nameText({ sale, field, name: c.name }, c)}</span>)}
+        {!cells.length && <span className="text-gray-400 dark:text-gray-600">—</span>}
       </div>
     )
   }
@@ -283,8 +282,11 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
   const timeOf = (i: number) => sales.map(s => days[s.id]?.slots[i]?.time).find(Boolean) ?? ""
   const selCell = selected ? cellAt(selected) : null
   const selSale = selected ? sales.find(s => s.id === selected.sale) : null
-  const rowLabel = "py-2 pr-3 text-sm font-medium text-gray-700 dark:text-gray-300 align-middle whitespace-nowrap"
-  const td = "p-1.5 align-middle"
+  const label = `${CELL} w-40 text-sm text-gray-600 dark:text-gray-400`
+  // A text box that reads like the sheet's own text until it is tapped.
+  const plain = "bg-transparent border-0 p-0 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 rounded"
+  let row = 0
+  const next = () => bandOf(row++)
 
   return (
     <div onClick={() => { if (selected) setSelected(null) }}>
@@ -313,6 +315,7 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
         <span className={muted}>📌 Pinned — the same person in that box every week</span>
         <span className={muted}>🔒 Locked — fixed for this sale; Fill and Clear leave it alone</span>
         <span className="text-amber-700 dark:text-amber-300">Amber name — on Saleroom and Vectis at the same time</span>
+        <span className={muted}>— empty</span>
         <span className={`ml-auto ${saveState === "error" ? "text-red-600 dark:text-red-400 font-semibold" : muted}`}>
           {saveState === "saving" ? "Saving…" : saveState === "error" ? `Not saved: ${saveError}` : "All changes saved"}
           {saveState === "error" && <button className="ml-2 underline" onClick={() => flush()}>Try again</button>}
@@ -324,54 +327,50 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
         <span className="flex-1">{notice}</span><button className="underline" onClick={() => setNotice("")}>OK</button>
       </div>}
       {picked && <div className="mb-3 rounded-lg bg-orange-600 text-white px-4 py-2.5 text-sm flex items-center gap-3" onClick={e => e.stopPropagation()}>
-        <span className="flex-1">Tap a box to put <b>{picked}</b> in it.</span><button className="underline" onClick={() => setPicked(null)}>Cancel</button>
+        <span className="flex-1">Tap a cell to put <b>{picked}</b> in it.</span><button className="underline" onClick={() => setPicked(null)}>Cancel</button>
       </div>}
 
       <div className="flex flex-col lg:flex-row gap-4 items-start">
-        {/* Grid */}
-        <div className={`${box} flex-1 min-w-0 overflow-x-auto p-3`}>
+        {/* The sheet */}
+        <div className={`${box} flex-1 min-w-0 overflow-x-auto`}>
           {loading ? <p className={`p-6 ${muted}`}>Loading the week…</p>
             : loadError ? <p className="p-6 text-red-600 dark:text-red-400">Couldn&apos;t load the week: {loadError} <button className="underline" onClick={() => load(monday)}>Try again</button></p>
             : !sales.length ? <p className={`p-6 ${muted}`}>No sales are dated in this week. Sales and lot counts come from the website data collected at Databases → BC Database (Update the BC lots) — a sale shows here once it has been collected, upcoming ones included.</p>
             : (
-              <table className="w-full border-separate border-spacing-0">
-                <thead>
-                  <tr>
-                    <th className="w-36" />
-                    {sales.map(s => (
-                      <th key={s.id} className="p-1.5 text-left align-bottom min-w-56">
-                        <div className="text-base font-bold text-gray-900 dark:text-white">{dayLabel(s.date)}</div>
-                        <div className={`text-xs font-normal ${muted}`}>{s.name}</div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody onClick={e => e.stopPropagation()}>
-                  <tr><td className={rowLabel}>Sale No.</td>{sales.map(s => <td key={s.id} className={`${td} text-sm font-semibold text-gray-900 dark:text-white`}>{s.code}</td>)}</tr>
-                  <tr><td className={rowLabel}>No. of Lots</td>{sales.map(s => <td key={s.id} className={`${td} text-sm text-gray-900 dark:text-white`}>{s.lots}</td>)}</tr>
-                  <tr>
-                    <td className={rowLabel}>Start Time</td>
-                    {sales.map(s => <td key={s.id} className={td}>
-                      <input className={`${input} w-28`} value={days[s.id]?.startTime ?? ""} onChange={e => changeDay(s.id, d => { d.startTime = e.target.value })} />
+              <table className="w-full border-collapse" onClick={e => e.stopPropagation()}>
+                <tbody>
+                  <tr className={next()}>
+                    <td className={label}>Sale</td>
+                    {sales.map(s => <td key={s.id} className={`${CELL} min-w-52`}>
+                      <span className="text-base font-bold text-gray-900 dark:text-white">{dayLabel(s.date)}</span>
+                      <span className={`ml-2 text-xs ${muted}`}>{s.name}</span>
                     </td>)}
                   </tr>
-                  <tr><td className={rowLabel}>Auctioneers</td>{sales.map(s => <td key={s.id} className={td}>{listBox(s.id, "auctioneers")}</td>)}</tr>
-                  <tr>
-                    <td className={rowLabel}>Clicking:</td>
-                    {sales.map(s => <td key={s.id} className={`${td} text-xs uppercase tracking-wider ${muted}`}><div className="grid grid-cols-2 gap-1.5"><span>Saleroom</span><span>Vectis</span></div></td>)}
+                  <tr className={next()}><td className={label}>Sale No.</td>{sales.map(s => <td key={s.id} className={`${CELL} text-sm font-semibold text-gray-900 dark:text-white`}>{s.code}</td>)}</tr>
+                  <tr className={next()}><td className={label}>No. of Lots</td>{sales.map(s => <td key={s.id} className={`${CELL} text-sm text-gray-900 dark:text-white`}>{s.lots}</td>)}</tr>
+                  <tr className={next()}>
+                    <td className={label}>Start Time</td>
+                    {sales.map(s => <td key={s.id} className={CELL}>
+                      <input aria-label="Start time" className={`${plain} w-20`} value={days[s.id]?.startTime ?? ""} onChange={e => changeDay(s.id, d => { d.startTime = e.target.value })} />
+                    </td>)}
+                  </tr>
+                  <tr className={next()}><td className={label}>Auctioneers</td>{sales.map(s => <td key={s.id} className={CELL}>{listCell(s.id, "auctioneers")}</td>)}</tr>
+                  <tr className={next()}>
+                    <td className={label}>Clicking:</td>
+                    {sales.map(s => <td key={s.id} className={`${CELL} text-xs ${muted}`}>Saleroom / Vectis</td>)}
                   </tr>
                   {Array.from({ length: slotCount }, (_, i) => (
-                    <tr key={i}>
-                      <td className="py-1 pr-3">
-                        <input aria-label="Time" className={`${input} w-32 font-medium`} value={timeOf(i)} onChange={e => setTime(i, e.target.value)} />
+                    <tr key={i} className={next()}>
+                      <td className={label}>
+                        <input aria-label="Time" className={`${plain} w-28 text-gray-600 dark:text-gray-400`} value={timeOf(i)} onChange={e => setTime(i, e.target.value)} />
                       </td>
-                      {sales.map(s => <td key={s.id} className={td}>
-                        {days[s.id]?.slots[i] ? <div className="grid grid-cols-2 gap-1.5">{slotBox(s.id, i, "saleroom")}{slotBox(s.id, i, "vectis")}</div> : null}
+                      {sales.map(s => <td key={s.id} className={CELL}>
+                        {days[s.id]?.slots[i] ? <span className="inline-flex items-center gap-1">{slotHalf(s.id, i, "saleroom")}<span className="text-gray-400 dark:text-gray-500">/</span>{slotHalf(s.id, i, "vectis")}</span> : null}
                       </td>)}
                     </tr>
                   ))}
-                  <tr><td className={rowLabel}>Late (if required)</td>{sales.map(s => <td key={s.id} className={td}>{listBox(s.id, "late")}</td>)}</tr>
-                  <tr><td className={rowLabel}>Telephone Bids</td>{sales.map(s => <td key={s.id} className={td}>{listBox(s.id, "phones")}</td>)}</tr>
+                  <tr className={next()}><td className={label}>Late (if required)</td>{sales.map(s => <td key={s.id} className={`${CELL} text-xs`}>{listCell(s.id, "late")}</td>)}</tr>
+                  <tr className={next()}><td className={label}>Telephone Bids</td>{sales.map(s => <td key={s.id} className={CELL}>{listCell(s.id, "phones")}</td>)}</tr>
                 </tbody>
               </table>
             )}
