@@ -335,7 +335,7 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
         <div className={`${box} flex-1 min-w-0 overflow-x-auto`}>
           {loading ? <p className={`p-6 ${muted}`}>Loading the week…</p>
             : loadError ? <p className="p-6 text-red-600 dark:text-red-400">Couldn&apos;t load the week: {loadError} <button className="underline" onClick={() => load(monday)}>Try again</button></p>
-            : !sales.length ? <p className={`p-6 ${muted}`}>No sales are dated in this week. Sales and lot counts come from the website data collected at Databases → BC Database (Update the BC lots) — a sale shows here once it has been collected, upcoming ones included.</p>
+            : !sales.length ? <p className={`p-6 ${muted}`}>No sales are dated in this week. The sales and lot counts are the same as Databases → BC Database — if a sale is missing here, it is missing there too (the BC copy has not got it yet).</p>
             : (
               <table className="w-full border-collapse" onClick={e => e.stopPropagation()}>
                 <tbody>

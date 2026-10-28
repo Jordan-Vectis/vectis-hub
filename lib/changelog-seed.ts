@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f846f6e74a617d50c94aa7133e0afcc5a06f3ec9","author":"Jordan Orange","date":"2026-10-28T12:23:53Z","subject":"Auctioneering Schedule: laid out like the old spreadsheet"},
   {"sha":"2bb8cb0922b218713018618a052f962562e795ca","author":"Jordan Orange","date":"2026-10-28T12:11:20Z","subject":"Auctioneering Schedule: sales and lot counts from the website data, not the Hub; Excel export"},
   {"sha":"47a2c0267193fccc538dbafd4b64db22bcca29b1","author":"Jordan Orange","date":"2026-10-28T11:36:08Z","subject":"Auctioneering Schedule: the week's sales with who auctions and clerks, drag and drop, pinned regulars, PDF"},
   {"sha":"ca5db803e7630a599bed3f1bb3816a11fe4cb44f","author":"jack-vectis","date":"2026-10-28T10:28:11Z","subject":"Redeploy staging: the 44a60598 deploy failed on Railway after 36 seconds (sandbox built the same commit fine)"},
