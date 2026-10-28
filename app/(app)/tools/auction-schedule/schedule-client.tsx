@@ -337,13 +337,14 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
             : loadError ? <p className="p-6 text-red-600 dark:text-red-400">Couldn&apos;t load the week: {loadError} <button className="underline" onClick={() => load(monday)}>Try again</button></p>
             : !sales.length ? <p className={`p-6 ${muted}`}>No sales are dated in this week. The sales and lot counts are the same as Databases → BC Database — if a sale is missing here, it is missing there too (the BC copy has not got it yet).</p>
             : (
-              <table className="w-full border-collapse" onClick={e => e.stopPropagation()}>
+              // table-fixed: every sale column the same width, whatever the sale is called (Jordan, 2026-10-28).
+              <table className="w-full min-w-[52rem] border-collapse table-fixed" onClick={e => e.stopPropagation()}>
                 <tbody>
                   <tr className={next()}>
                     <td className={label}>Sale</td>
-                    {sales.map(s => <td key={s.id} className={`${CELL} min-w-52`}>
-                      <span className="text-base font-bold text-gray-900 dark:text-white">{dayLabel(s.date)}</span>
-                      <span className={`ml-2 text-xs ${muted}`}>{s.name}</span>
+                    {sales.map(s => <td key={s.id} className={`${CELL} align-top`}>
+                      <div className="text-base font-bold text-gray-900 dark:text-white">{dayLabel(s.date)}</div>
+                      <div className={`text-xs leading-snug whitespace-normal ${muted}`} title={s.name}>{s.name}</div>
                     </td>)}
                   </tr>
                   <tr className={next()}><td className={label}>Sale No.</td>{sales.map(s => <td key={s.id} className={`${CELL} text-sm font-semibold text-gray-900 dark:text-white`}>{s.code}</td>)}</tr>
