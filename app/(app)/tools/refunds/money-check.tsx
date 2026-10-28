@@ -143,8 +143,8 @@ export default function MoneyCheck() {
       {finished && (
         <p role="status" className="mt-3 rounded-xl border px-4 py-3 text-sm border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">
           {finished === "stopped" ? "Stopped — " : "✓ "}{plural(checked, "request")} checked
-          {flagged.length ? <>; {plural(flagged.length, "has", "have")} something to look at — listed below</> : <> — every one adds up</>}
-          {finished === "stopped" && <>. Press Carry on checking to go on from here.</>} Nothing was changed.
+          {flagged.length ? <>; {plural(flagged.length, "has", "have")} something to look at — listed below.</> : <> — every one adds up.</>}
+          {finished === "stopped" && <> Press Carry on checking to go on from here.</>} Nothing was changed.
         </p>
       )}
 
