@@ -22,14 +22,17 @@ export async function requireSchedule(): Promise<{ userId: string; name: string;
  *  (wrong — sales are still done straight in BC); the second read ArchiveSale, which only holds a
  *  sale once the collector has read that sale's own page, so next week's sales were missing while
  *  the BC Database page plainly showed their lots. Upcoming sales included; a schedule is keyed on
- *  the sale CODE. ⚠ auctionDate is a 'YYYY-MM-DD' TEXT column, compared as text like that page does. */
+ *  the sale CODE. ⚠ auctionDate is a 'YYYY-MM-DD' TEXT column, compared as text like that page does.
+ *  ⚠⚠ NO "has a lot number" condition (the third version copied that page's and lost the week again):
+ *  lots in a sale still to come have no lot number in the BC copy yet — measured on the sandbox,
+ *  F139 had 602 rows and 0 with a number. Every row allocated to the sale counts: this week's sales
+ *  then read 523 / 538 / 620, exactly the old spreadsheet. */
 export async function salesForWeek(monday: string, who: { userId: string; role: string }): Promise<ScheduleSale[]> {
   const sunday = addDays(monday, 6)
   const rows = await prisma.$queryRaw<{ code: string; name: string | null; date: string; lots: number }[]>`
     SELECT w."auctionCode" AS "code", max(w."auctionName") AS "name", min(w."auctionDate") AS "date", count(*)::int AS "lots"
     FROM "WarehouseItem" w
     WHERE w."auctionCode" IS NOT NULL AND w."auctionDate" >= ${monday} AND w."auctionDate" <= ${sunday}
-      AND COALESCE(NULLIF(w."currentLotNo", '0'), NULLIF(w."lotNo", '0')) IS NOT NULL
     GROUP BY w."auctionCode"`
   let sales: ScheduleSale[] = rows
     .map(r => ({ id: r.code.trim().toUpperCase(), code: r.code.trim().toUpperCase(), name: (r.name ?? "").trim(), date: String(r.date).slice(0, 10), lots: Number(r.lots) || 0 }))
