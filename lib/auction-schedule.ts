@@ -108,11 +108,12 @@ export type ScheduleSale = { id: string; code: string; name: string; date: strin
 
 /** The week as the old spreadsheet's rows: a label, then one text per sale. The PDF and the Excel
  *  export both print from this, so the two can never disagree. */
-export type SheetRow = { label: string; cells: string[]; small?: boolean; shaded?: boolean }
+/** `cells` is one text per sale — or, when `split`, TWO per sale (Saleroom, then Vectis): the clerking
+ *  rows are separate columns since 2026-10-28 (Jordan), on screen, on the PDF and in Excel alike. */
+export type SheetRow = { label: string; cells: string[]; small?: boolean; shaded?: boolean; split?: boolean }
 
 export function scheduleRows(sales: ScheduleSale[], days: DaySchedule[]): SheetRow[] {
   const names = (cells: Cell[]) => cells.map(c => c.name).join(" / ")
-  const pair = (a: Cell | null, b: Cell | null) => (a || b ? `${a?.name ?? "-"} / ${b?.name ?? "-"}` : "")
   const rows: SheetRow[] = [
     { label: "Sale", cells: sales.map(s => dayLabel(s.date)) },
     { label: "Sale No.", cells: sales.map(s => s.code) },
@@ -120,12 +121,12 @@ export function scheduleRows(sales: ScheduleSale[], days: DaySchedule[]): SheetR
     { label: "Start Time", cells: days.map(d => d.startTime) },
     { label: "Auctioneers", cells: days.map(d => names(d.auctioneers)) },
     { label: "", cells: sales.map(s => s.name), small: true },
-    { label: "Clicking:", cells: sales.map(() => "Saleroom / Vectis") },
+    { label: "Clicking", cells: sales.flatMap(() => ["Saleroom", "Vectis"]), split: true, small: true },
   ]
   const slotCount = Math.max(0, ...days.map(d => d.slots.length))
   for (let i = 0; i < slotCount; i++) {
     const time = days.find(d => d.slots[i])?.slots[i]?.time ?? ""
-    rows.push({ label: time, cells: days.map(d => (d.slots[i] ? pair(d.slots[i].saleroom, d.slots[i].vectis) : "")) })
+    rows.push({ label: time, cells: days.flatMap(d => [d.slots[i]?.saleroom?.name ?? "", d.slots[i]?.vectis?.name ?? ""]), split: true })
   }
   rows.push({ label: "Late (if required)", cells: days.map(d => names(d.late)) })
   rows.push({ label: "Telephone Bids", cells: days.map(d => names(d.phones)) })
