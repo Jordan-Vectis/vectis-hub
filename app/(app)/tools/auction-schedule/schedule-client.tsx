@@ -227,8 +227,10 @@ export default function ScheduleClient({ initialWeek }: { initialWeek: string })
   // saleroom and Vectis should be separate columns" — so each sale is TWO columns, Saleroom | Vectis,
   // under one sale header; a faint stripe instead of the spreadsheet's blue bands; a divider between
   // sales. ──
-  const CELL = "border-b border-gray-200 dark:border-[#2a3447] px-3 py-2 align-middle whitespace-nowrap"
-  const SALE_L = "border-l-2 border-l-gray-300 dark:border-l-[#3a4a66]"   // the first column of each sale
+  // Gridlines on every cell so Saleroom and Vectis read as two columns (Jordan: "there is no gridlines
+  // so you can tell they are separate"); a heavier line where the next sale starts.
+  const CELL = "border border-gray-200 dark:border-[#2a3447] px-3 py-2 align-middle whitespace-nowrap"
+  const SALE_L = "border-l-2 border-l-gray-400 dark:border-l-[#4a5a78]"   // the first column of each sale
   const HEAD = "bg-[#dbe3f5] dark:bg-[#1a2640]"                           // the sale header only
   const STRIPE = "bg-gray-50 dark:bg-white/[0.03]"
   const stripeOf = (i: number) => (i % 2 === 1 ? STRIPE : "")

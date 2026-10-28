@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"04b4c5c6ac50a915200374d804e6ffe89386c155","author":"Jordan Orange","date":"2026-10-28T15:37:00Z","subject":"Auctioneering Schedule: PDF and Excel print Saleroom and Vectis as separate columns"},
   {"sha":"c24fc8780ad728d24ff6be5952d4793691296cff","author":"Jordan Orange","date":"2026-10-28T15:33:39Z","subject":"Auctioneering Schedule: Saleroom and Vectis as separate columns, lighter rows"},
   {"sha":"d68847fb559a504f3a4c5494188ffd5201ade16e","author":"Jordan Orange","date":"2026-10-28T15:15:07Z","subject":"Auctioneering Schedule: empty boxes are blank, like the spreadsheet"},
   {"sha":"3bda9570b2708c213ba2e08de71292e41fa76ffe","author":"Jordan Orange","date":"2026-10-28T14:31:18Z","subject":"Redeploy: Railway marked 8d17cf02's build failed after it had exported the image"},
