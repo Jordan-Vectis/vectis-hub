@@ -28,6 +28,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import FindLotsTab from "./find-lots-tab"
+import PostcodePopup from "./postcode-popup"
 import WhoCataloguedTab from "./who-catalogued-tab"
 import BySaleTab from "./by-sale-tab"
 import { CARD, INPUT, BTN_PRIMARY, HINT, formatSaleDate } from "./ui"
@@ -93,7 +94,10 @@ export default function LookupClient() {
   return (
     <div className="px-6 py-8 max-w-[1800px] mx-auto space-y-6">
       <div>
-        <Link href="/hub" className="inline-block text-base text-gray-500 hover:text-indigo-500 mb-3">← Back to the Hub</Link>
+        <div className="flex items-start justify-between gap-4">
+          <Link href="/hub" className="inline-block text-base text-gray-500 hover:text-indigo-500 mb-3">← Back to the Hub</Link>
+          <PostcodePopup />
+        </div>
         <h1 className="text-4xl font-bold text-gray-900 dark:text-white">🎛️ Admin Centre</h1>
         <p className="text-lg text-gray-600 dark:text-gray-400 mt-2 max-w-4xl">
           Look up anything across both systems — the Hub cataloguing tool and Business Central — to see what has been
