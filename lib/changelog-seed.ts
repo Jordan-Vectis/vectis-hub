@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"144e42202559eb38cecc9b2e4f8b2662b3fecca5","author":"Jordan Orange","date":"2026-10-29T12:56:12Z","subject":"Customers: staging and sandbox can add/edit customers in the Hub for testing"},
   {"sha":"7f13cf7ff1372050ddf9f1c11b1613e891a960a7","author":"Jordan Orange","date":"2026-10-29T12:41:00Z","subject":"Customers: findaddress.io postcode lookup on the customer form + New customer button"},
   {"sha":"8840e76da609add2b0dd93bc8100a62af967b623","author":"jack-vectis","date":"2026-10-29T11:00:46Z","subject":"Barcode Labels: stickers placed from the sheet maker's own template"},
   {"sha":"356460dc12755714d6ff9ab4fe1555433716d94e","author":"jack-vectis","date":"2026-10-29T09:08:20Z","subject":"Barcode Labels: type the sale number; each label centred on its sticker"},
