@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
+import { HUB_OWNS_CUSTOMERS } from "@/lib/customers/ownership"
 import SyncPanel from "./sync-panel"
 import CustomersList, { type RowDTO } from "./customers-list"
 import { parseFilters, PAGE_SIZE } from "@/lib/customers/filters"
@@ -52,6 +53,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <Link href="/tools/customers?tab=check" className={tabCls(tab === "check")}>Data check</Link>
           {isAdmin && <Link href="/tools/customers?tab=copy" className={tabCls(tab === "copy")}>Copy from BC</Link>}
         </nav>
+        {HUB_OWNS_CUSTOMERS && <Link href="/tools/warehouse/customers/new" className="min-h-[44px] inline-flex items-center px-4 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500">+ New customer</Link>}
       </div>
       {body}
     </div>

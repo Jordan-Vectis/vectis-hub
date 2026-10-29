@@ -30,6 +30,36 @@ export default function CustomerForm({ initial, onSaved, onCancel }: {
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [house, setHouse] = useState("")
+  const [finding, setFinding] = useState(false)
+  const [found, setFound] = useState<string | null>(null)
+
+  // Fills the address boxes from house + postcode (findaddress.io via /api/address-lookup).
+  const findAddress = async () => {
+    setFinding(true)
+    setFound(null)
+    setError(null)
+    try {
+      const res = await fetch(`/api/address-lookup?house=${encodeURIComponent(house)}&postcode=${encodeURIComponent(f.postcode ?? "")}`)
+      const a = await res.json()
+      if (!res.ok) { setError(a.error ?? "The address lookup failed."); return }
+      setF(p => ({
+        ...p,
+        addressLine1: [a.house, a.street].filter(Boolean).join(" "),
+        addressLine2: a.locality,
+        town: a.town,
+        county: a.county,
+        postcode: a.postcode || p.postcode,
+        country: "GB",
+      }))
+      setFound(a.partial ? "Only a partial match — check the address boxes and fill in what's missing." : "✓ Address filled in — check it.")
+    } catch {
+      setError("The address lookup didn't answer — type the address in.")
+    } finally {
+      setFinding(false)
+    }
+  }
+
   const set = (k: keyof CustomerInput) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(p => ({ ...p, [k]: e.target.value }))
 
   const save = async (e: React.FormEvent) => {
@@ -57,11 +87,24 @@ export default function CustomerForm({ initial, onSaved, onCancel }: {
           <label className={label} htmlFor="cf-name">Full name *</label>
           <input id="cf-name" className={input} value={f.name} onChange={set("name")} required autoComplete="name" />
         </div>
+        <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-4 items-end rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+          <div>
+            <label className={label} htmlFor="cf-house">House number or name</label>
+            <input id="cf-house" className={input} value={house} onChange={e => setHouse(e.target.value)} />
+          </div>
+          <div>
+            <label className={label} htmlFor="cf-find-postcode">Postcode</label>
+            <input id="cf-find-postcode" className={input} value={f.postcode ?? ""} onChange={set("postcode")} autoComplete="postal-code" />
+          </div>
+          <button type="button" className={btn} onClick={findAddress} disabled={finding || !house.trim() || !(f.postcode ?? "").trim()}>
+            {finding ? "Finding…" : "🔎 Find address"}
+          </button>
+          {found && <p className="sm:col-span-3 text-sm text-gray-600 dark:text-gray-300">{found}</p>}
+        </div>
         {field("addressLine1", "Address", { span: true, autoComplete: "address-line1" })}
         {field("addressLine2", "Address line 2", { span: true, autoComplete: "address-line2" })}
         {field("town", "Town / city", { autoComplete: "address-level2" })}
         {field("county", "County", { autoComplete: "address-level1" })}
-        {field("postcode", "Postcode", { autoComplete: "postal-code" })}
         {field("country", "Country code (GB)", { autoComplete: "country" })}
         {field("email", "Email", { type: "email", autoComplete: "email" })}
         {field("mobile", "Mobile", { type: "tel", autoComplete: "tel" })}

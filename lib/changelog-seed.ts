@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8840e76da609add2b0dd93bc8100a62af967b623","author":"jack-vectis","date":"2026-10-29T11:00:46Z","subject":"Barcode Labels: stickers placed from the sheet maker's own template"},
   {"sha":"356460dc12755714d6ff9ab4fe1555433716d94e","author":"jack-vectis","date":"2026-10-29T09:08:20Z","subject":"Barcode Labels: type the sale number; each label centred on its sticker"},
   {"sha":"65e5a354fd6538769b194283eaf37a879723dbd4","author":"jack-vectis","date":"2026-10-28T16:49:00Z","subject":"Barcode Labels: print a sale's Lot ID labels on the Avery sheets, no mail merge"},
   {"sha":"fbd790c2e8e55ebb7f12e6ba354e26f6268f4426","author":"jack-vectis","date":"2026-10-28T16:48:47Z","subject":"Refunds: full stop in Check the money's summary"},
