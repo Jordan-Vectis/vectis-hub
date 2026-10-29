@@ -2671,7 +2671,10 @@ Migrations**): `GoodsInCustomer` and `GoodsInAgreement` are keyed on `customerId
 and `Submission` gain `customerId` (their old `contactId` stays, nullable, for the test rows).
 
 - **The switch is ONE variable:** `CUSTOMERS_OWNER=hub` on Railway → `HUB_OWNS_CUSTOMERS`
-  (`lib/customers/ownership.ts`). Unset (now): BC owns the details — `saveCustomer` refuses, the
+  (`lib/customers/ownership.ts`). ⚠ **Staging and sandbox are always "hub"** (Jordan, 2026-10-29 — testing
+  only; he doesn't mind the BC copy overwriting there): any `RAILWAY_ENVIRONMENT_NAME` other than
+  `production`. Production, and a machine with no Railway name (a laptop on the real database), stay
+  BC-first. Unset on production (now): BC owns the details — `saveCustomer` refuses, the
   Goods In customer page has no Edit, and the check-in picker's "+ New customer" is **"Not on the
   system?"**: a panel (`_components/bc-first-panel.tsx`) saying add them in BC, then **Fetch new
   customers from BC** (`pullRecentCustomersFromBc`, `lib/actions/customers-pull.ts` — the nightly

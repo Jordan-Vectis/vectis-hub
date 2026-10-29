@@ -10,7 +10,11 @@
 //     gets them (lib/customer-sync.ts), so nothing is ever typed twice.
 // On switch day set CUSTOMERS_OWNER=hub on Railway: the forms open up and the Hub is the record.
 
-export const HUB_OWNS_CUSTOMERS = process.env.CUSTOMERS_OWNER === "hub"
+// Staging and sandbox let customers be added/edited in the Hub for testing (Jordan, 2026-10-29: "I dont
+// care if anything overwrites it in sandbox or staging we are just testing"). Production — or anywhere
+// that doesn't say which Railway environment it is, e.g. a laptop on the real database — stays BC-first.
+const env = process.env.RAILWAY_ENVIRONMENT_NAME
+export const HUB_OWNS_CUSTOMERS = process.env.CUSTOMERS_OWNER === "hub" || (!!env && env !== "production")
 
 export const BC_OWNS_MESSAGE =
   "Customers' details are kept in Business Central until the Hub takes over — make the change in BC, then press Fetch new customers from BC (or wait for tonight's copy)."
