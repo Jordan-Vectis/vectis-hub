@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"71d058a650ceda07994b821c7f67aaf6b9c5c162","author":"jack-vectis","date":"2026-10-29T14:59:25Z","subject":"Barcode Labels: arrows under the preview to move the print for a printer that's off"},
   {"sha":"34596cf5220d3443396aa7d6d104c94bf67bee43","author":"Jordan Orange","date":"2026-10-29T13:07:31Z","subject":"Customers: address lookup moves to Ideal Postcodes — postcode alone gives a pick-list"},
   {"sha":"144e42202559eb38cecc9b2e4f8b2662b3fecca5","author":"Jordan Orange","date":"2026-10-29T12:56:12Z","subject":"Customers: staging and sandbox can add/edit customers in the Hub for testing"},
   {"sha":"7f13cf7ff1372050ddf9f1c11b1613e891a960a7","author":"Jordan Orange","date":"2026-10-29T12:41:00Z","subject":"Customers: findaddress.io postcode lookup on the customer form + New customer button"},

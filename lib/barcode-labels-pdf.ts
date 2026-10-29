@@ -1,5 +1,5 @@
 import { PDFDocument, PrintScaling, StandardFonts, rgb } from "pdf-lib"
-import { LABEL, PER_SHEET, SHEET, STICKERS, barcodeOf, labelDate, labelFit, type LabelRun } from "@/lib/barcode-labels"
+import { LABEL, NO_NUDGE, PER_SHEET, SHEET, STICKERS, barcodeOf, labelDate, labelFit, type LabelRun, type Nudge } from "@/lib/barcode-labels"
 import { code39Runs } from "@/lib/code39"
 
 // Admin & Operations → Barcode Labels: the Lot ID labels as one A4 PDF for Avery L7651 sheets. SERVER
@@ -18,21 +18,24 @@ const PT_PER_MM = 72 / 25.4
 const INK = rgb(0, 0, 0)
 const EDGE = rgb(0.65, 0.65, 0.65)
 
-/** Where sticker `onSheet` (0–64, across then down) is: its left edge and top edge, in PDF points. */
-function stickerAt(onSheet: number): { left: number; top: number } {
+/** Where sticker `onSheet` (0–64, across then down) is printed: its left edge and top edge, in PDF
+ *  points — moved by `nudge` (mm right, mm down) for a printer that's off. */
+function stickerAt(onSheet: number, nudge: Nudge): { left: number; top: number } {
   const col = onSheet % SHEET.cols, row = Math.floor(onSheet / SHEET.cols)
   return {
-    left: (STICKERS.leftMm + col * STICKERS.pitchXMm) * PT_PER_MM,
-    top: A4_H - (STICKERS.topMm + row * STICKERS.pitchYMm) * PT_PER_MM,
+    left: (STICKERS.leftMm + col * STICKERS.pitchXMm + nudge.right) * PT_PER_MM,
+    top: A4_H - (STICKERS.topMm + row * STICKERS.pitchYMm + nudge.down) * PT_PER_MM,
   }
 }
 
 /**
  * The labels for `run`, in order — X160001 on the first label (or on label `startAt` of the first
  * sheet), across then down, as many sheets as it takes. `edges` (a test print on plain paper, held up
- * against a sheet) outlines every sticker in light grey — never on the labels.
+ * against a sheet) outlines every sticker in light grey — never on the labels. `nudge` moves the whole
+ * print, outlines included (lib/barcode-labels.ts Nudge).
  */
-export async function buildBarcodeLabelsPdf(run: LabelRun, opts: { edges?: boolean } = {}): Promise<Uint8Array> {
+export async function buildBarcodeLabelsPdf(run: LabelRun, opts: { edges?: boolean; nudge?: Nudge } = {}): Promise<Uint8Array> {
+  const nudge = opts.nudge ?? NO_NUDGE
   const doc = await PDFDocument.create()
   // The print box starts at "Actual size" rather than "Fit" — fitting shrinks the sheet off the stickers.
   doc.catalog.getOrCreateViewerPreferences().setPrintScaling(PrintScaling.None)
@@ -49,7 +52,7 @@ export async function buildBarcodeLabelsPdf(run: LabelRun, opts: { edges?: boole
     const p = doc.addPage([A4_W, A4_H])
     if (opts.edges) {
       for (let s = 0; s < PER_SHEET; s++) {
-        const { left, top } = stickerAt(s)
+        const { left, top } = stickerAt(s, nudge)
         p.drawRectangle({ x: left, y: top - H, width: W, height: H, borderColor: EDGE, borderWidth: 0.4 })
       }
     }
@@ -60,7 +63,7 @@ export async function buildBarcodeLabelsPdf(run: LabelRun, opts: { edges?: boole
   for (let i = 0; i < run.count; i++) {
     const slot = run.startAt - 1 + i
     if (i > 0 && slot % PER_SHEET === 0) page = newPage()
-    const { left, top } = stickerAt(slot % PER_SHEET)
+    const { left, top } = stickerAt(slot % PER_SHEET, nudge)
     const code = barcodeOf(run.sale, run.from + i)
     const fit = labelFit(code)
     const x = left + fit.left

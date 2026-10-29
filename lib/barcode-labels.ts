@@ -95,6 +95,48 @@ export function labelFit(code: string): { narrowMm: number; numberSize: number; 
   return { narrowMm, numberSize, left: ((STICKERS.wMm * 72) / 25.4 - widest) / 2 }
 }
 
+/**
+ * Moving the print for a printer that doesn't put it quite where the PDF says (Jack, 2026-10-29: "if it
+ * needs moving up, down, left and right a mm it can just be done in the preview — sometimes the labels
+ * don't line up"): mm to the right and mm down (negative = left / up), in NUDGE_STEP presses, at most
+ * NUDGE_MAX either way. The WHOLE page moves — every label, and the test print's outlines with them, so
+ * a test print shows the moved print against a real sheet. It belongs to the printer, so the page keeps
+ * it on that computer (NUDGE_KEY); nothing on the server stores it.
+ */
+export type Nudge = { right: number; down: number }
+export const NO_NUDGE: Nudge = { right: 0, down: 0 }
+export const NUDGE_STEP = 0.5
+export const NUDGE_MAX = 5
+export const NUDGE_KEY = "barcode_labels_nudge"
+
+const nudgeMm = (v: unknown): number | null => {
+  const s = typeof v === "number" ? String(v) : typeof v === "string" ? v.trim() : ""
+  if (s === "") return 0
+  if (!/^-?\d{1,2}(\.\d{1,2})?$/.test(s)) return null
+  const n = Number(s)
+  return Math.abs(n) <= NUDGE_MAX ? n : null
+}
+
+/** A nudge from a form or saved JSON (fields `right` and `down`, mm; missing = 0) — null when either
+ *  isn't a number within NUDGE_MAX. */
+export function readNudge(v: Record<string, unknown>): Nudge | null {
+  const right = nudgeMm(v.right), down = nudgeMm(v.down)
+  return right === null || down === null ? null : { right, down }
+}
+
+/** `n` moved one press: `dx`/`dy` −1, 0 or 1, kept within NUDGE_MAX (and clear of float drift). */
+export const nudged = (n: Nudge, dx: number, dy: number): Nudge => {
+  const step = (v: number, d: number) => Math.max(-NUDGE_MAX, Math.min(NUDGE_MAX, Math.round((v + d * NUDGE_STEP) * 10) / 10))
+  return { right: step(n.right, dx), down: step(n.down, dy) }
+}
+
+/** "1 mm up, 0.5 mm right" — "" when it isn't moved. */
+export function nudgeWords(n: Nudge): string {
+  const mm = (v: number) => `${String(Math.abs(v))} mm`
+  return [n.down ? `${mm(n.down)} ${n.down < 0 ? "up" : "down"}` : "", n.right ? `${mm(n.right)} ${n.right < 0 ? "left" : "right"}` : ""]
+    .filter(Boolean).join(", ")
+}
+
 /** At most this many labels in one PDF (20 sheets) — a sale is around 600. */
 export const MAX_LABELS = 1300
 /** The highest running number (a sale's labels run 001–999, then 1000 on). */

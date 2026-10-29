@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  LABEL, PER_SHEET, SALE_RE, STICKERS, barcodeOf, boldWidth, labelDate, labelFit, nextFrom, overlapping, readRun, runProblem, runWords,
-  type LabelRunRow, type LabelSale,
+  LABEL, NO_NUDGE, NUDGE_KEY, NUDGE_MAX, NUDGE_STEP, PER_SHEET, SALE_RE, STICKERS, barcodeOf, boldWidth, labelDate, labelFit, nextFrom,
+  nudged, nudgeWords, overlapping, readNudge, readRun, runProblem, runWords,
+  type LabelRunRow, type LabelSale, type Nudge,
 } from "@/lib/barcode-labels"
 import { code39Runs } from "@/lib/code39"
 
@@ -13,7 +14,8 @@ import { code39Runs } from "@/lib/code39"
 // in a new tab (a form posted inside the tap, as the Hub's other label screens do — iPad Safari blocks
 // a tab opened later). The first number follows
 // on from the last run printed for that sale; numbers already printed are said, not refused (reprinting
-// spoilt labels is normal). Below: a preview of the first label, and what has been printed.
+// spoilt labels is normal). Beside: a preview of the first label — with arrows to move the print for a
+// printer that's off, kept on this computer — and what has been printed.
 
 const card = "bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800"
 const field = "min-h-11 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500 [color-scheme:light] dark:[color-scheme:dark]"
@@ -55,6 +57,25 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
   const [note, setNote] = useState<string | null>(null)
   const busy = useRef(false)
   const lastRefresh = useRef(0)
+
+  // Where the print sits, moved for this computer's printer (Jack, 2026-10-29: "if it needs moving up,
+  // down, left and right a mm it can just be done in the preview") — remembered here, the moment it's changed.
+  const [nudge, setNudge] = useState<Nudge>(NO_NUDGE)
+  useEffect(() => {
+    // Read now, and again whenever another tab of this page changes it, so every tab prints with the same.
+    const load = () => {
+      try { const saved = localStorage.getItem(NUDGE_KEY); setNudge((saved ? readNudge(JSON.parse(saved)) : null) ?? NO_NUDGE) } catch {}
+    }
+    load()
+    const changed = (e: StorageEvent) => { if (e.key === NUDGE_KEY || e.key === null) load() }
+    window.addEventListener("storage", changed)
+    return () => window.removeEventListener("storage", changed)
+  }, [])
+  function moveNudge(n: Nudge) {
+    setNudge(n)
+    try { if (n.right || n.down) localStorage.setItem(NUDGE_KEY, JSON.stringify(n)); else localStorage.removeItem(NUDGE_KEY) } catch {}
+  }
+  const moved = nudgeWords(nudge)
 
   /** The sale number typed (or tapped): a sale the Hub knows fills its date, and the first number
    *  carries on from that sale's last printed one. */
@@ -108,7 +129,10 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
     form.action = "/api/barcodes/labels"
     form.target = name
     form.hidden = true
-    const fields: Record<string, string> = { sale: run.sale, date: run.date, from: String(run.from), count: String(run.count), startAt: String(run.startAt), edges: edges ? "1" : "" }
+    const fields: Record<string, string> = {
+      sale: run.sale, date: run.date, from: String(run.from), count: String(run.count), startAt: String(run.startAt), edges: edges ? "1" : "",
+      right: String(nudge.right), down: String(nudge.down),
+    }
     for (const [k, v] of Object.entries(fields)) {
       const input = document.createElement("input")
       input.type = "hidden"
@@ -124,7 +148,7 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
       return
     }
     setNote(edges
-      ? "A test sheet opened in a new tab — print it on plain paper at Actual size and hold it against a sheet of labels up to the light: the grey boxes should sit on the stickers, with each label's print inside its box. Nothing was logged."
+      ? "A test sheet opened in a new tab — print it on plain paper at Actual size and hold it against a sheet of labels up to the light: the grey boxes should sit on the stickers, with each label's print inside its box. If they sit off, move the print with the arrows under the preview and test again. Nothing was logged."
       : `${runWords(run)} opened in a new tab — print it at Actual size. The next labels carry on from ${barcodeOf(run.sale, run.from + run.count)}.`)
     if (!edges) {
       // Counted straight away, so the next print carries on (and a second press doesn't repeat it);
@@ -251,6 +275,11 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
           The labels open as a PDF in a new tab. In the print box choose <b>A4</b> and <b>Actual size</b> (100 %) — never &ldquo;Fit to page&rdquo; — and
           load the Avery L7651 sheets (38.1 × 21.2 mm, 65 a sheet).
         </p>
+        {moved && (
+          <p className="text-xs text-sky-800 dark:text-sky-200 mt-2">
+            The print is moved <b>{moved}</b> for this computer&apos;s printer — change it under the preview.
+          </p>
+        )}
         {note && <p role="status" className="mt-3 rounded-xl border px-4 py-3 text-sm border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-100">{note}</p>}
       </section>
 
@@ -258,8 +287,33 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
         {/* The first label, as it prints */}
         <section className={`${card} p-4 sm:p-5`} aria-label="Preview">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-3">The first label</h2>
-          {problem ? <p className={`text-sm ${muted}`}>Fill in the sale and the numbers to see it.</p> : <LabelPreview code={barcodeOf(run.sale, run.from)} date={labelDate(run.date)} />}
+          {problem
+            ? <p className={`text-sm ${muted}`}>Fill in the sale and the numbers to see it.</p>
+            : <LabelPreview code={barcodeOf(run.sale, run.from)} date={labelDate(run.date)} nudge={nudge} />}
           <p className={`text-xs ${muted} mt-2`}>Actual size 38.1 × 21.2 mm. The barcode is Code 39, the same as the old labels, so the scanners read it as before.</p>
+
+          {/* Moving the print, for a printer that doesn't put it on the stickers */}
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white mt-5 mb-2">Lining up</h3>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="grid grid-cols-3 gap-1 w-max" role="group" aria-label="Move the print">
+              <span />
+              <NudgeButton name="Up" turn={0} onClick={() => moveNudge(nudged(nudge, 0, -1))} disabled={nudge.down <= -NUDGE_MAX} />
+              <span />
+              <NudgeButton name="Left" turn={-90} onClick={() => moveNudge(nudged(nudge, -1, 0))} disabled={nudge.right <= -NUDGE_MAX} />
+              <button type="button" onClick={() => moveNudge(NO_NUDGE)} disabled={!moved} className={`${chip} min-w-11 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default`} title="Back to where the template puts it">Centre</button>
+              <NudgeButton name="Right" turn={90} onClick={() => moveNudge(nudged(nudge, 1, 0))} disabled={nudge.right >= NUDGE_MAX} />
+              <span />
+              <NudgeButton name="Down" turn={180} onClick={() => moveNudge(nudged(nudge, 0, 1))} disabled={nudge.down >= NUDGE_MAX} />
+              <span />
+            </div>
+            <div className="min-w-0 flex-1 basis-40">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white" aria-live="polite">{moved ? `Moved ${moved}` : "Not moved — just as the template"}</p>
+              <p className={`text-xs ${muted} mt-1`}>
+                Labels printing off the stickers? Move the print the way it needs to go — printed too low, press the up arrow. Each press is {String(NUDGE_STEP)} mm,
+                up to {NUDGE_MAX} mm. This computer remembers it for its printer; check with <b>Test on plain paper</b>.
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* What has been printed */}
@@ -296,20 +350,40 @@ function Step({ n }: { n: number }) {
   return <span className="inline-flex items-center justify-center h-6 w-6 mr-1.5 rounded-full bg-sky-600 text-white text-xs" aria-hidden>{n}</span>
 }
 
-/** One label drawn as it prints — the same measurements and bars as the PDF (in points), scaled up. */
-function LabelPreview({ code, date }: { code: string; date: string }) {
-  const W = (STICKERS.wMm * 72) / 25.4, H = (STICKERS.hMm * 72) / 25.4
+function NudgeButton({ name, turn, onClick, disabled }: { name: string; turn: number; onClick: () => void; disabled: boolean }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={`Move the print ${name.toLowerCase()} ${String(NUDGE_STEP)} mm`} title={name}
+      className="inline-flex items-center justify-center min-h-11 min-w-11 rounded-xl border border-gray-300 dark:border-gray-700 text-lg font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40">
+      <svg viewBox="0 0 24 24" className="h-5 w-5" style={{ transform: `rotate(${turn}deg)` }} aria-hidden>
+        <path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  )
+}
+
+/** One label drawn as it prints — the same measurements and bars as the PDF (in points), scaled up —
+ *  on its sticker with a little of the sheet round it, the print moved by `nudge` as the PDF moves it. */
+function LabelPreview({ code, date, nudge }: { code: string; date: string; nudge: Nudge }) {
+  const PT = 72 / 25.4
+  // Enough sheet round the sticker to show the print whole at the furthest move: it sits at least
+  // 1.2 mm inside the sticker, so NUDGE_MAX − 1 mm takes in the most that can hang over the edge.
+  const W = STICKERS.wMm * PT, H = STICKERS.hMm * PT, M = (NUDGE_MAX - 1) * PT
   const fit = labelFit(code)
-  const unit = fit.narrowMm * (72 / 25.4)
+  const unit = fit.narrowMm * PT
   const bars: { x: number; w: number }[] = []
   let x = fit.left
   code39Runs(code).forEach((u, k) => { if (k % 2 === 0) bars.push({ x, w: u * unit }); x += u * unit })
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white" role="img" aria-label={`Label ${code}${date ? `, ${date}` : ""}`}>
-      {date && <text x={fit.left} y={LABEL.dateBaseline} fontFamily="Helvetica, Arial, sans-serif" fontSize={LABEL.dateSize} fill="#000">{date}</text>}
-      {bars.map((b, i) => <rect key={i} x={b.x} y={LABEL.barTop} width={b.w} height={LABEL.barHeight} fill="#000" />)}
-      <text x={fit.left} y={LABEL.numberBaseline} fontFamily="Helvetica, Arial, sans-serif" fontWeight="bold" fontSize={fit.numberSize}
-        textLength={boldWidth(code, fit.numberSize)} lengthAdjust="spacingAndGlyphs" fill="#000">{code}</text>
+    <svg viewBox={`${-M} ${-M} ${W + 2 * M} ${H + 2 * M}`} className="w-full max-w-sm rounded-lg border border-gray-300 dark:border-gray-700" role="img"
+      aria-label={`Label ${code}${date ? `, ${date}` : ""}${nudgeWords(nudge) ? `, moved ${nudgeWords(nudge)}` : ""}`}>
+      <rect x={-M} y={-M} width={W + 2 * M} height={H + 2 * M} fill="#e5e7eb" />
+      <rect x={0} y={0} width={W} height={H} rx={1.5 * PT} fill="#fff" />
+      <g transform={`translate(${nudge.right * PT} ${nudge.down * PT})`}>
+        {date && <text x={fit.left} y={LABEL.dateBaseline} fontFamily="Helvetica, Arial, sans-serif" fontSize={LABEL.dateSize} fill="#000">{date}</text>}
+        {bars.map((b, i) => <rect key={i} x={b.x} y={LABEL.barTop} width={b.w} height={LABEL.barHeight} fill="#000" />)}
+        <text x={fit.left} y={LABEL.numberBaseline} fontFamily="Helvetica, Arial, sans-serif" fontWeight="bold" fontSize={fit.numberSize}
+          textLength={boldWidth(code, fit.numberSize)} lengthAdjust="spacingAndGlyphs" fill="#000">{code}</text>
+      </g>
     </svg>
   )
 }

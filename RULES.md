@@ -3445,6 +3445,16 @@ template to fit on the sheets — we print around 600 per sale"*.
   sits off the stickers by about that much, it's the printer, and that edit was making up for it.
   Printed at **Actual size** (100 %), never "fit" — the PDF sets
   PrintScaling None. The page's preview draws the sticker with the same `labelFit`.
+- **Lining up — moving the print for a printer that's off** (`Nudge` / `readNudge` / `nudged` in
+  `lib/barcode-labels.ts` — Jack, 2026-10-29: *"if it needs moving up, down, left and right a mm it can
+  just be done in the preview — sometimes the labels don't line up"*; the test print on his own printer
+  was perfect, so it starts at none): arrows under the preview move the WHOLE print 0.5 mm a press, at
+  most 5 mm each way, with Centre to put it back. Every label and the test print's outlines move together,
+  so a test print shows the moved print against a real sheet. ⚠ It belongs to the PRINTER, so it's kept
+  in that computer's browser (localStorage `barcode_labels_nudge`) — never on the server, never in the
+  log, never shared with other computers. The page says when it's moved. The form sends `right` / `down`
+  (mm); the route refuses anything that isn't a number within 5 mm. Never move `STICKERS` to suit one
+  printer — that's what the nudge is for.
 - ⚠ **The barcode is Code 39 drawn as vector bars** (`lib/code39.ts`, checked against bwip-js for all
   43 characters), the SAME size as the template's Libre Barcode 39 font at 22 pt — measured from the
   font: narrow bar 0.03 em = 0.2328 mm, wide 3 × narrow, bars 0.59 em (≈ 4.6 mm) — so the scanners
