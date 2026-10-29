@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
+import AddressLookup from "@/components/address-lookup"
 
 const RM_SERVICES: Record<string, string> = {
   TPNN: "Tracked 24 — No Signature",
@@ -423,6 +424,15 @@ export default function PackingPage() {
                     <label className="block text-xs text-gray-500 mb-1">Company</label>
                     <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientCompany} onChange={e => setForm({...form, recipientCompany: e.target.value})} />
                   </div>
+                  <AddressLookup
+                    idPrefix="np"
+                    inputClass="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
+                    labelClass="block text-xs text-gray-500 mb-1"
+                    buttonClass="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                    postcode={form.recipientPostcode}
+                    onPostcode={v => setForm(p => ({ ...p, recipientPostcode: v.toUpperCase() }))}
+                    onPick={a => setForm(p => ({ ...p, recipientLine1: a.line1, recipientLine2: a.line2, recipientCity: a.town, recipientCounty: a.county, recipientPostcode: a.postcode }))}
+                  />
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-500 mb-1">Address Line 1 *</label>
                     <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientLine1} onChange={e => setForm({...form, recipientLine1: e.target.value})} />
@@ -438,10 +448,6 @@ export default function PackingPage() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">County</label>
                     <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientCounty} onChange={e => setForm({...form, recipientCounty: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Postcode *</label>
-                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm uppercase" value={form.recipientPostcode} onChange={e => setForm({...form, recipientPostcode: e.target.value.toUpperCase()})} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Email</label>
