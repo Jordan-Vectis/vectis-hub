@@ -3429,14 +3429,18 @@ template to fit on the sheets — we print around 600 per sale"*.
   "Avery_38x21-R EDIT.docx" (an Excel "LotID Label Generator" fed it Barcode + Sale_Date).
 - ⚠ **Each label is CENTRED ON ITS STICKER** (`STICKERS` / `LABEL` / `labelFit` in
   `lib/barcode-labels.ts` — Jack, 2026-10-29: *"have you made sure it fits on the paper"*, *"this doesn't
-  line up"*): the stickers are 38.1 × 21.2 mm, 5 across at the template's pitch (2160 + 143 tw = 40.62 mm)
-  and 13 down touching (21.2 mm), the block centred on A4 — 4.7 mm each side, 10.7 mm top and bottom.
+  line up"*). ⚠ The sticker grid is the SHEET MAKER'S OWN template, which Jack sent 2026-10-29 —
+  Labels4U "65tv – 38.1 x 21.2mm" (code ref L7651, the sheets we buy; `SHEET`, in twips): first row
+  10.88 mm from the top (617 tw), first column 4.66 mm from the left (264 tw, the same on the right),
+  5 across at 40.64 mm pitch (2160 + 144 tw), 13 down at 21.17 mm (1200 tw, touching). `STICKERS` is
+  exactly those cells — change nothing there without a new template or a measured test print.
   The template's three lines, sizes and spacing, ONE left edge, the block centred across and down: a
   normal code (F018001) keeps 2.3 mm clear left and right (the Code 39 quiet zone) and 2.6 mm top and
-  bottom; even a 10-character one 1.27 mm. The Word template's own grid (`SHEET` — table at 10.0 mm /
-  6.1 mm, 21.17 mm rows, the barcode and number pulled out to the cell edge, so on the sticker they sat
-  1.3 mm from the left and 3.3 mm from the right, the date indented more) sits on the stickers to within
-  1.4 mm; it's kept as the record. Printed at **Actual size** (100 %), never "fit" — the PDF sets
+  bottom; even a 10-character one 1.22 mm (the template's text inset, 15 + 54 tw). The old mail merge's
+  "Avery_38x21-R EDIT.docx" had moved that grid 1.4 mm right and 0.9 mm up (10.0 mm / 6.1 mm margins),
+  with the barcode and number pulled out to its cell edge and the date indented more — if a test print
+  sits off the stickers by about that much, it's the printer, and that edit was making up for it.
+  Printed at **Actual size** (100 %), never "fit" — the PDF sets
   PrintScaling None. The page's preview draws the sticker with the same `labelFit`.
 - ⚠ **The barcode is Code 39 drawn as vector bars** (`lib/code39.ts`, checked against bwip-js for all
   43 characters), the SAME size as the template's Libre Barcode 39 font at 22 pt — measured from the

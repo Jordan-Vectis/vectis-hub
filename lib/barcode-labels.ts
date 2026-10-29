@@ -15,38 +15,40 @@ import { code39Units, isCode39Text } from "@/lib/code39"
 export const BARCODES_PATH = "/tools/barcodes"
 
 /**
- * The Word template's sheet, in twips (1/20 pt, Word's own unit): A4; the table 10.0 mm from the top and
- * 6.1 mm from the left; 5 columns of 38.1 mm with 2.52 mm gaps; 13 rows exactly 21.17 mm; 1.27 mm padding
- * inside each label. Kept as the record of what the mail merge printed — the labels are now placed on
- * the STICKERS themselves (below), which this grid sits on to within 1.4 mm.
+ * The sheet maker's own template — Labels4U "65tv – 38.1 x 21.2mm" (code ref L7651, the sheets we buy;
+ * Jack sent it 2026-10-29), in twips (1/20 pt, Word's own unit): A4 (11905 × 16837); the first row
+ * 10.88 mm from the top and the first column 4.66 mm from the left (264 tw margins both sides, so the
+ * block is centred across); 5 columns of 38.1 mm with 2.54 mm gaps; 13 rows exactly 21.17 mm, touching;
+ * text 1.22 mm inside each label (15 tw cell margin + 54 tw indent). The old mail merge's "Avery_38x21-R
+ * EDIT.docx" had moved this grid 1.4 mm right and 0.9 mm up (10.0 mm / 6.1 mm margins, 143 tw gaps).
  */
 export const SHEET = {
-  top: 567,
-  left: 346,
+  top: 617,
+  left: 264,
   labelW: 2160,
-  gap: 143,
+  gap: 144,
   labelH: 1200,
-  padX: 72,
+  padX: 69,
   cols: 5,
   rows: 13,
 } as const
 export const PER_SHEET = SHEET.cols * SHEET.rows
 
+const MM_PER_TWIP = 25.4 / 1440
+
 /**
- * The stickers on an Avery L7651 sheet, in mm: 38.1 × 21.2, 5 across with the template's 2.52 mm gaps
- * (pitch 40.62 mm) and 13 down touching (pitch 21.2 mm), the block centred on A4 — 4.7 mm each side and
- * 10.7 mm top and bottom. Each label's print is CENTRED on its sticker (Jack, 2026-10-29: "have you made
- * sure it fits on the paper" — "this doesn't line up"), so it can't run off an edge; "Test on plain
- * paper" outlines these, to hold up against a sheet.
+ * The stickers, in mm — exactly the template's cells: 38.1 × 21.17, pitch 40.64 across and 21.17 down,
+ * the first 4.66 mm from the left and 10.88 mm from the top. Each label's print is CENTRED on its sticker
+ * (Jack, 2026-10-29: "have you made sure it fits on the paper" — "this doesn't line up"), so it can't
+ * run off an edge; "Test on plain paper" outlines these, to hold up against a sheet.
  */
-const PITCH_X_MM = ((SHEET.labelW + SHEET.gap) / 1440) * 25.4
 export const STICKERS = {
-  wMm: 38.1,
-  hMm: 21.2,
-  pitchXMm: PITCH_X_MM,
-  pitchYMm: 21.2,
-  leftMm: (210 - (SHEET.cols * 38.1 + (SHEET.cols - 1) * (PITCH_X_MM - 38.1))) / 2,
-  topMm: (297 - SHEET.rows * 21.2) / 2,
+  wMm: SHEET.labelW * MM_PER_TWIP,
+  hMm: SHEET.labelH * MM_PER_TWIP,
+  pitchXMm: (SHEET.labelW + SHEET.gap) * MM_PER_TWIP,
+  pitchYMm: SHEET.labelH * MM_PER_TWIP,
+  leftMm: SHEET.left * MM_PER_TWIP,
+  topMm: SHEET.top * MM_PER_TWIP,
 } as const
 
 /**
@@ -59,7 +61,7 @@ export const STICKERS = {
 const CAP = 0.718   // Helvetica's capital height, in em
 const INK_TOP = 8 * CAP                      // the date's capitals, above its baseline
 const INK = INK_TOP + 2.2 + 13 + 7.27 + 24 * CAP   // date, gap, bars, gap, the number's capitals
-const MARGIN_Y = ((21.2 / 25.4) * 72 - INK) / 2
+const MARGIN_Y = ((STICKERS.hMm / 25.4) * 72 - INK) / 2
 export const LABEL = {
   dateSize: 8,
   dateBaseline: MARGIN_Y + INK_TOP,
@@ -150,8 +152,8 @@ export function readRun(v: Record<string, unknown>): LabelRun {
   }
 }
 
-/** The width (pt) a barcode or number may take — the sticker less the template's 1.27 mm padding each
- *  side (35.56 mm), so centred, even a long code keeps 1.27 mm clear of both edges. */
+/** The width (pt) a barcode or number may take — the sticker less the template's 1.22 mm text inset each
+ *  side (35.67 mm), so centred, even a long code keeps 1.22 mm clear of both edges. */
 export const ROOM_PT = (SHEET.labelW - 2 * SHEET.padX) / 20
 
 /** The narrow bar width (mm) for `text` on a label: the template's, made narrower only when a longer

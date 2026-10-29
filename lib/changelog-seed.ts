@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-28, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-10-29, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"356460dc12755714d6ff9ab4fe1555433716d94e","author":"jack-vectis","date":"2026-10-29T09:08:20Z","subject":"Barcode Labels: type the sale number; each label centred on its sticker"},
   {"sha":"65e5a354fd6538769b194283eaf37a879723dbd4","author":"jack-vectis","date":"2026-10-28T16:49:00Z","subject":"Barcode Labels: print a sale's Lot ID labels on the Avery sheets, no mail merge"},
   {"sha":"fbd790c2e8e55ebb7f12e6ba354e26f6268f4426","author":"jack-vectis","date":"2026-10-28T16:48:47Z","subject":"Refunds: full stop in Check the money's summary"},
   {"sha":"5130be89f6457970be9ac9589e881b0e47931129","author":"Jordan Orange","date":"2026-10-28T15:48:44Z","subject":"Auctioneering Schedule: gridlines on every cell so the two columns show"},
