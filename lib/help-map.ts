@@ -304,7 +304,7 @@ export const DESTINATIONS: Destination[] = [
   // mail merge. Not "labels" alone (Packing owns it) and nothing hyphenated.
   {
     name: "Barcode Labels", href: "/tools/barcodes", app: "BARCODES",
-    what: "🏷️ Barcode Labels (Admin & Operations): print a sale's Lot ID barcode labels — X160001, X160002 and on — on the Avery L7651 sheets (65 a sheet), laid out exactly like the old Word mail merge. Pick the sale (its date fills in), say the first number and how many (1, 5 or 10 sheets in one tap), and press Print: the PDF opens in a new tab to print at Actual size. The first number carries on from the last labels printed for that sale, numbers already printed are pointed out, a part-used sheet can start on any label, a test print on plain paper checks the lining up, and anything printed before can be printed again.",
+    what: "🏷️ Barcode Labels (Admin & Operations): print a sale's Lot ID barcode labels — X160001, X160002 and on — on the Avery L7651 sheets (65 a sheet), laid out exactly like the old Word mail merge. Type the sale number (F018 — its date fills in when the Hub knows the sale), say how many (600 prints F018001 to F018600; 1, 5 or 10 sheets in one tap), and press Print: the PDF opens in a new tab to print at Actual size. The first number carries on from the last labels printed for that sale, numbers already printed are pointed out, a part-used sheet can start on any label, a test print on plain paper checks the lining up, and anything printed before can be printed again.",
     // Lot ID words only — tote, pallet and location labels are Goods In's (they carry those words too).
     also: [
       "lot id labels", "lot labels", "lot barcode labels", "lot id barcodes", "sale barcode labels", "sale barcodes",

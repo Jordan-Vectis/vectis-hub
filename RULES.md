@@ -3427,21 +3427,29 @@ template to fit on the sheets — we print around 600 per sale"*.
   (`lib/barcode-labels-pdf.ts`, pdf-lib, server side — never pdfkit). Each label: the sale date
   (dd/mm/yyyy, 8 pt), the Code 39 barcode, the number 24 pt bold — the Word template's
   "Avery_38x21-R EDIT.docx" (an Excel "LotID Label Generator" fed it Barcode + Sale_Date).
-- ⚠ **The positions are the template's, to the twip** (`SHEET` in `lib/barcode-labels.ts`): table 567 tw
-  (10.0 mm) from the top and 346 tw (6.1 mm) from the left — Word 2013 layout, no table indent, so the
-  first column starts AT the margin — columns 2160 tw (38.1 mm) with 143 tw (2.52 mm) gaps, rows exactly
-  1200 tw (21.17 mm), 72 tw cell padding. Checked against Avery's published L7651 grid: every label
-  lands on its sticker. Don't "tidy" these numbers. Printed at **Actual size** (100 %), never "fit".
+- ⚠ **Each label is CENTRED ON ITS STICKER** (`STICKERS` / `LABEL` / `labelFit` in
+  `lib/barcode-labels.ts` — Jack, 2026-10-29: *"have you made sure it fits on the paper"*, *"this doesn't
+  line up"*): the stickers are 38.1 × 21.2 mm, 5 across at the template's pitch (2160 + 143 tw = 40.62 mm)
+  and 13 down touching (21.2 mm), the block centred on A4 — 4.7 mm each side, 10.7 mm top and bottom.
+  The template's three lines, sizes and spacing, ONE left edge, the block centred across and down: a
+  normal code (F018001) keeps 2.3 mm clear left and right (the Code 39 quiet zone) and 2.6 mm top and
+  bottom; even a 10-character one 1.27 mm. The Word template's own grid (`SHEET` — table at 10.0 mm /
+  6.1 mm, 21.17 mm rows, the barcode and number pulled out to the cell edge, so on the sticker they sat
+  1.3 mm from the left and 3.3 mm from the right, the date indented more) sits on the stickers to within
+  1.4 mm; it's kept as the record. Printed at **Actual size** (100 %), never "fit" — the PDF sets
+  PrintScaling None. The page's preview draws the sticker with the same `labelFit`.
 - ⚠ **The barcode is Code 39 drawn as vector bars** (`lib/code39.ts`, checked against bwip-js for all
   43 characters), the SAME size as the template's Libre Barcode 39 font at 22 pt — measured from the
   font: narrow bar 0.03 em = 0.2328 mm, wide 3 × narrow, bars 0.59 em (≈ 4.6 mm) — so the scanners
   (`lib/photo-prep-barcode.ts` reads Code39, `/scan`) read them as before. A longer code that wouldn't
   fit the label gets narrower bars (`barNarrowFor`), and a smaller number.
 - **The page** (`/tools/barcodes`, tile "Barcode Labels" in Admin & Operations, app key **BARCODES** —
-  grant it per person in Users & Permissions; admins have it): pick the sale (BC's copy — WarehouseItem,
-  upcoming sales included — plus the Hub's sales, four months back to a year ahead; or type a code),
-  its date fills in; the first number carries on from the last run printed for that sale; how many
-  (1 / 5 / 10 sheets in a tap, at most 1,300 = 20 sheets); "start on label" for a part-used sheet; a
+  grant it per person in Users & Permissions; admins have it): TYPE the sale number (Jack, 2026-10-29:
+  *"we would write the sale number, for example F018, then choose 600 lots, so it would do barcodes from
+  F018001 to F018600"*) — a sale the Hub knows (BC's copy — WarehouseItem, upcoming sales included — plus
+  the Hub's sales, four months back to a year ahead) fills its date, and the next ones are buttons to
+  tap; the first number carries on from the last run printed for that sale; how many (600 to start
+  with; 1 / 5 / 10 sheets in a tap, at most 1,300 = 20 sheets); "start on label" for a part-used sheet; a
   preview of the first label; Print posts a form into a new tab (inside the tap — iPad Safari).
   **Test on plain paper** draws each label's edges and isn't logged.
 - **The log** (`BarcodeLabelRun` — **NEEDS Run Migrations**): every real print, so numbers already printed

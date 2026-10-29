@@ -24,8 +24,8 @@ export default async function BarcodesPage() {
         <Link href="/hub" className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mb-3 inline-flex items-center gap-1">← Hub</Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🏷️ Barcode Labels</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl leading-relaxed">
-          A sale&apos;s Lot ID labels — X160001, X160002 … — on the Avery L7651 sheets (65 a sheet), laid out exactly like the old mail merge.
-          Pick the sale, say how many, press Print. No Word, no Excel.
+          A sale&apos;s Lot ID labels on the Avery L7651 sheets (65 a sheet), laid out exactly like the old mail merge. Type the sale number,
+          say how many, press Print — F018 and 600 prints F018001 to F018600. No Word, no Excel.
         </p>
       </div>
       <LabelsClient sales={sales} runs={log?.runs ?? []} logReady={log?.ready ?? false} logFailed={!log} today={londonDay()} />

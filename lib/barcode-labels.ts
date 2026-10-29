@@ -15,10 +15,10 @@ import { code39Units, isCode39Text } from "@/lib/code39"
 export const BARCODES_PATH = "/tools/barcodes"
 
 /**
- * The sheet, EXACTLY as the Word template lays it out — in twips (1/20 pt, Word's own unit, so
- * nothing is rounded): A4; the table 10.0 mm from the top and 6.1 mm from the left (Word 2013 layout,
- * no table indent, so the first column starts at the margin); 5 columns of 38.1 mm with 2.52 mm gaps;
- * 13 rows exactly 21.17 mm; 1.27 mm padding inside each label. Avery L7651 — 38.1 × 21.2 mm, 65 a sheet.
+ * The Word template's sheet, in twips (1/20 pt, Word's own unit): A4; the table 10.0 mm from the top and
+ * 6.1 mm from the left; 5 columns of 38.1 mm with 2.52 mm gaps; 13 rows exactly 21.17 mm; 1.27 mm padding
+ * inside each label. Kept as the record of what the mail merge printed — the labels are now placed on
+ * the STICKERS themselves (below), which this grid sits on to within 1.4 mm.
  */
 export const SHEET = {
   top: 567,
@@ -33,33 +33,65 @@ export const SHEET = {
 export const PER_SHEET = SHEET.cols * SHEET.rows
 
 /**
- * The label's insides, as the template sets them — Arial (Helvetica here: the same widths), single
- * spacing (1.15 em a line, ascent 0.905 em), the three lines centred in the 60 pt cell as Word does:
- * 1 pt before + the date (8 pt, a 9.2 pt line) + the barcode (Libre Barcode 39 at 22 pt on an EXACT
- * 16 pt line — narrow bar 0.03 em = 0.2328 mm, bars 0.59 em tall, measured from the font) + the number
- * (24 pt bold, a 27.6 pt line) = 53.8 pt, so 3.1 pt above. Positions from the label's top edge, in
- * points. The barcode and the number start AT the cell's left edge (their paragraphs are indented −74 /
- * −75 twips, cancelling the 72-twip cell padding); only the date sits inside the padding.
+ * The stickers on an Avery L7651 sheet, in mm: 38.1 × 21.2, 5 across with the template's 2.52 mm gaps
+ * (pitch 40.62 mm) and 13 down touching (pitch 21.2 mm), the block centred on A4 — 4.7 mm each side and
+ * 10.7 mm top and bottom. Each label's print is CENTRED on its sticker (Jack, 2026-10-29: "have you made
+ * sure it fits on the paper" — "this doesn't line up"), so it can't run off an edge; "Test on plain
+ * paper" outlines these, to hold up against a sheet.
  */
-export const LABEL = {
-  dateSize: 8,
-  dateBaseline: 11.3,
-  barNarrowMm: 0.2328,
-  barTop: 13.5,
-  barHeight: 13,
-  numberSize: 24,
-  numberBaseline: 51,
-  /** Twips the barcode and the number sit left of the cell padding (the paragraphs' negative indent). */
-  barIndent: -74,
-  numberIndent: -75,
+const PITCH_X_MM = ((SHEET.labelW + SHEET.gap) / 1440) * 25.4
+export const STICKERS = {
+  wMm: 38.1,
+  hMm: 21.2,
+  pitchXMm: PITCH_X_MM,
+  pitchYMm: 21.2,
+  leftMm: (210 - (SHEET.cols * 38.1 + (SHEET.cols - 1) * (PITCH_X_MM - 38.1))) / 2,
+  topMm: (297 - SHEET.rows * 21.2) / 2,
 } as const
 
 /**
- * The real stickers on an Avery L7651 sheet (Avery's published layout, in mm) — what "Test on plain
- * paper" outlines, to hold up against a sheet. The template's grid sits on them: its cells start 1.35
- * mm right of and 0.7 mm above the stickers, which the centred, padded contents absorb.
+ * A label's print, as the template sets its three lines: the date 8 pt; the barcode as Libre Barcode 39
+ * at 22 pt (narrow bar 0.03 em = 0.2328 mm, bars 0.59 em tall — measured from the font); the number
+ * 24 pt bold (Arial in Word; Helvetica here — the same widths), with the template's spacing between them
+ * (single-spaced lines). All three start at ONE left edge, and the whole block is centred on the
+ * sticker, across and down. Positions in points from the sticker's top edge.
  */
-export const STICKERS = { topMm: 10.7, leftMm: 4.75, wMm: 38.1, hMm: 21.2, pitchXMm: 40.6, pitchYMm: 21.2 } as const
+const CAP = 0.718   // Helvetica's capital height, in em
+const INK_TOP = 8 * CAP                      // the date's capitals, above its baseline
+const INK = INK_TOP + 2.2 + 13 + 7.27 + 24 * CAP   // date, gap, bars, gap, the number's capitals
+const MARGIN_Y = ((21.2 / 25.4) * 72 - INK) / 2
+export const LABEL = {
+  dateSize: 8,
+  dateBaseline: MARGIN_Y + INK_TOP,
+  barNarrowMm: 0.2328,
+  barTop: MARGIN_Y + INK_TOP + 2.2,
+  barHeight: 13,
+  numberSize: 24,
+  numberBaseline: MARGIN_Y + INK,
+} as const
+
+/** Helvetica Bold's widths (1/1000 em) for what a Lot ID holds — so the page's preview and the PDF
+ *  centre the number alike. */
+const BOLD_W: Record<string, number> = {
+  "0": 556, "1": 556, "2": 556, "3": 556, "4": 556, "5": 556, "6": 556, "7": 556, "8": 556, "9": 556,
+  A: 722, B: 722, C: 722, D: 722, E: 667, F: 611, G: 778, H: 722, I: 278, J: 556, K: 722, L: 611, M: 833,
+  N: 722, O: 778, P: 667, Q: 778, R: 722, S: 667, T: 611, U: 722, V: 667, W: 944, X: 667, Y: 667, Z: 611,
+}
+/** The number's width in points at `size` (Helvetica Bold). */
+export const boldWidth = (text: string, size: number): number => ([...text].reduce((w, c) => w + (BOLD_W[c] ?? 722), 0) * size) / 1000
+
+/**
+ * Where a label's three lines go on its sticker: the bars' narrow width (mm), the number's size (pt) —
+ * the template's, smaller only for a long code that wouldn't fit ROOM_PT — and the shared left edge
+ * (pt from the sticker's left) that centres the wider of the two.
+ */
+export function labelFit(code: string): { narrowMm: number; numberSize: number; left: number } {
+  const narrowMm = barNarrowFor(code)
+  let numberSize: number = LABEL.numberSize
+  while (numberSize > 10 && boldWidth(code, numberSize) > ROOM_PT) numberSize -= 0.5
+  const widest = Math.max((code39Units(code) * narrowMm * 72) / 25.4, boldWidth(code, numberSize))
+  return { narrowMm, numberSize, left: ((STICKERS.wMm * 72) / 25.4 - widest) / 2 }
+}
 
 /** At most this many labels in one PDF (20 sheets) — a sale is around 600. */
 export const MAX_LABELS = 1300
@@ -93,7 +125,7 @@ export type LabelRun = {
 
 /** Why a run can't be printed, in words — null when it can. */
 export function runProblem(r: { sale: string; date: string; from: number; count: number; startAt: number }): string | null {
-  if (!r.sale) return "Pick the sale (or type its code, for example X160)."
+  if (!r.sale) return "Type the sale number, for example F018."
   if (!SALE_RE.test(r.sale)) return `"${r.sale}" doesn't look like a sale code — a letter or two then three or four digits, for example X160.`
   if (r.date && !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return "The sale date isn't a date — pick it from the calendar."
   if (!Number.isInteger(r.from) || r.from < 1 || r.from > MAX_NUMBER) return `The first number must be a whole number from 1 to ${MAX_NUMBER}.`
@@ -118,9 +150,8 @@ export function readRun(v: Record<string, unknown>): LabelRun {
   }
 }
 
-/** The width (pt) a barcode or number may take — the cell less its padding (35.56 mm). Starting at the
- *  cell's edge, that ends 1.2 mm inside the real sticker's right edge (the template's cells sit 1.35 mm
- *  right of the stickers), so a long code never runs off it. */
+/** The width (pt) a barcode or number may take — the sticker less the template's 1.27 mm padding each
+ *  side (35.56 mm), so centred, even a long code keeps 1.27 mm clear of both edges. */
 export const ROOM_PT = (SHEET.labelW - 2 * SHEET.padX) / 20
 
 /** The narrow bar width (mm) for `text` on a label: the template's, made narrower only when a longer

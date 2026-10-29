@@ -3,14 +3,15 @@
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  LABEL, PER_SHEET, ROOM_PT, SHEET, barNarrowFor, barcodeOf, labelDate, nextFrom, overlapping, readRun, runProblem, runWords,
+  LABEL, PER_SHEET, SALE_RE, STICKERS, barcodeOf, boldWidth, labelDate, labelFit, nextFrom, overlapping, readRun, runProblem, runWords,
   type LabelRunRow, type LabelSale,
 } from "@/lib/barcode-labels"
 import { code39Runs } from "@/lib/code39"
 
-// Admin & Operations → Barcode Labels — the page. Three things to choose (the sale, the numbers, where
-// on the first sheet to start) and Print: the PDF opens in a new tab (a form posted inside the tap, as
-// the Hub's other label screens do — iPad Safari blocks a tab opened later). The first number follows
+// Admin & Operations → Barcode Labels — the page. Type the sale number (F018), say how many (600) and
+// Print — F018001 to F018600 — with where on the first sheet to start if it's part used. The PDF opens
+// in a new tab (a form posted inside the tap, as the Hub's other label screens do — iPad Safari blocks
+// a tab opened later). The first number follows
 // on from the last run printed for that sale; numbers already printed are said, not refused (reprinting
 // spoilt labels is normal). Below: a preview of the first label, and what has been printed.
 
@@ -21,9 +22,6 @@ const btn = "inline-flex items-center justify-center gap-2 min-h-11 px-4 rounded
 const btnGo = "inline-flex items-center justify-center gap-2 min-h-11 px-5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold disabled:opacity-40"
 const chip = "min-h-11 px-3 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
 const muted = "text-gray-500 dark:text-gray-400"
-
-/** The "Another sale" choice in the sale box. */
-const OTHER = "__other__"
 
 const shortDay = (day: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return ""
@@ -36,15 +34,15 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
 }) {
   const router = useRouter()
   const list = sales ?? []
+  // The next sales, to tap instead of typing.
   const coming = list.filter(s => s.date >= today)
-  const earlier = list.filter(s => s.date < today).reverse()
 
-  // The sale: one from the list, or typed in ("Another sale").
-  const [pick, setPick] = useState<string>(coming[0]?.code ?? (list.length ? list[list.length - 1].code : OTHER))
-  const [typed, setTyped] = useState("")
-  const picked = list.find(s => s.code === pick) ?? null
-  const sale = (pick === OTHER ? typed : pick).trim().toUpperCase().replace(/\s+/g, "")
-  const [date, setDate] = useState(picked?.date ?? "")
+  // The sale number, typed (Jack, 2026-10-29: "we would write the sale number, for example F018, then
+  // choose 600 lots, so it would do barcodes from F018001 to F018600") — a sale the Hub knows fills its date.
+  const [saleText, setSaleText] = useState("")
+  const sale = saleText.trim().toUpperCase().replace(/\s+/g, "")
+  const matched = list.find(s => s.code === sale) ?? null
+  const [date, setDate] = useState("")
   // Runs printed from this page since it loaded — counted at once, before the log comes back with them.
   const [mine, setMine] = useState<LabelRunRow[]>([])
   const known = useMemo(() => [...mine, ...runs], [mine, runs])
@@ -52,25 +50,19 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
   // when the log shows someone else's), unless one has been typed (or put back by "Print again").
   const [fromTyped, setFromTyped] = useState<string | null>(null)
   const from = fromTyped ?? String(nextFrom(known, sale))
-  const [count, setCount] = useState(String(PER_SHEET * 10))
+  const [count, setCount] = useState("600")
   const [startAt, setStartAt] = useState("1")
   const [note, setNote] = useState<string | null>(null)
   const busy = useRef(false)
   const lastRefresh = useRef(0)
 
-  /** Choosing a sale fills its date (none for one typed in) and carries on from its last printed number. */
-  function choose(code: string) {
-    setPick(code)
+  /** The sale number typed (or tapped): a sale the Hub knows fills its date, and the first number
+   *  carries on from that sale's last printed one. */
+  function typeSale(v: string) {
+    setSaleText(v)
     setNote(null)
     setFromTyped(null)
     setStartAt("1")
-    setDate(list.find(x => x.code === code)?.date ?? "")
-  }
-  /** A typed code that is one of the listed sales takes its date. */
-  function typeSale(v: string) {
-    setTyped(v)
-    setNote(null)
-    setFromTyped(null)
     const s = list.find(x => x.code === v.trim().toUpperCase().replace(/\s+/g, ""))
     if (s) setDate(s.date)
   }
@@ -146,9 +138,7 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
 
   /** "Print again": a run from the log back in the boxes. */
   function again(r: LabelRunRow) {
-    const listed = list.some(s => s.code === r.sale)
-    setPick(listed ? r.sale : OTHER)
-    if (!listed) setTyped(r.sale)
+    setSaleText(r.sale)
     setDate(r.date ?? "")
     setFromTyped(String(r.from))
     setCount(String(r.count))
@@ -167,36 +157,44 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
       <section className={`${card} p-4 sm:p-6`} aria-label="What to print">
         {/* 1 — the sale */}
         <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-3"><Step n={1} /> The sale</h2>
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+        <div className="flex flex-wrap items-end gap-3">
           <label className="block">
-            <span className={label}>Sale</span>
-            <select value={pick} onChange={e => choose(e.target.value)} className={`${field} w-full`}>
-              {coming.length > 0 && (
-                <optgroup label="Coming up">
-                  {coming.map(s => <option key={s.code} value={s.code}>{saleWords(s)}</option>)}
-                </optgroup>
-              )}
-              {earlier.length > 0 && (
-                <optgroup label="Earlier">
-                  {earlier.map(s => <option key={s.code} value={s.code}>{saleWords(s)}</option>)}
-                </optgroup>
-              )}
-              <option value={OTHER}>Another sale — type its code…</option>
-            </select>
+            <span className={label}>Sale number</span>
+            <input
+              value={saleText} onChange={e => typeSale(e.target.value)} list="label-sales" placeholder="e.g. F018" maxLength={8}
+              autoComplete="off" autoCapitalize="characters" spellCheck={false} aria-describedby="sale-found"
+              className={`${field} w-40 font-mono uppercase text-lg font-bold`}
+            />
+            <datalist id="label-sales">
+              {list.map(s => <option key={s.code} value={s.code}>{[s.name, shortDay(s.date)].filter(Boolean).join(" — ")}</option>)}
+            </datalist>
           </label>
           <label className="block">
             <span className={label}>Sale date on the labels</span>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} w-full`} />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} w-44`} />
           </label>
-          {pick === OTHER && (
-            <label className="block sm:col-span-2">
-              <span className={label}>Sale code</span>
-              <input value={typed} onChange={e => typeSale(e.target.value)} placeholder="e.g. X160" maxLength={8} autoComplete="off" className={`${field} w-full sm:w-48 font-mono uppercase`} />
-            </label>
-          )}
         </div>
-        {sales === null && <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">The list of sales couldn&apos;t be read just now — choose &ldquo;Another sale&rdquo; and type its code and date.</p>}
-        {!date && <p className={`text-xs ${muted} mt-2`}>No date — the labels will have no date line.</p>}
+        <p id="sale-found" className={`text-xs ${muted} mt-2`} aria-live="polite">
+          {matched
+            ? <>{saleWords(matched)}</>
+            : SALE_RE.test(sale)
+              ? <>Not a sale the Hub has a date for — that&apos;s fine, just check the date.</>
+              : sales === null
+                ? <>The list of sales couldn&apos;t be read just now — type the sale number and pick its date.</>
+                : null}
+          {sale && !date && <> No date — the labels will have no date line.</>}
+        </p>
+        {coming.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mt-2" role="group" aria-label="Sales coming up">
+            <span className={`text-xs ${muted}`}>Coming up:</span>
+            {coming.slice(0, 6).map(s => (
+              <button key={s.code} type="button" onClick={() => typeSale(s.code)} aria-pressed={s.code === sale} title={saleWords(s)}
+                className={`${chip} font-mono ${s.code === sale ? "border-sky-500 text-sky-700 dark:text-sky-300" : ""}`}>
+                {s.code} <span className={`font-sans font-normal ${muted}`}>{shortDay(s.date)}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 2 — the numbers */}
         <h2 className="text-sm font-bold text-gray-900 dark:text-white mt-6 mb-3"><Step n={2} /> The numbers</h2>
@@ -300,16 +298,18 @@ function Step({ n }: { n: number }) {
 
 /** One label drawn as it prints — the same measurements and bars as the PDF (in points), scaled up. */
 function LabelPreview({ code, date }: { code: string; date: string }) {
-  const W = SHEET.labelW / 20, H = SHEET.labelH / 20, pad = SHEET.padX / 20
-  const unit = barNarrowFor(code) * (72 / 25.4)
+  const W = (STICKERS.wMm * 72) / 25.4, H = (STICKERS.hMm * 72) / 25.4
+  const fit = labelFit(code)
+  const unit = fit.narrowMm * (72 / 25.4)
   const bars: { x: number; w: number }[] = []
-  let x = (SHEET.padX + LABEL.barIndent) / 20
+  let x = fit.left
   code39Runs(code).forEach((u, k) => { if (k % 2 === 0) bars.push({ x, w: u * unit }); x += u * unit })
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white" role="img" aria-label={`Label ${code}${date ? `, ${date}` : ""}`}>
-      {date && <text x={pad} y={LABEL.dateBaseline} fontFamily="Helvetica, Arial, sans-serif" fontSize={LABEL.dateSize} fill="#000">{date}</text>}
+      {date && <text x={fit.left} y={LABEL.dateBaseline} fontFamily="Helvetica, Arial, sans-serif" fontSize={LABEL.dateSize} fill="#000">{date}</text>}
       {bars.map((b, i) => <rect key={i} x={b.x} y={LABEL.barTop} width={b.w} height={LABEL.barHeight} fill="#000" />)}
-      <text x={(SHEET.padX + LABEL.numberIndent) / 20} y={LABEL.numberBaseline} fontFamily="Helvetica, Arial, sans-serif" fontWeight="bold" fontSize={LABEL.numberSize} textLength={code.length > 7 ? ROOM_PT : undefined} lengthAdjust="spacingAndGlyphs" fill="#000">{code}</text>
+      <text x={fit.left} y={LABEL.numberBaseline} fontFamily="Helvetica, Arial, sans-serif" fontWeight="bold" fontSize={fit.numberSize}
+        textLength={boldWidth(code, fit.numberSize)} lengthAdjust="spacingAndGlyphs" fill="#000">{code}</text>
     </svg>
   )
 }
