@@ -297,19 +297,19 @@ export default function LabelsClient({ sales, runs, logReady, logFailed, today }
           <div className="flex flex-wrap items-center gap-4">
             <div className="grid grid-cols-3 gap-1 w-max" role="group" aria-label="Move the print">
               <span />
-              <NudgeButton name="Up" arrow="↑" onClick={() => moveNudge(nudged(nudge, 0, -1))} disabled={nudge.down <= -NUDGE_MAX} />
+              <NudgeButton name="Up" turn={0} onClick={() => moveNudge(nudged(nudge, 0, -1))} disabled={nudge.down <= -NUDGE_MAX} />
               <span />
-              <NudgeButton name="Left" arrow="←" onClick={() => moveNudge(nudged(nudge, -1, 0))} disabled={nudge.right <= -NUDGE_MAX} />
+              <NudgeButton name="Left" turn={-90} onClick={() => moveNudge(nudged(nudge, -1, 0))} disabled={nudge.right <= -NUDGE_MAX} />
               <button type="button" onClick={() => moveNudge(NO_NUDGE)} disabled={!moved} className={`${chip} min-w-11 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default`} title="Back to where the template puts it">Centre</button>
-              <NudgeButton name="Right" arrow="→" onClick={() => moveNudge(nudged(nudge, 1, 0))} disabled={nudge.right >= NUDGE_MAX} />
+              <NudgeButton name="Right" turn={90} onClick={() => moveNudge(nudged(nudge, 1, 0))} disabled={nudge.right >= NUDGE_MAX} />
               <span />
-              <NudgeButton name="Down" arrow="↓" onClick={() => moveNudge(nudged(nudge, 0, 1))} disabled={nudge.down >= NUDGE_MAX} />
+              <NudgeButton name="Down" turn={180} onClick={() => moveNudge(nudged(nudge, 0, 1))} disabled={nudge.down >= NUDGE_MAX} />
               <span />
             </div>
             <div className="min-w-0 flex-1 basis-40">
               <p className="text-sm font-semibold text-gray-900 dark:text-white" aria-live="polite">{moved ? `Moved ${moved}` : "Not moved — just as the template"}</p>
               <p className={`text-xs ${muted} mt-1`}>
-                Labels printing off the stickers? Move the print the way it needs to go — printed too low, press ↑. Each press is {String(NUDGE_STEP)} mm,
+                Labels printing off the stickers? Move the print the way it needs to go — printed too low, press the up arrow. Each press is {String(NUDGE_STEP)} mm,
                 up to {NUDGE_MAX} mm. This computer remembers it for its printer; check with <b>Test on plain paper</b>.
               </p>
             </div>
@@ -350,11 +350,13 @@ function Step({ n }: { n: number }) {
   return <span className="inline-flex items-center justify-center h-6 w-6 mr-1.5 rounded-full bg-sky-600 text-white text-xs" aria-hidden>{n}</span>
 }
 
-function NudgeButton({ name, arrow, onClick, disabled }: { name: string; arrow: string; onClick: () => void; disabled: boolean }) {
+function NudgeButton({ name, turn, onClick, disabled }: { name: string; turn: number; onClick: () => void; disabled: boolean }) {
   return (
     <button type="button" onClick={onClick} disabled={disabled} aria-label={`Move the print ${name.toLowerCase()} ${String(NUDGE_STEP)} mm`} title={name}
       className="inline-flex items-center justify-center min-h-11 min-w-11 rounded-xl border border-gray-300 dark:border-gray-700 text-lg font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40">
-      {arrow}
+      <svg viewBox="0 0 24 24" className="h-5 w-5" style={{ transform: `rotate(${turn}deg)` }} aria-hidden>
+        <path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </button>
   )
 }
