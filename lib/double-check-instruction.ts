@@ -26,6 +26,7 @@ UNPACKED ITEMS: boxed model railway items (and other boxed items) are photograph
 - If a stated quantity does not match what you can count, do NOT change the number in the description — the cataloguer may know of items that are out of frame. Report it in "quantityFlag" instead, stating both figures, e.g. "The description says 7 x R8622 Terraced House Right Hand, but the photos show 5 boxes (4 in the middle row, 1 in the bottom row)".
 - If you cannot count with confidence — boxes partly hidden, a stack whose depth cannot be seen, items cut off by the edge of the photo — do NOT guess and do NOT change the number; say so in "quantityFlag", e.g. "Cannot confirm the count of R8621 — the boxes are partly hidden".
 - Leave "quantityFlag" empty when every stated quantity matches the photos or when there are no photos to count from.
+- A quantity that appears in the CATALOGUER KEY POINTS (e.g. "issues 1-25", "7 x R8622", "set of 12") was counted by a person with the items in hand. NEVER flag it — not as a mismatch and not as "cannot confirm" — even when the photos show fewer or the rest are hidden in a box. Only a quantity the description states WITHOUT the key points backing it is checked against the photos.
 A quantity flag is not a contradiction and does not need a revised description on its own.
 
 NAMED OBJECTS — look again at each one:

@@ -149,6 +149,12 @@ export async function POST(req: NextRequest) {
     // where the photo showed 4, 5 and 1 — every box's side panel carries the title too, and the
     // AI had counted printed faces, not boxes. Same rule as product codes: the number is never
     // changed here, the doubt is raised as a flag so a person counts.
+    // Jordan, 2026-11-02 (F144, "issues 1-25 complete" in the key points, flagged "cannot confirm
+    // the count of 25"): a count the cataloguer put in the key points was made with the items in
+    // hand — never flag it. The prompt says so; this guard makes sure: the flag always names the
+    // stated figure, so a flag whose number stands in the key points is dropped.
+    const kpNumbers = new Set((keyPoints ?? "").match(/\b\d+\b/g) ?? [])
+    if (quantityFlag && (quantityFlag.match(/\b\d+\b/g) ?? []).some(n => kpNumbers.has(n))) quantityFlag = ""
     if (quantityFlag) flag = [flag, `Double Check counted the photos: ${quantityFlag}`].filter(Boolean).join(" ")
 
     // ⚠ The Dolls/Bears mechanical clean-up runs HERE, as the last thing to touch the text.
