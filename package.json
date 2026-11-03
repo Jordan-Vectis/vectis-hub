@@ -41,7 +41,7 @@
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
     "resend": "^6.10.0",
-    "sanitize-html": "^2.17.5",
+    "sanitize-html": "^2.18.1",
     "sharp": "^0.35.5",
     "socket.io": "^4.8.4",
     "socket.io-client": "^4.8.4",

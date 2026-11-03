@@ -88,17 +88,34 @@ function extOf(name: string): string | null {
   return m ? m[1].toLowerCase() : null
 }
 
+/** A type a browser would RUN rather than show: a web page, SVG (it can carry script), XML, script.
+ *  ⚠ XML only as the whole subtype or a "+xml" suffix — a Word or Excel file's type contains
+ *  "openxmlformats" and must keep its own type. */
+const ACTIVE_TYPE_RE = /html|svg|javascript|ecmascript|\/xml(;|$)|\+xml(;|$)/
+
 /** The type to store a customer's file under. An image or video type is kept; otherwise it is worked
  *  out from the name. Anything else a customer sends (a PDF, a Word document…) keeps its own type so it
  *  opens as itself — until 2026-09-15 it was stored as a JPEG and wouldn't open at all. A file with no
- *  type AND no extension is what older phones send for a photo, so that stays a JPEG. */
+ *  type AND no extension is what older phones send for a photo, so that stays a JPEG.
+ *  ⚠ Never an ACTIVE type (security review, 2026-11-03): the photo request link is public, and a file
+ *  stored as text/html or image/svg+xml would run as a web page wherever the Hub served it as itself.
+ *  Those are stored as a plain download instead. */
 export function mediaContentType(rawType: string | null | undefined, filename: string): string {
   const t = (rawType ?? "").toLowerCase().trim()
+  if (ACTIVE_TYPE_RE.test(t)) return "application/octet-stream"
   if (t.startsWith("image/") || t.startsWith("video/")) return t
   const ext = extOf(filename)
   if (ext && TYPE_FOR_EXT[ext]) return TYPE_FOR_EXT[ext]
   if (t && t !== "application/octet-stream" && /^[a-z]+\/[a-z0-9.+-]+$/.test(t)) return t
   return ext ? "application/octet-stream" : "image/jpeg"
+}
+
+/** May the Hub send a stored file back for the browser to SHOW on the Hub's own address? Only types a
+ *  browser can't run: pictures (not SVG), video, audio and PDF. Anything else goes out as a download. */
+export function isSafeInlineType(type: string | null | undefined): boolean {
+  const t = (type ?? "").toLowerCase().trim()
+  if (!/^[a-z]+\/[a-z0-9.+-]+$/.test(t) || ACTIVE_TYPE_RE.test(t)) return false
+  return t.startsWith("image/") || t.startsWith("video/") || t.startsWith("audio/") || t === "application/pdf"
 }
 
 /** A key-safe file name that always ends in an extension, so a video can be recognised later. */

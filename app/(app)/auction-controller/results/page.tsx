@@ -103,6 +103,7 @@ export default function ResultsPage() {
   const [state, setState] = useState<AuctionState | null>(null)
   const [lotBids, setLotBids] = useState<Record<string, BidEntry[]>>({})
   const [lotTitles, setLotTitles] = useState<Record<string, string>>({})
+  const [watchError, setWatchError] = useState<string | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
   // ── DB / historical state ────────────────────────────────────────────────
@@ -119,7 +120,10 @@ export default function ResultsPage() {
 
     socket.on("connect", () => {
       socket.emit("bidder:join", { name: "Results View" })
+      // Bidder names and ids come only to staff with Auction Controller access.
+      socket.emit("staff:watch")
     })
+    socket.on("staff:watch:fail", ({ message }: { message: string }) => setWatchError(message))
 
     socket.on("auction:state", (s: AuctionState) => {
       setState(s)
@@ -194,6 +198,12 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+
+      {watchError && (
+        <div className="bg-amber-100 text-amber-900 text-sm px-6 py-2">
+          Bidder names are hidden on the live sale — {watchError}
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">

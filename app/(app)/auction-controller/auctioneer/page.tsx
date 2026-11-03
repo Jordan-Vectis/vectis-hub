@@ -71,6 +71,7 @@ export default function AuctioneerPage() {
   const [bidFlash, setBidFlash] = useState(false)
   const [hammerFlash, setHammerFlash] = useState(false)
   const [fairWarning, setFairWarning] = useState(false)
+  const [watchError, setWatchError] = useState<string | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
@@ -80,7 +81,10 @@ export default function AuctioneerPage() {
     socket.on("connect", () => {
       // Join as a viewer so we get state updates
       socket.emit("bidder:join", { name: "Auctioneer View" })
+      // Bidder names and the top commission bid come only to staff with Auction Controller access.
+      socket.emit("staff:watch")
     })
+    socket.on("staff:watch:fail", ({ message }: { message: string }) => setWatchError(message))
 
     socket.on("auction:state", (s: AuctionState) => {
       setState(s)
@@ -124,6 +128,12 @@ export default function AuctioneerPage() {
 
   return (
     <div className="min-h-screen bg-[#1a1a2e] text-white flex flex-col select-none" style={{ fontFamily: "system-ui, sans-serif" }}>
+
+      {watchError && (
+        <div className="bg-amber-900/60 text-amber-100 text-sm px-4 py-2 text-center">
+          Bidder names and commission bids are hidden — {watchError}
+        </div>
+      )}
 
       {/* ── Hover alert bar ── */}
       {hoveringCount > 0 && (

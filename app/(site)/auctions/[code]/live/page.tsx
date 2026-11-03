@@ -63,7 +63,6 @@ export default async function LiveAuctionPage({
       lots={lots}
       isLoggedIn={isLoggedIn}
       isRegistered={isRegistered}
-      customerId={session?.id ?? null}
       customerName={session ? `${session.firstName ?? ""} ${session.lastName ?? ""}`.trim() || null : null}
     />
   )

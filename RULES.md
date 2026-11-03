@@ -125,6 +125,23 @@ It is allowed to stay public **only because of these constraints. Keep every one
   sign or stream any key for anyone signed in, so each REFUSES a key starting `refund-photos/` — a
   customer's damage photos are for admins only. Keep that guard on any new route of that kind.
 
+## ⚠ Stored files and the live-auction socket — what an outsider can reach (security review, 2026-11-03)
+
+- **A route that streams a stored file from the Hub's own address never trusts the stored type.** It
+  is whatever the uploader claimed — a customer on the public photo request link included — so an HTML
+  or SVG file served as itself runs with the viewer's login. `/api/catalogue/photo-proxy` shows only
+  `isSafeInlineType()` (`lib/media.ts`: pictures except SVG, video, audio, PDF) and sends anything else
+  as a download; `/api/public/photo` has its own image list. And `mediaContentType()` never stores an
+  active type (HTML, SVG, XML, script) from the public link. Any new streaming route does the same.
+- **The live-auction socket is open to the internet** (`server.js` lets a connection with no Origin
+  through). So `lib/auction-socket.js` takes a bid or commission bid only from a customer signed in
+  (`customer-token`) and registered for the sale, AS that customer — never a bidder id from the payload.
+  The full state (bidder names and account ids, the top commission bid's ceiling) goes only to the
+  `staff` room: `clerk:auth`, or `staff:watch` for the auctioneer and results screens, both on the
+  Auction Controller rule. Everyone else gets `publicState()` — bidders as anonymous paddles, no
+  commission figures ("Your bid stays confidential", as the live room promises). An online bid must be
+  exactly the asking bid, and the WebRTC relays only ever connect a viewer and the camera.
+
 ## Design philosophy — read before building ANY screen
 
 Every rule here exists because it was got wrong, more than once. Each one names the failure.

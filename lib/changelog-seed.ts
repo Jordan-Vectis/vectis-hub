@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-10-29, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-02, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"0907aef33390151b8b540c492fa3aa26ef5fc154","author":"Jordan Orange","date":"2026-11-02T10:23:22Z","subject":"Double Check: never flag a count the cataloguer put in the key points"},
   {"sha":"540803d3f2a3a7ce050686d8623e42351fe9c36b","author":"Jordan Orange","date":"2026-10-29T15:31:36Z","subject":"Admin Centre: 📮 Postcode lookup popup with a copy button per address line"},
   {"sha":"ae348370d3634b45e978101fc0ef175affd90ac3","author":"Jordan Orange","date":"2026-10-29T15:25:43Z","subject":"Refresh changelog seed"},
   {"sha":"a4b67ee68c3d92cf754e0bfb1894d30e846dfb7d","author":"Jordan Orange","date":"2026-10-29T15:25:43Z","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},

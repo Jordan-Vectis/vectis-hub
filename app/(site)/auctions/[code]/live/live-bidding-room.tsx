@@ -66,7 +66,6 @@ interface Props {
   lots: Lot[]
   isLoggedIn: boolean
   isRegistered: boolean
-  customerId: string | null
   customerName: string | null
 }
 
@@ -98,9 +97,12 @@ const NOTICE_BAD = "border border-[var(--vs-red)] bg-white text-[var(--vs-red)]"
 
 export default function LiveBiddingRoom({
   auctionName, auctionCode, auctionDate, initialLotIndex, lots: initialLots,
-  isLoggedIn, isRegistered, customerId, customerName,
+  isLoggedIn, isRegistered, customerName,
 }: Props) {
   const [state, setState] = useState<AuctionState | null>(null)
+  // This customer's paddle in the public state — the socket says who you are from your sign-in and
+  // shows other people's bids only by paddle, never by account (lib/auction-socket.js → "Who sees what").
+  const [myPaddle, setMyPaddle] = useState<string | null>(null)
   const [fairWarning, setFairWarning] = useState(false)
   const [bidFlash, setBidFlash] = useState(false)
   const [connected, setConnected] = useState(false)
@@ -125,11 +127,9 @@ export default function LiveBiddingRoom({
     socketRef.current = socket
     socket.on("connect", () => {
       setConnected(true)
-      socket.emit("bidder:join", {
-        name: customerName ?? "Guest",
-        bidderId: customerId ?? undefined,
-      })
+      socket.emit("bidder:join", { name: customerName ?? "Guest" })
     })
+    socket.on("bidder:joined", ({ bidderId }: { bidderId: string | null }) => setMyPaddle(bidderId ?? null))
     socket.on("disconnect", () => setConnected(false))
     socket.on("auction:state", (s: AuctionState) => {
       setState(s)
@@ -250,7 +250,7 @@ export default function LiveBiddingRoom({
   const bids = lot?.bids ? [...lot.bids].reverse() : []
 
   // Is this customer currently the top bidder on the live lot?
-  const isLeading = !!(customerId && lastBid?.bidderId === customerId)
+  const isLeading = !!(myPaddle && lastBid?.bidderId === myPaddle)
 
   // Lots strip — use socket summary if available, otherwise initial lots
   const stripLots = state?.lots?.length
@@ -467,11 +467,7 @@ export default function LiveBiddingRoom({
                   if (!socketRef.current || !lot) return
                   setBidPending(true)
                   setBidFeedback(null)
-                  socketRef.current.emit("bid:place", {
-                    amount: askingBid,
-                    bidderId: customerId,
-                    bidderName: customerName ?? "Online Bidder",
-                  })
+                  socketRef.current.emit("bid:place", { amount: askingBid })
                 }}
                 className="vs-btn vs-btn-block vs-btn-lg mb-3 active:scale-[0.98] transition-all"
               >
@@ -738,8 +734,6 @@ export default function LiveBiddingRoom({
                     socketRef.current.emit("bid:commission", {
                       lotId: commissionModal.lotId,
                       maxAmount: Number(commissionAmount),
-                      bidderId: customerId,
-                      bidderName: customerName ?? "Online Bidder",
                     })
                   }}
                   className="vs-btn shrink-0"

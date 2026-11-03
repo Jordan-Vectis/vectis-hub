@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { isCronRequest } from "@/lib/cron-auth"
 import { r2 } from "@/lib/r2"
 import { GetObjectCommand } from "@aws-sdk/client-s3"
-import { needsJpegCopy } from "@/lib/media"
+import { isSafeInlineType, needsJpegCopy } from "@/lib/media"
 import { ensureJpegCopy } from "@/lib/media-convert"
 import { REFUND_PHOTO_PREFIX } from "@/lib/refunds"
 
@@ -39,12 +39,25 @@ export async function GET(req: NextRequest) {
     const body = obj.Body as ReadableStream | null
     if (!body) return new NextResponse("Not found", { status: 404 })
 
-    return new NextResponse(body, {
-      headers: {
-        "Content-Type":  obj.ContentType ?? "image/jpeg",
-        "Cache-Control": "private, max-age=3600",
-      },
-    })
+    // ⚠ The stored ContentType is whatever the UPLOADER claimed — a customer on the public photo
+    // request link included — and this route is on the Hub's own address. Served as itself, an HTML
+    // or SVG file would run with the viewer's login (security review, 2026-11-03). Pictures, video,
+    // audio and PDF are shown; anything else is sent as a download that can't run.
+    const claimed = (obj.ContentType ?? "image/jpeg").toLowerCase()
+    const headers: Record<string, string> = {
+      "Content-Type":           "application/octet-stream",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control":          "private, max-age=3600",
+    }
+    if (isSafeInlineType(claimed)) {
+      headers["Content-Type"] = claimed
+      // Same seal as /api/public/photo. Not on a PDF: a sandboxed page can't open the browser's PDF viewer.
+      if (claimed.startsWith("image/")) headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    } else {
+      const name = servedKey.split("/").pop() || "file"
+      headers["Content-Disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(name)}`
+    }
+    return new NextResponse(body, { headers })
   } catch (e: any) {
     const missing = e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404
     if (!missing) console.error("catalogue/photo-proxy error:", e)
