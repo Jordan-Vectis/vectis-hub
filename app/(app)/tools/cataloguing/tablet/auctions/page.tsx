@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { auctionTypeEmoji } from "@/lib/auction-types"
 import { getDepartmentAccessForSession, auctionWhere } from "@/lib/departments"
+import FavouriteStar from "./favourite-star"
 
 export default async function TabletAuctionsPage() {
   const session = await auth()
@@ -19,8 +20,21 @@ export default async function TabletAuctionsPage() {
     include: { _count: { select: { lots: true } } },
   })
 
-  const active   = auctions.filter(a => !a.complete && !a.finished)
-  const archived = auctions.filter(a => a.complete || a.finished)
+  // The sales THIS person has starred — the same per-person table as the desktop Auction Manager.
+  // Migration-safe: an empty set until the table exists.
+  let favourites = new Set<string>()
+  try {
+    const rows = await prisma.catalogueAuctionFavourite.findMany({
+      where:  { userId: session.user.id },
+      select: { auctionId: true },
+    })
+    favourites = new Set(rows.map(r => r.auctionId))
+  } catch { /* not migrated yet */ }
+
+  // Starred sales are lifted out of their section and pinned to the top, completed ones included.
+  const pinned   = auctions.filter(a => favourites.has(a.id))
+  const active   = auctions.filter(a => !favourites.has(a.id) && !a.complete && !a.finished)
+  const archived = auctions.filter(a => !favourites.has(a.id) && (a.complete || a.finished))
 
   function badge(a: typeof auctions[number]) {
     // Light-first with dark: variants, like the tablet screen it opens (light/dark switch, 2026-09-11).
@@ -33,9 +47,10 @@ export default async function TabletAuctionsPage() {
   function AuctionCard({ a }: { a: typeof auctions[number] }) {
     const b = badge(a)
     return (
+      <div className="relative">
       <Link
         href={`/tools/cataloguing/tablet/auctions/${a.id}`}
-        className="block bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl p-6 active:scale-[0.98] transition-transform"
+        className="block pr-16 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl p-6 active:scale-[0.98] transition-transform"
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <span className="font-mono font-bold text-[#2AB4A6] text-2xl leading-none">{a.code}</span>
@@ -52,6 +67,11 @@ export default async function TabletAuctionsPage() {
           <span className="text-gray-600">{auctionTypeEmoji(a.auctionType)} {a.auctionType}</span>
         </div>
       </Link>
+      {/* Beside the link, never inside it — a button in a link would open the sale too. */}
+      <div className="absolute top-3 right-3">
+        <FavouriteStar auctionId={a.id} initial={favourites.has(a.id)} />
+      </div>
+      </div>
     )
   }
 
@@ -69,6 +89,18 @@ export default async function TabletAuctionsPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* ★ Currently working on — only ever visible to the person who starred them */}
+          {pinned.length > 0 && (
+            <section>
+              <p className="text-sm font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-3 px-1">
+                ★ Currently working on <span className="normal-case tracking-normal font-normal text-gray-500">· only you see these</span>
+              </p>
+              <div className="space-y-3">
+                {pinned.map(a => <AuctionCard key={a.id} a={a} />)}
+              </div>
+            </section>
+          )}
+
           {/* Active auctions */}
           {active.length > 0 && (
             <section>

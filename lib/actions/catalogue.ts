@@ -1984,11 +1984,11 @@ export async function toggleAuctionFavourite(
     })
     if (existing) {
       await prisma.catalogueAuctionFavourite.delete({ where: { userId_auctionId: { userId, auctionId } } })
-      revalidatePath("/tools/cataloguing/auctions")
+      revalidatePath("/tools/cataloguing/auctions"); revalidatePath("/tools/cataloguing/tablet/auctions")
       return { ok: true, favourite: false }
     }
     await prisma.catalogueAuctionFavourite.create({ data: { userId, auctionId } })
-    revalidatePath("/tools/cataloguing/auctions")
+    revalidatePath("/tools/cataloguing/auctions"); revalidatePath("/tools/cataloguing/tablet/auctions")
     return { ok: true, favourite: true }
   } catch (e: any) {
     return { ok: false, favourite: false, error: e?.message ?? "Couldn't change that." }

@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-02, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-03, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7f15c29abff1463a36a5ca2061592d8706bd46a9","author":"jack-vectis","date":"2026-11-03T15:22:52Z","subject":"Security: customer uploads can't run as web pages, live bidding only as a signed-in registered customer, Node 22.23.4 + sanitize-html 2.18.1"},
   {"sha":"0907aef33390151b8b540c492fa3aa26ef5fc154","author":"Jordan Orange","date":"2026-11-02T10:23:22Z","subject":"Double Check: never flag a count the cataloguer put in the key points"},
   {"sha":"540803d3f2a3a7ce050686d8623e42351fe9c36b","author":"Jordan Orange","date":"2026-10-29T15:31:36Z","subject":"Admin Centre: 📮 Postcode lookup popup with a copy button per address line"},
   {"sha":"ae348370d3634b45e978101fc0ef175affd90ac3","author":"Jordan Orange","date":"2026-10-29T15:25:43Z","subject":"Refresh changelog seed"},
