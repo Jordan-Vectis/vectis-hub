@@ -93,34 +93,28 @@ It is allowed to stay public **only because of these constraints. Keep every one
 - `AccidentReport` rows are **only ever read inside the Hub** (`/tools/first-aid`, behind the
   `FIRST_AID` app permission). Never surface them publicly.
 
-## Public refund form — a deliberate exception (2026-10-26)
+## Refund form — customers use the Microsoft Form (2026-11-06)
 
-`/refund` (Accounts → Refunds) is reachable **without logging in**, on purpose: it is the Hub's own
-replacement for the Microsoft Form customers reach from vectis.co.uk (Jack, 2026-10-26: "the form link
-will need to come out of the hub instead of using the Microsoft form"). Requests land in
-`/tools/refunds`, admins only.
+Customers ask for a refund or return through the **Microsoft Form**, not a Hub page (Jack, 2026-11-06:
+*"i want to use my original microsoft form for safety"*). vectis.co.uk's FAQ links straight to it and it
+fills the SharePoint Refund Log. Its address is `REFUND_MICROSOFT_FORM` in `lib/refunds.ts`.
 
-It is allowed to stay public **only because of these constraints. Keep every one of them:**
+The Hub's own public form (built 2026-10-26) and its unauthenticated write
+`POST /api/public/refund-request` were **removed**, so the Hub takes in nothing from outsiders for
+refunds. Reverting that commit brings them back. What is left:
 
-- **EXACT-match allowlist entry, not a prefix** — `"/refund"` in `publicExact` (`auth.config.ts`), like
-  `/first-aid`. ⚠ Never move it into the prefix list.
-- **Top-level route (`app/refund`), never inside `app/(app)`**, and **no links from it into the Hub**.
-- **No public GET endpoint, nothing read back.** The page shows no record. `?sent=1` / `?problem=<word>`
-  (the route's answer to a browser that sent the form without its script) are fixed words only —
-  nothing the customer typed is ever put in an address. The `<form>` keeps `method="post"` +
-  `encType="multipart/form-data"` + `action="/api/public/refund-request"` for that reason.
-- **One unauthenticated write**: `POST /api/public/refund-request` (already-public prefix). Write-only —
-  it answers `{ok:true}` and nothing else: not the id, not the RF number (it's sequential and would
-  give away how many requests Vectis has had). Honeypot `hp_ref` and >10 an hour from one address →
-  saved but flagged suspect, never refused. Hard refusals only for floods: 60 attempts an hour per
-  address counted before the body is read, 3 requests in flight at once, 30 saved an hour per
-  address, 300 an hour overall. The address is the LAST X-Forwarded-For hop (Railway's), **hashed
-  with `AUTH_SECRET`, never stored raw**.
-- **Photos live under `refund-photos/` in R2 and are only ever opened through the admin-only
-  `/api/refunds/photo`.** ⚠ Never add `refund-photos/` to `/api/public/photo`'s prefix list.
+- **`/refund` only forwards to the Microsoft Form** (`app/refund/page.tsx`), for anyone who kept the
+  link. It stays an EXACT-match entry in `publicExact` (`auth.config.ts`) so a logged-out customer isn't
+  sent to `/login`. ⚠ Never move it into the prefix list, and never add a form, a record or a link into
+  the Hub to that page.
+- ⚠ **New requests don't reach `/tools/refunds` by themselves.** Admins import a fresh copy of the log,
+  which only adds rows not in yet, or use **＋ Add a request**.
+- Requests already sent through the Hub's form stay in `/tools/refunds` as `source: "form"`.
 - `Refund` rows are only ever read inside the Hub, behind the admin check. Never bank or card details:
-  the form refuses them (`looksLikeBankDetails`), and the old-log import takes them out of every cell
+  staff entries refuse them (`looksLikeBankDetails`), and the log import takes them out of every cell
   before saving.
+- **Those requests' photos live under `refund-photos/` in R2 and are only ever opened through the
+  admin-only `/api/refunds/photo`.** ⚠ Never add `refund-photos/` to `/api/public/photo`'s prefix list.
 - ⚠ The Hub's general photo routes (`/api/image`, `/api/catalogue/signed-url`, `/api/catalogue/photo-proxy`)
   sign or stream any key for anyone signed in, so each REFUSES a key starting `refund-photos/` — a
   customer's damage photos are for admins only. Keep that guard on any new route of that kind.
@@ -3328,19 +3322,18 @@ keeping the lots here they will be charged per lot"*.
 Jack: *"here is our current refund log … customers requesting issues, partial refunds or returns … make
 it better with the data you have"* and *"I want it all to be in the Hub, nice and clean"* — the Refunds
 tile in Admin & Operations (`/tools/refunds`, card `REFUNDS`, **admins only** like Paid, not collected:
-no appKey; every action re-checks `getAccountsAccess().isAdmin` on the server). It replaces the
-SharePoint "Refund Log" the Microsoft Form filled: requests come from the Hub's own public form
-(`/refund`, above), are added by staff (vendor payouts and the like), or were imported once from the old
-log. The words, money rules and shapes are `lib/refunds.ts` (plain, client-safe); the shared server
+no appKey; every action re-checks `getAccountsAccess().isAdmin` on the server). Customers ask through
+the Microsoft Form, which fills the SharePoint "Refund Log" (see "Refund form" above): requests reach this
+tile by importing that log, which only adds rows not in yet, or are added by staff (vendor payouts and the
+like). Those already sent through the Hub's removed public form stay here as `source: "form"`. The words, money rules and shapes are `lib/refunds.ts` (plain, client-safe); the shared server
 helpers `lib/refunds-server.ts`; staff actions `lib/actions/refunds.ts`; BC look-ups `lib/refunds-bc.ts`;
 the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
 
 - **Tables `Refund`, `RefundLot`, `RefundEvent`** (cascade) — **NEEDS Run Migrations**; until then the
-  panel says so and the form answers 503. Nothing was added to `Customer`, `Contact` or `User`
+  panel says so. Nothing was added to `Customer`, `Contact` or `User`
   (`customerId` is a plain id, matched from the C-number by `matchCustomerId`).
 - **The reference** `RF0042` is `Refund.ref`: max + 1 under `pg_advisory_xact_lock(hashtext('refund-ref'))`
-  inside the creating transaction (`nextRefundRef`). It is shown to STAFF only — the public form never
-  returns it (it's sequential).
+  inside the creating transaction (`nextRefundRef`). It is shown to STAFF only (it's sequential).
 - **Statuses**: New · Being looked at · Waiting for the item to come back · Agreed — to pay · Paid ·
   Declined · Closed another way (Declined and Closed need a reason). **Complete for accounts** is a
   separate tick, only once Paid. A status change only wins if the status is still the one the page

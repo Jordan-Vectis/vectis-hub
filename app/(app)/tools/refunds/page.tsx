@@ -1,8 +1,7 @@
-import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import { listRefunds } from "@/lib/actions/refunds"
-import { REFUND_FORM_PATH, parseRefundFilter } from "@/lib/refunds"
+import { REFUND_MICROSOFT_FORM, parseRefundFilter } from "@/lib/refunds"
 import FormLink from "./form-link"
 import ImportBox from "./import-box"
 import MatchSales from "./match-sales"
@@ -10,9 +9,9 @@ import MoneyCheck from "./money-check"
 import RefundsPanel from "./panel-client"
 import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 
-// Admin & Operations → 💷 Refunds: every refund, part-refund and return request — from the Hub's own
-// public refund form (/refund, replacing the Microsoft Form), added by staff, or imported once from the
-// old SharePoint refund log — worked from New to Paid and complete for accounts.
+// Admin & Operations → 💷 Refunds: every refund, part-refund and return request — imported from the
+// SharePoint refund log the Microsoft Form fills, added by staff, or sent through the Hub's own public
+// form while it existed — worked from New to Paid and complete for accounts.
 //
 // Admins only (Jack, 2026-10-26) — and every action re-checks that on the server. The filter lives in
 // the address bar, read by parseRefundFilter. ⚠ The search never does (it is usually a customer's
@@ -24,24 +23,13 @@ export const metadata = { title: "Refunds" }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
-/** This Hub's own address, from the request (Railway's proxy forwards the host) — so staging's page
- *  shows staging's form and the live Hub the live one. */
-async function formAddress(): Promise<string> {
-  const h = await headers()
-  const first = (v: string | null) => (v ?? "").split(",")[0].trim()
-  const host = first(h.get("x-forwarded-host")) || first(h.get("host"))
-  if (!host || !/^[A-Za-z0-9.\-:[\]]+$/.test(host)) return REFUND_FORM_PATH
-  const proto = first(h.get("x-forwarded-proto")) || (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host) ? "http" : "https")
-  return `${proto === "http" ? "http" : "https"}://${host}${REFUND_FORM_PATH}`
-}
-
 export default async function RefundsPage({ searchParams }: { searchParams: SearchParams }) {
   const { canAccess, isAdmin } = await getAccountsAccess()
   // Admins only — anyone else (Accounts' Simple mode included) goes back to the Hub.
   if (!canAccess || !isAdmin) redirect("/hub")
 
   const sp = await searchParams
-  const [res, formUrl] = await Promise.all([listRefunds(parseRefundFilter(sp)), formAddress()])
+  const res = await listRefunds(parseRefundFilter(sp))
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl desk:max-w-[1600px] mx-auto">
@@ -61,7 +49,7 @@ export default async function RefundsPage({ searchParams }: { searchParams: Sear
         <ErrorNote>{res.error}</ErrorNote>
       )}
 
-      <FormLink url={formUrl} />
+      <FormLink url={REFUND_MICROSOFT_FORM} />
 
       {/* Every request's money and dates checked against BC and the old log — listed, nothing changed. */}
       {res.ok && <details className={`${card} group mt-5`}>
@@ -105,9 +93,9 @@ function HowItWorks() {
       <h2 id="how-title" className="text-sm font-semibold text-gray-700 dark:text-gray-200">How refunds work here</h2>
       <ul className="mt-2 space-y-2 text-sm text-gray-600 dark:text-gray-300 list-disc pl-5 max-w-4xl">
         <li>
-          <b>Where they come from.</b> Customers fill in the <b>public refund form</b> (its address is above — no login needed), which
-          arrives here as <b>New</b> with their photos. Anything sent another way — an email, a phone call, a vendor owed a payout — is
-          added with <b>＋ Add a request</b>. The old SharePoint refund log can be imported once (re-importing never adds a row twice).
+          <b>Where they come from.</b> Customers fill in the <b>Microsoft Form</b> (its address is above), which goes to the SharePoint
+          refund log, <b>not straight here</b>. Import a fresh copy of the log to bring new ones in (it only adds rows that aren&apos;t in
+          yet). Anything sent another way — an email, a phone call, a vendor owed a payout — is added with <b>＋ Add a request</b>.
         </li>
         <li>
           <b>Working it.</b> Open a request, <b>Pick it up</b>, then move it on: being looked at, waiting for the item to come back,

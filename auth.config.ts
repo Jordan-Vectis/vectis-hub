@@ -46,8 +46,8 @@ export const authConfig: NextAuthConfig = {
       // RULES.md → Goods In → handheld scanner → "Scanner sign-in cards".
       // "/two-factor/setup": reached from the login form after a correct password, guarded by its own
       // 15-minute set-up pass cookie (lib/two-factor.ts) — it never gives a Hub session.
-      // /refund: the public refund & returns form (RULES.md "Public refund form") — write-only; admins
-      // read the requests in /tools/refunds. Exact path only, never a prefix.
+      // /refund: only forwards to the Microsoft Form (RULES.md "Refund form"), and must open without a
+      // login or a customer's old link would land on /login. Exact path only, never a prefix.
       const publicExact = ["/first-aid", "/scan", "/scan/sw", "/two-factor/setup", "/refund"]
       const bare = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname
       if (publicExact.includes(bare)) return true

@@ -332,7 +332,7 @@ export default function RefundsPanel({ list }: { list: RefundPanelList }) {
             statusTotal(CLOSED_REFUND_STATUSES) > 0 ? (
               <>Nothing is open right now — {plural(statusTotal(CLOSED_REFUND_STATUSES), "request")} paid, declined or closed (see <b>Everything</b>).</>
             ) : (
-              <>No refund requests yet. They arrive here from the public refund form (its address is above); press <b>＋ Add a request</b> for one sent another way, or import the old refund log below.</>
+              <>No refund requests yet. Customers use the Microsoft Form (its address is above), which goes to the SharePoint refund log: import the log below to bring them in, or press <b>＋ Add a request</b> for one sent another way.</>
             )
           ) : (
             <>Nothing matches these filters.{" "}

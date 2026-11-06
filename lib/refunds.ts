@@ -1,14 +1,15 @@
 // Accounts → Refunds (Jack, 2026-10-26: "here is our current refund log … customers requesting issues,
-// partial refunds or returns" — "i want it all to be in the hub, nice and clean … the form link will
-// need to come out of the hub instead of using the Microsoft form").
+// partial refunds or returns" — "i want it all to be in the hub, nice and clean").
 //
-// One refund = one request: a buyer asking for a refund, a part refund or a return (the Hub's own
-// public form at /refund, replacing the Microsoft Form), or a vendor owed a payout (lost in the
-// warehouse, sold in error…) added by staff — and the old SharePoint "Refund Log" imported once.
+// One refund = one request: a buyer asking for a refund, a part refund or a return, or a vendor owed a
+// payout (lost in the warehouse, sold in error…). Customers use the Microsoft Form, which fills the
+// SharePoint "Refund Log"; requests reach the Hub by importing that log, or are added by staff. The
+// Hub's own public form was removed on 2026-11-06 (Jack: "i want to use my original microsoft form for
+// safety") — what it already sent stays here as source "form", and /refund forwards to the Microsoft Form.
 //
 // A PLAIN, client-safe module: the words, the shapes the actions send, the money rules and the
 // filter in the address bar. No Prisma, no auth, no BC. The server's rules are lib/actions/refunds.ts
-// (staff), app/api/public/refund-request (the form) and lib/refunds-import.ts (the old log).
+// (staff) and lib/refunds-import.ts (the log).
 //
 // The money (checked against every row of the old log, 2026-10-26): commission is the buyer's premium,
 // 27% of the hammer inc VAT (22.5% + VAT — £90 → £24.30); a refund of N% is N% of hammer + commission
@@ -66,7 +67,7 @@ export const REFUND_STATUS_META: Record<RefundStatus, { label: string; short: st
 
 // ─── Reasons, solutions, who it is ──────────────────────────────────────────────────────────
 
-/** Why. The first four are the public form's choices (the Microsoft Form's, word for word). */
+/** Why. The first four are the Microsoft Form's choices, word for word. */
 export const REFUND_REASONS = [
   "damaged_in_transit", "missing_parts", "described_incorrectly", "lost_in_transit",
   "lost_in_warehouse", "not_available", "other",
@@ -437,5 +438,6 @@ export function refundFilterQuery(f: RefundFilter): string {
 }
 
 export const REFUNDS_PATH = "/tools/refunds"
-/** The public form's address (no login). */
-export const REFUND_FORM_PATH = "/refund"
+/** The form customers use. vectis.co.uk's FAQ links straight to it and the Hub's /refund forwards to it. */
+export const REFUND_MICROSOFT_FORM =
+  "https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=KrdG8fvDa02QAgcrMZFQeo5UNGsA6GJOsR_mYi_cyZxUOUVXRUZRRTlDUjVRVlVONUJXTzJCV1VLUS4u"

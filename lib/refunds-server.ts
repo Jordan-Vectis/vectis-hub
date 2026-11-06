@@ -1,5 +1,5 @@
-// Accounts → Refunds: the server-side pieces the public form, the staff panel and the old-log import
-// all share. Server only (Prisma) — NOT a "use server" file, so it may export plain helpers.
+// Accounts → Refunds: the server-side pieces the staff panel and the log import
+// share. Server only (Prisma) — NOT a "use server" file, so it may export plain helpers.
 
 import { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"

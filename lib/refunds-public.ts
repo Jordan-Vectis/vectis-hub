@@ -1,5 +1,6 @@
-// Accounts → Refunds: the rules for the PUBLIC refund form (app/refund, the Hub's replacement for the
-// Microsoft Form) and the write-only route behind it (app/api/public/refund-request).
+// Accounts → Refunds: the rules written for the Hub's own public refund form. That form and its route
+// were removed on 2026-11-06 (customers use the Microsoft Form again), so only isEmailShape and
+// mailtoHref are still used, by the staff panel and the log import; the form checks are unused.
 //
 // A PLAIN module — no Prisma, no Node, no auth — so the browser checks a request with exactly the rules
 // the server does (the server always checks again: nothing from the browser is trusted), and so the

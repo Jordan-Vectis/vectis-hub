@@ -75,7 +75,7 @@ function fail(e: unknown, what: string, fallback: string): Failure {
 const revalidate = () => revalidatePath(REFUNDS_PATH, "layout")
 
 /** New requests per transaction: small enough that a slow moment never runs into the timeout, and
- *  that the public form (which waits on the same RF-number lock) is held up for a second or two at most. */
+ *  that staff adding a request (which waits on the same RF-number lock) are held up for a second or two at most. */
 const IMPORT_BATCH = 25
 const TX_OPTIONS = { maxWait: 15_000, timeout: 60_000 }
 
