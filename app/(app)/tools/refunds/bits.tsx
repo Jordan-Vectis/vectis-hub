@@ -37,7 +37,7 @@ export function PartyBadge({ party }: { party: RefundParty }) {
 }
 
 const SOURCE_HELP: Record<RefundSource, string> = {
-  form: "Sent by the customer through the Hub's public refund form",
+  form: "Sent by the customer through the refund form",
   staff: "Added here by a member of staff (an email, a phone call, a vendor payout)",
   import: "Brought over from the old SharePoint refund log",
 }

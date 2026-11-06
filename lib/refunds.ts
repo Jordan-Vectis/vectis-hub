@@ -2,14 +2,14 @@
 // partial refunds or returns" — "i want it all to be in the hub, nice and clean").
 //
 // One refund = one request: a buyer asking for a refund, a part refund or a return, or a vendor owed a
-// payout (lost in the warehouse, sold in error…). Customers use the Microsoft Form, which fills the
-// SharePoint "Refund Log"; requests reach the Hub by importing that log, or are added by staff. The
-// Hub's own public form was removed on 2026-11-06 (Jack: "i want to use my original microsoft form for
-// safety") — what it already sent stays here as source "form", and /refund forwards to the Microsoft Form.
+// payout (lost in the warehouse, sold in error…). Customers use the Microsoft Form, and a Power Automate
+// flow sends each response here (app/api/public/refund-form); the rest are added by staff or imported
+// from the old log. The Hub's own public form was removed on 2026-11-06 (Jack: "i want to use my original
+// microsoft form for safety"): what it sent stays here as source "form", and /refund forwards to the form.
 //
 // A PLAIN, client-safe module: the words, the shapes the actions send, the money rules and the
 // filter in the address bar. No Prisma, no auth, no BC. The server's rules are lib/actions/refunds.ts
-// (staff) and lib/refunds-import.ts (the log).
+// (staff), lib/refunds-feed.ts (the form) and lib/refunds-import.ts (the log).
 //
 // The money (checked against every row of the old log, 2026-10-26): commission is the buyer's premium,
 // 27% of the hammer inc VAT (22.5% + VAT — £90 → £24.30); a refund of N% is N% of hammer + commission
@@ -438,6 +438,6 @@ export function refundFilterQuery(f: RefundFilter): string {
 }
 
 export const REFUNDS_PATH = "/tools/refunds"
-/** The form customers use. vectis.co.uk's FAQ links straight to it and the Hub's /refund forwards to it. */
+/** The form customers use. The Hub's /refund forwards to it, and the website should link to it. */
 export const REFUND_MICROSOFT_FORM =
-  "https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=KrdG8fvDa02QAgcrMZFQeo5UNGsA6GJOsR_mYi_cyZxUOUVXRUZRRTlDUjVRVlVONUJXTzJCV1VLUS4u"
+  "https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=KrdG8fvDa02QAgcrMZFQeo5UNGsA6GJOsR_mYi_cyZxURU9SSUlaVTMyVU1ONFRBSjlYNjQ4N1JXUS4u"
