@@ -9,9 +9,9 @@ import MoneyCheck from "./money-check"
 import RefundsPanel from "./panel-client"
 import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 
-// Admin & Operations → 💷 Refunds: every refund, part-refund and return request — imported from the
-// SharePoint refund log the Microsoft Form fills, added by staff, or sent through the Hub's own public
-// form while it existed — worked from New to Paid and complete for accounts.
+// Admin & Operations → 💷 Refunds: every refund, part-refund and return request — from the Microsoft
+// Form (a Power Automate flow sends each response here), added by staff, or imported from the old log
+// — worked from New to Paid and complete for accounts.
 //
 // Admins only (Jack, 2026-10-26) — and every action re-checks that on the server. The filter lives in
 // the address bar, read by parseRefundFilter. ⚠ The search never does (it is usually a customer's
@@ -93,9 +93,9 @@ function HowItWorks() {
       <h2 id="how-title" className="text-sm font-semibold text-gray-700 dark:text-gray-200">How refunds work here</h2>
       <ul className="mt-2 space-y-2 text-sm text-gray-600 dark:text-gray-300 list-disc pl-5 max-w-4xl">
         <li>
-          <b>Where they come from.</b> Customers fill in the <b>Microsoft Form</b> (its address is above), which goes to the SharePoint
-          refund log, <b>not straight here</b>. Import a fresh copy of the log to bring new ones in (it only adds rows that aren&apos;t in
-          yet). Anything sent another way — an email, a phone call, a vendor owed a payout — is added with <b>＋ Add a request</b>.
+          <b>Where they come from.</b> Customers fill in the <b>Microsoft Form</b> (its address is above), and each response arrives here
+          as <b>New</b> by itself. Anything sent another way — an email, a phone call, a vendor owed a payout — is added with
+          <b> ＋ Add a request</b>. The old refund log can also be imported (it only adds rows that aren&apos;t in yet).
         </li>
         <li>
           <b>Working it.</b> Open a request, <b>Pick it up</b>, then move it on: being looked at, waiting for the item to come back,

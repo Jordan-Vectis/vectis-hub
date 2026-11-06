@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-04, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-06, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"aacd1721d044a0a99e81e98b77dbb0a62080b32f","author":"jack-vectis","date":"2026-11-06T10:51:44Z","subject":"Refunds: back on the Microsoft Form, /refund forwards to it and the Hub's public form is removed"},
   {"sha":"4fc224ae42c3ef09ba6007d74da73830b2b22f80","author":"Jordan Orange","date":"2026-11-04T10:25:16Z","subject":"Tablet cataloguing: star sales into Currently working on, like the Auction Manager"},
   {"sha":"7f15c29abff1463a36a5ca2061592d8706bd46a9","author":"jack-vectis","date":"2026-11-03T15:22:52Z","subject":"Security: customer uploads can't run as web pages, live bidding only as a signed-in registered customer, Node 22.23.4 + sanitize-html 2.18.1"},
   {"sha":"0907aef33390151b8b540c492fa3aa26ef5fc154","author":"Jordan Orange","date":"2026-11-02T10:23:22Z","subject":"Double Check: never flag a count the cataloguer put in the key points"},

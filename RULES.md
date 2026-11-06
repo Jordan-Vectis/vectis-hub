@@ -93,27 +93,40 @@ It is allowed to stay public **only because of these constraints. Keep every one
 - `AccidentReport` rows are **only ever read inside the Hub** (`/tools/first-aid`, behind the
   `FIRST_AID` app permission). Never surface them publicly.
 
-## Refund form — customers use the Microsoft Form (2026-11-06)
+## Refund form — the Microsoft Form feeds the Hub (2026-11-06)
 
-Customers ask for a refund or return through the **Microsoft Form**, not a Hub page (Jack, 2026-11-06:
-*"i want to use my original microsoft form for safety"*). vectis.co.uk's FAQ links straight to it and it
-fills the SharePoint Refund Log. Its address is `REFUND_MICROSOFT_FORM` in `lib/refunds.ts`.
+Customers ask for a refund or return through a **Microsoft Form**, not a Hub page (Jack, 2026-11-06: *"i
+want to use my original microsoft form for safety"*, then *"we will make a new form and a new flow to put
+it in to the hub"*). A Power Automate flow owned by Jack sends each response to
+`POST /api/public/refund-form`, and it lands in `/tools/refunds` as New. The form's address is
+`REFUND_MICROSOFT_FORM` in `lib/refunds.ts`.
 
-The Hub's own public form (built 2026-10-26) and its unauthenticated write
-`POST /api/public/refund-request` were **removed**, so the Hub takes in nothing from outsiders for
-refunds. Reverting that commit brings them back. What is left:
+The flow's HTTP step is a premium connector. Jack's licence includes it (Power Automate for Dynamics 365),
+and a flow runs on its owner's plan, so ⚠ moving the flow to an owner without premium stops it.
 
-- **`/refund` only forwards to the Microsoft Form** (`app/refund/page.tsx`), for anyone who kept the
-  link. It stays an EXACT-match entry in `publicExact` (`auth.config.ts`) so a logged-out customer isn't
-  sent to `/login`. ⚠ Never move it into the prefix list, and never add a form, a record or a link into
-  the Hub to that page.
-- ⚠ **New requests don't reach `/tools/refunds` by themselves.** Admins import a fresh copy of the log,
-  which only adds rows not in yet, or use **＋ Add a request**.
-- Requests already sent through the Hub's form stay in `/tools/refunds` as `source: "form"`.
-- `Refund` rows are only ever read inside the Hub, behind the admin check. Never bank or card details:
-  staff entries refuse them (`looksLikeBankDetails`), and the log import takes them out of every cell
-  before saving.
-- **Those requests' photos live under `refund-photos/` in R2 and are only ever opened through the
+The Hub's own public form (built 2026-10-26) and its open write `POST /api/public/refund-request` were
+**removed**. **Keep these rules:**
+
+- **`/api/public/refund-form` takes nothing without `REFUND_FORM_SECRET`**, sent as
+  `Authorization: Bearer <key>`. An environment without it set turns everything away (401). Each Railway
+  environment has its own value. ⚠ The key lives only in Railway and in the flow: never in a URL, the repo
+  or the memory page.
+- **Write-only.** It answers `{ok:true}` and nothing about any record, and never logs what was sent.
+- ⚠ **A real customer is never turned away by how they typed something** (`readRefundFeed`,
+  `lib/refunds-feed.ts`). The form has already taken their request, so a refusal would lose it silently.
+  Only a response with no id is refused; whatever can't go in its own box goes in the details as typed.
+- **Never bank or card details:** they come out of every field first (`withoutBankDetails`).
+- **Sending a response twice adds it once:** `Refund.importKey` holds the sha256 of the form and response
+  id (`refundFeedKey`). A failure answers 5xx so the flow retries and its run history shows it.
+- **No photos come this way.** Microsoft Forms can't take a file upload from someone outside the
+  organisation; staff ask the customer by email.
+- **`/refund` only forwards to the form** (`app/refund/page.tsx`), for anyone who kept the link. It stays
+  an EXACT-match entry in `publicExact` (`auth.config.ts`) so a logged-out customer isn't sent to
+  `/login`. ⚠ Never move it into the prefix list, and never add a form, a record or a link into the Hub
+  to that page.
+- `Refund` rows are only ever read inside the Hub, behind the admin check. Staff entries refuse bank or
+  card details (`looksLikeBankDetails`), and the log import takes them out of every cell before saving.
+- **Photos on older requests live under `refund-photos/` in R2 and are only ever opened through the
   admin-only `/api/refunds/photo`.** ⚠ Never add `refund-photos/` to `/api/public/photo`'s prefix list.
 - ⚠ The Hub's general photo routes (`/api/image`, `/api/catalogue/signed-url`, `/api/catalogue/photo-proxy`)
   sign or stream any key for anyone signed in, so each REFUSES a key starting `refund-photos/` — a
@@ -3323,9 +3336,9 @@ Jack: *"here is our current refund log … customers requesting issues, partial 
 it better with the data you have"* and *"I want it all to be in the Hub, nice and clean"* — the Refunds
 tile in Admin & Operations (`/tools/refunds`, card `REFUNDS`, **admins only** like Paid, not collected:
 no appKey; every action re-checks `getAccountsAccess().isAdmin` on the server). Customers ask through
-the Microsoft Form, which fills the SharePoint "Refund Log" (see "Refund form" above): requests reach this
-tile by importing that log, which only adds rows not in yet, or are added by staff (vendor payouts and the
-like). Those already sent through the Hub's removed public form stay here as `source: "form"`. The words, money rules and shapes are `lib/refunds.ts` (plain, client-safe); the shared server
+the Microsoft Form, and a Power Automate flow sends each response here (see "Refund form" above). The rest
+are added by staff (vendor payouts and the like) or imported from the old log, which only adds rows not in
+yet. Those sent through the Hub's removed public form stay here as `source: "form"`. The words, money rules and shapes are `lib/refunds.ts` (plain, client-safe); the shared server
 helpers `lib/refunds-server.ts`; staff actions `lib/actions/refunds.ts`; BC look-ups `lib/refunds-bc.ts`;
 the import `lib/refunds-import.ts` + `lib/actions/refunds-import.ts`.
 

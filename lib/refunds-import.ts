@@ -188,7 +188,7 @@ export function plainText(s: string): string {
 const oneLine = (s: string) => plainText(s).replace(/\s+/g, " ").trim()
 
 /** Several lines: plain, Windows line ends tidied, trailing spaces off each line, no run of blank lines. */
-function prose(s: string): string {
+export function prose(s: string): string {
   return plainText(s.replace(/\r\n?/g, "\n"))
     .replace(/\t/g, " ")
     .split("\n").map((l) => l.replace(/ {2,}/g, " ").trimEnd()).join("\n")

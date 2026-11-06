@@ -2575,9 +2575,9 @@ model UncollectedPaid {
 /// Its own table so nothing is added to UncollectedPaid. `shipmentNos` / `packedBy` leave cancelled
 /// requests out; `shipments` keeps every one: [{ no, docket, status, packedBy, date, trackingNo }].
 /// Accounts → Refunds (Jack, 2026-10-26): one request — a buyer asking for a refund, a part refund or
-/// a return, a vendor owed a payout (added by staff), or a row of the SharePoint Refund Log the
-/// Microsoft Form fills (imported — importKey). source "form" rows came from the Hub's own public form,
-/// removed 2026-11-06. Admins work
+/// a return, a vendor owed a payout (added by staff), or a row of the old Refund Log (imported —
+/// importKey). source "form" rows come from the Microsoft Form through Power Automate (importKey is the
+/// response's own, so it's added once), or from the Hub's old public form, removed 2026-11-06. Admins work
 /// it in the Hub: status, who is dealing with it, the lots and the money (RefundLot, worked out from
 /// BC), postage, the accounts ref code, paid, complete for accounts. Money in pence. See lib/refunds.ts.
 model Refund {

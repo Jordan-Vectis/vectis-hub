@@ -4,8 +4,8 @@ import { useState } from "react"
 import { btn, card, cardTitle } from "./ui"
 
 // The Microsoft Form's address, to copy or open — customers fill that in, not a Hub page (Jack,
-// 2026-11-06: "i want to use my original microsoft form for safety"). What they send goes to the
-// SharePoint refund log, so this card says plainly that it doesn't arrive on this list by itself.
+// 2026-11-06: "i want to use my original microsoft form for safety"). A Power Automate flow sends each
+// response here (app/api/public/refund-form).
 
 export default function FormLink({ url }: { url: string }) {
   const [copied, setCopied] = useState<"yes" | "no" | null>(null)
@@ -36,7 +36,7 @@ export default function FormLink({ url }: { url: string }) {
       <p role="status" className="text-xs mt-2 text-gray-500 dark:text-gray-400">
         {copied === "no"
           ? "Couldn't copy it here — select the address above and copy it by hand."
-          : <>Customers use this form: the website links to it, and the Hub&apos;s old <b>/refund</b> address forwards to it. What they send goes to the SharePoint refund log, <b>not straight to this list</b> — import a fresh copy of the log below to bring new ones in.</>}
+          : <>Customers use this form, and the Hub&apos;s old <b>/refund</b> address forwards to it. Each response arrives on this list as <b>New</b> by itself. The website&apos;s <b>&ldquo;request a refund&rdquo;</b> link should point here.</>}
       </p>
     </section>
   )
