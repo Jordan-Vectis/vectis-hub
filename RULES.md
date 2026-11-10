@@ -1780,15 +1780,14 @@ the same way, never as an export of an actions file.
       setting can lift it. ⚠ Never move that list into a setting. `BC_WRITE_ENVIRONMENT` is its own
       setting, never `BC_ENVIRONMENT` (every READ in the Hub uses that), so turning it on can't move the
       Hub's reads. Where it isn't set at all (production) the panel isn't shown.
-      - ⚠⚠ **The ONE live exception — one receipt, from the Hub sandbox only** (Jack, 2026-11-10: *"I need
-        to do a test in BC production … keep it in the sandbox of the hub … just for one test"*, *"one test
-        is all I need, I can delete the test receipt along with it"*). Live BC is written to only when
-        **all** hold: `RAILWAY_ENVIRONMENT_NAME` is exactly `sandbox` (an allowlist — staging, production,
-        a dev machine or a missing name never can); `BC_WRITE_LIVE_RECEIPT` names one receipt and it is
-        that receipt; and the person **types that number** into the confirm box (checked on the server on
-        every call — `bcLiveRefusal`). The panel turns red and says LIVE. **Delete `BC_WRITE_LIVE_RECEIPT`
-        on Railway after the test** — that closes it. The test records are real in live BC: delete them
-        there, before the nightly copy brings them into the production Hub (which keeps rows BC deletes).
+      - ✅ **The ONE live test is DONE and the route is GONE** (2026-11-10). Jack asked for exactly one
+        test in live BC (*"one test is all I need, I can delete the test receipt along with it"*). It ran
+        from the Hub sandbox only, for one named receipt, with the number typed to confirm: **R900001**
+        (Bill Kingsman, C003247) with tote **T900001** went into live BC and **worked** (commit 6bc2787b).
+        The live route was then **taken back out of the code** — the hard-coded refusal above is the whole
+        story again. ⚠ Don't put a live route back for "one more test": writing to live BC for real is
+        the decision below (Jack and Jordan), built as its own feature with the Hub's own BC login.
+        Jack deletes R900001 and T900001 in live BC himself.
       - It began as "the name must contain sandbox". The first real press (R010271) found Vectis's BC
         **Sandbox** environment has none of Evosoft's EvoMobile pages ("No HTTP resource was found" for
         `receiptHeaders`), so Jack chose the copy of production, **`Production_Copy_20260622`**, which has

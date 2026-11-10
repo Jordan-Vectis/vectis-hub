@@ -36,55 +36,17 @@ const EVO_MOB = "api/evo/mob/v2.0"
 const VECTIS_WHSE = "api/vectis/whse/v2.0"
 const TIMEOUT_MS = 30_000
 
-/** BC's LIVE environment(s). BC environment names are case-insensitive. ⚠ Never take this list from a setting. */
+/** BC's LIVE environment(s). Test writes never go here, whatever BC_WRITE_ENVIRONMENT says.
+ *  BC environment names are case-insensitive. ⚠ Never take this list from a setting. */
 const LIVE_ENVIRONMENTS = ["production"]
 
 const isLive = (env: string) => LIVE_ENVIRONMENTS.includes(env.trim().toLowerCase())
 
-// ⚠⚠ ONE live test, ONE receipt (Jack, 2026-11-10: "I need to do a test in BC production … keep it in the
-// sandbox of the Hub but link it to production on BC just for one test" — "one test is all I need, I can
-// delete the test receipt along with it"). Live BC is allowed only when ALL of these hold:
-//   • this Hub is the SANDBOX site — RAILWAY_ENVIRONMENT_NAME exactly "sandbox" (an allowlist: staging,
-//     production, a dev machine or a missing name can never write to live BC);
-//   • BC_WRITE_LIVE_RECEIPT names the ONE receipt that may be sent, and it is that receipt;
-//   • the person TYPES that receipt number into the confirm box (checked on the server too).
-// Deleting BC_WRITE_LIVE_RECEIPT on Railway closes it again. Every other guard below still applies.
-const LIVE_HUB_SITE = "sandbox"
-
-const hubSite = () => (process.env.RAILWAY_ENVIRONMENT_NAME ?? "").trim().toLowerCase()
-
-/** The one receipt that may be sent to LIVE BC, or null. */
-function liveReceipt(): string | null {
-  const r = (process.env.BC_WRITE_LIVE_RECEIPT ?? "").trim().toUpperCase()
-  return r || null
-}
-
-/** Whether test writes from this server go to LIVE BC, and which single receipt may go. */
-export function bcLiveTest(): { live: boolean; receipt: string | null } {
-  const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
-  if (!env || !isLive(env)) return { live: false, receipt: null }
-  return { live: true, receipt: hubSite() === LIVE_HUB_SITE ? liveReceipt() : null }
-}
-
-/** The BC environment test writes go to, or null when they are switched off (or live BC isn't allowed here). */
+/** The BC environment test writes go to, or null when they are switched off / it names live BC. */
 export function bcSandboxEnvironment(): string | null {
   const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
-  if (!env) return null
-  if (isLive(env) && !(hubSite() === LIVE_HUB_SITE && liveReceipt())) return null
+  if (!env || isLive(env)) return null
   return env
-}
-
-/** For LIVE BC only: may THIS receipt go, with THIS typed confirmation? A reason when not; null when it may.
- *  Always null for a test environment (no extra gate there). */
-export function bcLiveRefusal(receiptId: string, typed: string | undefined): string | null {
-  const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
-  if (!isLive(env)) return null
-  if (hubSite() !== LIVE_HUB_SITE) return "Live Business Central can only be written to from the Hub sandbox."
-  const only = liveReceipt()
-  if (!only) return "Live Business Central is switched off: BC_WRITE_LIVE_RECEIPT isn't set."
-  if (receiptId.trim().toUpperCase() !== only) return `Only receipt ${only} may be sent to live Business Central (BC_WRITE_LIVE_RECEIPT).`
-  if ((typed ?? "").trim().toUpperCase() !== only) return `Type ${only} in the box to confirm sending it to LIVE Business Central.`
-  return null
 }
 
 /** Whether this server has the test set up at all. Unset (production) → the panel isn't shown. */
@@ -96,8 +58,7 @@ export function bcSandboxConfigured(): boolean {
 export function bcSandboxOffReason(): string | null {
   const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
   if (!env) return "Switched off: BC_WRITE_ENVIRONMENT isn't set on this server."
-  if (isLive(env) && hubSite() !== LIVE_HUB_SITE) return `Switched off: BC_WRITE_ENVIRONMENT is "${env}", the LIVE environment — that is only ever allowed from the Hub sandbox, for one named receipt.`
-  if (isLive(env) && !liveReceipt()) return `Switched off: BC_WRITE_ENVIRONMENT is "${env}", the LIVE environment — set BC_WRITE_LIVE_RECEIPT to the one receipt allowed.`
+  if (isLive(env)) return `Switched off: BC_WRITE_ENVIRONMENT is "${env}", the LIVE environment — test writes never go there. Set it to a copy or a sandbox.`
   if (!process.env.BC_TENANT_ID) return "Switched off: BC_TENANT_ID isn't set on this server."
   return null
 }
