@@ -1,9 +1,9 @@
-// Goods In → a receipt → "Send to BC sandbox (test)" (Jack, 2026-11-10: "can we test making a receipt
+// Goods In → a receipt → "Send to a BC test environment" (Jack, 2026-11-10: "can we test making a receipt
 // and tote on the hub and giving it back to BC"). SERVER ONLY.
 //
-// The FIRST time Goods In writes to Business Central, and ONLY to a sandbox — a deliberate, test-only
-// exception to "Goods In never touches BC" (RULES.md → Goods In). What it writes, and why it is shaped
-// like this, comes from BC's own AL source (IT Tools → BC Source):
+// The FIRST time Goods In writes to Business Central, and NEVER to the live environment — a deliberate,
+// test-only exception to "Goods In never touches BC" (RULES.md → Goods In). What it writes, and why it is
+// shaped like this, comes from BC's own AL source (IT Tools → BC Source):
 //
 //   1. the receipt      → api/evo/mob/v2.0  receiptHeaders  (page 76300, table EVA_ReceiptHeader)
 //   2. each tote/pallet → api/evo/mob/v2.0  totes           (page 76316, table EVA_Tote)
@@ -22,9 +22,12 @@
 //     number for a different vendor stops everything, and a tote BC holds on another receipt is never
 //     linked to this one. Silently attaching to someone else's record is the one outcome this must not have.
 //
-// ⚠⚠ The sandbox guard: nothing is sent unless BC_WRITE_ENVIRONMENT is set AND names a sandbox. It is a
-// separate setting from BC_ENVIRONMENT (which every read in the Hub uses), so turning this on can never
-// point the Hub's reads somewhere else, and no setting can point these writes at live BC.
+// ⚠⚠ The guard: nothing is sent unless BC_WRITE_ENVIRONMENT is set, and NEVER when it names the live
+// environment (LIVE_ENVIRONMENTS, hard-coded here so no setting can lift it). It is a separate setting
+// from BC_ENVIRONMENT (which every read in the Hub uses), so turning this on never moves the Hub's reads.
+// It began as "the name must contain sandbox"; the first real press found Vectis's sandbox doesn't have
+// Evosoft's EvoMobile pages at all, so Jack chose the copy of production (Production_Copy_20260622),
+// which has every extension live has.
 // ⚠ It signs in as the PERSON pressing it (their own BC sign-in, getBCToken) — BC records them as the
 // one who made the records. Never the background sign-in (that is Jordan's, for reads).
 
@@ -33,10 +36,16 @@ const EVO_MOB = "api/evo/mob/v2.0"
 const VECTIS_WHSE = "api/vectis/whse/v2.0"
 const TIMEOUT_MS = 30_000
 
-/** The BC environment test writes go to, or null when they are switched off / not a sandbox. */
+/** BC's LIVE environment(s). Test writes never go here, whatever BC_WRITE_ENVIRONMENT says.
+ *  BC environment names are case-insensitive. ⚠ Never take this list from a setting. */
+const LIVE_ENVIRONMENTS = ["production"]
+
+const isLive = (env: string) => LIVE_ENVIRONMENTS.includes(env.trim().toLowerCase())
+
+/** The BC environment test writes go to, or null when they are switched off / it names live BC. */
 export function bcSandboxEnvironment(): string | null {
   const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
-  if (!env || !/sandbox/i.test(env)) return null
+  if (!env || isLive(env)) return null
   return env
 }
 
@@ -49,7 +58,7 @@ export function bcSandboxConfigured(): boolean {
 export function bcSandboxOffReason(): string | null {
   const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
   if (!env) return "Switched off: BC_WRITE_ENVIRONMENT isn't set on this server."
-  if (!/sandbox/i.test(env)) return `Switched off: BC_WRITE_ENVIRONMENT is "${env}", which isn't a sandbox — test writes only ever go to a sandbox.`
+  if (isLive(env)) return `Switched off: BC_WRITE_ENVIRONMENT is "${env}", the LIVE environment — test writes never go there. Set it to a copy or a sandbox.`
   if (!process.env.BC_TENANT_ID) return "Switched off: BC_TENANT_ID isn't set on this server."
   return null
 }

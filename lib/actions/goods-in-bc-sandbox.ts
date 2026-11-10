@@ -16,7 +16,7 @@ import type { Result } from "@/lib/actions/goods-in"
 //
 // • Warehouse ADMINS only, read fresh from the database (requireGoodsIn), and never while an admin is
 //   viewing as someone else — it writes to BC under the real person's own BC sign-in.
-// • A sandbox only (BC_WRITE_ENVIRONMENT); refused with the reason when it isn't one.
+// • A BC test environment only (BC_WRITE_ENVIRONMENT), never the live one; refused with the reason.
 // • Booked Hub receipts only: not a draft, not void, not one copied FROM BC, and it must carry a vendor
 //   number (BC refuses a tote on a receipt without one).
 // • It writes NOTHING in the Hub. What happened is shown on the screen and in the server log.
@@ -32,7 +32,7 @@ async function check(): Promise<Checked> {
   const session = await getEffectiveSession()
   if (session?.isImpersonating) throw new GoodsInAccessError("Stop viewing as someone else first — this writes to Business Central as you.")
   const environment = bcSandboxEnvironment()
-  if (!environment || !process.env.BC_TENANT_ID) throw new GoodsInAccessError(bcSandboxOffReason() ?? "Sending to the BC sandbox is switched off on this server.")
+  if (!environment || !process.env.BC_TENANT_ID) throw new GoodsInAccessError(bcSandboxOffReason() ?? "Sending to a BC test environment is switched off on this server.")
   const token = await getBCToken()
   if (!token) throw new GoodsInAccessError(NO_BC_SIGN_IN)
   return { environment, token, userName: me.name }

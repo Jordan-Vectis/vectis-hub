@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"0f61501ee0c53e99faed44228e40557cda561725","author":"jack-vectis","date":"2026-11-10T11:48:52Z","subject":"Goods In BC sandbox test: when BC has no such API page, list what that address does have"},
   {"sha":"140ce084f3420a308868f7e42c1cd6a2c6ef22a0","author":"jack-vectis","date":"2026-11-10T11:43:06Z","subject":"Goods In BC sandbox test: stop on a numbering clash instead of attaching to another record"},
   {"sha":"a8c47375eb0b808b76757916c35669ae6038ed0e","author":"jack-vectis","date":"2026-11-10T11:36:33Z","subject":"Goods In: send a booked receipt and its totes to the BC sandbox (test only)"},
   {"sha":"bad455b901d32a9766e481f429888d830466d659","author":"jack-vectis","date":"2026-11-06T11:58:17Z","subject":"Refunds: a new Microsoft Form feeds the Hub directly through Power Automate"},

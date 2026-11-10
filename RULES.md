@@ -1767,17 +1767,24 @@ the same way, never as an export of an actions file.
     the overnight import fails on it. So **a lot from a Goods In tote cannot get into BC** today.
   - ⚠ **A decision for Jack and Jordan before real stock is booked in this way.** Don't quieten those
     flags by teaching the checks about Goods In without that decision — they are telling the truth.
-  - ⚠⚠ **ONE test-only exception: "Send to BC sandbox (test)"** (Jack, 2026-11-10 — *"can we test
+  - ⚠⚠ **ONE test-only exception: "Send to BC test environment"** (Jack, 2026-11-10 — *"can we test
     making a receipt and tote on the hub and giving it back to BC"*, agreed against this rule). A
-    Warehouse admin, on a booked Hub receipt, can send it and its totes and pallets to **a BC sandbox**:
+    Warehouse admin, on a booked Hub receipt, can send it and its totes and pallets to **a BC TEST
+    environment, never the live one**:
     the receipt to `api/evo/mob/v2.0/receiptHeaders`, each tote to `api/evo/mob/v2.0/totes`, each line to
     `api/vectis/whse/v2.0/receiptTotes` (read off BC's own AL source — IT Tools → BC Source). Code:
     `lib/goods-in/bc-sandbox.ts`, `lib/actions/goods-in-bc-sandbox.ts`, the panel `receipts/[id]/bc-sandbox-test.tsx`.
     Keep every guard:
-    - **Sandbox only.** Nothing is sent unless `BC_WRITE_ENVIRONMENT` is set AND names a sandbox. It is
-      its own setting, never `BC_ENVIRONMENT` (every READ in the Hub uses that) — so no setting can point
-      these writes at live BC, and turning them on can't move the Hub's reads. Where it isn't set at all
-      (production) the panel isn't shown.
+    - **Never live BC.** Nothing is sent unless `BC_WRITE_ENVIRONMENT` is set, and never when it names
+      the live environment — `LIVE_ENVIRONMENTS` (`["production"]`) is HARD-CODED in bc-sandbox.ts, so no
+      setting can lift it. ⚠ Never move that list into a setting. `BC_WRITE_ENVIRONMENT` is its own
+      setting, never `BC_ENVIRONMENT` (every READ in the Hub uses that), so turning it on can't move the
+      Hub's reads. Where it isn't set at all (production) the panel isn't shown.
+      - It began as "the name must contain sandbox". The first real press (R010271) found Vectis's BC
+        **Sandbox** environment has none of Evosoft's EvoMobile pages ("No HTTP resource was found" for
+        `receiptHeaders`), so Jack chose the copy of production, **`Production_Copy_20260622`**, which has
+        every extension live has. A missing page now lists what the address DOES have, from BC's own
+        service document.
     - **As the person pressing it** (their own BC sign-in, `getBCToken`), never the background sign-in
       (Jordan's, for reads), and never while an admin is viewing as someone else.
     - **Look first, create only what's missing**, so pressing it again carries on after a failure.
