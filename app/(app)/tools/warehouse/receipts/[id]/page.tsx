@@ -16,7 +16,7 @@ import AddContainers from "./add-containers"
 import NotesEditor from "./notes-editor"
 import LotList from "./lot-list"
 import BcSandboxTest from "./bc-sandbox-test"
-import { bcLiveTest, bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason } from "@/lib/goods-in/bc-sandbox"
+import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason } from "@/lib/goods-in/bc-sandbox"
 import { CATEGORY_LIST_ID, type ContainerView, type LotView } from "./types"
 
 // Goods In → one receipt. Everything about what a customer handed in on one visit: the customer as
@@ -273,8 +273,6 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           containerCount={containers.length}
           environment={bcSandboxEnvironment()}
           offReason={bcSandboxOffReason()}
-          live={bcLiveTest().live}
-          liveReceipt={bcLiveTest().receipt}
         />
       )}
 

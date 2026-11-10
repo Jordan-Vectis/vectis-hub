@@ -20,23 +20,16 @@ const MARK: Record<BcStep["outcome"], { sym: string; cls: string; word: string }
 
 type Phase = "idle" | "confirm" | "running" | "done"
 
-export default function BcSandboxTest({ receiptId, vendorNo, containerCount, environment, offReason, live = false, liveReceipt = null }: {
+export default function BcSandboxTest({ receiptId, vendorNo, containerCount, environment, offReason }: {
   receiptId: string
   vendorNo: string | null
   containerCount: number
-  /** The BC environment writes go to; null when switched off. */
+  /** The BC test environment writes go to (never live BC); null when switched off. */
   environment: string | null
   /** Why it's switched off, in words; null when it can run. */
   offReason: string | null
-  /** True when writes go to LIVE BC (the one-receipt test from the Hub sandbox). */
-  live?: boolean
-  /** The ONE receipt allowed to go to live BC (BC_WRITE_LIVE_RECEIPT). */
-  liveReceipt?: string | null
 }) {
   const [phase, setPhase] = useState<Phase>("idle")
-  const [typed, setTyped] = useState("")
-  const typedOk = !live || typed.trim().toUpperCase() === receiptId.toUpperCase()
-  const notThisOne = live && liveReceipt && liveReceipt.toUpperCase() !== receiptId.toUpperCase()
   const [steps, setSteps] = useState<BcStep[]>([])
   const [error, setError] = useState<string | null>(null)
   const [needsSignIn, setNeedsSignIn] = useState(false)
@@ -55,7 +48,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
     setSummary(null)
     setProgress({ done: 0, total: containerCount, current: `receipt ${receiptId}` })
 
-    const start = await bcSandboxStart(receiptId, typed).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+    const start = await bcSandboxStart(receiptId).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
     if (!start.ok) {
       if (start.error === "NO_BC_SIGN_IN") setNeedsSignIn(true)
       else setError(start.error)
@@ -80,7 +73,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
     for (let i = 0; i < list.length; i++) {
       if (stopRef.current) { stopped = true; break }
       setProgress({ done: i, total: list.length, current: list[i].id })
-      const res = await bcSandboxSendContainer(receiptId, list[i].id, typed).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+      const res = await bcSandboxSendContainer(receiptId, list[i].id).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
       if (!res.ok) {
         all.push({ what: `Tote ${list[i].id}`, outcome: "failed", detail: res.error })
         failedTotes++
@@ -104,62 +97,32 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
   }
 
   return (
-    <section className={`${live ? "rounded-xl border-2 border-red-500 dark:border-red-600 bg-red-50 dark:bg-red-950/40" : box} mb-6 px-4 py-3`} aria-labelledby="bc-sandbox-heading">
-      <h2 id="bc-sandbox-heading" className={`text-sm font-semibold ${live ? "text-red-800 dark:text-red-200" : "text-gray-900 dark:text-white"}`}>
-        {live ? "⚠ LIVE BUSINESS CENTRAL — one test receipt" : "Business Central test"}
-      </h2>
-      {live ? (
-        <p className="mt-1 text-sm text-red-900 dark:text-red-100">
-          Admins only. Sends this receipt and its totes and pallets to <b>LIVE</b> Business Central (<b className={mono}>{environment}</b>), signed in as you.
-          They become real records that staff can see — delete them in BC after the test. Only receipt{" "}
-          <b className={mono}>{liveReceipt ?? "—"}</b> can go (BC_WRITE_LIVE_RECEIPT).
-        </p>
-      ) : (
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-          Admins only. Sends this receipt and its totes and pallets to a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — signed in as you. Nothing in the Hub changes.
-        </p>
-      )}
+    <section className={`${box} mb-6 px-4 py-3`} aria-labelledby="bc-sandbox-heading">
+      <h2 id="bc-sandbox-heading" className="text-sm font-semibold text-gray-900 dark:text-white">Business Central test</h2>
+      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+        Admins only. Sends this receipt and its totes and pallets to a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — signed in as you. Nothing in the Hub changes.
+      </p>
 
       {off ? (
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{off}</p>
-      ) : notThisOne ? (
-        <p className="mt-2 text-sm text-red-800 dark:text-red-200">Only receipt <b className={mono}>{liveReceipt}</b> may be sent to live Business Central — not this one.</p>
       ) : !vendorNo ? (
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">This receipt has no vendor number, and Business Central refuses a tote on a receipt without one — try a receipt for a customer who has one.</p>
       ) : (
         <>
           {phase === "idle" && (
-            <button type="button" className={`${btn} mt-3`} onClick={() => { setTyped(""); setPhase("confirm") }}>
-              {live ? "Send to LIVE Business Central…" : "Send to BC test environment…"}
-            </button>
+            <button type="button" className={`${btn} mt-3`} onClick={() => setPhase("confirm")}>Send to BC test environment…</button>
           )}
 
           {phase === "confirm" && (
-            <div className={`mt-3 rounded-lg border px-3 py-3 text-sm ${live
-              ? "border-red-400 dark:border-red-700 bg-white dark:bg-gray-900 text-red-900 dark:text-red-100"
-              : "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100"}`}>
+            <div className="mt-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-3 text-sm text-amber-900 dark:text-amber-100">
               <p>
                 This makes receipt <span className={mono}>{receiptId}</span> (vendor <span className={mono}>{vendorNo}</span>) and its{" "}
                 {containerCount} {containerCount === 1 ? "tote or pallet" : "totes and pallets"} in Business Central&apos;s{" "}
-                <b className={mono}>{environment}</b> environment{live ? <> — <b>LIVE BC</b></> : null}, under the same numbers, with you as the person who made them.
+                <b className={mono}>{environment}</b> environment, under the same numbers, with you as the person who made them.
                 Anything it already has is left alone.
               </p>
-              {live && (
-                <label className="mt-3 block">
-                  <span className="block font-medium">Type <span className={mono}>{receiptId}</span> to confirm sending it to live Business Central</span>
-                  <input
-                    value={typed}
-                    onChange={e => setTyped(e.target.value)}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className={`${mono} mt-1 w-full max-w-xs min-h-11 rounded-lg border border-red-400 dark:border-red-700 bg-white dark:bg-gray-950 px-3 text-gray-900 dark:text-white`}
-                  />
-                </label>
-              )}
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" className={btnGo} onClick={run} disabled={!typedOk}>
-                  {live ? "Send to LIVE Business Central" : <>Send to {environment}</>}
-                </button>
+                <button type="button" className={btnGo} onClick={run}>Send to {environment}</button>
                 <button type="button" className={btn} onClick={() => setPhase("idle")}>Cancel</button>
               </div>
             </div>
@@ -214,7 +177,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
                   ))}
                 </p>
               )}
-              <button type="button" className={btn} onClick={() => { setTyped(""); setPhase("confirm") }}>Send again…</button>
+              <button type="button" className={btn} onClick={() => setPhase("confirm")}>Send again…</button>
             </div>
           )}
         </>
