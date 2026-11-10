@@ -18,6 +18,9 @@
 //     TestField(EVA_VendorNo)), so a receipt with none is refused here before anything is sent.
 //   • Every step LOOKS FIRST and only creates what BC doesn't already have, so pressing it again after a
 //     failure carries on rather than tripping over what the first press made.
+//   • ⚠ But a number BC already uses for something ELSE is a clash, not "already sent": a receipt with that
+//     number for a different vendor stops everything, and a tote BC holds on another receipt is never
+//     linked to this one. Silently attaching to someone else's record is the one outcome this must not have.
 //
 // ⚠⚠ The sandbox guard: nothing is sent unless BC_WRITE_ENVIRONMENT is set AND names a sandbox. It is a
 // separate setting from BC_ENVIRONMENT (which every read in the Hub uses), so turning this on can never
@@ -144,8 +147,13 @@ export async function sendReceiptHeader(token: string, environment: string, rece
     const base = await companyRoot(token, EVO_MOB, environment)
     const there = await findFirst(token, base, "receiptHeaders", `no eq ${quote(receipt.id)}`)
     if (there) {
-      const vendor = String(there.vendorNo ?? "")
-      return { what, outcome: "there", detail: vendor && vendor !== receipt.vendorNo ? `BC already has it — under vendor ${vendor}, not ${receipt.vendorNo}.` : "BC already has it." }
+      const vendor = String(there.vendorNo ?? "").trim()
+      // The same number for a DIFFERENT customer is a numbering clash, not "already sent": attaching this
+      // receipt's totes to it would put them on someone else's receipt. Stop and say so.
+      if (vendor && vendor !== receipt.vendorNo) {
+        return { what, outcome: "failed", detail: `BC already has a receipt ${receipt.id} for a different vendor (${vendor}, not ${receipt.vendorNo}) — the Hub's and BC's receipt numbers clash, so nothing more was sent.` }
+      }
+      return { what, outcome: "there", detail: "BC already has it (same vendor) — nothing sent." }
     }
     const made = await call(token, "POST", `${base}receiptHeaders`, { no: receipt.id, vendorNo: receipt.vendorNo })
     const no = String(made.no ?? receipt.id)
@@ -173,7 +181,14 @@ export async function sendContainer(
     const mob = await companyRoot(token, EVO_MOB, environment)
     const there = await findFirst(token, mob, "totes", `no eq ${quote(container.id)}`)
     if (there) {
-      steps.push({ what: toteWhat, outcome: "there", detail: "BC already has this tote." })
+      // A tote BC already holds on ANOTHER receipt is a numbering clash — never link it to this one too.
+      const whse = await companyRoot(token, VECTIS_WHSE, environment)
+      const elsewhere = await findFirst(token, whse, "receiptTotes", `evaTOTToteNo eq ${quote(container.id)} and evaTOTReceiptNo ne ${quote(receiptId)}`)
+      if (elsewhere) {
+        steps.push({ what: toteWhat, outcome: "failed", detail: `BC already has tote ${container.id} on receipt ${String(elsewhere.evaTOTReceiptNo ?? "?")} — the Hub's and BC's tote numbers clash, so it wasn't linked here.` })
+        return steps
+      }
+      steps.push({ what: toteWhat, outcome: "there", detail: "BC already has this tote — nothing sent." })
     } else {
       // EVA_Tote.EVA_Description is Text[80].
       const description = (contents || container.category || container.id).slice(0, 80)
