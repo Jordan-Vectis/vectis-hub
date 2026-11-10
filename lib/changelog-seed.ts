@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"13999742b881941fd78fe7b10239c5caa3b6f2a1","author":"Jordan Orange","date":"2026-11-10T12:47:41Z","subject":"Memory: Power Automate -> BC tote/lot location findings"},
+  {"sha":"b7e88e8c642b0510124979236a0fe78a7866c544","author":"jack-vectis","date":"2026-11-10T11:52:34Z","subject":"Goods In BC test: allow the copy of production, never the live environment"},
   {"sha":"0f61501ee0c53e99faed44228e40557cda561725","author":"jack-vectis","date":"2026-11-10T11:48:52Z","subject":"Goods In BC sandbox test: when BC has no such API page, list what that address does have"},
   {"sha":"140ce084f3420a308868f7e42c1cd6a2c6ef22a0","author":"jack-vectis","date":"2026-11-10T11:43:06Z","subject":"Goods In BC sandbox test: stop on a numbering clash instead of attaching to another record"},
   {"sha":"a8c47375eb0b808b76757916c35669ae6038ed0e","author":"jack-vectis","date":"2026-11-10T11:36:33Z","subject":"Goods In: send a booked receipt and its totes to the BC sandbox (test only)"},
