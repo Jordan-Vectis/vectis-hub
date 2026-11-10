@@ -13,6 +13,38 @@ import SetupBackups from "./setup-backups"
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reference_power_automate_bc_tote_location.md",
+    content: `---
+name: reference-power-automate-bc-tote-location
+description: "Power Automate CAN change a BC tote's location — evo/mob/v2.0 → totes is writable; the other tote APIs are read-only"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: 4d709809-ad08-47e2-a74e-837e2024d44d
+  modified: 2026-11-10T11:56:05.224Z
+---
+
+Tested 2026-11-10 on PRODUCTION_COPY_20260622 (Jordan, Power Automate, BC connector "Update record (V3)").
+
+**Works:** API category \`evo/mob/v2.0\`, table \`totes\`. Fields: \`no\` (tote number), \`location\`, \`systemId\` (= Row id). Flow = Find records (filter \`no eq 'T000005'\`) → For each → Update record (Row id = SystemId, Location = new value). Change shows in BC immediately.
+
+**Lot location also works:** \`evo/mob/v2.0\` → \`receiptLines\`, field \`articleLocationCode\`, find by \`uniqueID eq 'R000006-1'\`, Row id = \`systemId\`. Tested OK on R000006-1 (ARCHIVE → BENCH35 → back). ⚠ This table has NO barcode field (Internal Barcode is \`PTE_InternalBarcode\`, a Vectis per-tenant extension) — finding a lot by F-number needs another API that carries it. Checked 2026-11-10: NOT in vectis/whse/v2.0, evo/vectis/v2.0, or evo/base/v1.0 → auctionLines (that one has \`uniqueID\` + \`receiptLineSystemId\` = the receiptLines Row id, but no barcode). ✅ SOLVED 2026-11-10 with "HTTP with Microsoft Entra ID (**preauthorized**)" → Invoke an HTTP request, connection resource + base URL both \`https://api.businesscentral.dynamics.com\` (signs in as the user, no app registration). GET \`https://api.businesscentral.dynamics.com/v2.0/f146b72a-c3fb-4d6b-9002-072b3191507a/Production_Copy_20260622/ODataV4/Company('Vectis')/Receipt_Lines_Excel?$filter=PTE_InternalBarcode%20eq%20'B001001'&$select=EVA_UniqueID,PTE_InternalBarcode,EVA_ArticleLocationCode\` → 200, B001001 = R000006-1. Gotchas: spaces must be %20; the step clung to an old SharePoint connection (error is base64 "BaseResourceUri … must be a base of the full url") — delete + re-add the step; "Resubmit" replays the old run; the NON-preauthorized "HTTP With Microsoft Entra ID" needs tenant admin consent. ✅ FULL FLOW WORKS (2026-11-10, flow "Change Receipt Line Test"): HTTP GET (barcode → EVA_UniqueID) → Find records evo/mob/v2.0 receiptLines, Filter \`uniqueID eq '\` + fx \`first(body('Invoke_an_HTTP_request')?['value'])?['EVA_UniqueID']\` + \`'\` → For each → Update record (Row id SystemId, Article Location Code). Unknown barcode → empty filter → no rows → nothing updated. Barcode and location are still hard-coded; next would be trigger inputs. Old notes: HTTP GET on ODataV4 \`Receipt_Lines_Excel\` (has PTE_InternalBarcode + EVA_UniqueID; needs an Entra app login), or devs add the barcode to an API page.
+
+**Doesn't work:**
+- \`vectis/whse/v2.0\` → \`receiptTotes\`: \`evaTOTToteLocation\` is read-only (copied from the tote record). Row id there is \`ItemInternalId\` = "R000009,10000" (receipt,line).
+- \`eva/tot/v1.0\` only lists \`subscriptions\` under Update (read-only for writes).
+- \`v2.0\` (Microsoft standard) has no totes.
+
+**Gotchas:**
+- The BC connector is Premium (💎).
+- Top Count was ignored once — a missing/wrong filter would make For each update EVERY tote. Always filter by \`no\`.
+- Jordan first checked the wrong BC environment and thought it hadn't worked — check the environment name first.
+- ✅ It IS logged: BC Change Log Entries shows a "Modification" row (Field Caption = Location, old BENCH34 → new BENCH35), same as a manual change — Jordan's "Past Locations Check" view reads from the Change Log. The change is logged under the connection's user (whoever owns the flow connection). \`totescan\` / \`locationRequests\` in evo/mob/v2.0 are untested alternatives.
+
+Related: [[bc_api_reference]], [[project_replace_bc]]
+`,
+  },
+  {
     filename: "reference_goods_in_bc_mirror.md",
     content: `---
 name: reference-goods-in-bc-mirror
