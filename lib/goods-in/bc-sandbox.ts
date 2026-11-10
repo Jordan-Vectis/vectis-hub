@@ -140,6 +140,30 @@ const failed = (what: string, e: unknown): BcStep => ({
   detail: e instanceof BcCallError ? e.message : String((e as { message?: string })?.message ?? e).slice(0, 300),
 })
 
+/**
+ * BC answers "No HTTP resource was found" when an API page isn't in that environment at all — the
+ * extension isn't installed there, or is an older version than the source in IT Tools → BC Source.
+ * Then the most useful thing to show is what the address DOES have: its service document lists every
+ * entity set on that publisher/group/version.
+ */
+async function failedWithRoute(token: string, environment: string, apiPath: string, entitySet: string, what: string, e: unknown): Promise<BcStep> {
+  const step = failed(what, e)
+  if (!/no http resource was found/i.test(step.detail)) return step
+  let have = ""
+  try {
+    const json = await call(token, "GET", rootFor(apiPath, environment))
+    const names = ((json.value as { name?: string }[] | undefined) ?? []).map(v => v.name).filter(Boolean) as string[]
+    have = names.length ? `It has: ${names.sort().join(", ")}.` : "It lists nothing there."
+  } catch (e2) {
+    have = `Couldn't list what it has there (${failed("", e2).detail}).`
+  }
+  return {
+    what,
+    outcome: "failed",
+    detail: `The ${environment} environment has no "${entitySet}" at ${apiPath} — the extension that provides it isn't installed there, or is an older version. ${have}`,
+  }
+}
+
 /** Step 1: the receipt itself. BC fills in the vendor's name and contact details from the vendor number. */
 export async function sendReceiptHeader(token: string, environment: string, receipt: { id: string; vendorNo: string }): Promise<BcStep> {
   const what = `Receipt ${receipt.id}`
@@ -159,7 +183,7 @@ export async function sendReceiptHeader(token: string, environment: string, rece
     const no = String(made.no ?? receipt.id)
     return { what, outcome: "made", detail: no === receipt.id ? `Made in BC for vendor ${receipt.vendorNo}.` : `BC made it as ${no}.` }
   } catch (e) {
-    return failed(what, e)
+    return failedWithRoute(token, environment, EVO_MOB, "receiptHeaders", what, e)
   }
 }
 
@@ -196,7 +220,7 @@ export async function sendContainer(
       steps.push({ what: toteWhat, outcome: "made", detail: "Made in BC." })
     }
   } catch (e) {
-    steps.push(failed(toteWhat, e))
+    steps.push(await failedWithRoute(token, environment, EVO_MOB, "totes", toteWhat, e))
     return steps // no tote, no link
   }
 
@@ -219,7 +243,7 @@ export async function sendContainer(
     await call(token, "POST", `${whse}receiptTotes`, body)
     steps.push({ what: linkWhat, outcome: "made", detail: `Line ${lineNo} on the receipt.` })
   } catch (e) {
-    steps.push(failed(linkWhat, e))
+    steps.push(await failedWithRoute(token, environment, VECTIS_WHSE, "receiptTotes", linkWhat, e))
   }
   return steps
 }
