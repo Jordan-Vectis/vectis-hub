@@ -15,6 +15,8 @@ import ContainersTable from "./containers-table"
 import AddContainers from "./add-containers"
 import NotesEditor from "./notes-editor"
 import LotList from "./lot-list"
+import BcSandboxTest from "./bc-sandbox-test"
+import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason } from "@/lib/goods-in/bc-sandbox"
 import { CATEGORY_LIST_ID, type ContainerView, type LotView } from "./types"
 
 // Goods In → one receipt. Everything about what a customer handed in on one visit: the customer as
@@ -261,6 +263,18 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           </div>
         )}
       </section>
+
+      {/* Test only: Goods In's one way into Business Central, and only into a sandbox (lib/goods-in/bc-sandbox.ts).
+          Not shown at all on a server without BC_WRITE_ENVIRONMENT (production). */}
+      {bcSandboxConfigured() && atLeast(me, "admin") && !fromBc && !isDraft && !isVoid && (
+        <BcSandboxTest
+          receiptId={r.id}
+          vendorNo={r.vendorNo?.trim() || null}
+          containerCount={containers.length}
+          environment={bcSandboxEnvironment()}
+          offReason={bcSandboxOffReason()}
+        />
+      )}
 
       {otherLots.length > 0 && (
         <section className="mb-8" aria-labelledby="other-lots-heading">
