@@ -5,16 +5,16 @@ import { bcSandboxSendContainer, bcSandboxStart } from "@/lib/actions/goods-in-b
 import type { BcStep } from "@/lib/goods-in/bc-sandbox"
 import { ErrorBox, box, btn, btnGo, mono } from "../../_components/ui"
 
-// Goods In → a receipt → "Send to BC sandbox (test)" — Warehouse admins only. The rules are in
-// lib/goods-in/bc-sandbox.ts and lib/actions/goods-in-bc-sandbox.ts.
+// Goods In → a receipt → "Send to a BC test environment" (never live BC) — Warehouse admins only. The
+// rules are in lib/goods-in/bc-sandbox.ts and lib/actions/goods-in-bc-sandbox.ts.
 //
 // The browser drives it, one call per tote (RULES.md 7b): the count moves as each one goes, Stop
 // works between them, and the end says what happened in numbers. It asks in place before sending
-// (never window.confirm). Nothing in the Hub changes — only the sandbox.
+// (never window.confirm). Nothing in the Hub changes — only the BC test environment.
 
 const MARK: Record<BcStep["outcome"], { sym: string; cls: string; word: string }> = {
-  made: { sym: "✓", cls: "text-emerald-700 dark:text-emerald-300", word: "made in the sandbox now" },
-  there: { sym: "=", cls: "text-gray-500 dark:text-gray-400", word: "the sandbox already had it, nothing sent" },
+  made: { sym: "✓", cls: "text-emerald-700 dark:text-emerald-300", word: "made in the BC test environment now" },
+  there: { sym: "=", cls: "text-gray-500 dark:text-gray-400", word: "it was already there, nothing sent" },
   failed: { sym: "✗", cls: "text-red-700 dark:text-red-300", word: "Business Central refused it (its words shown)" },
 }
 
@@ -24,7 +24,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
   receiptId: string
   vendorNo: string | null
   containerCount: number
-  /** The sandbox environment test writes go to; null when switched off. */
+  /** The BC test environment writes go to (never live BC); null when switched off. */
   environment: string | null
   /** Why it's switched off, in words; null when it can run. */
   offReason: string | null
@@ -87,7 +87,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
     setProgress(null)
     setPhase("done")
 
-    const receiptWord = start.data.receipt.outcome === "made" ? "Receipt made in the sandbox" : "Receipt already in the sandbox"
+    const receiptWord = start.data.receipt.outcome === "made" ? `Receipt made in ${start.data.environment}` : `Receipt already in ${start.data.environment}`
     const totesWord = list.length === 0
       ? "this receipt has no totes or pallets, so none were sent"
       : `${sent} of ${list.length} totes and pallets sent in full${failedTotes ? `, ${failedTotes} refused` : ""}`
@@ -98,9 +98,9 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
 
   return (
     <section className={`${box} mb-6 px-4 py-3`} aria-labelledby="bc-sandbox-heading">
-      <h2 id="bc-sandbox-heading" className="text-sm font-semibold text-gray-900 dark:text-white">Business Central sandbox test</h2>
+      <h2 id="bc-sandbox-heading" className="text-sm font-semibold text-gray-900 dark:text-white">Business Central test</h2>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-        Admins only. Sends this receipt and its totes and pallets to BC&apos;s <b>sandbox</b> — never live BC — signed in as you. Nothing in the Hub changes.
+        Admins only. Sends this receipt and its totes and pallets to a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — signed in as you. Nothing in the Hub changes.
       </p>
 
       {off ? (
@@ -110,7 +110,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
       ) : (
         <>
           {phase === "idle" && (
-            <button type="button" className={`${btn} mt-3`} onClick={() => setPhase("confirm")}>Send to BC sandbox (test)…</button>
+            <button type="button" className={`${btn} mt-3`} onClick={() => setPhase("confirm")}>Send to BC test environment…</button>
           )}
 
           {phase === "confirm" && (
@@ -119,10 +119,10 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
                 This makes receipt <span className={mono}>{receiptId}</span> (vendor <span className={mono}>{vendorNo}</span>) and its{" "}
                 {containerCount} {containerCount === 1 ? "tote or pallet" : "totes and pallets"} in Business Central&apos;s{" "}
                 <b className={mono}>{environment}</b> environment, under the same numbers, with you as the person who made them.
-                Anything the sandbox already has is left alone.
+                Anything it already has is left alone.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" className={btnGo} onClick={run}>Send to the sandbox</button>
+                <button type="button" className={btnGo} onClick={run}>Send to {environment}</button>
                 <button type="button" className={btn} onClick={() => setPhase("idle")}>Cancel</button>
               </div>
             </div>
