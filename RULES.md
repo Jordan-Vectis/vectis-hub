@@ -1802,6 +1802,23 @@ the same way, never as an export of an actions file.
     - **Nothing in the Hub is written** — the outcome is on the screen and in the server log.
     - BC keeps the numbers it is sent (its OnInsert only numbers a blank), so the Hub's R/T/P numbers go
       as they are; a receipt with no vendor number is refused (BC's receipt-tote OnInsert TestFields it).
+    - **Lots → BC receipt lines** (Jack, 2026-11-10 — *"we just want to get the auction lines / receipt
+      lines back into BC; if we could assign them to the sale too"*, panel on the RECEIPT page by his
+      choice). "Lots → Business Central test" sends every lot **catalogued onto** the receipt
+      (`CatalogueLot.receipt` = it; lots that only sit on its totes but carry another receipt are counted
+      and left out) — for a "From BC" receipt as well as a Hub one; the receipt must already be in BC.
+      Per lot (`sendLot`): look first by internal barcode on `Receipt_Lines_Excel` (already there → left
+      alone; on another receipt → refused); then `POST api/evo/mob/v2.0/receiptLines` with receiptNo,
+      shortDescription (title), catalogueDescription (the description as HTML — `descriptionHtml`),
+      estimates (cataloguer's, else the AI's, as the BC Fill tab does), category, subcategory, tote and
+      `auctionNo` = the sale's code (BC's "Sales Allocation" — that IS assigning it to the sale). BC's
+      InitLine gives the article number and **UniqueID** and copies vendor/contact from the receipt. Then
+      the barcode (`PTE_InternalBarcode`) and size (`EVA_SHIP_EVA_SizeClassification`, from the parcel size
+      in `CatalogueLot.notes` → `bcSizeFor`) are PATCHed on `Receipt_Lines_Excel` — that API has neither,
+      and page 75021 allows edits but not inserts. A line made but not finished is picked up on the next
+      press (same receipt + short description + no barcode), never doubled.
+      ⚠ BC's UniqueID is only SHOWN — never written onto the Hub lot (BC Match stays the one way a
+      UniqueID reaches a lot; changing that is its own decision).
     - ⚠ This does **not** settle the decision above. Writing to LIVE BC — and which system owns the
       receipt and tote numbering — is still Jack and Jordan's call; this only proves the calls work.
 - **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken

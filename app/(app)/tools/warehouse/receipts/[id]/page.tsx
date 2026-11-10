@@ -16,6 +16,7 @@ import AddContainers from "./add-containers"
 import NotesEditor from "./notes-editor"
 import LotList from "./lot-list"
 import BcSandboxTest from "./bc-sandbox-test"
+import BcLotsTest from "./bc-lots-test"
 import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason } from "@/lib/goods-in/bc-sandbox"
 import { CATEGORY_LIST_ID, type ContainerView, type LotView } from "./types"
 
@@ -274,6 +275,12 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           environment={bcSandboxEnvironment()}
           offReason={bcSandboxOffReason()}
         />
+      )}
+
+      {/* Test only: the lots catalogued onto this receipt → BC receipt lines, on this receipt and their sale.
+          For a receipt booked in BC as well as one booked here — the receipt must already be in BC. */}
+      {bcSandboxConfigured() && atLeast(me, "admin") && !isDraft && !isVoid && (
+        <BcLotsTest receiptId={r.id} environment={bcSandboxEnvironment()} offReason={bcSandboxOffReason()} />
       )}
 
       {otherLots.length > 0 && (

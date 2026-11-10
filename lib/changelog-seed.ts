@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"7e09d2f2bb05cebd958cca4a14d21fda268e8a5b","author":"jack-vectis","date":"2026-11-10T14:30:36Z","subject":"Goods In BC test: the one live-BC test worked, so the live route comes back out"},
   {"sha":"6bc2787b425906cf1ab48188d4b629149c08b7c1","author":"jack-vectis","date":"2026-11-10T12:49:07Z","subject":"Goods In BC test: one live-BC receipt from the Hub sandbox only"},
   {"sha":"13999742b881941fd78fe7b10239c5caa3b6f2a1","author":"Jordan Orange","date":"2026-11-10T12:47:41Z","subject":"Memory: Power Automate -> BC tote/lot location findings"},
   {"sha":"b7e88e8c642b0510124979236a0fe78a7866c544","author":"jack-vectis","date":"2026-11-10T11:52:34Z","subject":"Goods In BC test: allow the copy of production, never the live environment"},

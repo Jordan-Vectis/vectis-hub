@@ -93,7 +93,7 @@ function bcMessage(status: number, text: string): string {
   return `Business Central answered ${status}${text ? `: ${text.slice(0, 300)}` : ""}`
 }
 
-async function call(token: string, method: "GET" | "POST", url: string, body?: Json): Promise<Json> {
+async function call(token: string, method: "GET" | "POST" | "PATCH", url: string, body?: Json, extraHeaders?: Record<string, string>): Promise<Json> {
   let res: Response
   try {
     res = await fetch(url, {
@@ -102,6 +102,7 @@ async function call(token: string, method: "GET" | "POST", url: string, body?: J
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
         ...(body ? { "Content-Type": "application/json" } : {}),
+        ...(extraHeaders ?? {}),
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -135,6 +136,12 @@ async function companyRoot(token: string, apiPath: string, environment: string):
     companyIds.set(root, id)
   }
   return `${root}companies(${id})/`
+}
+
+/** The ODataV4 (published web services) root for this environment — Receipt_Lines_Excel lives here. */
+function odataRoot(environment: string): string {
+  const company = (process.env.BC_COMPANY ?? "Vectis").replace(/'/g, "''")
+  return `${API_HOST}/${process.env.BC_TENANT_ID ?? ""}/${encodeURIComponent(environment)}/ODataV4/Company('${encodeURIComponent(company)}')/`
 }
 
 async function findFirst(token: string, base: string, entitySet: string, filter: string): Promise<Json | null> {
@@ -253,6 +260,162 @@ export async function sendContainer(
     steps.push({ what: linkWhat, outcome: "made", detail: `Line ${lineNo} on the receipt.` })
   } catch (e) {
     steps.push(await failedWithRoute(token, environment, VECTIS_WHSE, "receiptTotes", linkWhat, e))
+  }
+  return steps
+}
+
+// ── Lots → BC receipt lines (Jack, 2026-11-10: "we just want to get the auction lines / receipt lines back
+// into BC; if we could assign them to the sale too that would be great, if not just onto the receipt") ──
+//
+// One lot = one EVA_ReceiptLine, read off BC's own AL source:
+//   1. Look first — by INTERNAL BARCODE on the Receipt_Lines_Excel web service (page 75021 + Vectis's
+//      PTE_InternalBarcode and the carriage-costs size): BC already holding the barcode means "there",
+//      nothing sent. Then a line left over from an earlier press that made the line but couldn't set its
+//      barcode (same receipt, same short description, no barcode) is picked up and finished, never doubled.
+//   2. Create — POST api/evo/mob/v2.0 receiptLines (page 76301): receiptNo, shortDescription,
+//      catalogueDescription (HTML — BC keeps it as EVA_DescriptionHtml), estimates, category, subcategory,
+//      tote, and auctionNo = the SALE ("Sales Allocation" in BC). BC's InitLine gives the article number
+//      and the UniqueID (R009081-3) and copies the vendor and contact from the receipt.
+//   3. Finish — that API has no barcode or size, so they are PATCHed onto the same line through
+//      Receipt_Lines_Excel (page 75021 allows edits, not inserts). BC refuses a barcode that is already on
+//      another line (PTE_InternalBarcode's OnValidate inserts it into PTE_PrePrintedBarcode).
+// Nothing is written back to the Hub: the UniqueID only shows on screen (BC Match is the one way a
+// UniqueID reaches a Hub lot — RULES.md).
+
+/** A Hub lot as it goes to BC. */
+export type LotForBc = {
+  barcode: string | null
+  title: string
+  description: string
+  estimateLow: number | null
+  estimateHigh: number | null
+  /** Parcel size as the Hub keeps it (CatalogueLot.notes): Small / Medium / Large / Contact / Collection Only. */
+  size: string | null
+  category: string | null
+  subCategory: string | null
+  tote: string | null
+  /** The sale's code (CatalogueAuction.code) — BC's Sales Allocation. */
+  saleCode: string | null
+}
+
+/** BC's EVA_RecLineSizeClassification names (base enum + "Vectis - Carriage Costs"). Unknown → not sent. */
+export function bcSizeFor(size: string | null): string | null {
+  const s = (size ?? "").trim().toLowerCase()
+  if (!s) return null
+  if (s === "small") return "Small"
+  if (s === "medium") return "Medium"
+  if (s === "large") return "Large"
+  if (s === "contact") return "Contact"
+  if (s === "collect" || s.startsWith("collection")) return "Collect"
+  return null
+}
+
+/** The Hub's plain-text description as the HTML BC keeps: a blank line starts a paragraph, a line break stays one. */
+export function descriptionHtml(text: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  return text.replace(/\r\n?/g, "\n").trim().split(/\n\s*\n/)
+    .map(p => p.trim()).filter(Boolean)
+    .map(p => `<p>${p.split("\n").map(l => esc(l.trim())).join("<br>")}</p>`)
+    .join("")
+}
+
+/** Is the receipt in BC? Checked once before any lot is sent. */
+export async function receiptInBc(token: string, environment: string, receiptId: string): Promise<BcStep> {
+  const what = `Receipt ${receiptId}`
+  try {
+    const base = await companyRoot(token, EVO_MOB, environment)
+    const there = await findFirst(token, base, "receiptHeaders", `no eq ${quote(receiptId)}`)
+    return there
+      ? { what, outcome: "there", detail: `In BC (vendor ${String(there.vendorNo ?? "?")}) — lots go onto it.` }
+      : { what, outcome: "failed", detail: `Business Central has no receipt ${receiptId}, so its lots have nowhere to go.` }
+  } catch (e) {
+    return failedWithRoute(token, environment, EVO_MOB, "receiptHeaders", what, e)
+  }
+}
+
+/** Sends one lot as a receipt line on receiptId (and its sale). */
+export async function sendLot(token: string, environment: string, receiptId: string, lot: LotForBc): Promise<BcStep[]> {
+  const label = lot.barcode ? `Lot ${lot.barcode}` : `Lot "${lot.title.slice(0, 40)}"`
+  const steps: BcStep[] = []
+  const odata = odataRoot(environment)
+  const lines = `${odata}Receipt_Lines_Excel`
+  const size = bcSizeFor(lot.size)
+  const shortDescription = lot.title.trim().slice(0, 250)
+
+  // 1. Look first.
+  let receiptNo = receiptId
+  let articleNo: number | null = null
+  let uniqueId = ""
+  try {
+    if (lot.barcode) {
+      const json = await call(token, "GET", `${lines}?$filter=${encodeURIComponent(`PTE_InternalBarcode eq ${quote(lot.barcode)}`)}&$select=EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID&$top=1`)
+      const hit = ((json.value as Json[] | undefined) ?? [])[0]
+      if (hit) {
+        const where = String(hit.EVA_ReceiptNo ?? "")
+        steps.push(where.toUpperCase() === receiptId.toUpperCase()
+          ? { what: label, outcome: "there", detail: `BC already has it as ${String(hit.EVA_UniqueID ?? "?")} — nothing sent.` }
+          : { what: label, outcome: "failed", detail: `BC already has barcode ${lot.barcode} on ${String(hit.EVA_UniqueID ?? "?")} (receipt ${where}) — a different receipt, so it wasn't sent.` })
+        return steps
+      }
+    }
+    // A line an earlier press made but couldn't finish (no barcode yet) — finish it rather than make another.
+    if (lot.barcode && shortDescription) {
+      const json = await call(token, "GET", `${lines}?$filter=${encodeURIComponent(`EVA_ReceiptNo eq ${quote(receiptId)} and EVA_ShortDescription eq ${quote(shortDescription)} and PTE_InternalBarcode eq ''`)}&$select=EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID&$top=1`)
+      const left = ((json.value as Json[] | undefined) ?? [])[0]
+      if (left) {
+        receiptNo = String(left.EVA_ReceiptNo ?? receiptId)
+        articleNo = Number(left.EVA_ArticleNo) || null
+        uniqueId = String(left.EVA_UniqueID ?? "")
+        steps.push({ what: label, outcome: "there", detail: `Found ${uniqueId}, made earlier without its barcode — finishing it.` })
+      }
+    }
+  } catch (e) {
+    steps.push(failed(label, e))
+    return steps
+  }
+
+  // 2. Create the line on the receipt (and its sale).
+  if (articleNo == null) {
+    try {
+      const mob = await companyRoot(token, EVO_MOB, environment)
+      const body: Json = { receiptNo: receiptId, shortDescription }
+      if (lot.description.trim()) body.catalogueDescription = descriptionHtml(lot.description)
+      if (lot.estimateLow != null) body.lowEstimate = lot.estimateLow
+      if (lot.estimateHigh != null) body.highEstimate = lot.estimateHigh
+      if (lot.category) body.articleCategoryCode = lot.category
+      if (lot.subCategory) body.articleSubcategoryCode = lot.subCategory
+      if (lot.tote) body.articleToteNo = lot.tote
+      if (lot.saleCode) body.auctionNo = lot.saleCode
+      const made = await call(token, "POST", `${mob}receiptLines`, body)
+      receiptNo = String(made.receiptNo ?? receiptId)
+      articleNo = Number(made.articleNo) || null
+      uniqueId = String(made.uniqueID ?? "")
+      steps.push({ what: label, outcome: "made", detail: `Made as ${uniqueId || "a new line"}${lot.saleCode ? ` on sale ${String(made.auctionNo || lot.saleCode)}` : " (no sale on the lot)"}.` })
+    } catch (e) {
+      steps.push(await failedWithRoute(token, environment, EVO_MOB, "receiptLines", label, e))
+      return steps
+    }
+  }
+
+  // 3. Barcode and size, on the same line.
+  const patch: Json = {}
+  if (lot.barcode) patch.PTE_InternalBarcode = lot.barcode
+  if (size) patch.EVA_SHIP_EVA_SizeClassification = size
+  const finishWhat = `Barcode & size ${uniqueId || label}`
+  if (!Object.keys(patch).length) {
+    steps.push({ what: finishWhat, outcome: "failed", detail: "The lot has no barcode and no size the Hub recognises, so neither was set." })
+    return steps
+  }
+  if (articleNo == null) {
+    steps.push({ what: finishWhat, outcome: "failed", detail: "BC didn't say which line it made, so the barcode and size couldn't be set." })
+    return steps
+  }
+  try {
+    await call(token, "PATCH", `${lines}(EVA_ReceiptNo=${quote(receiptNo)},EVA_ArticleNo=${articleNo})`, patch, { "If-Match": "*" })
+    const bits = [lot.barcode ? `barcode ${lot.barcode}` : "no barcode on the lot", size ? `size ${size}` : `no size${lot.size ? ` (the Hub's "${lot.size}" isn't one BC has)` : ""}`]
+    steps.push({ what: finishWhat, outcome: "made", detail: `Set ${bits.join(", ")}.` })
+  } catch (e) {
+    steps.push({ what: finishWhat, outcome: "failed", detail: `${failed("", e).detail} — the line ${uniqueId} is in BC without it; pressing again finishes it.` })
   }
   return steps
 }
