@@ -1767,6 +1767,25 @@ the same way, never as an export of an actions file.
     the overnight import fails on it. So **a lot from a Goods In tote cannot get into BC** today.
   - ⚠ **A decision for Jack and Jordan before real stock is booked in this way.** Don't quieten those
     flags by teaching the checks about Goods In without that decision — they are telling the truth.
+  - ⚠⚠ **ONE test-only exception: "Send to BC sandbox (test)"** (Jack, 2026-11-10 — *"can we test
+    making a receipt and tote on the hub and giving it back to BC"*, agreed against this rule). A
+    Warehouse admin, on a booked Hub receipt, can send it and its totes and pallets to **a BC sandbox**:
+    the receipt to `api/evo/mob/v2.0/receiptHeaders`, each tote to `api/evo/mob/v2.0/totes`, each line to
+    `api/vectis/whse/v2.0/receiptTotes` (read off BC's own AL source — IT Tools → BC Source). Code:
+    `lib/goods-in/bc-sandbox.ts`, `lib/actions/goods-in-bc-sandbox.ts`, the panel `receipts/[id]/bc-sandbox-test.tsx`.
+    Keep every guard:
+    - **Sandbox only.** Nothing is sent unless `BC_WRITE_ENVIRONMENT` is set AND names a sandbox. It is
+      its own setting, never `BC_ENVIRONMENT` (every READ in the Hub uses that) — so no setting can point
+      these writes at live BC, and turning them on can't move the Hub's reads. Where it isn't set at all
+      (production) the panel isn't shown.
+    - **As the person pressing it** (their own BC sign-in, `getBCToken`), never the background sign-in
+      (Jordan's, for reads), and never while an admin is viewing as someone else.
+    - **Look first, create only what's missing**, so pressing it again carries on after a failure.
+    - **Nothing in the Hub is written** — the outcome is on the screen and in the server log.
+    - BC keeps the numbers it is sent (its OnInsert only numbers a blank), so the Hub's R/T/P numbers go
+      as they are; a receipt with no vendor number is refused (BC's receipt-tote OnInsert TestFields it).
+    - ⚠ This does **not** settle the decision above. Writing to LIVE BC — and which system owns the
+      receipt and tote numbering — is still Jack and Jordan's call; this only proves the calls work.
 - **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken
   with a single `UPDATE … RETURNING` inside the transaction that needs it, so two clerks at once can
   never be handed the same number (the prototype's read-the-highest-and-add-one could). At check-in

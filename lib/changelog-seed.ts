@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"bad455b901d32a9766e481f429888d830466d659","author":"jack-vectis","date":"2026-11-06T11:58:17Z","subject":"Refunds: a new Microsoft Form feeds the Hub directly through Power Automate"},
   {"sha":"aacd1721d044a0a99e81e98b77dbb0a62080b32f","author":"jack-vectis","date":"2026-11-06T10:51:44Z","subject":"Refunds: back on the Microsoft Form, /refund forwards to it and the Hub's public form is removed"},
   {"sha":"4fc224ae42c3ef09ba6007d74da73830b2b22f80","author":"Jordan Orange","date":"2026-11-04T10:25:16Z","subject":"Tablet cataloguing: star sales into Currently working on, like the Auction Manager"},
   {"sha":"7f15c29abff1463a36a5ca2061592d8706bd46a9","author":"jack-vectis","date":"2026-11-03T15:22:52Z","subject":"Security: customer uploads can't run as web pages, live bidding only as a signed-in registered customer, Node 22.23.4 + sanitize-html 2.18.1"},
