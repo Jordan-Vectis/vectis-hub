@@ -1781,6 +1781,9 @@ the same way, never as an export of an actions file.
     - **As the person pressing it** (their own BC sign-in, `getBCToken`), never the background sign-in
       (Jordan's, for reads), and never while an admin is viewing as someone else.
     - **Look first, create only what's missing**, so pressing it again carries on after a failure.
+      ⚠ But a number BC already uses for something ELSE is a clash, never "already there": a receipt
+      with that number for a different vendor stops the whole send, and a tote BC holds on another
+      receipt is never linked to this one.
     - **Nothing in the Hub is written** — the outcome is on the screen and in the server log.
     - BC keeps the numbers it is sent (its OnInsert only numbers a blank), so the Hub's R/T/P numbers go
       as they are; a receipt with no vendor number is refused (BC's receipt-tote OnInsert TestFields it).
