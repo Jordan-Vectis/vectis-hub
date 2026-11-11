@@ -272,20 +272,22 @@ export async function sendContainer(
 //      PTE_InternalBarcode and the carriage-costs size): BC already holding the barcode means "there",
 //      nothing sent. Then a line left over from an earlier press that made the line but couldn't set its
 //      barcode (same receipt, same short description, no barcode) is picked up and finished, never doubled.
-//   2. Create — POST api/evo/mob/v2.0 receiptLines (page 76301): receiptNo, shortDescription, estimates,
-//      tote, and auctionNo = the SALE ("Sales Allocation" in BC). BC's InitLine gives the article number
-//      and the UniqueID (R009081-3) and copies the vendor and contact from the receipt — but only when the
-//      line is SAVED, after every field sent has been set. So the create carries nothing that needs the
-//      line to exist first:
-//        ⚠ NOT the category — EVA_ReceiptLine's category OnValidate does TestField(EVA_VendorNo), and the
-//          vendor isn't on the line until it's saved. Sending it on the create is refused with "Vendor No.
-//          must have a value in Receipt Line: … Article No.=0" (the first real press, 2026-11-11). Sending
-//          vendorNo too doesn't help: an API page sets fields in PAGE order, and vendorNo comes after it.
-//        ⚠ NOT the description — the page stores it (BinaryDataWrapper.SetData) under the line's SystemId
-//          and UniqueID, both still blank before the line is saved.
-//   3. Details — PATCH the same API page (keyed on systemId) with category, subcategory (in that order on
-//      the page — a new category clears the subcategory, then it's set) and catalogueDescription (HTML —
-//      BC keeps it as EVA_DescriptionHtml).
+//   2. Create — POST api/evo/mob/v2.0 receiptLines (page 76301) with receiptNo and shortDescription ONLY.
+//      BC's InitLine gives the article number and the UniqueID (R009081-3) and copies the vendor and contact
+//      from the receipt — but only when the line is SAVED, after every field sent has been set. Other
+//      fields' OnValidate code needs the line to exist already, and each one sent on the create was refused:
+//        ⚠ category — its OnValidate does TestField(EVA_VendorNo), and the vendor isn't on the line until
+//          it's saved: "Vendor No. must have a value in Receipt Line: … Article No.=0" (first press,
+//          2026-11-11). Sending vendorNo too doesn't help: an API page sets fields in PAGE order.
+//        ⚠ tote — its OnValidate moves the line to the tote's location and calls Rec.Modify(true) (table
+//          75002 line 339): "The Receipt Line does not exist … Article No.='0'" (second press).
+//        ⚠ estimates touch the sale's auction lines, and the description is stored under the line's
+//          SystemId/UniqueID — both blank before the line is saved.
+//   3. Details — PATCH the same API page (keyed on systemId): category, subcategory, tote, estimates and
+//      catalogueDescription (HTML — BC keeps it as EVA_DescriptionHtml). BC sets them in page order:
+//      category before subcategory (a new category clears it first), high estimate before low.
+//      3b. The sale — auctionNo ("Sales Allocation" in BC) in a PATCH of its own, so a sale BC won't take
+//      leaves the lot on the receipt and carries on; the screen says the sale wasn't set.
 //   4. Finish — that API has no barcode or size, so they are PATCHed onto the same line through
 //      Receipt_Lines_Excel (page 75021 allows edits, not inserts). BC refuses a barcode that is already on
 //      another line (PTE_InternalBarcode's OnValidate inserts it into PTE_PrePrintedBarcode).
@@ -430,22 +432,18 @@ export async function sendLot(token: string, environment: string, receiptId: str
     return steps
   }
 
-  // 2. Create the line on the receipt (and its sale) — only fields that don't need the line saved first.
+  // 2. Create the line on the receipt — the receipt and short description ONLY. Every other field's
+  // OnValidate can touch the line or its sale, and the line doesn't exist until this call saves it.
   let systemId = ""
   try {
     const mob = await companyRoot(token, EVO_MOB, environment)
     if (articleNo == null) {
-      const body: Json = { receiptNo: receiptId, shortDescription }
-      if (lot.estimateLow != null) body.lowEstimate = lot.estimateLow
-      if (lot.estimateHigh != null) body.highEstimate = lot.estimateHigh
-      if (lot.tote) body.articleToteNo = lot.tote
-      if (lot.saleCode) body.auctionNo = lot.saleCode
-      const made = await call(token, "POST", `${mob}receiptLines`, body)
+      const made = await call(token, "POST", `${mob}receiptLines`, { receiptNo: receiptId, shortDescription })
       receiptNo = String(made.receiptNo ?? receiptId)
       articleNo = Number(made.articleNo) || null
       uniqueId = String(made.uniqueID ?? "")
       systemId = String(made.systemId ?? "")
-      steps.push({ what: label, outcome: "made", detail: `Made as ${uniqueId || "a new line"}${lot.saleCode ? ` on sale ${String(made.auctionNo || lot.saleCode)}` : " (no sale on the lot)"}.` })
+      steps.push({ what: label, outcome: "made", detail: `Made on ${receiptNo} as ${uniqueId || "a new line"}.` })
     } else if (uniqueId) {
       // A line left from an earlier press: the API page is keyed on systemId, so find it by its UniqueID.
       const row = await findFirst(token, mob, "receiptLines", `uniqueID eq ${quote(uniqueId)}`)
@@ -456,29 +454,50 @@ export async function sendLot(token: string, environment: string, receiptId: str
     return steps
   }
 
-  // 3. Category, subcategory and description, now the line exists (it has its vendor, SystemId and UniqueID).
-  // A failure stops here, BEFORE the barcode: a line with no barcode is what the next press picks up and finishes.
+  // 3. The details, now the line exists (it has its vendor, SystemId and UniqueID): category, subcategory,
+  // tote, estimates and description — BC sets them in its page's order (category before subcategory, high
+  // estimate before low). A failure stops here, BEFORE the barcode: a line with no barcode is what the next
+  // press picks up and finishes.
+  if (!systemId) {
+    steps.push({ what: `Details ${uniqueId || label}`, outcome: "failed", detail: `BC didn't say which line it made, so its details couldn't be set — the line ${uniqueId || ""} is in BC without them; pressing again finishes it.` })
+    return steps
+  }
   const details: Json = {}
   if (lot.category) details.articleCategoryCode = lot.category
   if (lot.subCategory) details.articleSubcategoryCode = lot.subCategory
+  if (lot.tote) details.articleToteNo = lot.tote
+  if (lot.estimateHigh != null) details.highEstimate = lot.estimateHigh
+  if (lot.estimateLow != null) details.lowEstimate = lot.estimateLow
   if (lot.description.trim()) details.catalogueDescription = descriptionHtml(lot.description)
   if (Object.keys(details).length) {
     const detailsWhat = `Details ${uniqueId || label}`
-    if (!systemId) {
-      steps.push({ what: detailsWhat, outcome: "failed", detail: `BC didn't say which line it made, so the category and description couldn't be set — the line ${uniqueId || ""} is in BC without them; pressing again finishes it.` })
-      return steps
-    }
     try {
       const mob = await companyRoot(token, EVO_MOB, environment)
       await call(token, "PATCH", `${mob}receiptLines(${systemId})`, details, { "If-Match": "*" })
+      const est = lot.estimateLow != null || lot.estimateHigh != null ? `estimate ${lot.estimateLow ?? "?"}–${lot.estimateHigh ?? "?"}` : "no estimate"
       const bits = [
-        lot.category ? `category ${lot.category}${lot.subCategory ? ` / ${lot.subCategory}` : ""}` : "no category on the lot",
-        lot.description.trim() ? "the description" : "no description on the lot",
+        lot.category ? `category ${lot.category}${lot.subCategory ? ` / ${lot.subCategory}` : ""}` : "no category",
+        lot.tote ? `tote ${lot.tote}` : "no tote",
+        est,
+        lot.description.trim() ? "the description" : "no description",
       ]
       steps.push({ what: detailsWhat, outcome: "made", detail: `Set ${bits.join(", ")}.` })
     } catch (e) {
       steps.push({ what: detailsWhat, outcome: "failed", detail: `${failed("", e).detail} — the line ${uniqueId} is in BC without them; pressing again finishes it.` })
       return steps
+    }
+  }
+
+  // 3b. The sale (BC's "Sales Allocation"), on its own: if BC won't put it on the sale, the lot still goes
+  // onto the receipt and carries on to its barcode and size — the sale is reported as not set.
+  if (lot.saleCode) {
+    const saleWhat = `Sale ${uniqueId || label}`
+    try {
+      const mob = await companyRoot(token, EVO_MOB, environment)
+      await call(token, "PATCH", `${mob}receiptLines(${systemId})`, { auctionNo: lot.saleCode }, { "If-Match": "*" })
+      steps.push({ what: saleWhat, outcome: "made", detail: `On sale ${lot.saleCode}.` })
+    } catch (e) {
+      steps.push({ what: saleWhat, outcome: "failed", detail: `${failed("", e).detail} — it's on the receipt but not on sale ${lot.saleCode}.` })
     }
   }
 

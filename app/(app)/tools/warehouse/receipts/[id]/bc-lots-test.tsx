@@ -132,6 +132,7 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
     let full = 0
     let already = 0
     let refused = 0
+    let noSale = 0
     let stopped = false
     for (let i = 0; i < plan.lots.length; i++) {
       if (stopRef.current) { stopped = true; break }
@@ -143,7 +144,10 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
         refused++
       } else {
         all.push(...res.data)
-        if (res.data.some(s => s.outcome === "failed")) refused++
+        // A sale BC wouldn't take is reported on its own step ("Sale …") — the lot is still on the receipt.
+        const failedSteps = res.data.filter(s => s.outcome === "failed")
+        if (failedSteps.some(s => !s.what.startsWith("Sale "))) refused++
+        else if (failedSteps.length) noSale++
         else if (res.data.some(s => s.outcome === "made")) full++
         else already++
       }
@@ -151,9 +155,10 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
     }
     setProgress(null)
     setPhase("done")
-    const done = full + already + refused
+    const done = full + already + refused + noSale
     setSummary(`${stopped ? `Stopped after ${done} of ${plan.lots.length} lots — the rest weren't sent. ` : ""}`
-      + `${full} sent in full, ${already} already in BC, ${refused} refused${stopped ? "" : ` — of ${plan.lots.length} lots`}.`)
+      + `${full} sent in full, ${noSale ? `${noSale} on the receipt but not their sale, ` : ""}${already} already in BC, ${refused} refused`
+      + `${stopped ? "" : ` — of ${plan.lots.length} lots`}.`)
   }
 
   return (

@@ -1808,16 +1808,18 @@ the same way, never as an export of an actions file.
       (`CatalogueLot.receipt` = it; lots that only sit on its totes but carry another receipt are counted
       and left out) — for a "From BC" receipt as well as a Hub one; the receipt must already be in BC.
       Per lot (`sendLot`): look first by internal barcode on `Receipt_Lines_Excel` (already there → left
-      alone; on another receipt → refused); then `POST api/evo/mob/v2.0/receiptLines` with receiptNo,
-      shortDescription (title), estimates (cataloguer's, else the AI's, as the BC Fill tab does), tote and
-      `auctionNo` = the sale's code (BC's "Sales Allocation" — that IS assigning it to the sale). BC's
-      InitLine gives the article number and **UniqueID** and copies vendor/contact from the receipt — but
-      only when the line is SAVED. So **category, subcategory and the description go in a second call**
-      (PATCH the same page by `systemId`): ⚠ BC's category OnValidate does `TestField(EVA_VendorNo)`, so a
-      create carrying the category is refused *"Vendor No. must have a value in Receipt Line … Article
-      No.=0"* (the first press, 2026-11-11 — sending vendorNo too doesn't help, an API page sets fields in
-      PAGE order), and the description is stored under the line's SystemId/UniqueID, blank until it's
-      saved. Then the barcode (`PTE_InternalBarcode`) and size (`EVA_SHIP_EVA_SizeClassification`, from the
+      alone; on another receipt → refused); then `POST api/evo/mob/v2.0/receiptLines` with receiptNo and
+      shortDescription (title) **only**. BC's InitLine gives the article number and **UniqueID** and copies
+      vendor/contact from the receipt — but only when the line is SAVED, and other fields' OnValidate code
+      needs the line to exist: ⚠ the category does `TestField(EVA_VendorNo)` (*"Vendor No. must have a
+      value in Receipt Line … Article No.=0"*, first press 2026-11-11 — sending vendorNo too doesn't help,
+      an API page sets fields in PAGE order); ⚠ the tote saves the line (`Rec.Modify(true)`, *"The Receipt
+      Line does not exist … Article No.='0'"*, second press); estimates touch the sale's auction lines; the
+      description is stored under the line's SystemId/UniqueID. So **category, subcategory, tote,
+      estimates (cataloguer's, else the AI's, as the BC Fill tab does) and the description go in a PATCH
+      of the same page by `systemId`**, then **`auctionNo` = the sale's code** (BC's "Sales Allocation" —
+      that IS assigning it to the sale) in a PATCH of its own: a sale BC won't take leaves the lot on the
+      receipt and carries on, and the screen says so. Then the barcode (`PTE_InternalBarcode`) and size (`EVA_SHIP_EVA_SizeClassification`, from the
       parcel size in `CatalogueLot.notes` → `bcSizeFor`) are PATCHed on `Receipt_Lines_Excel` — that API
       has neither, and page 75021 allows edits but not inserts. The barcode goes LAST, so a line made but
       not finished (no barcode) is picked up on the next press (same receipt + short description), never

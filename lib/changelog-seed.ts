@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-10, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-11, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4653706bad0672f70f24f1b92c4a5cb84d74350a","author":"jack-vectis","date":"2026-11-11T09:03:28Z","subject":"Goods In lots -> BC test: show every lot before sending, and make lines the way BC's code needs"},
   {"sha":"fa3c725093c1e181d9136101a2f647ec40fcad12","author":"jack-vectis","date":"2026-11-10T14:53:13Z","subject":"Goods In: send a receipt's lots to a BC test environment as receipt lines, on their sale"},
   {"sha":"7e09d2f2bb05cebd958cca4a14d21fda268e8a5b","author":"jack-vectis","date":"2026-11-10T14:30:36Z","subject":"Goods In BC test: the one live-BC test worked, so the live route comes back out"},
   {"sha":"6bc2787b425906cf1ab48188d4b629149c08b7c1","author":"jack-vectis","date":"2026-11-10T12:49:07Z","subject":"Goods In BC test: one live-BC receipt from the Hub sandbox only"},
