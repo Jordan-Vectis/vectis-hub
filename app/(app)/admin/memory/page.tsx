@@ -21,7 +21,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 4d709809-ad08-47e2-a74e-837e2024d44d
-  modified: 2026-11-11T10:54:13.961Z
+  modified: 2026-11-11T11:23:09.894Z
 ---
 
 Tested 2026-11-10 on PRODUCTION_COPY_20260622 (Jordan, Power Automate, BC connector "Update record (V3)").
@@ -35,6 +35,8 @@ Tested 2026-11-10 on PRODUCTION_COPY_20260622 (Jordan, Power Automate, BC connec
 **Creating a lot (2026-11-11):** Create record (V3) evo/mob/v2.0 → receiptLines with only Receipt No. (test receipt R009304 in the copy) → worked, BC's OnInsert/InitLine fills uniqueID, vendor, default location, default sale. ⚠ The macro's "Create Line" (EVA_CFA_CreateReceiptAndAuctionLine, Catalog From Auction ext) ALSO creates the AUCTION LINE (lot in the sale) + sets category/tote/CreatedFromAuction/ClearedForSale/CreatedFromToteNo — the API insert did NOT add it to a sale (Jordan does the sales allocation by hand for now, "a 2 min job"). Barcode can only be set once uniqueID exists (OnValidate writes PTE_PrePrintedBarcode).
 
 **✅ Create lot + barcode in one flow WORKS (2026-11-11, flow "Add Receipt Line Test"):** Create record (receiptLines, Receipt No.) → "HTTP with Microsoft Entra ID (preauthorized)" PATCH \`…/ODataV4/Company('Vectis')/Receipt_Lines_Excel(EVA_ReceiptNo='[Receipt No.]',EVA_ArticleNo=[Article No.])\` (both dynamic from Create record), headers \`If-Match: *\` + \`Content-Type: application/json\`, body \`{"PTE_InternalBarcode":"TESTBC001"}\`. So the Receipt_Lines_Excel web service IS writable and its key is (EVA_ReceiptNo, EVA_ArticleNo). This is the route to replace the "Create Line" macro; still missing vs the macro: sale (auction line), category, tote, CreatedFromToteNo.
+
+**⚠ Description set via API = HTML copy ONLY (2026-11-11).** BC keeps two copies: EVA_DescriptionHtml (card, reports) and EVA_DescriptionText (plain — the Lines list column in sale/receipt subpages reads THIS; also Artbrain/Invaluable/DMS use it). BC's own save, ReceiptLine.SetCatalogueDescription(html, plain), writes both + auto-ticks Catalogued (unless CataloguedManual) + updates short description; the evo/mob API's catalogueDescription OnValidate only writes the HTML. Symptom: list shows blank until someone edits it in the card. No API or web service writes the plain copy (Receipt_Lines_Excel page 75021 has no description). Can't create with a description either: it needs the line's SystemId → "Related System ID must have a value" — set it in an Update AFTER Create. Fix = AL change: an API field that calls SetCatalogueDescription(html, plain). The Hub's own Goods In → BC code (lib/goods-in/bc-sandbox.ts, other dev, same API route) has the same gap.
 
 **Doesn't work:**
 - \`vectis/whse/v2.0\` → \`receiptTotes\`: \`evaTOTToteLocation\` is read-only (copied from the tote record). Row id there is \`ItemInternalId\` = "R000009,10000" (receipt,line).
