@@ -1809,14 +1809,24 @@ the same way, never as an export of an actions file.
       and left out) — for a "From BC" receipt as well as a Hub one; the receipt must already be in BC.
       Per lot (`sendLot`): look first by internal barcode on `Receipt_Lines_Excel` (already there → left
       alone; on another receipt → refused); then `POST api/evo/mob/v2.0/receiptLines` with receiptNo,
-      shortDescription (title), catalogueDescription (the description as HTML — `descriptionHtml`),
-      estimates (cataloguer's, else the AI's, as the BC Fill tab does), category, subcategory, tote and
+      shortDescription (title), estimates (cataloguer's, else the AI's, as the BC Fill tab does), tote and
       `auctionNo` = the sale's code (BC's "Sales Allocation" — that IS assigning it to the sale). BC's
-      InitLine gives the article number and **UniqueID** and copies vendor/contact from the receipt. Then
-      the barcode (`PTE_InternalBarcode`) and size (`EVA_SHIP_EVA_SizeClassification`, from the parcel size
-      in `CatalogueLot.notes` → `bcSizeFor`) are PATCHed on `Receipt_Lines_Excel` — that API has neither,
-      and page 75021 allows edits but not inserts. A line made but not finished is picked up on the next
-      press (same receipt + short description + no barcode), never doubled.
+      InitLine gives the article number and **UniqueID** and copies vendor/contact from the receipt — but
+      only when the line is SAVED. So **category, subcategory and the description go in a second call**
+      (PATCH the same page by `systemId`): ⚠ BC's category OnValidate does `TestField(EVA_VendorNo)`, so a
+      create carrying the category is refused *"Vendor No. must have a value in Receipt Line … Article
+      No.=0"* (the first press, 2026-11-11 — sending vendorNo too doesn't help, an API page sets fields in
+      PAGE order), and the description is stored under the line's SystemId/UniqueID, blank until it's
+      saved. Then the barcode (`PTE_InternalBarcode`) and size (`EVA_SHIP_EVA_SizeClassification`, from the
+      parcel size in `CatalogueLot.notes` → `bcSizeFor`) are PATCHed on `Receipt_Lines_Excel` — that API
+      has neither, and page 75021 allows edits but not inserts. The barcode goes LAST, so a line made but
+      not finished (no barcode) is picked up on the next press (same receipt + short description), never
+      doubled.
+      **Nothing is sent before the person pressing sees it** (Jack, 2026-11-11: *"there's no way for me to
+      see what lots I'm sending"*): Check lists every lot with exactly what it sends — barcode, short
+      description, sale, estimate, category, tote, size, description — built by the SAME `lotForBc` the
+      send uses, so the list can't drift from what goes. A link opens BC's own Receipt Lines list (page
+      75021) for the receipt in the test environment. ⚠ Claude never presses Send on this panel for Jack.
       ⚠ BC's UniqueID is only SHOWN — never written onto the Hub lot (BC Match stays the one way a
       UniqueID reaches a lot; changing that is its own decision).
     - ⚠ This does **not** settle the decision above. Writing to LIVE BC — and which system owns the
