@@ -5,7 +5,10 @@ import { GoodsInAccessError, requireGoodsIn } from "@/lib/goods-in/access"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { getBCToken } from "@/lib/bc"
 import { isFromBc } from "@/lib/goods-in/source"
-import { bcSandboxEnvironment, bcSandboxOffReason, receiptInBc, sendContainer, sendLot, sendReceiptHeader, type BcStep } from "@/lib/goods-in/bc-sandbox"
+import {
+  bcReceiptLinesUrl, bcSandboxEnvironment, bcSandboxOffReason, lotPreview, receiptInBc, sendContainer, sendLot, sendReceiptHeader,
+  type BcStep, type LotForBc, type LotPreview,
+} from "@/lib/goods-in/bc-sandbox"
 import type { Result } from "@/lib/actions/goods-in"
 
 // Goods In → a receipt → "Send to BC sandbox (test)". The rules are in lib/goods-in/bc-sandbox.ts.
@@ -103,6 +106,36 @@ export async function bcSandboxSendContainer(receiptId: string, containerId: str
 //   already be in the BC test environment (checked first), since lines go onto it.
 // • One call per lot, driven by the browser, so the count moves and Stop works between lots.
 
+const LOT_FOR_BC_SELECT = {
+  id: true, barcode: true, title: true, description: true, estimateLow: true, estimateHigh: true, aiEstimateLow: true, aiEstimateHigh: true,
+  notes: true, category: true, subCategory: true, tote: true, receipt: true, auction: { select: { code: true } },
+} as const
+
+type LotRow = {
+  barcode: string | null; title: string; description: string | null
+  estimateLow: number | null; estimateHigh: number | null; aiEstimateLow: number | null; aiEstimateHigh: number | null
+  notes: string | null; category: string | null; subCategory: string | null; tote: string | null
+  auction: { code: string | null } | null
+}
+
+/** The ONE place a Hub lot becomes what goes to BC — the preview and the send both use it, so the list
+ *  shown before sending is exactly what is sent. */
+function lotForBc(lot: LotRow): LotForBc {
+  return {
+    barcode: lot.barcode?.trim() || null,
+    title: lot.title,
+    description: lot.description ?? "",
+    // The cataloguer's estimate, else the AI's — as the BC Fill tab does.
+    estimateLow: lot.estimateLow ?? lot.aiEstimateLow ?? null,
+    estimateHigh: lot.estimateHigh ?? lot.aiEstimateHigh ?? null,
+    size: lot.notes, // the parcel size is kept in notes (Small / Medium / Large / Contact / Collection Only)
+    category: lot.category?.trim() || null,
+    subCategory: lot.subCategory?.trim() || null,
+    tote: lot.tote?.trim() || null,
+    saleCode: lot.auction?.code?.trim() || null,
+  }
+}
+
 async function lotsOnReceipt(receiptId: string) {
   const r = await prisma.goodsInReceipt.findUnique({ where: { id: receiptId }, select: { id: true, status: true, containers: { select: { id: true } } } })
   if (!r) throw new GoodsInAccessError(`There's no receipt ${receiptId}.`)
@@ -116,7 +149,7 @@ async function lotsOnReceipt(receiptId: string) {
         { receipt: { equals: r.id, mode: "insensitive" as const } },
       ],
     },
-    select: { id: true, barcode: true, title: true, receipt: true },
+    select: LOT_FOR_BC_SELECT,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: 5000,
   })
@@ -127,9 +160,12 @@ async function lotsOnReceipt(receiptId: string) {
 export type BcLotsStart = {
   environment: string
   receipt: BcStep
-  lots: { id: string; barcode: string | null; title: string }[]
+  /** Each lot with exactly what it will send (lotPreview of the same lotForBc the send uses). */
+  lots: ({ id: string } & LotPreview)[]
   /** Lots on this receipt's totes that are catalogued onto ANOTHER receipt — left out. */
   elsewhere: number
+  /** BC's Receipt Lines list for this receipt in the test environment, to see the lines there. */
+  bcLinesUrl: string | null
 }
 
 /** Checks the receipt is in BC and returns the lots catalogued onto it, to send one by one. */
@@ -139,7 +175,16 @@ export async function bcLotsStart(receiptId: string): Promise<Result<BcLotsStart
     const { mine, elsewhere } = await lotsOnReceipt(receiptId)
     const receipt = await receiptInBc(token, environment, receiptId)
     console.log(`[goods-in bc-lots] ${userName ?? "?"} → ${environment}: ${receipt.what} ${receipt.outcome}; ${mine.length} lots`)
-    return { ok: true, data: { environment, receipt, lots: mine.map(l => ({ id: l.id, barcode: l.barcode, title: l.title })), elsewhere } }
+    return {
+      ok: true,
+      data: {
+        environment,
+        receipt,
+        lots: mine.map(l => ({ id: l.id, ...lotPreview(lotForBc(l)) })),
+        elsewhere,
+        bcLinesUrl: bcReceiptLinesUrl(environment, receiptId),
+      },
+    }
   } catch (e) {
     return fail(e)
   }
@@ -149,30 +194,12 @@ export async function bcLotsStart(receiptId: string): Promise<Result<BcLotsStart
 export async function bcLotSend(receiptId: string, lotId: string): Promise<Result<BcStep[]>> {
   try {
     const { environment, token, userName } = await check()
-    const lot = await prisma.catalogueLot.findUnique({
-      where: { id: lotId },
-      select: {
-        barcode: true, title: true, description: true, estimateLow: true, estimateHigh: true, aiEstimateLow: true, aiEstimateHigh: true,
-        notes: true, category: true, subCategory: true, tote: true, receipt: true, auction: { select: { code: true } },
-      },
-    })
+    const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: LOT_FOR_BC_SELECT })
     if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
     if ((lot.receipt ?? "").trim().toUpperCase() !== receiptId.toUpperCase()) {
       return { ok: false, error: `This lot is catalogued onto ${lot.receipt || "no receipt"}, not ${receiptId}.` }
     }
-    const steps = await sendLot(token, environment, receiptId, {
-      barcode: lot.barcode?.trim() || null,
-      title: lot.title,
-      description: lot.description ?? "",
-      // The cataloguer's estimate, else the AI's — as the BC Fill tab does.
-      estimateLow: lot.estimateLow ?? lot.aiEstimateLow ?? null,
-      estimateHigh: lot.estimateHigh ?? lot.aiEstimateHigh ?? null,
-      size: lot.notes, // the parcel size is kept in notes (Small / Medium / Large / Contact / Collection Only)
-      category: lot.category?.trim() || null,
-      subCategory: lot.subCategory?.trim() || null,
-      tote: lot.tote?.trim() || null,
-      saleCode: lot.auction?.code?.trim() || null,
-    })
+    const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
     console.log(`[goods-in bc-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {

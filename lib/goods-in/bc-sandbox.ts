@@ -272,11 +272,21 @@ export async function sendContainer(
 //      PTE_InternalBarcode and the carriage-costs size): BC already holding the barcode means "there",
 //      nothing sent. Then a line left over from an earlier press that made the line but couldn't set its
 //      barcode (same receipt, same short description, no barcode) is picked up and finished, never doubled.
-//   2. Create — POST api/evo/mob/v2.0 receiptLines (page 76301): receiptNo, shortDescription,
-//      catalogueDescription (HTML — BC keeps it as EVA_DescriptionHtml), estimates, category, subcategory,
+//   2. Create — POST api/evo/mob/v2.0 receiptLines (page 76301): receiptNo, shortDescription, estimates,
 //      tote, and auctionNo = the SALE ("Sales Allocation" in BC). BC's InitLine gives the article number
-//      and the UniqueID (R009081-3) and copies the vendor and contact from the receipt.
-//   3. Finish — that API has no barcode or size, so they are PATCHed onto the same line through
+//      and the UniqueID (R009081-3) and copies the vendor and contact from the receipt — but only when the
+//      line is SAVED, after every field sent has been set. So the create carries nothing that needs the
+//      line to exist first:
+//        ⚠ NOT the category — EVA_ReceiptLine's category OnValidate does TestField(EVA_VendorNo), and the
+//          vendor isn't on the line until it's saved. Sending it on the create is refused with "Vendor No.
+//          must have a value in Receipt Line: … Article No.=0" (the first real press, 2026-11-11). Sending
+//          vendorNo too doesn't help: an API page sets fields in PAGE order, and vendorNo comes after it.
+//        ⚠ NOT the description — the page stores it (BinaryDataWrapper.SetData) under the line's SystemId
+//          and UniqueID, both still blank before the line is saved.
+//   3. Details — PATCH the same API page (keyed on systemId) with category, subcategory (in that order on
+//      the page — a new category clears the subcategory, then it's set) and catalogueDescription (HTML —
+//      BC keeps it as EVA_DescriptionHtml).
+//   4. Finish — that API has no barcode or size, so they are PATCHed onto the same line through
 //      Receipt_Lines_Excel (page 75021 allows edits, not inserts). BC refuses a barcode that is already on
 //      another line (PTE_InternalBarcode's OnValidate inserts it into PTE_PrePrintedBarcode).
 // Nothing is written back to the Hub: the UniqueID only shows on screen (BC Match is the one way a
@@ -317,6 +327,52 @@ export function descriptionHtml(text: string): string {
     .map(p => p.trim()).filter(Boolean)
     .map(p => `<p>${p.split("\n").map(l => esc(l.trim())).join("<br>")}</p>`)
     .join("")
+}
+
+/** What one lot will put on its BC line, field by field — shown BEFORE anything is sent, from the same
+ *  values sendLot sends, so what's on screen is what goes. */
+export type LotPreview = {
+  barcode: string | null
+  shortDescription: string
+  /** The description as typed in the Hub (plain text; BC is sent it as HTML). */
+  description: string
+  sale: string | null
+  estimateLow: number | null
+  estimateHigh: number | null
+  category: string | null
+  subCategory: string | null
+  tote: string | null
+  /** BC's size value, or null when the lot has none BC knows. */
+  size: string | null
+  /** The Hub's own size text when it isn't one BC knows (so it won't be sent). */
+  sizeUnknown: string | null
+}
+
+export function lotPreview(lot: LotForBc): LotPreview {
+  const size = bcSizeFor(lot.size)
+  return {
+    barcode: lot.barcode,
+    shortDescription: lot.title.trim().slice(0, 250),
+    description: lot.description.trim(),
+    sale: lot.saleCode,
+    estimateLow: lot.estimateLow,
+    estimateHigh: lot.estimateHigh,
+    category: lot.category,
+    subCategory: lot.subCategory,
+    tote: lot.tote,
+    size,
+    sizeUnknown: !size && lot.size?.trim() ? lot.size.trim() : null,
+  }
+}
+
+/** BC's own Receipt Lines list (page 75021) in the test environment, filtered to one receipt — where the
+ *  lines this sends can be seen in BC. */
+export function bcReceiptLinesUrl(environment: string, receiptId: string): string | null {
+  const tenant = process.env.BC_TENANT_ID
+  if (!tenant) return null
+  const company = encodeURIComponent(process.env.BC_COMPANY ?? "Vectis")
+  const filter = encodeURIComponent(`'EVA_ReceiptNo' IS '${receiptId.replace(/'/g, "")}'`)
+  return `https://businesscentral.dynamics.com/${tenant}/${encodeURIComponent(environment)}?company=${company}&page=75021&filter=${filter}`
 }
 
 /** Is the receipt in BC? Checked once before any lot is sent. */
@@ -374,30 +430,59 @@ export async function sendLot(token: string, environment: string, receiptId: str
     return steps
   }
 
-  // 2. Create the line on the receipt (and its sale).
-  if (articleNo == null) {
-    try {
-      const mob = await companyRoot(token, EVO_MOB, environment)
+  // 2. Create the line on the receipt (and its sale) — only fields that don't need the line saved first.
+  let systemId = ""
+  try {
+    const mob = await companyRoot(token, EVO_MOB, environment)
+    if (articleNo == null) {
       const body: Json = { receiptNo: receiptId, shortDescription }
-      if (lot.description.trim()) body.catalogueDescription = descriptionHtml(lot.description)
       if (lot.estimateLow != null) body.lowEstimate = lot.estimateLow
       if (lot.estimateHigh != null) body.highEstimate = lot.estimateHigh
-      if (lot.category) body.articleCategoryCode = lot.category
-      if (lot.subCategory) body.articleSubcategoryCode = lot.subCategory
       if (lot.tote) body.articleToteNo = lot.tote
       if (lot.saleCode) body.auctionNo = lot.saleCode
       const made = await call(token, "POST", `${mob}receiptLines`, body)
       receiptNo = String(made.receiptNo ?? receiptId)
       articleNo = Number(made.articleNo) || null
       uniqueId = String(made.uniqueID ?? "")
+      systemId = String(made.systemId ?? "")
       steps.push({ what: label, outcome: "made", detail: `Made as ${uniqueId || "a new line"}${lot.saleCode ? ` on sale ${String(made.auctionNo || lot.saleCode)}` : " (no sale on the lot)"}.` })
+    } else if (uniqueId) {
+      // A line left from an earlier press: the API page is keyed on systemId, so find it by its UniqueID.
+      const row = await findFirst(token, mob, "receiptLines", `uniqueID eq ${quote(uniqueId)}`)
+      systemId = String(row?.systemId ?? "")
+    }
+  } catch (e) {
+    steps.push(await failedWithRoute(token, environment, EVO_MOB, "receiptLines", label, e))
+    return steps
+  }
+
+  // 3. Category, subcategory and description, now the line exists (it has its vendor, SystemId and UniqueID).
+  // A failure stops here, BEFORE the barcode: a line with no barcode is what the next press picks up and finishes.
+  const details: Json = {}
+  if (lot.category) details.articleCategoryCode = lot.category
+  if (lot.subCategory) details.articleSubcategoryCode = lot.subCategory
+  if (lot.description.trim()) details.catalogueDescription = descriptionHtml(lot.description)
+  if (Object.keys(details).length) {
+    const detailsWhat = `Details ${uniqueId || label}`
+    if (!systemId) {
+      steps.push({ what: detailsWhat, outcome: "failed", detail: `BC didn't say which line it made, so the category and description couldn't be set — the line ${uniqueId || ""} is in BC without them; pressing again finishes it.` })
+      return steps
+    }
+    try {
+      const mob = await companyRoot(token, EVO_MOB, environment)
+      await call(token, "PATCH", `${mob}receiptLines(${systemId})`, details, { "If-Match": "*" })
+      const bits = [
+        lot.category ? `category ${lot.category}${lot.subCategory ? ` / ${lot.subCategory}` : ""}` : "no category on the lot",
+        lot.description.trim() ? "the description" : "no description on the lot",
+      ]
+      steps.push({ what: detailsWhat, outcome: "made", detail: `Set ${bits.join(", ")}.` })
     } catch (e) {
-      steps.push(await failedWithRoute(token, environment, EVO_MOB, "receiptLines", label, e))
+      steps.push({ what: detailsWhat, outcome: "failed", detail: `${failed("", e).detail} — the line ${uniqueId} is in BC without them; pressing again finishes it.` })
       return steps
     }
   }
 
-  // 3. Barcode and size, on the same line.
+  // 4. Barcode and size, on the same line.
   const patch: Json = {}
   if (lot.barcode) patch.PTE_InternalBarcode = lot.barcode
   if (size) patch.EVA_SHIP_EVA_SizeClassification = size
