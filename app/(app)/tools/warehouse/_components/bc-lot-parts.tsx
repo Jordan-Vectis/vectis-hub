@@ -42,6 +42,7 @@ export function LotCard({ n, lot }: { n: number; lot: LotPreview }) {
       </div>
       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
         <Field label="Sale" value={lot.sale} />
+        <Field label="Cleared for sale" value={lot.clearedForSale ? "Yes" : null} note="no sale" />
         <Field label="Estimate" value={estimateText(lot.estimateLow, lot.estimateHigh)} />
         <Field label="Category" value={category} />
         <Field label="Tote" value={lot.tote} />
