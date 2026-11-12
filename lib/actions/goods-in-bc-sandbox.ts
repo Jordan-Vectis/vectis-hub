@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
-import { GoodsInAccessError, requireGoodsIn } from "@/lib/goods-in/access"
+import { GoodsInAccessError, getGoodsInUser, requireGoodsIn } from "@/lib/goods-in/access"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { getBCToken } from "@/lib/bc"
 import { isFromBc } from "@/lib/goods-in/source"
@@ -201,6 +201,123 @@ export async function bcLotSend(receiptId: string, lotId: string): Promise<Resul
     }
     const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
     console.log(`[goods-in bc-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
+    return { ok: true, data: steps }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+// ── A SALE's lots → BC receipt lines (the sale page's Push to BC tab, "Send lots to BC") ──
+//
+// Jack, 2026-11-12: the same send as the receipt panel above, started from the sale. Each lot goes onto
+// the receipt it was CATALOGUED ONTO (CatalogueLot.receipt) and is allocated to this sale, exactly as
+// sendLot does from a receipt — nothing about a lot's line differs.
+// • Hub ADMINS only (Jack: "needs to be admin only"), read fresh from the database on the effective
+//   session, and never while viewing as someone else — then every guard of check() above.
+// • A lot with no receipt has nowhere to go: listed, never sent. So is a lot on a Hub receipt that isn't
+//   booked in or is void. A receipt BC doesn't have is found by the per-receipt check before anything is
+//   sent, and its lots are left out.
+// • The browser drives it, one call per receipt to check and one per lot to send (RULES.md 7b).
+
+async function checkAdmin(): Promise<Checked> {
+  const u = await getGoodsInUser()
+  if (u?.role !== "ADMIN") throw new GoodsInAccessError("Only an admin can send a sale's lots to Business Central.")
+  return check()
+}
+
+const SALE_LOT_SELECT = { ...LOT_FOR_BC_SELECT, auctionId: true } as const
+
+const receiptOf = (receipt: string | null | undefined) => (receipt ?? "").trim().toUpperCase()
+
+/** Why a Hub receipt can't take lines — or null when it can (or the Hub has no record of it: BC decides). */
+function hubReceiptNote(status: string | null | undefined): string | null {
+  if (status === "draft") return "This check-in hasn't been booked in yet — book it in first."
+  if (status === "void") return "This receipt is void."
+  return null
+}
+
+export type BcSaleReceipt = {
+  receiptId: string
+  /** Why the Hub won't send this receipt's lots (not booked in, void), or null. */
+  hubNote: string | null
+  /** BC's Receipt Lines list for this receipt in the test environment. */
+  bcLinesUrl: string | null
+  lots: ({ id: string } & LotPreview)[]
+}
+
+export type BcSaleLotsStart = {
+  environment: string
+  saleCode: string
+  receipts: BcSaleReceipt[]
+  /** Lots with no receipt in the Hub — they have nowhere to go in BC, so they're never sent. */
+  noReceipt: ({ id: string } & LotPreview)[]
+}
+
+/** The sale's lots, grouped by the receipt each was catalogued onto, with exactly what each sends. No BC call. */
+export async function bcSaleLotsStart(auctionId: string): Promise<Result<BcSaleLotsStart>> {
+  try {
+    const { environment, userName } = await checkAdmin()
+    const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { code: true } })
+    if (!auction) return { ok: false, error: "That sale isn't in the Hub any more." }
+    const lots = await prisma.catalogueLot.findMany({
+      where: { auctionId },
+      select: SALE_LOT_SELECT,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 5000,
+    })
+    const ids = [...new Set(lots.map(l => receiptOf(l.receipt)).filter(Boolean))]
+    const hub = ids.length
+      ? await prisma.goodsInReceipt.findMany({ where: { id: { in: ids } }, select: { id: true, status: true } }) // receipt numbers are kept in capitals
+      : []
+    const status = new Map(hub.map(r => [r.id.toUpperCase(), r.status]))
+    const groups = new Map<string, BcSaleReceipt>()
+    const noReceipt: BcSaleLotsStart["noReceipt"] = []
+    for (const l of lots) {
+      const preview = { id: l.id, ...lotPreview(lotForBc(l)) }
+      const receiptId = receiptOf(l.receipt)
+      if (!receiptId) { noReceipt.push(preview); continue }
+      let g = groups.get(receiptId)
+      if (!g) {
+        g = { receiptId, hubNote: hubReceiptNote(status.get(receiptId)), bcLinesUrl: bcReceiptLinesUrl(environment, receiptId), lots: [] }
+        groups.set(receiptId, g)
+      }
+      g.lots.push(preview)
+    }
+    const receipts = [...groups.values()].sort((a, b) => a.receiptId.localeCompare(b.receiptId, "en", { numeric: true }))
+    console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: sale ${auction.code} — ${lots.length} lots on ${receipts.length} receipts, ${noReceipt.length} with no receipt`)
+    return { ok: true, data: { environment, saleCode: auction.code, receipts, noReceipt } }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Is this receipt (one the sale's lots were catalogued onto) in the BC test environment? Read only. */
+export async function bcSaleReceiptCheck(auctionId: string, receiptId: string): Promise<Result<BcStep>> {
+  try {
+    const { environment, token } = await checkAdmin()
+    const id = receiptOf(receiptId)
+    const onSale = await prisma.catalogueLot.findFirst({ where: { auctionId, receipt: { equals: id, mode: "insensitive" } }, select: { id: true } })
+    if (!onSale) return { ok: false, error: `No lot on this sale is catalogued onto ${id}.` }
+    return { ok: true, data: await receiptInBc(token, environment, id) }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Sends one lot of the sale as a line on the receipt it was catalogued onto, allocated to the sale. */
+export async function bcSaleLotSend(auctionId: string, lotId: string): Promise<Result<BcStep[]>> {
+  try {
+    const { environment, token, userName } = await checkAdmin()
+    const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: SALE_LOT_SELECT })
+    if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
+    if (lot.auctionId !== auctionId) return { ok: false, error: "This lot has moved to another sale since the list was made." }
+    const receiptId = receiptOf(lot.receipt)
+    if (!receiptId) return { ok: false, error: "This lot has no receipt in the Hub, so it has nowhere to go in BC." }
+    const hub = await prisma.goodsInReceipt.findFirst({ where: { id: { equals: receiptId, mode: "insensitive" } }, select: { status: true } })
+    const note = hubReceiptNote(hub?.status)
+    if (note) return { ok: false, error: `${receiptId}: ${note}` }
+    const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
+    console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {
     return fail(e)
