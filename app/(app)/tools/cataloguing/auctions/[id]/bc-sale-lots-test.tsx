@@ -176,8 +176,8 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
         Admins only. Sends every lot on <span className={mono}>{saleCode}</span> to a BC <b>test</b> environment
         {environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — as a line on the receipt it was
-        catalogued onto, allocated to this sale: short description, description, estimates, category, subcategory, tote, size and
-        internal barcode. BC gives each its UniqueID. Signed in as you; nothing in the Hub changes.
+        catalogued onto, allocated to this sale and ticked Cleared For Sale: short description, description, estimates, category,
+        subcategory, tote, size and internal barcode. BC gives each its UniqueID. Signed in as you; nothing in the Hub changes.
       </p>
 
       {off ? (
@@ -206,7 +206,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
               {goingLots > 0 ? (
                 <p>
                   This makes <b>{goingLots}</b> {goingLots === 1 ? "line" : "lines"} on <b>{plural(going.length, "receipt", "receipts")}</b> in
-                  Business Central&apos;s <b className={mono}>{plan.environment}</b> environment, each allocated to sale <b className={mono}>{plan.saleCode}</b>.
+                  Business Central&apos;s <b className={mono}>{plan.environment}</b> environment, each allocated to sale <b className={mono}>{plan.saleCode}</b> and cleared for sale.
                   A lot whose barcode BC already has is left alone.
                 </p>
               ) : (

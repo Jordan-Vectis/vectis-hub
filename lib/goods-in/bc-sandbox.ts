@@ -286,8 +286,14 @@ export async function sendContainer(
 //   3. Details — PATCH the same API page (keyed on systemId): category, subcategory, tote, estimates and
 //      catalogueDescription (HTML — BC keeps it as EVA_DescriptionHtml). BC sets them in page order:
 //      category before subcategory (a new category clears it first), high estimate before low.
-//      3b. The sale — auctionNo ("Sales Allocation" in BC) in a PATCH of its own, so a sale BC won't take
-//      leaves the lot on the receipt and carries on; the screen says the sale wasn't set.
+//      3b. The sale — auctionNo ("Sales Allocation" in BC) AND clearedForSale = true, in a PATCH of their own,
+//      so a sale BC won't take leaves the lot on the receipt and carries on; the screen says the sale wasn't
+//      set. Same two fields in the same order as BC's own Catalog From Auction (table ext 76141: Validate
+//      EVA_AuctionNo, then Validate EVA_ClearedForSale true). Ticking it validates EVA_ApprovedForSale = Yes
+//      (table 75002 field 62 → 140), which is what BC's Create Auction reads to put a receipt line on the
+//      sale's auction lines (codeunit 75079) — so without it the lot sat on the sale "Uncleared For Sale"
+//      (Jack, 2026-11-12). One PATCH is one BC transaction: if the tick is refused the sale is too, and
+//      the screen's "not on the sale" stays true.
 //   4. Finish — that API has no barcode or size, so they are PATCHed onto the same line through
 //      Receipt_Lines_Excel (page 75021 allows edits, not inserts). BC refuses a barcode that is already on
 //      another line (PTE_InternalBarcode's OnValidate inserts it into PTE_PrePrintedBarcode).
@@ -339,6 +345,8 @@ export type LotPreview = {
   /** The description as typed in the Hub (plain text; BC is sent it as HTML). */
   description: string
   sale: string | null
+  /** Ticked Cleared For Sale in BC — always, with the sale (sendLot step 3b); never without one. */
+  clearedForSale: boolean
   estimateLow: number | null
   estimateHigh: number | null
   category: string | null
@@ -357,6 +365,7 @@ export function lotPreview(lot: LotForBc): LotPreview {
     shortDescription: lot.title.trim().slice(0, 250),
     description: lot.description.trim(),
     sale: lot.saleCode,
+    clearedForSale: !!lot.saleCode,
     estimateLow: lot.estimateLow,
     estimateHigh: lot.estimateHigh,
     category: lot.category,
@@ -488,16 +497,17 @@ export async function sendLot(token: string, environment: string, receiptId: str
     }
   }
 
-  // 3b. The sale (BC's "Sales Allocation"), on its own: if BC won't put it on the sale, the lot still goes
-  // onto the receipt and carries on to its barcode and size — the sale is reported as not set.
+  // 3b. The sale (BC's "Sales Allocation") and Cleared For Sale, on their own: if BC won't put it on the sale,
+  // the lot still goes onto the receipt and carries on to its barcode and size — the sale is reported as not
+  // set. The API page sets auctionNo before clearedForSale (page order), as BC's own Catalog From Auction does.
   if (lot.saleCode) {
     const saleWhat = `Sale ${uniqueId || label}`
     try {
       const mob = await companyRoot(token, EVO_MOB, environment)
-      await call(token, "PATCH", `${mob}receiptLines(${systemId})`, { auctionNo: lot.saleCode }, { "If-Match": "*" })
-      steps.push({ what: saleWhat, outcome: "made", detail: `On sale ${lot.saleCode}.` })
+      await call(token, "PATCH", `${mob}receiptLines(${systemId})`, { auctionNo: lot.saleCode, clearedForSale: true }, { "If-Match": "*" })
+      steps.push({ what: saleWhat, outcome: "made", detail: `On sale ${lot.saleCode}, cleared for sale.` })
     } catch (e) {
-      steps.push({ what: saleWhat, outcome: "failed", detail: `${failed("", e).detail} — it's on the receipt but not on sale ${lot.saleCode}.` })
+      steps.push({ what: saleWhat, outcome: "failed", detail: `${failed("", e).detail} — it's on the receipt but not on sale ${lot.saleCode}, and not cleared for sale.` })
     }
   }
 
