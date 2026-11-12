@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"380ce2dbe390030ce152e50a4dcdc671f8ac87e4","author":"jack-vectis","date":"2026-11-12T10:58:52Z","subject":"Adds tick clear for sale on api import"},
   {"sha":"54bcab615da8d9b18ffe708d1abacf66ede92fd2","author":"jack-vectis","date":"2026-11-12T09:12:37Z","subject":"Push to BC: send a sale's lots to the BC test environment (admins only)"},
   {"sha":"5a51a6f252c8008248a8cb739ec6dfa5ec647922","author":"Jordan Orange","date":"2026-11-11T11:23:23Z","subject":"Memory: BC API description writes HTML copy only"},
   {"sha":"0db83524a425bab418a05783275ac8fe92a7c2eb","author":"Jordan Orange","date":"2026-11-11T10:54:57Z","subject":"Memory: Power Automate can create a BC lot and set its barcode"},

@@ -64,6 +64,7 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
     let already = 0
     let refused = 0
     let noSale = 0
+    let notCleared = 0
     let stopped = false
     for (let i = 0; i < plan.lots.length; i++) {
       if (stopRef.current) { stopped = true; break }
@@ -78,6 +79,7 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
         const outcome = lotOutcome(res.data)
         if (outcome === "refused") refused++
         else if (outcome === "noSale") noSale++
+        else if (outcome === "notCleared") notCleared++
         else if (outcome === "full") full++
         else already++
       }
@@ -85,9 +87,9 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
     }
     setProgress(null)
     setPhase("done")
-    const done = full + already + refused + noSale
+    const done = full + already + refused + noSale + notCleared
     setSummary(`${stopped ? `Stopped after ${done} of ${plan.lots.length} lots — the rest weren't sent. ` : ""}`
-      + `${full} sent in full, ${noSale ? `${noSale} on the receipt but not their sale, ` : ""}${already} already in BC, ${refused} refused`
+      + `${full} sent in full, ${noSale ? `${noSale} on the receipt but not their sale, ` : ""}${notCleared ? `${notCleared} sent but not cleared for sale, ` : ""}${already} already in BC, ${refused} refused`
       + `${stopped ? "" : ` — of ${plan.lots.length} lots`}.`)
   }
 
@@ -120,7 +122,7 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
                 <p>
                   This makes <b>{plan.lots.length}</b> {plan.lots.length === 1 ? "line" : "lines"} on receipt <span className={mono}>{receiptId}</span> in
                   Business Central&apos;s <b className={mono}>{plan.environment}</b> environment, each on its lot&apos;s sale and cleared for sale. A lot whose barcode
-                  BC already has is left alone.
+                  BC already has on this receipt isn&apos;t sent again — it&apos;s only ticked Cleared For Sale if it isn&apos;t yet.
                 </p>
               )}
               {plan.elsewhere > 0 && (

@@ -1818,14 +1818,16 @@ the same way, never as an export of an actions file.
       description is stored under the line's SystemId/UniqueID. So **category, subcategory, tote,
       estimates (cataloguer's, else the AI's, as the BC Fill tab does) and the description go in a PATCH
       of the same page by `systemId`**, then **`auctionNo` = the sale's code** (BC's "Sales Allocation" —
-      that IS assigning it to the sale) **with `clearedForSale: true`** in a PATCH of its own: a sale BC
-      won't take leaves the lot on the receipt and carries on, and the screen says so. ⚠ **Cleared For Sale
-      is ticked on every lot sent with a sale** (Jack, 2026-11-12: *"i need the lots to come down as cleared
-      for sale … right now there all coming down not cleared for sale"*). Same two fields in the same order
-      as BC's own Catalog From Auction (sale, then the tick). The tick sets Approved For Sale = Yes, which is
-      what BC's Create Auction reads to put a receipt line on the sale's auction lines; without it a lot sat
-      on the sale as "Uncleared For Sale". One PATCH, so a refused tick leaves the sale unset too, and the
-      screen says neither was set. A line BC already had (found by barcode) is still left alone, tick and all.
+      that IS assigning it to the sale) in a PATCH of its own: a sale BC won't take leaves the lot on the
+      receipt and carries on, and the screen says so. ⚠ **Then `clearedForSale: true` in ANOTHER PATCH of
+      its own, on every lot, whether or not BC took the sale** (Jack, 2026-11-12: *"i need the lots to come
+      down as cleared for sale … right now there all coming down not cleared for sale"*). Same order as BC's
+      own Catalog From Auction (sale, then the tick). The tick sets Approved For Sale = Yes, which is what
+      BC's Create Auction reads to put a receipt line on the sale's auction lines. ⚠⚠ **Never send the tick
+      in the sale's PATCH** — one PATCH is one BC transaction, and the BC test copy refuses the newer sales
+      (it dates from 22 June), so the first version (380ce2db) sent both together and every lot came down
+      with neither. A line BC already has on this receipt (found by barcode) isn't sent again, but gets the
+      tick if it hasn't got it — nothing else on it is touched — so pressing again fixes lots sent earlier.
       Then the barcode (`PTE_InternalBarcode`) and size (`EVA_SHIP_EVA_SizeClassification`, from the
       parcel size in `CatalogueLot.notes` → `bcSizeFor`) are PATCHed on `Receipt_Lines_Excel` — that API
       has neither, and page 75021 allows edits but not inserts. The barcode goes LAST, so a line made but

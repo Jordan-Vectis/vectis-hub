@@ -286,14 +286,18 @@ export async function sendContainer(
 //   3. Details — PATCH the same API page (keyed on systemId): category, subcategory, tote, estimates and
 //      catalogueDescription (HTML — BC keeps it as EVA_DescriptionHtml). BC sets them in page order:
 //      category before subcategory (a new category clears it first), high estimate before low.
-//      3b. The sale — auctionNo ("Sales Allocation" in BC) AND clearedForSale = true, in a PATCH of their own,
-//      so a sale BC won't take leaves the lot on the receipt and carries on; the screen says the sale wasn't
-//      set. Same two fields in the same order as BC's own Catalog From Auction (table ext 76141: Validate
-//      EVA_AuctionNo, then Validate EVA_ClearedForSale true). Ticking it validates EVA_ApprovedForSale = Yes
-//      (table 75002 field 62 → 140), which is what BC's Create Auction reads to put a receipt line on the
-//      sale's auction lines (codeunit 75079) — so without it the lot sat on the sale "Uncleared For Sale"
-//      (Jack, 2026-11-12). One PATCH is one BC transaction: if the tick is refused the sale is too, and
-//      the screen's "not on the sale" stays true.
+//      3b. The sale — auctionNo ("Sales Allocation" in BC) in a PATCH of its own, so a sale BC won't take
+//      leaves the lot on the receipt and carries on; the screen says the sale wasn't set.
+//      3c. Cleared For Sale — clearedForSale = true in ANOTHER PATCH of its own, sent whether or not BC took
+//      the sale (Jack, 2026-11-12: "i need the lots to come down as cleared for sale"). Same order as BC's
+//      own Catalog From Auction (table ext 76141: Validate EVA_AuctionNo, then Validate EVA_ClearedForSale
+//      true). Ticking it validates EVA_ApprovedForSale = Yes (table 75002 field 62 → 140), which is what
+//      BC's Create Auction reads to put a receipt line on the sale's auction lines (codeunit 75079).
+//      ⚠ Never put it back in the sale's PATCH: one PATCH is one BC transaction, and the BC test copy
+//      (Production_Copy_20260622) refuses the newer sales — the first version did that, and every lot
+//      came down with neither the sale nor the tick.
+//      A line BC already has on this receipt (step 1) gets the tick too if it hasn't got it, so pressing
+//      again fixes lots sent before this; nothing else on it is touched.
 //   4. Finish — that API has no barcode or size, so they are PATCHed onto the same line through
 //      Receipt_Lines_Excel (page 75021 allows edits, not inserts). BC refuses a barcode that is already on
 //      another line (PTE_InternalBarcode's OnValidate inserts it into PTE_PrePrintedBarcode).
@@ -345,7 +349,7 @@ export type LotPreview = {
   /** The description as typed in the Hub (plain text; BC is sent it as HTML). */
   description: string
   sale: string | null
-  /** Ticked Cleared For Sale in BC — always, with the sale (sendLot step 3b); never without one. */
+  /** Ticked Cleared For Sale in BC — every lot, on its own step after the sale (sendLot step 3c). */
   clearedForSale: boolean
   estimateLow: number | null
   estimateHigh: number | null
@@ -365,7 +369,7 @@ export function lotPreview(lot: LotForBc): LotPreview {
     shortDescription: lot.title.trim().slice(0, 250),
     description: lot.description.trim(),
     sale: lot.saleCode,
-    clearedForSale: !!lot.saleCode,
+    clearedForSale: true,
     estimateLow: lot.estimateLow,
     estimateHigh: lot.estimateHigh,
     category: lot.category,
@@ -400,6 +404,19 @@ export async function receiptInBc(token: string, environment: string, receiptId:
   }
 }
 
+/** Ticks Cleared For Sale on one receipt line (by its SystemId on the EvoMobile receiptLines page). The step
+ *  is named "Cleared for sale …" — lotOutcome (bc-lot-parts.tsx) reads that prefix, so keep the two in step. */
+async function tickClearedForSale(token: string, environment: string, systemId: string, line: string): Promise<BcStep> {
+  const what = `Cleared for sale ${line}`
+  try {
+    const mob = await companyRoot(token, EVO_MOB, environment)
+    await call(token, "PATCH", `${mob}receiptLines(${systemId})`, { clearedForSale: true }, { "If-Match": "*" })
+    return { what, outcome: "made", detail: "Ticked Cleared For Sale." }
+  } catch (e) {
+    return { what, outcome: "failed", detail: `${failed("", e).detail} — it's in BC but not cleared for sale; pressing again tries the tick again.` }
+  }
+}
+
 /** Sends one lot as a receipt line on receiptId (and its sale). */
 export async function sendLot(token: string, environment: string, receiptId: string, lot: LotForBc): Promise<BcStep[]> {
   const label = lot.barcode ? `Lot ${lot.barcode}` : `Lot "${lot.title.slice(0, 40)}"`
@@ -413,20 +430,29 @@ export async function sendLot(token: string, environment: string, receiptId: str
   let receiptNo = receiptId
   let articleNo: number | null = null
   let uniqueId = ""
+  // A line BC already has on this receipt that isn't cleared for sale yet (sent before the tick was added).
+  let untickedLine = ""
   try {
     if (lot.barcode) {
-      const json = await call(token, "GET", `${lines}?$filter=${encodeURIComponent(`PTE_InternalBarcode eq ${quote(lot.barcode)}`)}&$select=EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID&$top=1`)
+      const json = await call(token, "GET", `${lines}?$filter=${encodeURIComponent(`PTE_InternalBarcode eq ${quote(lot.barcode)}`)}&$select=EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID,EVA_ClearedForSale&$top=1`)
       const hit = ((json.value as Json[] | undefined) ?? [])[0]
       if (hit) {
         const where = String(hit.EVA_ReceiptNo ?? "")
-        steps.push(where.toUpperCase() === receiptId.toUpperCase()
-          ? { what: label, outcome: "there", detail: `BC already has it as ${String(hit.EVA_UniqueID ?? "?")} — nothing sent.` }
-          : { what: label, outcome: "failed", detail: `BC already has barcode ${lot.barcode} on ${String(hit.EVA_UniqueID ?? "?")} (receipt ${where}) — a different receipt, so it wasn't sent.` })
-        return steps
+        const hitId = String(hit.EVA_UniqueID ?? "?")
+        if (where.toUpperCase() !== receiptId.toUpperCase()) {
+          steps.push({ what: label, outcome: "failed", detail: `BC already has barcode ${lot.barcode} on ${hitId} (receipt ${where}) — a different receipt, so it wasn't sent.` })
+          return steps
+        }
+        if (hit.EVA_ClearedForSale === true || !hit.EVA_UniqueID) {
+          steps.push({ what: label, outcome: "there", detail: `BC already has it as ${hitId}${hit.EVA_ClearedForSale === true ? ", cleared for sale" : ""} — nothing sent.` })
+          return steps
+        }
+        steps.push({ what: label, outcome: "there", detail: `BC already has it as ${hitId} — nothing sent but the Cleared For Sale tick.` })
+        untickedLine = hitId
       }
     }
     // A line an earlier press made but couldn't finish (no barcode yet) — finish it rather than make another.
-    if (lot.barcode && shortDescription) {
+    if (!untickedLine && lot.barcode && shortDescription) {
       const json = await call(token, "GET", `${lines}?$filter=${encodeURIComponent(`EVA_ReceiptNo eq ${quote(receiptId)} and EVA_ShortDescription eq ${quote(shortDescription)} and PTE_InternalBarcode eq ''`)}&$select=EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID&$top=1`)
       const left = ((json.value as Json[] | undefined) ?? [])[0]
       if (left) {
@@ -438,6 +464,20 @@ export async function sendLot(token: string, environment: string, receiptId: str
     }
   } catch (e) {
     steps.push(failed(label, e))
+    return steps
+  }
+
+  // 1b. Already in BC on this receipt but not cleared for sale: tick it, and touch nothing else on the line.
+  if (untickedLine) {
+    try {
+      const mob = await companyRoot(token, EVO_MOB, environment)
+      const row = await findFirst(token, mob, "receiptLines", `uniqueID eq ${quote(untickedLine)}`)
+      steps.push(row?.systemId
+        ? await tickClearedForSale(token, environment, String(row.systemId), untickedLine)
+        : { what: `Cleared for sale ${untickedLine}`, outcome: "failed", detail: `BC's receipt lines API didn't find ${untickedLine}, so it wasn't ticked.` })
+    } catch (e) {
+      steps.push({ what: `Cleared for sale ${untickedLine}`, outcome: "failed", detail: `${failed("", e).detail} — it's in BC but not cleared for sale.` })
+    }
     return steps
   }
 
@@ -497,19 +537,22 @@ export async function sendLot(token: string, environment: string, receiptId: str
     }
   }
 
-  // 3b. The sale (BC's "Sales Allocation") and Cleared For Sale, on their own: if BC won't put it on the sale,
-  // the lot still goes onto the receipt and carries on to its barcode and size — the sale is reported as not
-  // set. The API page sets auctionNo before clearedForSale (page order), as BC's own Catalog From Auction does.
+  // 3b. The sale (BC's "Sales Allocation"), on its own: if BC won't put it on the sale, the lot still goes
+  // onto the receipt and carries on to its barcode and size — the sale is reported as not set.
   if (lot.saleCode) {
     const saleWhat = `Sale ${uniqueId || label}`
     try {
       const mob = await companyRoot(token, EVO_MOB, environment)
-      await call(token, "PATCH", `${mob}receiptLines(${systemId})`, { auctionNo: lot.saleCode, clearedForSale: true }, { "If-Match": "*" })
-      steps.push({ what: saleWhat, outcome: "made", detail: `On sale ${lot.saleCode}, cleared for sale.` })
+      await call(token, "PATCH", `${mob}receiptLines(${systemId})`, { auctionNo: lot.saleCode }, { "If-Match": "*" })
+      steps.push({ what: saleWhat, outcome: "made", detail: `On sale ${lot.saleCode}.` })
     } catch (e) {
-      steps.push({ what: saleWhat, outcome: "failed", detail: `${failed("", e).detail} — it's on the receipt but not on sale ${lot.saleCode}, and not cleared for sale.` })
+      steps.push({ what: saleWhat, outcome: "failed", detail: `${failed("", e).detail} — it's on the receipt but not on sale ${lot.saleCode}.` })
     }
   }
+
+  // 3c. Cleared For Sale, on its own — after the sale, whether or not BC took it. A refusal carries on to the
+  // barcode; the next press finds the line by its barcode and ticks it then.
+  steps.push(await tickClearedForSale(token, environment, systemId, uniqueId || label))
 
   // 4. Barcode and size, on the same line.
   const patch: Json = {}
