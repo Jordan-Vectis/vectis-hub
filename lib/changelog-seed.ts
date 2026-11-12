@@ -19,6 +19,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5a51a6f252c8008248a8cb739ec6dfa5ec647922","author":"Jordan Orange","date":"2026-11-11T11:23:23Z","subject":"Memory: BC API description writes HTML copy only"},
+  {"sha":"0db83524a425bab418a05783275ac8fe92a7c2eb","author":"Jordan Orange","date":"2026-11-11T10:54:57Z","subject":"Memory: Power Automate can create a BC lot and set its barcode"},
+  {"sha":"4100f64143287f0e38cf5a7f5aef228c16eb72c9","author":"jack-vectis","date":"2026-11-11T09:13:08Z","subject":"Goods In lots -> BC test: create each line the way BC's own Create Line does"},
   {"sha":"4653706bad0672f70f24f1b92c4a5cb84d74350a","author":"jack-vectis","date":"2026-11-11T09:03:28Z","subject":"Goods In lots -> BC test: show every lot before sending, and make lines the way BC's code needs"},
   {"sha":"fa3c725093c1e181d9136101a2f647ec40fcad12","author":"jack-vectis","date":"2026-11-10T14:53:13Z","subject":"Goods In: send a receipt's lots to a BC test environment as receipt lines, on their sale"},
   {"sha":"7e09d2f2bb05cebd958cca4a14d21fda268e8a5b","author":"jack-vectis","date":"2026-11-10T14:30:36Z","subject":"Goods In BC test: the one live-BC test worked, so the live route comes back out"},

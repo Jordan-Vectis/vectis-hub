@@ -1831,6 +1831,18 @@ the same way, never as an export of an actions file.
       75021) for the receipt in the test environment. ⚠ Claude never presses Send on this panel for Jack.
       ⚠ BC's UniqueID is only SHOWN — never written onto the Hub lot (BC Match stays the one way a
       UniqueID reaches a lot; changing that is its own decision).
+    - **The same send from the SALE** (Jack, 2026-11-12 — a "Send lots to BC" button on the sale page's
+      📤 Push to BC tab, *"needs to be admin only"*). Panel `cataloguing/auctions/[id]/bc-sale-lots-test.tsx`,
+      actions `bcSaleLotsStart` / `bcSaleReceiptCheck` / `bcSaleLotSend`. Every lot on the sale goes through
+      the SAME `sendLot` and `lotForBc` as the receipt panel, onto the receipt it was **catalogued onto**
+      (`CatalogueLot.receipt`) and allocated to this sale — never a different rule for a lot's line.
+      **Hub ADMINS only** (role ADMIN, read fresh, effective session, never while viewing as someone else),
+      on top of every guard above; the panel isn't shown to anyone else or where the test isn't set up.
+      The button sends nothing: it lists the lots BY RECEIPT and checks each receipt is in BC (one call
+      each, a moving count, Stop), and only "Send N lots" sends. Lots with no receipt, on a Hub receipt not
+      booked in or void, or on a receipt BC doesn't have are listed and LEFT OUT, and the end says how
+      many. The two panels share their lot card and step list (`warehouse/_components/bc-lot-parts.tsx`),
+      so a lot reads the same in both. ⚠ Claude never presses Send on this panel for Jack either.
     - ⚠ This does **not** settle the decision above. Writing to LIVE BC — and which system owns the
       receipt and tote numbering — is still Jack and Jordan's call; this only proves the calls work.
 - **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken

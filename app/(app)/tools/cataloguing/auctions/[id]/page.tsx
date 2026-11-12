@@ -5,6 +5,8 @@ import { redirect } from "next/navigation"
 import AuctionTabs from "./auction-tabs"
 import { getDepartmentAccess, auctionWhere, canSeeAuction } from "@/lib/departments"
 import { logAccessDenied } from "@/lib/access-log"
+import { getEffectiveSession } from "@/lib/impersonation"
+import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason } from "@/lib/goods-in/bc-sandbox"
 
 export default async function AuctionDetailPage({
   params,
@@ -120,6 +122,14 @@ export default async function AuctionDetailPage({
     inBC = new Set(rows.map(r => r.id))
   } catch { /* the BC mirror is a convenience — never take the sale page down for it */ }
 
+  // Push to BC → "Send lots to BC" (a BC TEST environment only) — admins only, and not while viewing as
+  // someone else; the server actions check both again. Not shown at all where the test isn't set up
+  // (production), exactly like the receipt page's panel.
+  const effective = isAdmin && bcSandboxConfigured() ? await getEffectiveSession() : null
+  const bcSaleTest = effective && !effective.isImpersonating && effective.user.role === "ADMIN"
+    ? { environment: bcSandboxEnvironment(), offReason: bcSandboxOffReason() }
+    : null
+
   return (
     <div className="h-full flex flex-col min-h-0">
       {/* ⚠ The Registered Bidders banner was removed from this page on 2026-08-14 (Jordan's
@@ -138,6 +148,7 @@ export default async function AuctionDetailPage({
         allAuctions={allAuctions.map(a => ({ id: a.id, code: a.code, name: a.name, auctionDate: a.auctionDate }))}
         extraAccess={extraAccess}
         assignableUsers={assignableUsers}
+        bcSaleTest={bcSaleTest}
         auction={{
           id: auction.id,
           code: auction.code,
