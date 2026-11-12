@@ -104,6 +104,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
     let already = 0
     let refused = 0
     let noSale = 0
+    let notCleared = 0
     let stopped = false
     for (let i = 0; i < lots.length; i++) {
       if (stopRef.current) { stopped = true; break }
@@ -118,6 +119,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
         const outcome = lotOutcome(res.data)
         if (outcome === "refused") refused++
         else if (outcome === "noSale") noSale++
+        else if (outcome === "notCleared") notCleared++
         else if (outcome === "full") full++
         else already++
       }
@@ -125,9 +127,9 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
     }
     setProgress(null)
     setPhase("done")
-    const done = full + already + refused + noSale
+    const done = full + already + refused + noSale + notCleared
     setSummary(`${stopped ? `Stopped after ${done} of ${lots.length} lots — the rest weren't sent. ` : ""}`
-      + `${full} sent in full, ${noSale ? `${noSale} on their receipt but not the sale, ` : ""}${already} already in BC, ${refused} refused`
+      + `${full} sent in full, ${noSale ? `${noSale} on their receipt but not the sale, ` : ""}${notCleared ? `${notCleared} sent but not cleared for sale, ` : ""}${already} already in BC, ${refused} refused`
       + `${stopped ? "" : ` — of ${plural(lots.length, "lot", "lots")}`}.`
       + (leftOut ? ` ${plural(leftOut, "lot was", "lots were")} left out before sending (no receipt, or a receipt BC doesn't have).` : ""))
   }
@@ -207,7 +209,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
                 <p>
                   This makes <b>{goingLots}</b> {goingLots === 1 ? "line" : "lines"} on <b>{plural(going.length, "receipt", "receipts")}</b> in
                   Business Central&apos;s <b className={mono}>{plan.environment}</b> environment, each allocated to sale <b className={mono}>{plan.saleCode}</b> and cleared for sale.
-                  A lot whose barcode BC already has is left alone.
+                  A lot whose barcode BC already has on its receipt isn&apos;t sent again — it&apos;s only ticked Cleared For Sale if it isn&apos;t yet.
                 </p>
               ) : (
                 <p className="font-medium">Nothing on {plan.saleCode} can be sent — no lot is on a receipt the BC test environment has.</p>

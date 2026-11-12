@@ -42,7 +42,7 @@ export function LotCard({ n, lot }: { n: number; lot: LotPreview }) {
       </div>
       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
         <Field label="Sale" value={lot.sale} />
-        <Field label="Cleared for sale" value={lot.clearedForSale ? "Yes" : null} note="no sale" />
+        <Field label="Cleared for sale" value={lot.clearedForSale ? "Yes" : null} />
         <Field label="Estimate" value={estimateText(lot.estimateLow, lot.estimateHigh)} />
         <Field label="Category" value={category} />
         <Field label="Tote" value={lot.tote} />
@@ -103,11 +103,16 @@ export function StepKey() {
   )
 }
 
-/** How one lot's send came out, for the end-of-run numbers. A sale BC wouldn't take is reported on its own
- *  step ("Sale …") — the lot is still on its receipt. */
-export function lotOutcome(steps: BcStep[]): "full" | "already" | "refused" | "noSale" {
+/** How one lot's send came out, for the end-of-run numbers. A sale BC wouldn't take ("Sale …") and a Cleared
+ *  For Sale tick it wouldn't take ("Cleared for sale …" — tickClearedForSale in bc-sandbox.ts) are each their
+ *  own step: the lot is still on its receipt. A lot BC already had that only got the tick now counts as
+ *  already in BC. */
+export function lotOutcome(steps: BcStep[]): "full" | "already" | "refused" | "noSale" | "notCleared" {
+  const isSale = (s: BcStep) => s.what.startsWith("Sale ")
+  const isTick = (s: BcStep) => s.what.startsWith("Cleared for sale ")
   const failed = steps.filter(s => s.outcome === "failed")
-  if (failed.some(s => !s.what.startsWith("Sale "))) return "refused"
-  if (failed.length) return "noSale"
-  return steps.some(s => s.outcome === "made") ? "full" : "already"
+  if (failed.some(s => !isSale(s) && !isTick(s))) return "refused"
+  if (failed.some(isSale)) return "noSale"
+  if (failed.length) return "notCleared"
+  return steps.some(s => s.outcome === "made" && !isTick(s)) ? "full" : "already"
 }
