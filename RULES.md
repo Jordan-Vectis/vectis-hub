@@ -1852,6 +1852,31 @@ the same way, never as an export of an actions file.
       booked in or void, or on a receipt BC doesn't have are listed and LEFT OUT, and the end says how
       many. The two panels share their lot card and step list (`warehouse/_components/bc-lot-parts.tsx`),
       so a lot reads the same in both. ⚠ Claude never presses Send on this panel for Jack either.
+    - **End of Day → "📤 Send to BC (test)" tab** (Jordan, 2026-11-13 — *"transfer to the end of day with
+      options to do it per vendor or in mass and the ability to chose sales allocation … an extra addition
+      or maybe another tab as to not interfere with the current end of day"*). The same `sendLot`, started
+      from the End of Day sheet. Code: `end-of-day/bc-send-tab.tsx`; actions `bcEodAvailable` / `bcEodList` /
+      `bcEodLotsStart` / `bcEodReceiptCheck` / `bcEodLotSend` in `lib/actions/goods-in-bc-sandbox.ts`.
+      - **A tab BESIDE the sheet, never a change to it.** The sheet, its checks, the download and the macro
+        are untouched; the End of Day route is not called or changed by it. The tab bar only appears where
+        `bcEodAvailable()` says so (the test is set up on this server AND a Hub admin not viewing as someone
+        else), so on production and for everyone else the page is exactly as it was. ⚠ Both tabs stay
+        MOUNTED and the other is hidden with CSS: unmounting would throw away an uploaded Import Check
+        file or ticked lots on the sheet, and would leave a send running with nothing on screen.
+      - **Which lots = the sheet ON SCREEN.** The browser hands the sheet's barcodes to `bcEodList` (as
+        "Fix what BC can prove" does). ⚠ Never work out "not in BC yet" a second time here: the End of Day
+        route is the one definition. Lots taken off the sheet (same barcode under two receipts) and lots
+        with no barcode or no receipt are therefore never sent. Barcodes that no longer match a lot are
+        counted on screen, not dropped silently.
+      - **By vendor or all at once.** Lots are grouped by the vendor ON THE LOT (name from the synced BC
+        items); tick vendors, or Tick all. Nothing is ticked to begin with.
+      - **The sale is chosen** — each lot's own sale (the default, as the other two panels) or ONE sale
+        code for every lot sent (BC's Sales Allocation; the Hub's open sales are offered, any BC code can be
+        typed). `eodLotForBc` is the one place that is applied, for the preview and the send alike. The
+        code is checked on the server (`saleFor`). A sale BC won't take leaves the lot on its receipt.
+      - Otherwise identical to the sale panel: ticking sends nothing; "Check and send…" lists every lot and
+        checks each receipt is in BC (a count that moves, Stop); only "Send N lots" sends, one call per lot;
+        the end says what happened in numbers. Every guard above holds, and nothing in the Hub is written.
     - ⚠ This does **not** settle the decision above. Writing to LIVE BC — and which system owns the
       receipt and tote numbering — is still Jack and Jordan's call; this only proves the calls work.
 - **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken

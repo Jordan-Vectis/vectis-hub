@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"923e0c81751a50cf827bbdf0180b440b135ecf84","author":"jack-vectis","date":"2026-11-12T11:40:54Z","subject":"Fixes clear for sale tick on api import"},
   {"sha":"380ce2dbe390030ce152e50a4dcdc671f8ac87e4","author":"jack-vectis","date":"2026-11-12T10:58:52Z","subject":"Adds tick clear for sale on api import"},
   {"sha":"54bcab615da8d9b18ffe708d1abacf66ede92fd2","author":"jack-vectis","date":"2026-11-12T09:12:37Z","subject":"Push to BC: send a sale's lots to the BC test environment (admins only)"},
   {"sha":"5a51a6f252c8008248a8cb739ec6dfa5ec647922","author":"Jordan Orange","date":"2026-11-11T11:23:23Z","subject":"Memory: BC API description writes HTML copy only"},

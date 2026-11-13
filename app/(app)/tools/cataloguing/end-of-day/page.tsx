@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { autocorrectLotsForAuctions, dismissEodChecks, lookupToteOrReceipt, massRemapPendingLots, matchBcLinesAcrossAuctions, restoreEodChecks, setLotsVendorReceiptAcrossAuctions, type AutocorrectChange, type EodMatchRow, type RemapLineResult } from "@/lib/actions/catalogue"
 import { readSheet, parseBcLinesForMatch, parseHotkeySheet, parseBcLinesExport, reconcileImport, buildHotkeyCsv, type HotkeyToteRow, type BcLinesRow } from "@/lib/bc-import-sheets"
+import { bcEodAvailable, type BcEodAvailable } from "@/lib/actions/goods-in-bc-sandbox"
+import BcSendTab from "./bc-send-tab"
 
 type ReceiptRow = { receipt: string; count: number; barcodes: string[]; sales: string[] }
 type SaleRow = { id: string; code: string; name: string; complete: boolean; count: number }
@@ -121,6 +123,17 @@ export default function EndOfDayPage() {
   useEffect(() => {
     const t = setInterval(() => setAgeTick(x => x + 1), 60_000)
     return () => clearInterval(t)
+  }, [])
+
+  // "Send to BC (test)" — a second tab BESIDE the sheet (Jordan, 2026-11-13: "an extra addition or maybe
+  // another tab as to not interfere with the current end of day"). Only offered where the test send is set
+  // up and to a Hub admin (bcEodAvailable — null everywhere else, production included), so without it this
+  // page is exactly as it was. ⚠ Both tabs stay MOUNTED and the other is hidden: switching never throws
+  // away an uploaded file or ticked lots on the sheet, nor a send that is part-way through.
+  const [tab, setTab] = useState<"sheet" | "send">("sheet")
+  const [bcSend, setBcSend] = useState<BcEodAvailable | null>(null)
+  useEffect(() => {
+    bcEodAvailable().then(setBcSend).catch(() => setBcSend(null))
   }, [])
 
   // ── Manual intervention: tick lots in the panels, look up the right tote /
@@ -375,6 +388,25 @@ export default function EndOfDayPage() {
         </div>
       </div>
 
+      {bcSend && (
+        <div role="tablist" aria-label="End of Day" className="flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-800">
+          {([["sheet", "📄 Tonight's sheet"], ["send", "📤 Send to BC (test)"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={`min-h-11 px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === key
+                ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {stale && (
         <p className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800/40 text-sm text-amber-800 dark:text-amber-300">
           Changes have been applied — the numbers, sheet and checks on screen are from before. Press <strong>⟳ Refresh</strong> when
@@ -388,6 +420,19 @@ export default function EndOfDayPage() {
         </p>
       )}
 
+      {bcSend && (
+        <div className={tab === "send" ? "" : "hidden"}>
+          <BcSendTab
+            active={tab === "send"}
+            receipts={loading ? null : data?.receipts ?? null}
+            environment={bcSend.environment}
+            offReason={bcSend.offReason}
+          />
+        </div>
+      )}
+
+      {/* Tonight's sheet — everything below is the page as it always was, hidden (not unmounted) on the other tab. */}
+      <div className={tab === "sheet" ? "space-y-5" : "hidden"}>
       {loading ? (
         <p className="text-sm text-gray-500">Checking the day&apos;s lots against BC…</p>
       ) : data && (
@@ -643,6 +688,7 @@ export default function EndOfDayPage() {
           )}
         </>
       )}
+      </div>
 
       {/* ── 🔧 Fix preview — every planned change, shown BEFORE anything is written ── */}
       {fixPreview && (

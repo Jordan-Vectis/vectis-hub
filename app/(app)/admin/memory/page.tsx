@@ -3081,7 +3081,20 @@ Jordan's case: a sale goes into BC **in stages** over several days ("my last leg
 
 Related: [[bc_api_reference]], [[reference_admin_centre]] (the not-in-BC matching), [[reference_bc_source_code]].
 
-⚠ **The BC Match result list is CAPPED at 1,000 rows, and the cap is ORDERED BY WHAT MATTERS** (fixed 2026-08-19 — Jordan: *"its flagging 3 as receipt disagrees but when you click on it it says nothing to show"*). It used to be a flat \`slice(0, 1000)\` in export order, so on a big export the three mismatches sat past row 1,000: the tile counted them (counts come from the full pass) while the list they opened was empty. \`matchBcLinesAcrossAuctions\` now keeps **mismatches first (up to 500), then not-found (300), then matches** in whatever room is left. ⚠ Counts are always computed over EVERY row — never derive a count from the capped \`rows\` array. The panel also says "showing the first N of M" when a group still overflows.`,
+⚠ **The BC Match result list is CAPPED at 1,000 rows, and the cap is ORDERED BY WHAT MATTERS** (fixed 2026-08-19 — Jordan: *"its flagging 3 as receipt disagrees but when you click on it it says nothing to show"*). It used to be a flat \`slice(0, 1000)\` in export order, so on a big export the three mismatches sat past row 1,000: the tile counted them (counts come from the full pass) while the list they opened was empty. \`matchBcLinesAcrossAuctions\` now keeps **mismatches first (up to 500), then not-found (300), then matches** in whatever room is left. ⚠ Counts are always computed over EVERY row — never derive a count from the capped \`rows\` array. The panel also says "showing the first N of M" when a group still overflows.
+
+## 📤 Send to BC (test) tab (2026-11-13)
+
+Jordan: *"the BC test for sending lots jack has made we want to transfer to the end of day with options to do it per vendor or in mass and the ability to chose sales allocation it needs to be an extra addition or maybe another tab as to not interfere with the current end of day"*.
+
+- A second tab on the End of Day page, beside "Tonight's sheet". It is Jack's sendLot (the receipt page and sale page panels) started from the sheet. Files: end-of-day/bc-send-tab.tsx, and the actions bcEodAvailable, bcEodList, bcEodLotsStart, bcEodReceiptCheck and bcEodLotSend in lib/actions/goods-in-bc-sandbox.ts. The full rules are in RULES.md beside the other BC test notes.
+- ⚠ It must never change the sheet side. The tab bar shows only where the BC test send is set up and only to a Hub admin, so production looks exactly as it did. Both tabs stay mounted and the other is hidden, so switching never loses an uploaded file, ticked lots or a send in progress.
+- Which lots: the barcodes of the sheet on screen, handed over by the browser. Never work out the pending list a second time.
+- By vendor (the vendor on the lot) or Tick all. Nothing is ticked to begin with. That was my choice, so that sending everything is a deliberate click.
+- Sale: each lot's own, or one sale code for every lot sent (BC's Sales Allocation).
+- Not built: a "no sale" option. sendLot always ticks Cleared For Sale and I do not know how BC treats that tick on a line with no sale. Ask before adding it.
+- Still TEST only (the copy of production), never live BC. Going live is the decision in change request CM00001.
+`,
   },
   {
     filename: "auto_clerk_review.md",
