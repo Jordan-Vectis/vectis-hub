@@ -6,7 +6,7 @@ import { getEffectiveSession } from "@/lib/impersonation"
 import { getBCToken } from "@/lib/bc"
 import { isFromBc } from "@/lib/goods-in/source"
 import {
-  bcReceiptLinesUrl, bcSandboxEnvironment, bcSandboxOffReason, lotPreview, receiptInBc, sendContainer, sendLot, sendReceiptHeader,
+  bcReceiptLinesUrl, bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason, lotPreview, receiptInBc, sendContainer, sendLot, sendReceiptHeader,
   type BcStep, type LotForBc, type LotPreview,
 } from "@/lib/goods-in/bc-sandbox"
 import type { Result } from "@/lib/actions/goods-in"
@@ -318,6 +318,216 @@ export async function bcSaleLotSend(auctionId: string, lotId: string): Promise<R
     if (note) return { ok: false, error: `${receiptId}: ${note}` }
     const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
     console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
+    return { ok: true, data: steps }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+// ── END OF DAY → BC: the sheet's lots → BC receipt lines (End of Day's "Send to BC (test)" tab) ──
+//
+// Jordan, 2026-11-13: the same send as the receipt and sale panels above, started from End of Day — by
+// vendor or everything at once, with the sale chosen. It sits beside the sheet and the macro; it changes
+// nothing about them.
+// • WHICH lots: the ones on the End of Day sheet ON SCREEN. The browser hands over the sheet's barcodes
+//   (as "Fix what BC can prove" does), so "not in BC yet" keeps ONE definition — the End of Day route's.
+//   ⚠ Never work the pending list out again here: two definitions would drift.
+// • WHICH sale: each lot's own (as every other send here), or ONE sale code for every lot sent.
+//   eodLotForBc is the one place that is applied — the preview and the send both use it, so the list
+//   shown before sending is exactly what goes.
+// • Every guard of checkAdmin(): Hub admins only, never while viewing as someone else, a BC TEST
+//   environment only, signed in as the person pressing it. Nothing in the Hub is written.
+// • The browser drives it (RULES.md 7b): one call per receipt to check, one per lot to send.
+
+/** Which sale the lots go on: each lot's own, or one sale code for every lot sent. */
+export type BcEodSale = { mode: "own" } | { mode: "one"; code: string }
+
+/** The sale choice as it arrived from the browser, checked. */
+function saleFor(sale: unknown): BcEodSale {
+  const s = sale as { mode?: unknown; code?: unknown } | null
+  if (s?.mode === "own") return { mode: "own" }
+  if (s?.mode === "one") {
+    const code = typeof s.code === "string" ? s.code.trim() : ""
+    if (!/^[A-Za-z0-9][A-Za-z0-9 ._/-]{0,19}$/.test(code)) {
+      throw new GoodsInAccessError("Type the code of the sale every lot should go on (up to 20 letters and numbers), or choose each lot's own sale.")
+    }
+    return { mode: "one", code }
+  }
+  throw new GoodsInAccessError("Choose which sale the lots go on first.")
+}
+
+function eodLotForBc(lot: LotRow, sale: BcEodSale): LotForBc {
+  const forBc = lotForBc(lot)
+  return sale.mode === "one" ? { ...forBc, saleCode: sale.code } : forBc
+}
+
+/** A list of ids or barcodes as it arrived from the browser: strings only, trimmed, no repeats, capped. */
+const cleanList = (v: unknown): string[] =>
+  Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string").map(x => x.trim()).filter(Boolean))].slice(0, 20000) : []
+
+// Prisma `in` is case-sensitive, so original/upper/lower are asked for and compared in capitals in code.
+const caseVariants = (vals: string[]) => [...new Set(vals.flatMap(v => [v, v.toUpperCase(), v.toLowerCase()]))]
+
+export type BcEodAvailable = { environment: string | null; offReason: string | null }
+
+/** Whether End of Day shows the tab to this person — the same test as the sale page's panel: the send
+ *  is set up on this server (never production) and they are a Hub admin not viewing as someone else. */
+export async function bcEodAvailable(): Promise<BcEodAvailable | null> {
+  try {
+    if (!bcSandboxConfigured()) return null
+    const session = await getEffectiveSession()
+    if (!session || session.isImpersonating || session.user.role !== "ADMIN") return null
+    return { environment: bcSandboxEnvironment(), offReason: bcSandboxOffReason() }
+  } catch {
+    return null
+  }
+}
+
+export type BcEodVendor = {
+  /** The vendor number on the lots, in capitals — "" for lots with no vendor. */
+  vendorNo: string
+  vendorName: string
+  receipts: string[]
+  sales: string[]
+  lotIds: string[]
+}
+
+export type BcEodList = {
+  environment: string
+  vendors: BcEodVendor[]
+  lots: number
+  /** Barcodes on the sheet that no Hub lot with a receipt carries now — the sheet is out of date. */
+  notFound: number
+  /** The Hub's open sales, offered when one sale is chosen for everything. */
+  openSales: { code: string; name: string }[]
+}
+
+/** The sheet's lots grouped by vendor, to tick. No BC call. */
+export async function bcEodList(barcodes: string[]): Promise<Result<BcEodList>> {
+  try {
+    const { environment, userName } = await checkAdmin()
+    const wanted = cleanList(barcodes)
+    const onSheet = new Set(wanted.map(b => b.toUpperCase()))
+    const rows = wanted.length
+      ? await prisma.catalogueLot.findMany({
+          where: { barcode: { in: caseVariants(wanted) } },
+          select: { id: true, barcode: true, receipt: true, vendor: true, auction: { select: { code: true } } },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          take: 20000,
+        })
+      : []
+    const lots = rows.filter(l => onSheet.has((l.barcode ?? "").trim().toUpperCase()) && receiptOf(l.receipt))
+    const found = new Set(lots.map(l => (l.barcode ?? "").trim().toUpperCase()))
+
+    const vendorNos = [...new Set(lots.map(l => (l.vendor ?? "").trim()).filter(Boolean))]
+    const named = vendorNos.length
+      ? await prisma.warehouseItem.findMany({
+          where: { vendorNo: { in: caseVariants(vendorNos) }, vendorName: { not: null } },
+          select: { vendorNo: true, vendorName: true },
+          distinct: ["vendorNo"],
+        })
+      : []
+    const nameByNo = new Map(named.map(v => [(v.vendorNo ?? "").trim().toUpperCase(), (v.vendorName ?? "").trim()]))
+
+    const groups = new Map<string, { vendorNo: string; vendorName: string; receipts: Set<string>; sales: Set<string>; lotIds: string[] }>()
+    for (const l of lots) {
+      const vendorNo = (l.vendor ?? "").trim().toUpperCase()
+      let g = groups.get(vendorNo)
+      if (!g) {
+        g = { vendorNo, vendorName: nameByNo.get(vendorNo) ?? "", receipts: new Set(), sales: new Set(), lotIds: [] }
+        groups.set(vendorNo, g)
+      }
+      g.receipts.add(receiptOf(l.receipt))
+      if (l.auction?.code) g.sales.add(l.auction.code)
+      g.lotIds.push(l.id)
+    }
+    const byNumber = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true })
+    const vendors = [...groups.values()]
+      .map(g => ({ ...g, receipts: [...g.receipts].sort(byNumber), sales: [...g.sales].sort(byNumber) }))
+      // Named vendors by name, then unnamed by number; lots with no vendor at all go last.
+      .sort((a, b) => Number(!a.vendorNo) - Number(!b.vendorNo) || Number(!a.vendorName) - Number(!b.vendorName) || a.vendorName.localeCompare(b.vendorName, "en") || byNumber(a.vendorNo, b.vendorNo))
+
+    const openSales = await prisma.catalogueAuction.findMany({ where: { complete: false }, select: { code: true, name: true }, orderBy: { code: "asc" }, take: 500 })
+    console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: sheet of ${wanted.length} barcodes — ${lots.length} lots for ${vendors.length} vendors`)
+    return { ok: true, data: { environment, vendors, lots: lots.length, notFound: wanted.filter(b => !found.has(b.toUpperCase())).length, openSales } }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+export type BcEodLotsStart = {
+  environment: string
+  /** The one sale every lot goes on, or null when each goes on its own. */
+  saleCode: string | null
+  receipts: BcSaleReceipt[]
+  /** Ticked lots that can't be sent now: gone from the Hub, or no longer carrying a barcode and a receipt. */
+  unsendable: number
+}
+
+/** The ticked lots grouped by receipt, with exactly what each sends on the sale chosen. No BC call. */
+export async function bcEodLotsStart(lotIds: string[], sale: BcEodSale): Promise<Result<BcEodLotsStart>> {
+  try {
+    const { environment, userName } = await checkAdmin()
+    const chosen = saleFor(sale)
+    const ids = cleanList(lotIds)
+    if (!ids.length) return { ok: false, error: "Tick at least one vendor first." }
+    const lots = await prisma.catalogueLot.findMany({
+      where: { id: { in: ids } },
+      select: SALE_LOT_SELECT,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })
+    const sendable = lots.filter(l => l.barcode?.trim() && receiptOf(l.receipt))
+    const receiptIds = [...new Set(sendable.map(l => receiptOf(l.receipt)))]
+    const hub = receiptIds.length
+      ? await prisma.goodsInReceipt.findMany({ where: { id: { in: receiptIds } }, select: { id: true, status: true } }) // receipt numbers are kept in capitals
+      : []
+    const status = new Map(hub.map(r => [r.id.toUpperCase(), r.status]))
+    const groups = new Map<string, BcSaleReceipt>()
+    for (const l of sendable) {
+      const receiptId = receiptOf(l.receipt)
+      let g = groups.get(receiptId)
+      if (!g) {
+        g = { receiptId, hubNote: hubReceiptNote(status.get(receiptId)), bcLinesUrl: bcReceiptLinesUrl(environment, receiptId), lots: [] }
+        groups.set(receiptId, g)
+      }
+      g.lots.push({ id: l.id, ...lotPreview(eodLotForBc(l, chosen)) })
+    }
+    const receipts = [...groups.values()].sort((a, b) => a.receiptId.localeCompare(b.receiptId, "en", { numeric: true }))
+    console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: ${sendable.length} lots on ${receipts.length} receipts, sale ${chosen.mode === "one" ? chosen.code : "each lot's own"}`)
+    return { ok: true, data: { environment, saleCode: chosen.mode === "one" ? chosen.code : null, receipts, unsendable: ids.length - sendable.length } }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Is this receipt (one a Hub lot is catalogued onto) in the BC test environment? Read only. */
+export async function bcEodReceiptCheck(receiptId: string): Promise<Result<BcStep>> {
+  try {
+    const { environment, token } = await checkAdmin()
+    const id = receiptOf(typeof receiptId === "string" ? receiptId : "")
+    const used = id ? await prisma.catalogueLot.findFirst({ where: { receipt: { equals: id, mode: "insensitive" } }, select: { id: true } }) : null
+    if (!used) return { ok: false, error: `No lot in the Hub is catalogued onto ${id || "that receipt"}.` }
+    return { ok: true, data: await receiptInBc(token, environment, id) }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Sends one lot from the End of Day sheet as a line on the receipt it was catalogued onto, on the sale chosen. */
+export async function bcEodLotSend(lotId: string, sale: BcEodSale): Promise<Result<BcStep[]>> {
+  try {
+    const { environment, token, userName } = await checkAdmin()
+    const chosen = saleFor(sale)
+    const lot = typeof lotId === "string" ? await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: SALE_LOT_SELECT }) : null
+    if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
+    if (!lot.barcode?.trim()) return { ok: false, error: "This lot has no barcode now, and the End of Day send goes by barcode." }
+    const receiptId = receiptOf(lot.receipt)
+    if (!receiptId) return { ok: false, error: "This lot has no receipt in the Hub, so it has nowhere to go in BC." }
+    const hub = await prisma.goodsInReceipt.findFirst({ where: { id: { equals: receiptId, mode: "insensitive" } }, select: { status: true } })
+    const note = hubReceiptNote(hub?.status)
+    if (note) return { ok: false, error: `${receiptId}: ${note}` }
+    const steps = await sendLot(token, environment, receiptId, eodLotForBc(lot, chosen))
+    console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {
     return fail(e)

@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-04, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-12, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,22 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c81f1d618e8a55b17da1c8f012fe22d1086fba59","author":"jack-vectis","date":"2026-11-12T11:40:54Z","subject":"Fixes clear for sale tick on api import"},
+  {"sha":"bc27564edc75f40ebedf8ebebcdfa379e1d74f0b","author":"jack-vectis","date":"2026-11-12T10:58:52Z","subject":"Adds tick clear for sale on api import"},
+  {"sha":"dc3308e8c905f5d6e37f7b6c26978779b263adda","author":"jack-vectis","date":"2026-11-12T09:12:37Z","subject":"Push to BC: send a sale's lots to the BC test environment (admins only)"},
+  {"sha":"5fda10b2d3318e74e0c5a88ff145c9ccc54b2958","author":"Jordan Orange","date":"2026-11-11T11:23:23Z","subject":"Memory: BC API description writes HTML copy only"},
+  {"sha":"e2877d37a0448ca3042b2e34815749f147d988fa","author":"Jordan Orange","date":"2026-11-11T10:54:57Z","subject":"Memory: Power Automate can create a BC lot and set its barcode"},
+  {"sha":"e589892900f6e987b06f6637a8ec18559e5a627e","author":"jack-vectis","date":"2026-11-11T09:13:08Z","subject":"Goods In lots -> BC test: create each line the way BC's own Create Line does"},
+  {"sha":"9888e7758ffc22f54f643613cca53beeafd46c9e","author":"jack-vectis","date":"2026-11-11T09:03:28Z","subject":"Goods In lots -> BC test: show every lot before sending, and make lines the way BC's code needs"},
+  {"sha":"13403a324a303f6ace9a5cb697fba864e0d2c571","author":"jack-vectis","date":"2026-11-10T14:53:13Z","subject":"Goods In: send a receipt's lots to a BC test environment as receipt lines, on their sale"},
+  {"sha":"882d533e7cee119bf06e8b350719346233b53600","author":"jack-vectis","date":"2026-11-10T14:30:36Z","subject":"Goods In BC test: the one live-BC test worked, so the live route comes back out"},
+  {"sha":"f44f268cf7e3667b14604670ad58e29a52bd6bad","author":"jack-vectis","date":"2026-11-10T12:49:07Z","subject":"Goods In BC test: one live-BC receipt from the Hub sandbox only"},
+  {"sha":"a228b07b4d61737eecbeab7eaab70b531ea37c93","author":"Jordan Orange","date":"2026-11-10T12:47:41Z","subject":"Memory: Power Automate -> BC tote/lot location findings"},
+  {"sha":"503385c6409c80236318b6a6921e182a30d2a1e7","author":"jack-vectis","date":"2026-11-10T11:52:34Z","subject":"Goods In BC test: allow the copy of production, never the live environment"},
+  {"sha":"83c78bb4482b2eca1e0c3bbc4b3a1b604436e7c3","author":"jack-vectis","date":"2026-11-10T11:48:52Z","subject":"Goods In BC sandbox test: when BC has no such API page, list what that address does have"},
+  {"sha":"e101c1400ad697cbdceec6d4861ac9861f80e258","author":"jack-vectis","date":"2026-11-10T11:43:06Z","subject":"Goods In BC sandbox test: stop on a numbering clash instead of attaching to another record"},
+  {"sha":"2db3b2c659739c3e0db55931e133b10972f3a73f","author":"jack-vectis","date":"2026-11-10T11:36:33Z","subject":"Goods In: send a booked receipt and its totes to the BC sandbox (test only)"},
+  {"sha":"aacd1721d044a0a99e81e98b77dbb0a62080b32f","author":"jack-vectis","date":"2026-11-06T10:51:44Z","subject":"Refunds: back on the Microsoft Form, /refund forwards to it and the Hub's public form is removed"},
   {"sha":"4fc224ae42c3ef09ba6007d74da73830b2b22f80","author":"Jordan Orange","date":"2026-11-04T10:25:16Z","subject":"Tablet cataloguing: star sales into Currently working on, like the Auction Manager"},
   {"sha":"7f15c29abff1463a36a5ca2061592d8706bd46a9","author":"jack-vectis","date":"2026-11-03T15:22:52Z","subject":"Security: customer uploads can't run as web pages, live bidding only as a signed-in registered customer, Node 22.23.4 + sanitize-html 2.18.1"},
   {"sha":"0907aef33390151b8b540c492fa3aa26ef5fc154","author":"Jordan Orange","date":"2026-11-02T10:23:22Z","subject":"Double Check: never flag a count the cataloguer put in the key points"},
