@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { getAccountsAccess } from "@/lib/accounts-auth"
+import { getAppAccess } from "@/lib/accounts-auth"
 import { listRefunds } from "@/lib/actions/refunds"
 import { REFUND_MICROSOFT_FORM, parseRefundFilter } from "@/lib/refunds"
 import FormLink from "./form-link"
@@ -13,7 +13,8 @@ import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 // Form (a Power Automate flow sends each response here), added by staff, or imported from the old log
 // — worked from New to Paid and complete for accounts.
 //
-// Admins only (Jack, 2026-10-26) — and every action re-checks that on the server. The filter lives in
+// Admins, and anyone given the Refunds app (admins only 2026-10-26 → 2026-11-13) — and every action
+// re-checks that on the server. The filter lives in
 // the address bar, read by parseRefundFilter. ⚠ The search never does (it is usually a customer's
 // name or email): this page always renders the list unsearched, and the panel asks listRefunds for
 // the search itself.
@@ -24,9 +25,9 @@ export const metadata = { title: "Refunds" }
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
 export default async function RefundsPage({ searchParams }: { searchParams: SearchParams }) {
-  const { canAccess, isAdmin } = await getAccountsAccess()
-  // Admins only — anyone else (Accounts' Simple mode included) goes back to the Hub.
-  if (!canAccess || !isAdmin) redirect("/hub")
+  const { canAccess, isAdmin } = await getAppAccess("REFUNDS")
+  // Admins, and anyone given the Refunds app — anyone else goes back to the Hub.
+  if (!canAccess) redirect("/hub")
 
   const sp = await searchParams
   const res = await listRefunds(parseRefundFilter(sp))
@@ -61,8 +62,10 @@ export default async function RefundsPage({ searchParams }: { searchParams: Sear
         </div>
       </details>}
 
+      {/* Admins only, like delete: Match sales from BC writes to many requests at once, and the import
+          brings the old log over (lib/actions/refunds*.ts check again). */}
       {/* Requests with no sale code (the old log's, the form's) — their F / E number matched from BC. */}
-      {res.ok && <details className={`${card} group mt-5`}>
+      {res.ok && isAdmin && <details className={`${card} group mt-5`}>
         <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 min-h-11 px-4 sm:px-5 py-3 text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           <span className="transition-transform group-open:rotate-90" aria-hidden>▸</span> Match sales from BC
         </summary>
@@ -72,7 +75,7 @@ export default async function RefundsPage({ searchParams }: { searchParams: Sear
       </details>}
 
       {/* The old SharePoint log, brought over once (re-importing never duplicates — each row's importKey). */}
-      {res.ok && <details className={`${card} group mt-5`}>
+      {res.ok && isAdmin && <details className={`${card} group mt-5`}>
         <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 min-h-11 px-4 sm:px-5 py-3 text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           <span className="transition-transform group-open:rotate-90" aria-hidden>▸</span> Import the old refund log
         </summary>

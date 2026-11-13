@@ -12,7 +12,8 @@ import DetailsCard from "./details-card"
 import LotsCard from "./lots-card"
 import StatusCard from "./status-card"
 
-// One refund request. Every card writes through lib/actions/refunds.ts (admins only, re-checked there)
+// One refund request. Every card writes through lib/actions/refunds.ts (admins and anyone given the
+// Refunds app; Delete admins only — re-checked there)
 // and then refreshes the page from the server, so what's shown is what's saved.
 //
 // Layout: on a wide screen (lg) Details on the left beside Status, then Lots & money ACROSS THE FULL
@@ -20,7 +21,7 @@ import StatusCard from "./status-card"
 // and the Timeline. Narrower — a phone, an iPad in portrait — one column, Status first: what's done
 // most comes first. The Status card comes first in the page too, so the order you tab through matches.
 
-export default function RefundView({ r, today, backHref, me }: { r: RefundDetail; today: string; backHref: string; me: { id: string; name: string } }) {
+export default function RefundView({ r, today, backHref, me, isAdmin }: { r: RefundDetail; today: string; backHref: string; me: { id: string; name: string }; isAdmin: boolean }) {
   const closed = CLOSED_REFUND_STATUSES.includes(r.status)
   return (
     <div className="p-4 sm:p-6 max-w-7xl desk:max-w-[1600px] mx-auto">
@@ -69,13 +70,14 @@ export default function RefundView({ r, today, backHref, me }: { r: RefundDetail
         </div>
       </div>
 
-      <DeleteCard r={r} backHref={backHref} />
+      {/* Deleting a request is admins only (deleteRefund checks again). */}
+      {isAdmin && <DeleteCard r={r} backHref={backHref} />}
     </div>
   )
 }
 
 // ─── Photos ──────────────────────────────────────────────────────────────────────────────────
-// Through the admin-only photo route (never a public address); each opens full size in a new tab.
+// Through the Refunds-only photo route (never a public address); each opens full size in a new tab.
 
 function Photos({ r }: { r: RefundDetail }) {
   return (

@@ -351,8 +351,8 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   },
   {
     // Accounts → Paid, not collected, as its own tile (Jack, 2026-10-23). Filled from BC every
-    // morning: paid invoices whose lots are still here 28 days later. Admin-only — no appKey —
-    // exactly like the panel itself (getAccountsAccess: admins only).
+    // morning: paid invoices whose lots are still here 28 days later. Admin-only until 2026-11-13;
+    // now its own app, so it can be ticked for a person in Users & Permissions (getAppAccess).
     key:                "UNCOLLECTED",
     href:               "/tools/accounts/uncollected",
     defaultLabel:       "Paid, not collected",
@@ -363,11 +363,13 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     btnBg:              "bg-amber-600 hover:bg-amber-500",
     glow:               "hover:shadow-amber-900/40",
     group:              "OPERATIONS",
+    appKey:             "UNCOLLECTED",
     allUsers:           false,
   },
   {
     // Accounts → Refunds as its own tile (Jack, 2026-10-26): refund, part-refund and return requests
-    // from the Hub's public refund form, vendor payouts, and the old refund log. Admin-only — no appKey.
+    // from the Hub's public refund form, vendor payouts, and the old refund log. Admin-only until
+    // 2026-11-13; now its own app, so it can be ticked for a person in Users & Permissions.
     key:                "REFUNDS",
     href:               "/tools/refunds",
     defaultLabel:       "Refunds",
@@ -378,6 +380,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     btnBg:              "bg-rose-600 hover:bg-rose-500",
     glow:               "hover:shadow-rose-900/40",
     group:              "OPERATIONS",
+    appKey:             "REFUNDS",
     allUsers:           false,
   },
   {

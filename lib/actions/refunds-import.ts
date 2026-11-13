@@ -17,7 +17,8 @@ import { dayToStored, isDay } from "@/lib/uncollected"
 
 // Accounts → Refunds → importing the old SharePoint refund log (the CSV saved from it). SERVER ONLY.
 //
-//  • ADMINS ONLY, like the rest of Refunds: both actions re-check with getAccountsAccess().
+//  • ADMINS ONLY (even since Refunds became grantable, 2026-11-13): every action re-checks with
+//    getAccountsAccess().isAdmin.
 //  • The file is read by lib/refunds-import.ts (pure); each row's fingerprint is hashed here (sha256)
 //    into Refund.importKey, which is unique — so importing the same file again, or a later export of
 //    the log, only ever ADDS the rows that aren't in yet. A row already in is NEVER changed (staff may

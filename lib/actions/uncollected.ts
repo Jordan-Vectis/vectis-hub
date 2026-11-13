@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
-import { getAccountsAccess } from "@/lib/accounts-auth"
+import { getAppAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
 import {
   bcLotsForBuyer, collectedCloseText, collectedFromLiveLots, collectedStopOf, salesOf, salesUnparsed, startUncollectedSync,
@@ -19,7 +19,7 @@ import {
   AGE_BANDS, BANK_DETAILS_REFUSED, BC_OWNED_FIELDS, CLOSED_STATUSES, FIELD_LABELS, OPEN_STATUSES, REACHED_OUT_KINDS,
   STATUS_META, STORAGE_LIMITS, STORAGE_RESUMED, STORAGE_SETTINGS_NOT_READY, STORAGE_SETTINGS_READ_FAILED, STORAGE_SWITCH_KINDS,
   STORAGE_WAIVED,
-  UNCOLLECTED_ADMINS_ONLY, UNCOLLECTED_BC_NOT_CONNECTED, UNCOLLECTED_LIMITS, UNCOLLECTED_NOT_READY,
+  UNCOLLECTED_ADMINS_ONLY, UNCOLLECTED_NO_ACCESS, UNCOLLECTED_BC_NOT_CONNECTED, UNCOLLECTED_LIMITS, UNCOLLECTED_NOT_READY,
   UNCOLLECTED_RUN_STALE_MINUTES, UNCOLLECTED_STATUSES, UNCOLLECTED_SYNC_NOT_READY,
   ageBandFor, chaseState, dayToStored, daysWaiting, eventKindOf, formatDay, formatMoney, isAgeBandKey, isContactKind,
   isDay, isOpenRaw, isUncollectedSort, isUncollectedStatus, londonDay, looksLikeBankDetails, sentence, statusOf,
@@ -35,8 +35,10 @@ import {
 
 // Accounts → Paid, not collected — every read and write. SERVER ONLY.
 //
-//  • ADMINS ONLY, like Accounts → Reserves: every action re-checks with getAccountsAccess() and
-//    refuses anyone who isn't an admin, whatever the page showed them.
+//  • WHO: admins, and anyone given the Paid, not collected app in Admin → Users & Permissions (admins
+//    only until 2026-11-13, when Jack needed to give it to the person who chases them). Every action
+//    re-checks (requireUncollected), whatever the page showed. Kept for admins (requireAdmin): Check BC
+//    now and Stop, Start again from BC, the storage-charge settings, and deleting a case.
 //  • Each action RETURNS { ok, error } (UncollectedResult) — a thrown server-action error is
 //    redacted in production (RULES.md). Missing tables → { ok: false, notReady: true,
 //    error: UNCOLLECTED_NOT_READY } until Run Migrations.
@@ -71,8 +73,16 @@ class Refusal extends Error {
 const NOT_FOUND = "That case couldn't be found — it may have been deleted. Go back to the list."
 const CHANGED_MEANWHILE = "Someone else changed this case a moment ago — open it again to see where it stands."
 
+/** Anyone with Paid, not collected: admins, and anyone given the app in Admin → Users & Permissions. */
+async function requireUncollected(): Promise<Who> {
+  const { session, canAccess } = await getAppAccess("UNCOLLECTED")
+  if (!session || !canAccess) throw new Refusal(UNCOLLECTED_NO_ACCESS)
+  return { id: session.user.id, name: session.user.name || session.user.email || "Unknown" }
+}
+
+/** Admins only — the tools kept back when Paid, not collected became grantable (2026-11-13). */
 async function requireAdmin(): Promise<Who> {
-  const { session, isAdmin } = await getAccountsAccess()
+  const { session, isAdmin } = await getAppAccess("UNCOLLECTED")
   if (!session || !isAdmin) throw new Refusal(UNCOLLECTED_ADMINS_ONLY)
   return { id: session.user.id, name: session.user.name || session.user.email || "Unknown" }
 }
@@ -417,7 +427,7 @@ const likeWord = (w: string) => `%${w.replace(/[\\%_]/g, (m) => `\\${m}`)}%`
  */
 export async function listCases(filter: UncollectedFilter = {}): Promise<UncollectedResult<UncollectedList>> {
   try {
-    await requireAdmin()
+    await requireUncollected()
     const today = londonDay()
 
     const statuses = (Array.isArray(filter.statuses) ? filter.statuses : []).filter(isUncollectedStatus)
@@ -564,7 +574,7 @@ export async function listCases(filter: UncollectedFilter = {}): Promise<Uncolle
  */
 export async function countOpenCases(): Promise<{ open: number; ready: boolean; error?: boolean }> {
   try {
-    const { isAdmin } = await getAccountsAccess()
+    const { isAdmin } = await getAppAccess("UNCOLLECTED")
     if (!isAdmin) return { open: 0, ready: true }
     const open = await prisma.uncollectedPaid.count({ where: { status: { notIn: CLOSED_STATUSES } } })
     return { open, ready: true }
@@ -580,7 +590,7 @@ export async function countOpenCases(): Promise<{ open: number; ready: boolean; 
 /** A case with its whole timeline, newest first, and the storage settings its figures used. */
 export async function getCase(id: string): Promise<UncollectedResult<UncollectedCaseDetail>> {
   try {
-    await requireAdmin()
+    await requireUncollected()
     if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
     const [r, flags, settings, startOwner, shipping] = await Promise.all([
       prisma.uncollectedPaid.findUnique({
@@ -642,7 +652,7 @@ export async function startAgainFromBc(word: string): Promise<UncollectedResult<
 /** Adds a buyer by hand. Only the name is needed; everything else can be filled in later. */
 export async function createCase(input: UncollectedInput): Promise<UncollectedResult<{ id: string }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireUncollected()
     if (!input || typeof input !== "object") throw new Refusal("Type the buyer's name.")
     const today = londonDay()
     const f = parseFields({ ...input, buyerName: input.buyerName ?? "" }, today)
@@ -699,7 +709,7 @@ export async function createCase(input: UncollectedInput): Promise<UncollectedRe
  */
 export async function updateCase(id: string, patch: UncollectedPatch): Promise<UncollectedResult<{ changed: UncollectedField[] }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireUncollected()
     if (!patch || typeof patch !== "object") return { ok: true, data: { changed: [] } }
     const today = londonDay()
     const f = parseFields(patch, today)
@@ -765,7 +775,7 @@ export async function setStatus(
   note?: string | null,
 ): Promise<UncollectedResult<{ changed: boolean; status: UncollectedStatus }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireUncollected()
     if (!isUncollectedStatus(status)) throw new Refusal("That isn't one of this panel's statuses.")
     const reason = prose(note, "the reason", UNCOLLECTED_LIMITS.eventText)
     if (STATUS_META[status].needsReason && !reason) {
@@ -840,7 +850,7 @@ export async function setStatus(
  */
 export async function logContact(id: string, input: LogContactInput): Promise<UncollectedResult<{ statusChangedTo: UncollectedStatus | null }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireUncollected()
     const kind: ContactKind | null = isContactKind(input?.kind) ? input.kind : null
     if (!kind) throw new Refusal("Pick call, email, letter or note.")
     const text = prose(input.text, "what happened", UNCOLLECTED_LIMITS.eventText)
@@ -914,7 +924,8 @@ export async function deleteCase(id: string): Promise<UncollectedResult> {
 
 // ─── Storage charges: waived on a case, and the settings ────────────────────────────────────
 // Storage is worked out LIVE (storageCharge in lib/uncollected.ts — never stored as money: it changes
-// every day). An admin can waive a case's storage with a reason: an event of kind STORAGE_WAIVED on
+// every day). Anyone with Paid, not collected can waive a case's storage with a reason (only the
+// settings for every case are admins'): an event of kind STORAGE_WAIVED on
 // its timeline whose text IS the reason, and STORAGE_RESUMED (an optional note) to charge it again —
 // the LATEST such event is the switch (storageWaiverOf; no schema change). Both take the case's row
 // lock first, so two people pressing at once can't both write one, and say "nothing changed" when it
@@ -922,7 +933,7 @@ export async function deleteCase(id: string): Promise<UncollectedResult> {
 
 async function setWaived(id: string, waive: boolean, note: unknown): Promise<UncollectedResult<{ changed: boolean; figurePence: number | null }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireUncollected()
     if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
     const text = prose(note, waive ? "the reason" : "the note", STORAGE_LIMITS.reason)
     if (waive && !text) throw new Refusal("Say why the storage is being waived — for example \"Agreed with Jordan — our delay, not theirs\".")
@@ -1092,7 +1103,7 @@ async function readCheckState(): Promise<UncollectedCheckState> {
  */
 export async function lastSyncRun(): Promise<UncollectedResult<UncollectedCheckState>> {
   try {
-    await requireAdmin()
+    await requireUncollected()
     return { ok: true, data: await readCheckState() }
   } catch (e) {
     if (isMissingUncollected(e)) return { ok: false, error: UNCOLLECTED_SYNC_NOT_READY, notReady: true }
@@ -1196,7 +1207,7 @@ export async function bcLotsForCase(id: string): Promise<UncollectedResult<Uncol
   let buyerNo: string
   let saleCode: string
   try {
-    await requireAdmin()
+    await requireUncollected()
     if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
     const c = await prisma.uncollectedPaid.findUnique({ where: { id }, select: { buyerNo: true, saleCode: true } })
     if (!c) throw new Refusal(NOT_FOUND)
@@ -1242,7 +1253,7 @@ export async function closeCollectedFromBc(id: string): Promise<UncollectedResul
   let who: Who
   let c: { status: string; buyerNo: string | null; saleCode: string | null; closedAt: Date | null }
   try {
-    who = await requireAdmin()
+    who = await requireUncollected()
     if (typeof id !== "string" || !id) throw new Refusal(NOT_FOUND)
     const row = await prisma.uncollectedPaid.findUnique({ where: { id }, select: { status: true, buyerNo: true, saleCode: true, closedAt: true } })
     if (!row) throw new Refusal(NOT_FOUND)

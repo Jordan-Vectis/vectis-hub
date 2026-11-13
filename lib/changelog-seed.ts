@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-16, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-06, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"3b07884be13f7a7d466ca09a577acef14e13c2a8","author":"jack-vectis","date":"2026-11-06T11:58:17Z","subject":"Refunds: a new Microsoft Form feeds the Hub directly through Power Automate"},
+  {"sha":"10f17f9c5b8d3efbb585e4a5d0cda8a9b970adb0","author":"jack-vectis","date":"2026-11-16T14:56:09Z","subject":"End of Day download always uses the sheet as it is now"},
   {"sha":"d6b154cf7bb23fe4564fe6f5be8797da83c627b5","author":"jack-vectis","date":"2026-11-16T11:53:15Z","subject":"Mirror Api change based on staging"},
   {"sha":"be2cecc75614c8b19726d78940026d4b99a5fe5e","author":"jack-vectis","date":"2026-11-16T10:58:21Z","subject":"Merging main to work with new APIs"},
   {"sha":"9e1840a17fcf2017826e9423f9e76f9fd9368735","author":"Jordan Orange","date":"2026-11-13T12:07:40Z","subject":"End of Day: Send to BC (test) tab, by vendor or all"},

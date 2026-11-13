@@ -16,8 +16,8 @@ import ContactCard from "./contact-card"
 import DetailsCard from "./details-card"
 import StatusCard from "./status-card"
 
-// One Paid, not collected case. Every card writes through lib/actions/uncollected.ts (admins only,
-// re-checked there) and then refreshes the page from the server, so what's shown is what's saved.
+// One Paid, not collected case. Every card writes through lib/actions/uncollected.ts (admins and anyone
+// given the app; Delete admins only — re-checked there) and then refreshes the page from the server, so what's shown is what's saved.
 //
 // Layout: on a wide screen (lg) Details on the left beside Status + Log contact, then Lots in BC
 // ACROSS THE FULL WIDTH (Jack, 2026-10-23: "instead of using a scroll function just use more of the
@@ -28,7 +28,7 @@ import StatusCard from "./status-card"
 // stack comes first in the page, so on the iPads the order you tab through matches what's shown; on a
 // wide screen the keyboard reaches Status and Log contact before Details.
 
-export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDetail; today: string; backHref: string }) {
+export default function CaseView({ c, today, backHref, isAdmin }: { c: UncollectedCaseDetail; today: string; backHref: string; isAdmin: boolean }) {
   const query = backHref.startsWith(PANEL_PATH) ? backHref.slice(PANEL_PATH.length) : ""
   const caseHref: CaseHref = id => `${PANEL_PATH}/${id}${query}`
   return (
@@ -78,7 +78,8 @@ export default function CaseView({ c, today, backHref }: { c: UncollectedCaseDet
         </div>
       </div>
 
-      <DeleteCard c={c} backHref={backHref} />
+      {/* Deleting a case is admins only (deleteCase checks again). */}
+      {isAdmin && <DeleteCard c={c} backHref={backHref} />}
     </div>
   )
 }

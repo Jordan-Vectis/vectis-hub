@@ -749,7 +749,11 @@ export const UNCOLLECTED_LIMITS = {
 
 export const UNCOLLECTED_NOT_READY =
   "Paid, not collected needs Run Migrations — an admin needs to press Run Migrations before it can be used."
-export const UNCOLLECTED_ADMINS_ONLY = "Paid, not collected is for admins only."
+/** Someone without the Paid, not collected app (Admin → Users & Permissions). */
+export const UNCOLLECTED_NO_ACCESS = "You don't have Paid, not collected — an admin can give it to you in Users & Permissions."
+/** The tools kept for admins when Paid, not collected became grantable (2026-11-13): Check BC now,
+ *  Start again, the storage-charge settings and deleting a case. */
+export const UNCOLLECTED_ADMINS_ONLY = "Only an admin can do that in Paid, not collected."
 export const UNCOLLECTED_SYNC_NOT_READY =
   "Checking BC needs Run Migrations — an admin needs to press Run Migrations before the BC check can run or be shown."
 export const UNCOLLECTED_BC_NOT_CONNECTED =

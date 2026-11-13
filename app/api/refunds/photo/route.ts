@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAccountsAccess } from "@/lib/accounts-auth"
+import { getAppAccess } from "@/lib/accounts-auth"
 import { getSignedImageUrl } from "@/lib/r2"
-import { REFUNDS_ADMINS_ONLY } from "@/lib/refunds"
+import { REFUNDS_NO_ACCESS } from "@/lib/refunds"
 
-// Accounts → Refunds: a request's photo, for the staff panel ONLY. Admins only (like the panel —
-// getAccountsAccess, re-checked here on every request), and only an exact refund-photo key —
+// Accounts → Refunds: a request's photo, for the staff panel ONLY. Whoever can open the panel — admins
+// and anyone given the Refunds app (getAppAccess, re-checked here on every request), and only an exact refund-photo key —
 // refund-photos/<request id>/<n>.<jpg|png|webp>, the shape the public form saves — so it can never be
 // used to open anything else in R2. Answers a redirect to a link signed for 15 minutes.
 // ⚠ Never a public route: it isn't under /api/public, and customers' photos must never be
@@ -14,9 +14,9 @@ const KEY_RE = /^refund-photos\/[a-z0-9]+\/\d{1,2}\.(jpg|png|webp)$/
 
 export async function GET(req: NextRequest) {
   try {
-    const { session, isAdmin } = await getAccountsAccess()
+    const { session, canAccess } = await getAppAccess("REFUNDS")
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    if (!isAdmin) return NextResponse.json({ error: REFUNDS_ADMINS_ONLY }, { status: 403 })
+    if (!canAccess) return NextResponse.json({ error: REFUNDS_NO_ACCESS }, { status: 403 })
 
     const key = req.nextUrl.searchParams.get("key") ?? ""
     if (!KEY_RE.test(key)) return NextResponse.json({ error: "That isn't a refund photo." }, { status: 400 })
