@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { getAccountsAccess } from "@/lib/accounts-auth"
+import { getAppAccess } from "@/lib/accounts-auth"
 import { startAgainSite } from "@/lib/uncollected-settings"
 import { lastSyncRun, listCases } from "@/lib/actions/uncollected"
 import {
@@ -17,7 +17,9 @@ import { BackLink, ErrorNote, NeedsMigrations, card } from "./ui"
 // this page), and by hand. ⚠ BC is only ever READ: this page shows when it was last checked, and
 // Check BC now starts the same read-only check with the admin's own BC sign-in.
 //
-// Admins only, exactly like Accounts → Reserves — and every action re-checks that on the server.
+// Admins, and anyone given the Paid, not collected app (2026-11-13; admins only before). Check BC
+// now, the storage-charge settings and Start again stay admins only — and every action re-checks on
+// the server.
 // Status, age band and order live in the address bar (?status= &age= &sort=), read by
 // parseUncollectedFilter. ⚠ The search never does (it is usually a customer's name or email): this
 // page always renders the list unsearched, and the panel asks listCases for the search itself.
@@ -28,10 +30,9 @@ export const metadata = { title: "Paid, not collected" }
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
 export default async function UncollectedPage({ searchParams }: { searchParams: SearchParams }) {
-  const { canAccess, isAdmin } = await getAccountsAccess()
+  // Admins, and anyone given the Paid, not collected app — anyone else goes back to the Hub.
+  const { canAccess, isAdmin } = await getAppAccess("UNCOLLECTED")
   if (!canAccess) redirect("/hub")
-  // An admin-only power feature, like Reserves — non-admins go to Simple mode.
-  if (!isAdmin) redirect("/tools/accounts/simple")
 
   const sp = await searchParams
   const filter = parseUncollectedFilter(sp)
@@ -41,7 +42,8 @@ export default async function UncollectedPage({ searchParams }: { searchParams: 
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl desk:max-w-[1600px] mx-auto">
-      <BackLink href="/tools/accounts">Accounts</BackLink>
+      {/* Accounts itself is admins only (non-admins with Accounts get Simple mode), so they go back to the Hub. */}
+      {isAdmin ? <BackLink href="/tools/accounts">Accounts</BackLink> : <BackLink href="/hub">Hub</BackLink>}
       <div className="mt-1 mb-5">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">📦 Paid, not collected</h1>
         <p className="text-base text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">
@@ -56,10 +58,11 @@ export default async function UncollectedPage({ searchParams }: { searchParams: 
             initial={check.ok ? check.data : null}
             notReady={!check.ok && !!check.notReady}
             readError={check.ok || check.notReady ? null : check.error}
+            canRun={isAdmin}
           />
           <UncollectedPanel list={res.data} />
-          <StorageSettingsBox settings={res.data.storageSettings} />
-          {site && <StartAgain site={site} />}
+          {isAdmin && <StorageSettingsBox settings={res.data.storageSettings} />}
+          {isAdmin && site && <StartAgain site={site} />}
         </>
       ) : res.notReady ? (
         <NeedsMigrations />

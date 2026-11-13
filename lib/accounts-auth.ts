@@ -13,7 +13,7 @@
 import type { Session } from "next-auth"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { hasAppAccess } from "@/lib/apps"
+import { hasAppAccess, type AppKey } from "@/lib/apps"
 
 export type AccountsAccess = {
   session: Session | null
@@ -22,6 +22,16 @@ export type AccountsAccess = {
 }
 
 export async function getAccountsAccess(): Promise<AccountsAccess> {
+  return getAppAccess("ACCOUNTS")
+}
+
+/**
+ * Who may open an Accounts-family app: admins always, anyone else only with that app ticked in
+ * Admin → Users & Permissions. Refunds ("REFUNDS") and Paid, not collected ("UNCOLLECTED") use it
+ * too since 2026-11-13: each is its own grant, separate from Accounts, so giving someone Refunds
+ * never opens the Accounts months, and the reverse.
+ */
+export async function getAppAccess(appKey: AppKey): Promise<AccountsAccess> {
   const session = await auth()
   if (!session) return { session: null, canAccess: false, isAdmin: false }
   if (session.user.role === "ADMIN") return { session, canAccess: true, isAdmin: true }
@@ -31,7 +41,7 @@ export async function getAccountsAccess(): Promise<AccountsAccess> {
     where: { id: session.user.id },
     select: { role: true, allowedApps: true },
   })
-  const canAccess = hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "ACCOUNTS")
+  const canAccess = hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], appKey)
   return { session, canAccess, isAdmin: false }
 }
 

@@ -255,7 +255,11 @@ export type RefundResult<T = undefined> =
   | { ok: false; error: string; notReady?: boolean; needsBc?: boolean; data?: undefined }
 
 export const REFUNDS_NOT_READY = "Refunds needs Run Migrations — an admin presses Run it now on the banner, then it's ready."
-export const REFUNDS_ADMINS_ONLY = "Refunds is for admins only."
+/** Someone without the Refunds app (Admin → Users & Permissions). */
+export const REFUNDS_NO_ACCESS = "You don't have Refunds — an admin can give it to you in Users & Permissions."
+/** The tools kept for admins when Refunds became grantable (2026-11-13): delete, the old-log import,
+ *  Match sales from BC. */
+export const REFUNDS_ADMINS_ONLY = "Only an admin can do that in Refunds."
 
 export type RefundLotRow = {
   id: string

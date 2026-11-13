@@ -124,13 +124,15 @@ The Hub's own public form (built 2026-10-26) and its open write `POST /api/publi
   an EXACT-match entry in `publicExact` (`auth.config.ts`) so a logged-out customer isn't sent to
   `/login`. ⚠ Never move it into the prefix list, and never add a form, a record or a link into the Hub
   to that page.
-- `Refund` rows are only ever read inside the Hub, behind the admin check. Staff entries refuse bank or
+- `Refund` rows are only ever read inside the Hub, behind the Refunds check (admins, and anyone given the
+  Refunds app — see "Accounts → Refunds"). Staff entries refuse bank or
   card details (`looksLikeBankDetails`), and the log import takes them out of every cell before saving.
-- **Photos on older requests live under `refund-photos/` in R2 and are only ever opened through the
-  admin-only `/api/refunds/photo`.** ⚠ Never add `refund-photos/` to `/api/public/photo`'s prefix list.
+- **Photos on older requests live under `refund-photos/` in R2 and are only ever opened through
+  `/api/refunds/photo`, which makes the same Refunds check as the panel.** ⚠ Never add `refund-photos/` to `/api/public/photo`'s prefix list.
 - ⚠ The Hub's general photo routes (`/api/image`, `/api/catalogue/signed-url`, `/api/catalogue/photo-proxy`)
   sign or stream any key for anyone signed in, so each REFUSES a key starting `refund-photos/` — a
-  customer's damage photos are for admins only. Keep that guard on any new route of that kind.
+  customer's damage photos are only for people who can open Refunds. Keep that guard on any new route of
+  that kind.
 
 ## ⚠ Stored files and the live-auction socket — what an outsider can reach (security review, 2026-11-03)
 
@@ -2839,16 +2841,21 @@ and `Submission` gain `customerId` (their old `contactId` stays, nullable, for t
 Jack: *"a new panel inside the Accounts section to track people who pay and are not collecting —
 make the framework for now"*. `/tools/accounts/uncollected` (the 📦 card under Reserves on the
 Accounts page, and — since 2026-10-23 — its own **"Paid, not collected" tile in Admin & Operations**
-on the Hub home, card key `UNCOLLECTED` in lib/app-cards.ts, admin-only like the panel: no appKey),
+on the Hub home, card key `UNCOLLECTED` in lib/app-cards.ts, app key `UNCOLLECTED` since 2026-11-13),
 a case page per buyer at `/tools/accounts/uncollected/<id>`. One case = one buyer
 who has paid (an invoice, or a sale's worth) and hasn't collected their lots: who they are, the
 sale and invoice, lots and £ paid, when they paid, where it stands, the next chase date, when
 storage charges start, and a timeline of every call, email, letter, note and change.
 
-- **Admins only, exactly like Reserves.** The pages use `getAccountsAccess()` (`!canAccess` → `/hub`,
-  `!isAdmin` → `/tools/accounts/simple`), and **every server action re-checks admin on the server**
-  (`lib/actions/uncollected.ts`). A non-admin granted Accounts never sees it, and neither does the
-  Help box (`adminOnly` in `lib/help-map.ts`).
+- **Admins, and anyone given the "Paid, not collected" app** (Admin → Users & Permissions). Admins only
+  until 2026-11-13, when Jack couldn't give it to the person who chases these (the tile had no app key, so
+  it never showed on the permissions page). It is its OWN app (`UNCOLLECTED`), not Accounts: Accounts on
+  its own still reaches Simple mode only, and never this panel. The pages use `getAppAccess("UNCOLLECTED")`
+  (`!canAccess` → `/hub`), and **every server action re-checks on the server** (`requireUncollected` in
+  `lib/actions/uncollected.ts`), as does the Help box (`app: "UNCOLLECTED"` in `lib/help-map.ts`).
+  - ⚠ **Kept for admins** (`requireAdmin`, and hidden on the page for everyone else): 🔄 Check BC now and
+    Stop, Start again from BC, the storage-charge settings (they change every case), and deleting a case.
+    Waiving one case's storage, with a reason, is case work: anyone with the app can.
 - **One module for the words** — `lib/uncollected.ts` (a plain, client-safe module: no Prisma):
   statuses with their labels, help text and colours (`STATUS_META`), age bands (`AGE_BANDS`),
   London-day helpers, the shapes the actions return, and the URL filter
@@ -3415,7 +3422,7 @@ keeping the lots here they will be charged per lot"*.
     still has no start. ⚠ **A decision waiting on Jack** (the old behaviour was "charges start the day
     the status is picked"): if he wants that back, set `storageFrom = today` with the "storage charges
     from …" line for every case with no start, and drop the rule branch and the status card's words.
-- **Waiving storage** (admins only, a reason needed): an event of kind **`storage_waived`** whose text
+- **Waiving storage** (anyone with Paid, not collected since 2026-11-13, a reason needed): an event of kind **`storage_waived`** whose text
   IS the reason, and **`storage_resumed`** (an optional note) to charge it again. The **latest** of the
   two is the switch (`storageWaiverOf`, `readCaseStorageFlags`) — no schema change. Waived → nothing
   owed and not in the tile, but the case still shows what it would have been. `EVENT_META` gives both
@@ -3446,8 +3453,12 @@ keeping the lots here they will be charged per lot"*.
 
 Jack: *"here is our current refund log … customers requesting issues, partial refunds or returns … make
 it better with the data you have"* and *"I want it all to be in the Hub, nice and clean"* — the Refunds
-tile in Admin & Operations (`/tools/refunds`, card `REFUNDS`, **admins only** like Paid, not collected:
-no appKey; every action re-checks `getAccountsAccess().isAdmin` on the server). Customers ask through
+tile in Admin & Operations (`/tools/refunds`, card `REFUNDS`). **Admins, and anyone given the Refunds app**
+(app key `REFUNDS`, Admin → Users & Permissions — admins only until 2026-11-13, when Jack couldn't give it
+to the person who does refunds). Its own app, not Accounts, so giving one never opens the other. Every
+action re-checks on the server (`requireRefunds`, `getAppAccess("REFUNDS")`). ⚠ **Kept for admins**
+(`requireAdmin`, and hidden on the page for everyone else): Delete, Match sales from BC (it writes to many
+requests at once) and the old-log import. Customers ask through
 the Microsoft Form, and a Power Automate flow sends each response here (see "Refund form" above). The rest
 are added by staff (vendor payouts and the like) or imported from the old log, which only adds rows not in
 yet. Those sent through the Hub's removed public form stay here as `source: "form"`. The words, money rules and shapes are `lib/refunds.ts` (plain, client-safe); the shared server

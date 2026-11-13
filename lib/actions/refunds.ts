@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import type { Prisma } from "@/app/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
-import { getAccountsAccess } from "@/lib/accounts-auth"
+import { getAppAccess } from "@/lib/accounts-auth"
 import { getBCToken } from "@/lib/bc"
 import { deleteObjectsFromR2 } from "@/lib/r2"
 import {
@@ -15,7 +15,7 @@ import { isMissingRefunds, matchCustomerId, nextRefundRef, tidyCustomerNo, write
 import { BANK_DETAILS_REFUSED, UNCOLLECTED_BC_NOT_CONNECTED, dayToStored, daysBetween, formatDay, isDay, londonDay } from "@/lib/uncollected"
 import {
   CLOSED_REFUND_STATUSES, OPEN_REFUND_STATUSES, REFUND_LIMITS, REFUND_PARTY_LABELS, REFUND_PHOTO_PREFIX, REFUND_REASONS,
-  REFUND_REASON_LABELS, REFUND_SOLUTION_LABELS, REFUND_SOURCES, REFUND_STATUSES, REFUND_STATUS_META, REFUNDS_ADMINS_ONLY,
+  REFUND_REASON_LABELS, REFUND_SOLUTION_LABELS, REFUND_SOURCES, REFUND_STATUSES, REFUND_STATUS_META, REFUNDS_ADMINS_ONLY, REFUNDS_NO_ACCESS,
   REFUNDS_NOT_READY, REFUNDS_PATH,
   commissionDiffers, commissionFor, commissionUsed, formatPence, isRefundBasis, isRefundParty, isRefundReason, isRefundSolution, isRefundSort,
   isRefundStatus, isSaleCode, looksLikeBankDetails, lotRefundPence, oldLogCell, poundsToPence, refundRefWords, refundStatusOf,
@@ -28,8 +28,11 @@ import { isEmailShape } from "@/lib/refunds-public"
 
 // Accounts → Refunds — every read and write the staff panel makes. SERVER ONLY.
 //
-//  • ADMINS ONLY (Jack, 2026-10-26): every action re-checks with getAccountsAccess() and refuses
-//    anyone who isn't an admin, whatever the page showed them.
+//  • WHO: admins, and anyone given the Refunds app in Admin → Users & Permissions (admins only from
+//    2026-10-26 until 2026-11-13, when Jack needed to give it to the person who does refunds). Every
+//    action re-checks (requireRefunds), whatever the page showed. Kept for admins (requireAdmin):
+//    deleteRefund and Match sales from BC (refundSalesToMatch / matchRefundSales, which write to many
+//    requests at once); the old-log import is admin-only in lib/actions/refunds-import.ts.
 //  • Each action RETURNS { ok, error } (RefundResult) — a thrown server-action error is redacted in
 //    production (RULES.md). Missing tables → { ok: false, notReady: true, error: REFUNDS_NOT_READY }
 //    until Run Migrations.
@@ -56,8 +59,16 @@ const NOT_FOUND = "That request couldn't be found — it may have been deleted. 
 const CHANGED_MEANWHILE = "Someone changed this request a moment ago — open it again to see where it stands."
 const SAVE_FAILED = "Something went wrong and nothing was saved — please try again."
 
+/** Anyone with Refunds: admins, and anyone given the app in Admin → Users & Permissions. */
+async function requireRefunds(): Promise<Who> {
+  const { session, canAccess } = await getAppAccess("REFUNDS")
+  if (!session || !canAccess) throw new Refusal(REFUNDS_NO_ACCESS)
+  return { id: session.user.id, name: session.user.name || session.user.email || "Unknown" }
+}
+
+/** Admins only — the tools kept back when Refunds became grantable (2026-11-13). */
 async function requireAdmin(): Promise<Who> {
-  const { session, isAdmin } = await getAccountsAccess()
+  const { session, isAdmin } = await getAppAccess("REFUNDS")
   if (!session || !isAdmin) throw new Refusal(REFUNDS_ADMINS_ONLY)
   return { id: session.user.id, name: session.user.name || session.user.email || "Unknown" }
 }
@@ -367,7 +378,7 @@ function median(xs: number[]): number | null {
  */
 export async function listRefunds(filter: RefundFilter = {}): Promise<RefundResult<RefundPanelList>> {
   try {
-    await requireAdmin()
+    await requireRefunds()
     const today = londonDay()
 
     const picked = (Array.isArray(filter.statuses) ? filter.statuses : []).filter(isRefundStatus)
@@ -475,7 +486,7 @@ export async function listRefunds(filter: RefundFilter = {}): Promise<RefundResu
 
 export async function getRefund(id: string): Promise<RefundResult<RefundDetail>> {
   try {
-    await requireAdmin()
+    await requireRefunds()
     const r = await prisma.refund.findUnique({
       where: { id: idOf(id) },
       include: {
@@ -526,7 +537,7 @@ export async function getRefund(id: string): Promise<RefundResult<RefundDetail>>
  *  someone is dealing with it, else "New". */
 export async function createRefund(input: RefundInput): Promise<RefundResult<{ id: string; ref: number }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     if (!input || typeof input !== "object") throw new Refusal("Type the customer's name.")
     const today = londonDay()
     const name = line(input.name, "the name", REFUND_LIMITS.name)
@@ -673,7 +684,7 @@ export async function updateRefund(
   patch: RefundPatch,
 ): Promise<RefundResult<{ changed: string[]; totalPence: number | null; total: RefundTotalSaved | null }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     if (!patch || typeof patch !== "object") return { ok: true, data: { changed: [], totalPence: null, total: null } }
     const f = parsePatch(patch, londonDay())
@@ -742,7 +753,7 @@ export async function setRefundStatus(
   shown?: RefundStatus | null,
 ): Promise<RefundResult<{ changed: boolean; status: RefundStatus }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     if (!isRefundStatus(status)) throw new Refusal("That isn't one of this panel's statuses.")
     if (shown != null && !isRefundStatus(shown)) throw new Refusal(CHANGED_MEANWHILE)
@@ -789,7 +800,7 @@ export async function setRefundStatus(
  *  looked at. Says when nothing changed (already theirs, and not New). */
 export async function pickUp(id: string): Promise<RefundResult<{ changed: boolean; status: RefundStatus }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     const result = await prisma.$transaction(async (tx) => {
       const c = await tx.refund.findUnique({ where: { id: rid }, select: { status: true, dealtWithId: true, dealtWithName: true } })
@@ -820,7 +831,7 @@ export async function pickUp(id: string): Promise<RefundResult<{ changed: boolea
  *  Being looked at (someone is on it). */
 export async function setDealtWith(id: string, name: string | null): Promise<RefundResult<{ changed: boolean; status: RefundStatus }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     const next = line(name, "who's dealing with it", 60)
     const result = await prisma.$transaction(async (tx) => {
@@ -854,7 +865,7 @@ export async function setDealtWith(id: string, name: string | null): Promise<Ref
 /** "Complete for accounts" — ticked (when, and who) or taken off. Only a PAID request can be ticked. */
 export async function setAccountsDone(id: string, done: boolean): Promise<RefundResult<{ changed: boolean }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     const tick = done === true
     const result = await prisma.$transaction(async (tx) => {
@@ -881,7 +892,7 @@ export async function setAccountsDone(id: string, done: boolean): Promise<Refund
  *  clears it. */
 export async function setProcessedDate(id: string, day: string | null): Promise<RefundResult<{ changed: boolean }>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     const at = dayOf(day, "the date processed", londonDay(), true)
     const result = await prisma.$transaction(async (tx) => {
@@ -948,7 +959,7 @@ function lotOf(v: RefundLotInput, n: number) {
  */
 export async function saveRefundLots(id: string, lots: RefundLotInput[]): Promise<RefundResult<RefundTotalSaved>> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     if (!Array.isArray(lots)) throw new Refusal("The lots couldn't be read — please try again.")
     if (lots.length > REFUND_LIMITS.lots) throw new Refusal(`That's more than ${REFUND_LIMITS.lots} lots — one request can hold ${REFUND_LIMITS.lots} at most.`)
@@ -1007,7 +1018,7 @@ function bcFailure(e: unknown): Failure {
 export async function lotsFromBc(id: string): Promise<RefundResult<RefundBcFound>> {
   let ask: { customerNo: string; saleCode: string | null; auctionDate: string | null; lotsText: string | null }
   try {
-    await requireAdmin()
+    await requireRefunds()
     const r = await prisma.refund.findUnique({
       where: { id: idOf(id) },
       select: { party: true, customerNo: true, saleCode: true, auctionDate: true, lotsText: true },
@@ -1054,7 +1065,7 @@ export async function lookUpRefundLots(id: string, asks: RefundLotAsk[], check =
   let clean: RefundLotAsk[]
   let ctx: { saleCode: string | null; auctionDate: string | null; customerNo: string | null; party: RefundParty }
   try {
-    await requireAdmin()
+    await requireRefunds()
     if (!Array.isArray(asks) || !asks.length) throw new Refusal("There's no lot to look up.")
     if (asks.length > REFUND_LIMITS.lots) throw new Refusal(`That's more than ${REFUND_LIMITS.lots} lots — one request can hold ${REFUND_LIMITS.lots} at most.`)
     clean = asks.map((a, i) => {
@@ -1344,7 +1355,7 @@ const CHECK_MAX = 25
 /** How many requests there are — what "Check the money" goes through. */
 export async function refundsToCheck(): Promise<RefundResult<{ count: number }>> {
   try {
-    await requireAdmin()
+    await requireRefunds()
     return { ok: true, data: { count: await prisma.refund.count() } }
   } catch (e) {
     return fail(e, "requests to check", "The requests couldn't be counted just now — please try again.")
@@ -1372,7 +1383,7 @@ export async function checkRefundMoney(afterRef: number, max: number): Promise<R
     lots: { saleCode: string | null; lotNo: string; uniqueId: string | null; hammerPence: number | null; commissionPence: number | null; basis: string; percent: number | null; setAmountPence: number | null }[]
   }[]
   try {
-    await requireAdmin()
+    await requireRefunds()
     const after = Number.isInteger(afterRef) && afterRef > 0 ? afterRef : 0
     const take = Math.min(CHECK_MAX, Math.max(1, Math.floor(Number(max)) || 1))
     picked = await prisma.refund.findMany({
@@ -1507,7 +1518,7 @@ export async function checkRefundMoney(afterRef: number, max: number): Promise<R
 /** A note on the request's timeline. */
 export async function addRefundNote(id: string, text: string): Promise<RefundResult> {
   try {
-    const who = await requireAdmin()
+    const who = await requireRefunds()
     const rid = idOf(id)
     const note = prose(text, "the note", REFUND_LIMITS.eventText)
     if (!note) throw new Refusal("Write the note first.")

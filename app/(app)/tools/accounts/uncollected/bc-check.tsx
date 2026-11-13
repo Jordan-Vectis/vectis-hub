@@ -65,10 +65,12 @@ function RunNotes({ note }: { note: string | null | undefined }) {
   )
 }
 
-export default function BcCheck({ initial, notReady, readError }: {
+export default function BcCheck({ initial, notReady, readError, canRun }: {
   initial: UncollectedCheckState | null
   notReady: boolean
   readError: string | null
+  /** Check BC now and Stop are admins only (checkBcNow / stopBcCheck check again); everyone sees when BC was last checked. */
+  canRun: boolean
 }) {
   const router = useRouter()
   const [st, setSt] = useState<UncollectedCheckState | null>(initial)
@@ -274,7 +276,7 @@ export default function BcCheck({ initial, notReady, readError }: {
           )}
         </div>
 
-        <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+        {canRun && <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
           <button
             type="button"
             onClick={press}
@@ -289,10 +291,10 @@ export default function BcCheck({ initial, notReady, readError }: {
               <span aria-hidden>■</span> Stop the check
             </button>
           )}
-        </div>
+        </div>}
       </div>
 
-      {running && askStop && !st?.stopBy && (
+      {canRun && running && askStop && !st?.stopBy && (
         <div role="group" aria-labelledby="bc-stop-q" className={`mt-3 rounded-xl border px-4 py-3 text-sm ${TONE.info}`}>
           <p id="bc-stop-q">
             <b>Stop the check?</b> Every case it has already saved stays saved; what it hasn&apos;t got to waits for the next check.
