@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-13, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-16, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"1fab31160b9e432f9d51ddd40ad4659c2fb2bf4f","author":"jack-vectis","date":"2026-11-16T09:17:42Z","subject":"Logins now end 30 days after signing in"},
   {"sha":"a9b7f7bbc4e0a0bd717ccff77a35369a2055b693","author":"jack-vectis","date":"2026-11-13T12:10:09Z","subject":"Refunds and Paid, not collected now show under permissions"},
   {"sha":"47a6d0cd6fa5c026534f53143e8ef20ee9f0c3c7","author":"Jordan Orange","date":"2026-11-13T12:07:40Z","subject":"End of Day: Send to BC (test) tab, by vendor or all"},
   {"sha":"923e0c81751a50cf827bbdf0180b440b135ecf84","author":"jack-vectis","date":"2026-11-12T11:40:54Z","subject":"Fixes clear for sale tick on api import"},

@@ -96,7 +96,29 @@ export async function GET(req: NextRequest) {
     const inBc = (l: { barcode: string | null }) =>
       !!(l.barcode && inBcBarcode.has(l.barcode.toUpperCase()))
 
-    const pending = lots.filter(l => !inBc(l))
+    const notInBcCopy = lots.filter(l => !inBc(l))
+
+    // Lots already sent to LIVE BC through the Hub (End of Day's / the sale's / a receipt's "Send to BC" —
+    // Jack, 2026-11-16). BC has them, but the BC copy above won't until the next data sync, so without this
+    // they'd go on tonight's sheet and be imported a SECOND time. Each live send leaves a "bc_sent" event on the
+    // lot's change log (noteLiveSend, lib/actions/goods-in-bc-sandbox.ts). If that can't be read, the sheet
+    // still goes out — and the page says plainly that sent lots may be on it (sentByHubUnknown).
+    let sentByHub = new Set<string>()
+    let sentByHubUnknown = false
+    if (notInBcCopy.length) {
+      try {
+        const sent = await prisma.catalogueLotEvent.findMany({
+          where:    { action: "bc_sent", lotId: { in: notInBcCopy.map(l => l.id) } },
+          select:   { lotId: true },
+          distinct: ["lotId"],
+        })
+        sentByHub = new Set(sent.map(s => s.lotId))
+      } catch (e) {
+        console.error("end-of-day: couldn't read which lots were sent to BC through the Hub:", e)
+        sentByHubUnknown = true
+      }
+    }
+    const pending = notInBcCopy.filter(l => !sentByHub.has(l.id))
 
     // The macro's sheet is keyed on RECEIPT and driven by barcode (corrected
     // 2026-08-07 — Jordan: the macro works receipt-by-receipt in BC; the tote
@@ -262,7 +284,9 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
       toteLastSync: lastToteSync._max.syncedAt?.toISOString() ?? null,
       totalLots: lots.length,
-      alreadyInBc: lots.length - pending.length,
+      alreadyInBc: lots.length - notInBcCopy.length,
+      sentByHub: notInBcCopy.length - pending.length,
+      sentByHubUnknown,
       readyCount: ready.length,
       receipts,
       sales: [...bySale.values()].sort((a, b) => a.code.localeCompare(b.code)),

@@ -4,7 +4,7 @@ import { useRef, useState } from "react"
 import { bcLotSend, bcLotsStart, type BcLotsStart } from "@/lib/actions/goods-in-bc-sandbox"
 import type { BcStep } from "@/lib/goods-in/bc-sandbox"
 import { ErrorBox, box, btn, btnGo, mono } from "../../_components/ui"
-import { BcLink, LotCard, StepKey, StepList, lotOutcome } from "../../_components/bc-lot-parts"
+import { BcLink, LiveBanner, LiveConfirm, LotCard, StepKey, StepList, liveConfirmed, lotOutcome } from "../../_components/bc-lot-parts"
 
 // Goods In → a receipt → "Send lots to BC test environment" — Warehouse admins only. Sends every lot
 // catalogued onto this receipt to BC as a receipt line, on this receipt and on the lot's sale. The rules
@@ -13,18 +13,22 @@ import { BcLink, LotCard, StepKey, StepList, lotOutcome } from "../../_component
 //
 // "Check" is read-only (is the receipt in BC? which lots?), then it asks in place before sending. The
 // browser drives one call per lot (RULES.md 7b): the count moves, Stop works between lots, and the end
-// says what happened in numbers. Nothing in the Hub changes — BC's UniqueIDs only show here.
+// says what happened in numbers. BC's UniqueIDs only show here. On LIVE BC (the production Hub) the number of
+// lots is typed to confirm, and each lot sent is noted on its change log so End of Day leaves it off the sheet.
 
 type Phase = "idle" | "checking" | "confirm" | "running" | "done"
 
-export default function BcLotsTest({ receiptId, environment, offReason }: {
+export default function BcLotsTest({ receiptId, environment, offReason, live }: {
   receiptId: string
-  /** The BC test environment writes go to (never live BC); null when switched off. */
+  /** The BC environment writes go to; null when switched off. */
   environment: string | null
   /** Why it's switched off, in words; null when it can run. */
   offReason: string | null
+  /** Writes go to LIVE Business Central (the production Hub only). */
+  live: boolean
 }) {
   const [phase, setPhase] = useState<Phase>("idle")
+  const [typed, setTyped] = useState("")
   const [plan, setPlan] = useState<BcLotsStart | null>(null)
   const [steps, setSteps] = useState<BcStep[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +45,7 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
     setNeedsSignIn(false)
     setSteps([])
     setSummary(null)
+    setTyped("")
     const res = await bcLotsStart(receiptId).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
     if (!res.ok) {
       if (res.error === "NO_BC_SIGN_IN") setNeedsSignIn(true)
@@ -51,11 +56,15 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
     setPlan(res.data)
     setSteps([res.data.receipt])
     setPhase(res.data.receipt.outcome === "failed" ? "done" : "confirm")
-    if (res.data.receipt.outcome === "failed") setSummary("The receipt isn't in the BC test environment, so no lots were sent.")
+    if (res.data.receipt.outcome === "failed") setSummary(`The receipt isn't in ${res.data.live ? "live BC" : "the BC test environment"}, so no lots were sent.`)
   }
 
   async function run() {
     if (!plan) return
+    const expected = String(plan.lots.length)
+    if (!liveConfirmed(plan.live, typed, expected)) return
+    // On LIVE BC the server checks this on every call too.
+    const confirm = plan.live ? { typed, expected } : undefined
     stopRef.current = false
     setPhase("running")
     const all: BcStep[] = [plan.receipt]
@@ -70,7 +79,7 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
       if (stopRef.current) { stopped = true; break }
       const lot = plan.lots[i]
       setProgress({ done: i, total: plan.lots.length, current: lot.barcode || lot.shortDescription.slice(0, 30) })
-      const res = await bcLotSend(receiptId, lot.id).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+      const res = await bcLotSend(receiptId, lot.id, confirm).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
       if (!res.ok) {
         all.push({ what: lot.barcode ? `Lot ${lot.barcode}` : `Lot "${lot.shortDescription.slice(0, 40)}"`, outcome: "failed", detail: res.error })
         refused++
@@ -95,13 +104,20 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
 
   return (
     <section className={`${box} mb-6 px-4 py-3`} aria-labelledby="bc-lots-heading">
-      <h2 id="bc-lots-heading" className="text-sm font-semibold text-gray-900 dark:text-white">Lots → Business Central test</h2>
+      <h2 id="bc-lots-heading" className="text-sm font-semibold text-gray-900 dark:text-white">{live ? "Lots → Business Central — LIVE" : "Lots → Business Central test"}</h2>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-        Admins only. Sends every lot catalogued onto <span className={mono}>{receiptId}</span> to a BC <b>test</b> environment
-        {environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — as a line on this receipt and on the
+        Admins only. Sends every lot catalogued onto <span className={mono}>{receiptId}</span> to{" "}
+        {live
+          ? <><b>live</b> Business Central</>
+          : <>a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC —</>}{" "}
+        as a line on this receipt and on the
         lot&apos;s sale, ticked Cleared For Sale: short description, description, estimates, category, subcategory, tote, size and internal barcode. BC gives each its
-        UniqueID. Signed in as you; nothing in the Hub changes.
+        UniqueID. Signed in as you.{" "}
+        {live
+          ? <>Each lot sent is noted on its change log, and End of Day leaves it off the overnight sheet.</>
+          : <>Nothing in the Hub changes.</>}
       </p>
+      {live && !off && <LiveBanner environment={environment} />}
 
       {off ? (
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{off}</p>
@@ -141,9 +157,14 @@ export default function BcLotsTest({ receiptId, environment, offReason }: {
                 </>
               )}
               {plan.bcLinesUrl && <BcLink url={plan.bcLinesUrl} environment={plan.environment} receiptId={receiptId} />}
+              {plan.live && plan.lots.length > 0 && (
+                <LiveConfirm expected={String(plan.lots.length)} what={`${plan.lots.length} ${plan.lots.length === 1 ? "lot" : "lots"}`} value={typed} onChange={setTyped} />
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 {plan.lots.length > 0 && (
-                  <button type="button" className={btnGo} onClick={run}>Send {plan.lots.length} {plan.lots.length === 1 ? "lot" : "lots"} to {plan.environment}</button>
+                  <button type="button" className={btnGo} onClick={run} disabled={!liveConfirmed(plan.live, typed, String(plan.lots.length))}>
+                    Send {plan.lots.length} {plan.lots.length === 1 ? "lot" : "lots"} to {plan.live ? "live BC" : plan.environment}
+                  </button>
                 )}
                 <button type="button" className={btn} onClick={() => { setPhase("idle"); setSteps([]) }}>Cancel</button>
               </div>

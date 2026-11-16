@@ -27,6 +27,10 @@ type Data = {
   toteLastSync: string | null
   totalLots: number
   alreadyInBc: number
+  /** Lots sent to live BC through the Hub's Send to BC, left off the sheet until the BC data sync has them. */
+  sentByHub?: number
+  /** The Hub couldn't read which lots it has sent to live BC — some may be on the sheet. */
+  sentByHubUnknown?: boolean
   readyCount: number
   receipts: ReceiptRow[]
   sales: SaleRow[]
@@ -125,10 +129,10 @@ export default function EndOfDayPage() {
     return () => clearInterval(t)
   }, [])
 
-  // "Send to BC (test)" — a second tab BESIDE the sheet (Jordan, 2026-11-13: "an extra addition or maybe
-  // another tab as to not interfere with the current end of day"). Only offered where the test send is set
-  // up and to a Hub admin (bcEodAvailable — null everywhere else, production included), so without it this
-  // page is exactly as it was. ⚠ Both tabs stay MOUNTED and the other is hidden: switching never throws
+  // "Send to BC" — a second tab BESIDE the sheet (Jordan, 2026-11-13: "an extra addition or maybe another tab
+  // as to not interfere with the current end of day"). Only offered where the send is set up
+  // (BC_WRITE_ENVIRONMENT) and to a Hub admin (bcEodAvailable — null everywhere else), so without it this page
+  // is exactly as it was. It says "(LIVE)" on the production Hub, where it writes to live BC. ⚠ Both tabs stay MOUNTED and the other is hidden: switching never throws
   // away an uploaded file or ticked lots on the sheet, nor a send that is part-way through.
   const [tab, setTab] = useState<"sheet" | "send">("sheet")
   const [bcSend, setBcSend] = useState<BcEodAvailable | null>(null)
@@ -390,7 +394,7 @@ export default function EndOfDayPage() {
 
       {bcSend && (
         <div role="tablist" aria-label="End of Day" className="flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-800">
-          {([["sheet", "📄 Tonight's sheet"], ["send", "📤 Send to BC (test)"]] as const).map(([key, label]) => (
+          {([["sheet", "📄 Tonight's sheet"], ["send", bcSend.live ? "📤 Send to BC (LIVE)" : "📤 Send to BC (test)"]] as const).map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -427,6 +431,7 @@ export default function EndOfDayPage() {
             receipts={loading ? null : data?.receipts ?? null}
             environment={bcSend.environment}
             offReason={bcSend.offReason}
+            live={bcSend.live}
           />
         </div>
       )}
@@ -458,6 +463,20 @@ export default function EndOfDayPage() {
               <div className="text-xs text-gray-500 mt-0.5">Already in BC</div>
             </div>
           </div>
+
+          {!!data.sentByHub && (
+            <p className="px-4 py-3 rounded-xl bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 text-sm text-gray-700 dark:text-gray-300">
+              📤 <strong>{data.sentByHub.toLocaleString()}</strong> {data.sentByHub === 1 ? "lot was" : "lots were"} sent to live BC through
+              the Hub&apos;s Send to BC, so {data.sentByHub === 1 ? "it's" : "they're"} left off this sheet — BC already has{" "}
+              {data.sentByHub === 1 ? "it" : "them"}. {data.sentByHub === 1 ? "It counts" : "They count"} as Already in BC after the next BC data sync.
+            </p>
+          )}
+          {data.sentByHubUnknown && (
+            <p className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800/40 text-sm text-amber-800 dark:text-amber-300">
+              ⚠ The Hub couldn&apos;t check which lots it has already sent to live BC, so lots sent through Send to BC today may be on
+              this sheet. Press <strong>⟳ Refresh</strong> before importing; if this stays, leave those lots out of the import.
+            </p>
+          )}
 
           {/* ── Export ── */}
           <div className="flex items-center gap-3 flex-wrap">

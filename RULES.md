@@ -1774,36 +1774,45 @@ customer helpers both action files share (`customerRow`, `CUSTOMER_INCLUDE`, `sn
 plain module `lib/goods-in/customer-row.ts` — put any other shared non-async helper in a plain module
 the same way, never as an export of an actions file.
 
-- ⚠⚠ **Goods In never touches Business Central** (Jack: *"don't do anything with BC"*). No BC API call,
-  no BC sync table written, and End of Day, Tote Check, Locking Check, BC Match, Change Vendor,
-  `lib/bc.ts` and `lib/tote-check.ts` are unchanged. What that means, and it is **not solved**:
+- ⚠⚠ **Goods In never touches Business Central** (Jack: *"don't do anything with BC"*) — except the ONE
+  "Send to Business Central" exception below. No other BC API call, no BC sync table written, and Tote
+  Check, Locking Check, BC Match, Change Vendor, `lib/bc.ts` and `lib/tote-check.ts` are unchanged. What
+  that means, and it is **not solved**:
   - A lot made from a Goods In tote shows **"Tote not in the BC data"** on Tote Check and **"Tote not
     found in BC"** on Locking Check, because BC has never heard of the tote.
   - End of Day flags its receipt **"Receipt doesn't exist in BC"** — the lot stays on the sheet, but
-    the overnight import fails on it. So **a lot from a Goods In tote cannot get into BC** today.
+    the overnight import fails on it. So **a lot from a Goods In tote can't get into BC through the
+    overnight import**; it can through the live Send to Business Central (receipt first, then its lots).
   - ⚠ **A decision for Jack and Jordan before real stock is booked in this way.** Don't quieten those
     flags by teaching the checks about Goods In without that decision — they are telling the truth.
-  - ⚠⚠ **ONE test-only exception: "Send to BC test environment"** (Jack, 2026-11-10 — *"can we test
-    making a receipt and tote on the hub and giving it back to BC"*, agreed against this rule). A
-    Warehouse admin, on a booked Hub receipt, can send it and its totes and pallets to **a BC TEST
-    environment, never the live one**:
+  - ⚠⚠ **ONE exception: "Send to Business Central"** (Jack, 2026-11-10 — *"can we test making a receipt
+    and tote on the hub and giving it back to BC"*, agreed against this rule). It began test-only; since
+    **2026-11-16 the production Hub writes to LIVE BC** (next guard). A Warehouse admin, on a booked Hub
+    receipt, can send it and its totes and pallets to BC:
     the receipt to `api/evo/mob/v2.0/receiptHeaders`, each tote to `api/evo/mob/v2.0/totes`, each line to
     `api/vectis/whse/v2.0/receiptTotes` (read off BC's own AL source — IT Tools → BC Source). Code:
     `lib/goods-in/bc-sandbox.ts`, `lib/actions/goods-in-bc-sandbox.ts`, the panel `receipts/[id]/bc-sandbox-test.tsx`.
     Keep every guard:
-    - **Never live BC.** Nothing is sent unless `BC_WRITE_ENVIRONMENT` is set, and never when it names
-      the live environment — `LIVE_ENVIRONMENTS` (`["production"]`) is HARD-CODED in bc-sandbox.ts, so no
-      setting can lift it. ⚠ Never move that list into a setting. `BC_WRITE_ENVIRONMENT` is its own
-      setting, never `BC_ENVIRONMENT` (every READ in the Hub uses that), so turning it on can't move the
-      Hub's reads. Where it isn't set at all (production) the panel isn't shown.
-      - ✅ **The ONE live test is DONE and the route is GONE** (2026-11-10). Jack asked for exactly one
-        test in live BC (*"one test is all I need, I can delete the test receipt along with it"*). It ran
-        from the Hub sandbox only, for one named receipt, with the number typed to confirm: **R900001**
-        (Bill Kingsman, C003247) with tote **T900001** went into live BC and **worked** (commit 6bc2787b).
-        The live route was then **taken back out of the code** — the hard-coded refusal above is the whole
-        story again. ⚠ Don't put a live route back for "one more test": writing to live BC for real is
-        the decision below (Jack and Jordan), built as its own feature with the Hub's own BC login.
-        Jack deletes R900001 and T900001 in live BC himself.
+    - **Live BC from the PRODUCTION Hub only** (Jack, 2026-11-16 — *"when it goes to main i need it to go
+      to production BC same with the receipt creation in warehouse"*). Nothing is sent unless
+      `BC_WRITE_ENVIRONMENT` is set. The live environment — `LIVE_ENVIRONMENTS` (`["production"]`),
+      HARD-CODED in bc-sandbox.ts — is allowed ONLY when this Hub is the production site
+      (`RAILWAY_ENVIRONMENT_NAME` exactly `"production"`, an allowlist): staging, sandbox and dev machines
+      are refused it whatever the setting says, and stay on a copy or sandbox. ⚠ Never move either list
+      into a setting. `BC_WRITE_ENVIRONMENT` is its own setting, never `BC_ENVIRONMENT` (every READ in the
+      Hub uses that), so turning it on can't move the Hub's reads. Where it isn't set, no panel is shown;
+      unsetting it on Railway switches the whole send off.
+      - **Every LIVE write is confirmed by typing** — the receipt number for a receipt and its totes, the
+        number of lots for a batch of lots — and the server checks it on EVERY call (`bcLiveRefusal`), so
+        a screen opened before live sending was switched on can't write to live BC. Every panel turns red
+        and says LIVE (`LiveBanner` / `LiveConfirm` in `warehouse/_components/bc-lot-parts.tsx`).
+      - ⚠ **The numbering is still unsettled.** BC keeps the numbers it's sent, so a live receipt or tote
+        made in the Hub takes an R/T number BC's own series may hand out later. The send stops on a clash
+        it can see (below), but it can't stop BC clashing later — while BC still makes receipts itself,
+        set Goods In's series to a range BC won't reach.
+      - History: the ONE earlier live test (2026-11-10) ran from the Hub sandbox for one named receipt —
+        **R900001** (Bill Kingsman, C003247) with tote **T900001** went into live BC and worked (commit
+        6bc2787b) — and its route was then taken out again. Jack deletes R900001 and T900001 in live BC himself.
       - It began as "the name must contain sandbox". The first real press (R010271) found Vectis's BC
         **Sandbox** environment has none of Evosoft's EvoMobile pages ("No HTTP resource was found" for
         `receiptHeaders`), so Jack chose the copy of production, **`Production_Copy_20260622`**, which has
@@ -1815,7 +1824,8 @@ the same way, never as an export of an actions file.
       ⚠ But a number BC already uses for something ELSE is a clash, never "already there": a receipt
       with that number for a different vendor stops the whole send, and a tote BC holds on another
       receipt is never linked to this one.
-    - **Nothing in the Hub is written** — the outcome is on the screen and in the server log.
+    - **The only thing written in the Hub** is the LIVE "sent" note on a lot (next bullets but one) —
+      otherwise the outcome is on the screen and in the server log.
     - BC keeps the numbers it is sent (its OnInsert only numbers a blank), so the Hub's R/T/P numbers go
       as they are; a receipt with no vendor number is refused (BC's receipt-tote OnInsert TestFields it).
     - **Lots → BC receipt lines** (Jack, 2026-11-10 — *"we just want to get the auction lines / receipt
@@ -1873,10 +1883,10 @@ the same way, never as an export of an actions file.
       or maybe another tab as to not interfere with the current end of day"*). The same `sendLot`, started
       from the End of Day sheet. Code: `end-of-day/bc-send-tab.tsx`; actions `bcEodAvailable` / `bcEodList` /
       `bcEodLotsStart` / `bcEodReceiptCheck` / `bcEodLotSend` in `lib/actions/goods-in-bc-sandbox.ts`.
-      - **A tab BESIDE the sheet, never a change to it.** The sheet, its checks, the download and the macro
-        are untouched; the End of Day route is not called or changed by it. The tab bar only appears where
-        `bcEodAvailable()` says so (the test is set up on this server AND a Hub admin not viewing as someone
-        else), so on production and for everyone else the page is exactly as it was. ⚠ Both tabs stay
+      - **A tab BESIDE the sheet.** Its checks, the download and the macro are untouched. The tab bar only
+        appears where `bcEodAvailable()` says so (`BC_WRITE_ENVIRONMENT` is set on this server AND a Hub admin
+        not viewing as someone else), so for everyone else the page is exactly as it was; on the production
+        Hub the tab reads "Send to BC (LIVE)". ⚠ Both tabs stay
         MOUNTED and the other is hidden with CSS: unmounting would throw away an uploaded Import Check
         file or ticked lots on the sheet, and would leave a send running with nothing on screen.
       - **Which lots = the sheet ON SCREEN.** The browser hands the sheet's barcodes to `bcEodList` (as
@@ -1892,9 +1902,18 @@ the same way, never as an export of an actions file.
         code is checked on the server (`saleFor`). A sale BC won't take leaves the lot on its receipt.
       - Otherwise identical to the sale panel: ticking sends nothing; "Check and send…" lists every lot and
         checks each receipt is in BC (a count that moves, Stop); only "Send N lots" sends, one call per lot;
-        the end says what happened in numbers. Every guard above holds, and nothing in the Hub is written.
-    - ⚠ This does **not** settle the decision above. Writing to LIVE BC — and which system owns the
-      receipt and tote numbering — is still Jack and Jordan's call; this only proves the calls work.
+        the end says what happened in numbers. Every guard above holds.
+    - ⚠⚠ **A lot sent to LIVE BC never goes on the overnight sheet as well** (2026-11-16). The Hub's BC
+      copy (`WarehouseItem`) doesn't have it until the next data sync, so the sheet would import it a
+      SECOND time. Every live lot send — receipt, sale or End of Day — that leaves the lot's line in BC
+      writes a `bc_sent` event on the lot's change log (`noteLiveSend` → `writeLotEventsChecked`, source
+      `bc_live_receipt` / `bc_live_sale` / `bc_live_eod`), and the End of Day route leaves those lots off
+      the sheet, counting them (`sentByHub`) on the page. Test sends write nothing — a copy isn't live BC.
+      If the note can't be written the send says so on screen ("leave it out of the import"); if the
+      route can't read the notes it still makes the sheet and warns plainly (`sentByHubUnknown`). ⚠ A
+      lot deleted from BC after being sent stays off the sheet — send it again from the tab.
+    - The decision on live BC was taken 2026-11-16 (above). **Which system owns the receipt and tote
+      numbering is still open** — Jack and Jordan's call.
 - **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken
   with a single `UPDATE … RETURNING` inside the transaction that needs it, so two clerks at once can
   never be handed the same number (the prototype's read-the-highest-and-add-one could). At check-in

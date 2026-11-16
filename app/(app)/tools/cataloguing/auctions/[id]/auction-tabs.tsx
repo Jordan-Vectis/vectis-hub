@@ -722,7 +722,7 @@ function TransferLotsModal({ selectedIds, sourceAuctionId, allAuctions, onClose,
 export type SaleAccessUser = { id: string; name: string }
 export type SaleAccessEntry = { userId: string; name: string; grantedBy: string | null }
 
-export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, manualDescriptions, allAuctions, extraAccess = [], assignableUsers = [], bcSaleTest = null }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; manualDescriptions?: boolean; allAuctions: AuctionSummary[]; extraAccess?: SaleAccessEntry[]; assignableUsers?: SaleAccessUser[]; /** Push to BC → "Send lots to BC" (BC test environment) — set only for an admin where the test is set up. */ bcSaleTest?: { environment: string | null; offReason: string | null } | null }) {
+export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, manualDescriptions, allAuctions, extraAccess = [], assignableUsers = [], bcSaleTest = null }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; manualDescriptions?: boolean; allAuctions: AuctionSummary[]; extraAccess?: SaleAccessEntry[]; assignableUsers?: SaleAccessUser[]; /** Push to BC → "Send lots to BC" — set only for an admin where the send is set up; live = LIVE BC (production Hub). */ bcSaleTest?: { environment: string | null; offReason: string | null; live: boolean } | null }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const bcLocked     = auction.catalogued && userRole !== "ADMIN"
@@ -1008,7 +1008,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
         )}
 
         {tab === "bc-fill" && bcSaleTest && (
-          <BcSaleLotsTest auctionId={auction.id} saleCode={auction.code} environment={bcSaleTest.environment} offReason={bcSaleTest.offReason} />
+          <BcSaleLotsTest auctionId={auction.id} saleCode={auction.code} environment={bcSaleTest.environment} offReason={bcSaleTest.offReason} live={bcSaleTest.live} />
         )}
 
         {tab === "bc-fill" && (

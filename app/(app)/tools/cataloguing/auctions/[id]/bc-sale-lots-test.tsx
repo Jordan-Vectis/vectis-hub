@@ -4,7 +4,7 @@ import { useRef, useState } from "react"
 import { bcSaleLotSend, bcSaleLotsStart, bcSaleReceiptCheck, type BcSaleLotsStart, type BcSaleReceipt } from "@/lib/actions/goods-in-bc-sandbox"
 import type { BcStep } from "@/lib/goods-in/bc-sandbox"
 import { ErrorBox, box, btn, btnGo, mono } from "../../../warehouse/_components/ui"
-import { BcLink, LotCard, MARK, StepKey, StepList, lotOutcome } from "../../../warehouse/_components/bc-lot-parts"
+import { BcLink, LiveBanner, LiveConfirm, LotCard, MARK, StepKey, StepList, liveConfirmed, lotOutcome } from "../../../warehouse/_components/bc-lot-parts"
 
 // A sale → 📤 Push to BC → "Send lots to BC" — admins only (Jack, 2026-11-12). The receipt page's
 // "Lots → Business Central test" send, started from the sale: every lot on the sale goes to a BC TEST
@@ -14,21 +14,26 @@ import { BcLink, LotCard, MARK, StepKey, StepList, lotOutcome } from "../../../w
 //
 // Pressing the button sends NOTHING: it lists every lot by receipt and checks each receipt is in BC (a
 // count that moves), then shows exactly what each lot sends. Only "Send N lots" sends — one call per lot,
-// Stop between lots, and the end says what happened in numbers (RULES.md 7b). Nothing in the Hub changes.
+// Stop between lots, and the end says what happened in numbers (RULES.md 7b). On LIVE BC (the production Hub)
+// the number of lots is typed to confirm, and each lot sent is noted on its change log so End of Day leaves it
+// off the overnight sheet.
 
 type Phase = "idle" | "listing" | "checking" | "confirm" | "running" | "done"
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-export default function BcSaleLotsTest({ auctionId, saleCode, environment, offReason }: {
+export default function BcSaleLotsTest({ auctionId, saleCode, environment, offReason, live }: {
   auctionId: string
   saleCode: string
-  /** The BC test environment writes go to (never live BC); null when switched off. */
+  /** The BC environment writes go to; null when switched off. */
   environment: string | null
   /** Why it's switched off, in words; null when it can run. */
   offReason: string | null
+  /** Writes go to LIVE Business Central (the production Hub only). */
+  live: boolean
 }) {
   const [phase, setPhase] = useState<Phase>("idle")
+  const [typed, setTyped] = useState("")
   const [plan, setPlan] = useState<BcSaleLotsStart | null>(null)
   const [inBc, setInBc] = useState<Record<string, BcStep>>({})
   const [steps, setSteps] = useState<BcStep[]>([])
@@ -51,9 +56,13 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
   const hubHeld = notGoing.filter(r => r.hubNote)
   const hubHeldLots = hubHeld.reduce((n, r) => n + r.lots.length, 0)
   const leftOut = notInBcLots + hubHeldLots + (plan?.noReceipt.length ?? 0)
+  const isLive = plan?.live ?? live
+  const where = isLive ? "live BC" : "the BC test environment"
+  const sendReady = liveConfirmed(isLive, typed, String(goingLots))
 
   async function check() {
     setPhase("listing")
+    setTyped("")
     setError(null)
     setNotice(null)
     setNeedsSignIn(false)
@@ -94,7 +103,9 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
   }
 
   async function run() {
-    if (!plan) return
+    if (!plan || !sendReady) return
+    // On LIVE BC the server checks this on every call too.
+    const confirm = plan.live ? { typed, expected: String(goingLots) } : undefined
     const lots = going.flatMap(r => r.lots.map(l => ({ ...l, receiptId: r.receiptId })))
     stopRef.current = false
     setPhase("running")
@@ -110,7 +121,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
       if (stopRef.current) { stopped = true; break }
       const lot = lots[i]
       setProgress({ done: i, total: lots.length, current: `${lot.barcode || lot.shortDescription.slice(0, 30)} on ${lot.receiptId}` })
-      const res = await bcSaleLotSend(auctionId, lot.id).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+      const res = await bcSaleLotSend(auctionId, lot.id, confirm).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
       if (!res.ok) {
         all.push({ what: lot.barcode ? `Lot ${lot.barcode}` : `Lot "${lot.shortDescription.slice(0, 40)}"`, outcome: "failed", detail: res.error })
         refused++
@@ -140,7 +151,9 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
     return (
       <div className="mt-3 flex flex-wrap gap-2">
         {goingLots > 0 && plan && (
-          <button type="button" className={btnGo} onClick={run}>Send {plural(goingLots, "lot", "lots")} to {plan.environment}</button>
+          <button type="button" className={btnGo} onClick={run} disabled={!sendReady}>
+            Send {plural(goingLots, "lot", "lots")} to {plan.live ? "live BC" : plan.environment}
+          </button>
         )}
         <button type="button" className={btn} onClick={() => { setPhase("idle"); setPlan(null) }}>Cancel</button>
       </div>
@@ -174,13 +187,22 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
 
   return (
     <section className={`${box} mb-6 px-4 py-3`} aria-labelledby="bc-sale-lots-heading">
-      <h2 id="bc-sale-lots-heading" className="text-sm font-semibold text-gray-900 dark:text-white">Send lots to Business Central (test)</h2>
+      <h2 id="bc-sale-lots-heading" className="text-sm font-semibold text-gray-900 dark:text-white">
+        {live ? "Send lots to Business Central — LIVE" : "Send lots to Business Central (test)"}
+      </h2>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-        Admins only. Sends every lot on <span className={mono}>{saleCode}</span> to a BC <b>test</b> environment
-        {environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — as a line on the receipt it was
+        Admins only. Sends every lot on <span className={mono}>{saleCode}</span> to{" "}
+        {live
+          ? <><b>live</b> Business Central</>
+          : <>a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC —</>}{" "}
+        as a line on the receipt it was
         catalogued onto, allocated to this sale and ticked Cleared For Sale: short description, description, estimates, category,
-        subcategory, tote, size and internal barcode. BC gives each its UniqueID. Signed in as you; nothing in the Hub changes.
+        subcategory, tote, size and internal barcode. BC gives each its UniqueID. Signed in as you.{" "}
+        {live
+          ? <>Each lot sent is noted on its change log, and End of Day leaves it off the overnight sheet.</>
+          : <>Nothing in the Hub changes.</>}
       </p>
+      {live && !off && <LiveBanner environment={environment} />}
 
       {off ? (
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{off}</p>
@@ -212,12 +234,12 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
                   A lot whose barcode BC already has on its receipt isn&apos;t sent again — it&apos;s only ticked Cleared For Sale if it isn&apos;t yet.
                 </p>
               ) : (
-                <p className="font-medium">Nothing on {plan.saleCode} can be sent — no lot is on a receipt the BC test environment has.</p>
+                <p className="font-medium">Nothing on {plan.saleCode} can be sent — no lot is on a receipt {where} has.</p>
               )}
               {notInBcLots > 0 && (
                 <p className="mt-2">
-                  <b>{plural(notInBcLots, "lot", "lots")}</b> on {plural(notInBc.length, "receipt", "receipts")} won&apos;t be sent — the BC test
-                  environment doesn&apos;t have the receipt ({notInBc.map(r => r.receiptId).join(", ")}). A Hub receipt can be sent first from its
+                  <b>{plural(notInBcLots, "lot", "lots")}</b> on {plural(notInBc.length, "receipt", "receipts")} won&apos;t be sent — {where}{" "}
+                  doesn&apos;t have the receipt ({notInBc.map(r => r.receiptId).join(", ")}). A Hub receipt can be sent first from its
                   Goods In page.
                 </p>
               )}
@@ -228,6 +250,9 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
                 <p className="mt-2"><b>{plural(plan.noReceipt.length, "lot has", "lots have")}</b> no receipt in the Hub, so {plan.noReceipt.length === 1 ? "it has" : "they have"} nowhere to go in BC — not sent.</p>
               )}
 
+              {goingLots > 0 && plan.live && (
+                <LiveConfirm expected={String(goingLots)} what={plural(goingLots, "lot", "lots")} value={typed} onChange={setTyped} />
+              )}
               {goingLots > 0 && sendButtons()}
 
               <p className="mt-3 font-medium">What each lot sends, by receipt — nothing is sent until you press Send:</p>
@@ -275,7 +300,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
             <>
               {failed.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-sm font-medium text-red-700 dark:text-red-300">What BC refused ({failed.length}):</p>
+                  <p className="text-sm font-medium text-red-700 dark:text-red-300">What didn&apos;t go through ({failed.length}):</p>
                   <StepList steps={failed} />
                 </div>
               )}
