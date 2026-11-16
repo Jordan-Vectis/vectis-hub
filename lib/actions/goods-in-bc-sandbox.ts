@@ -6,12 +6,14 @@ import { getEffectiveSession } from "@/lib/impersonation"
 import { getBCToken } from "@/lib/bc"
 import { isFromBc } from "@/lib/goods-in/source"
 import {
-  bcReceiptLinesUrl, bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason, lotPreview, receiptInBc, sendContainer, sendLot, sendReceiptHeader,
+  bcLiveRefusal, bcReceiptLinesUrl, bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason, bcWriteIsLive, lotPreview, receiptInBc,
+  sendContainer, sendLot, sendReceiptHeader,
   type BcStep, type LotForBc, type LotPreview,
 } from "@/lib/goods-in/bc-sandbox"
+import { buildLotEventRow, writeLotEventsChecked } from "@/lib/lot-log"
 import type { Result } from "@/lib/actions/goods-in"
 
-// Goods In → a receipt → "Send to BC sandbox (test)". The rules are in lib/goods-in/bc-sandbox.ts.
+// Goods In → a receipt → "Send to Business Central". The rules are in lib/goods-in/bc-sandbox.ts.
 //
 // The BROWSER drives it (RULES.md 7b): bcSandboxStart sends the receipt and returns the totes and
 // pallets to send, then bcSandboxSendContainer is called once per tote, so the screen can count them
@@ -19,26 +21,59 @@ import type { Result } from "@/lib/actions/goods-in"
 //
 // • Warehouse ADMINS only, read fresh from the database (requireGoodsIn), and never while an admin is
 //   viewing as someone else — it writes to BC under the real person's own BC sign-in.
-// • A BC test environment only (BC_WRITE_ENVIRONMENT), never the live one; refused with the reason.
+// • The BC environment in BC_WRITE_ENVIRONMENT: a copy or sandbox, or LIVE BC from the production Hub only
+//   (bcWriteIsLive). Every LIVE write needs the typed confirmation, checked here on every call (liveGate).
 // • Booked Hub receipts only: not a draft, not void, not one copied FROM BC, and it must carry a vendor
 //   number (BC refuses a tote on a receipt without one).
-// • It writes NOTHING in the Hub. What happened is shown on the screen and in the server log.
+// • The only thing it writes in the Hub: a lot sent to LIVE BC gets a "bc_sent" event on its change log
+//   (noteLiveSend), so End of Day leaves it off the overnight sheet. What happened is shown on the screen
+//   and in the server log.
 // ⚠ Each action RETURNS { ok, error } rather than throwing (production redacts thrown server-action errors).
 
 /** Shown with a link to /api/bc/auth when the person has no BC sign-in the Hub can use. */
 const NO_BC_SIGN_IN = "NO_BC_SIGN_IN"
 
-type Checked = { environment: string; token: string; userName: string | null }
+type Checked = { environment: string; token: string; userName: string | null; live: boolean }
 
 async function check(): Promise<Checked> {
   const me = await requireGoodsIn("admin")
   const session = await getEffectiveSession()
   if (session?.isImpersonating) throw new GoodsInAccessError("Stop viewing as someone else first — this writes to Business Central as you.")
   const environment = bcSandboxEnvironment()
-  if (!environment || !process.env.BC_TENANT_ID) throw new GoodsInAccessError(bcSandboxOffReason() ?? "Sending to a BC test environment is switched off on this server.")
+  if (!environment || !process.env.BC_TENANT_ID) throw new GoodsInAccessError(bcSandboxOffReason() ?? "Sending to Business Central is switched off on this server.")
   const token = await getBCToken()
   if (!token) throw new GoodsInAccessError(NO_BC_SIGN_IN)
-  return { environment, token, userName: me.name }
+  return { environment, token, userName: me.name, live: bcWriteIsLive() }
+}
+
+/** Every WRITE to live BC needs the person's typed confirmation (bcLiveRefusal) — on each call, not once. */
+function liveGate(confirm: unknown, receiptId?: string) {
+  const refusal = bcLiveRefusal(confirm, receiptId)
+  if (refusal) throw new GoodsInAccessError(refusal)
+}
+
+/**
+ * LIVE BC only: a lot whose line is now in BC on its receipt gets a "bc_sent" event on its change log, and
+ * End of Day leaves it off the overnight sheet (app/api/catalogue/end-of-day/route.ts). The Hub's BC copy
+ * won't have the lot until the next data sync, so without this the sheet would import it a SECOND time.
+ * "In BC" = the lot's own step ("Lot …") made or found the line, even if a later step failed (a line without
+ * its barcode is still a line). A note that can't be written is said on screen, never swallowed.
+ */
+async function noteLiveSend(
+  lot: { id: string; auctionId: string; barcode: string | null; title: string; auction: { code: string | null } | null },
+  receiptId: string, steps: BcStep[], environment: string, userName: string | null, source: string,
+): Promise<BcStep[]> {
+  if (!steps.some(s => s.what.startsWith("Lot ") && s.outcome !== "failed")) return []
+  const ok = await writeLotEventsChecked([buildLotEventRow(
+    { id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "",
+    "bc_sent", "Sent to Business Central", "", `Receipt ${receiptId} in ${environment}`,
+    { changedBy: userName ?? "?", source },
+  )])
+  return ok ? [] : [{
+    what: `Hub note ${lot.barcode ?? ""}`.trim(),
+    outcome: "failed",
+    detail: "It's in BC, but the Hub couldn't note that — it will still be on tonight's End of Day sheet, so leave it out of the import.",
+  }]
 }
 
 async function loadReceipt(receiptId: string) {
@@ -70,10 +105,12 @@ export type BcSandboxStart = {
   containers: { id: string; kind: string }[]
 }
 
-/** Sends the receipt to the BC sandbox and returns the totes and pallets still to send. */
-export async function bcSandboxStart(receiptId: string): Promise<Result<BcSandboxStart>> {
+/** Sends the receipt to BC and returns the totes and pallets still to send. On LIVE BC, `confirm` must carry
+ *  the receipt number typed on the screen. */
+export async function bcSandboxStart(receiptId: string, confirm?: unknown): Promise<Result<BcSandboxStart>> {
   try {
     const { environment, token, userName } = await check()
+    liveGate(confirm, receiptId)
     const r = await loadReceipt(receiptId)
     const receipt = await sendReceiptHeader(token, environment, { id: r.id, vendorNo: r.vendorNo })
     console.log(`[goods-in bc-sandbox] ${userName ?? "?"} → ${environment}: ${receipt.what} ${receipt.outcome}`)
@@ -83,10 +120,11 @@ export async function bcSandboxStart(receiptId: string): Promise<Result<BcSandbo
   }
 }
 
-/** Sends one tote or pallet (the tote record, then its line on the receipt) to the BC sandbox. */
-export async function bcSandboxSendContainer(receiptId: string, containerId: string): Promise<Result<BcStep[]>> {
+/** Sends one tote or pallet (the tote record, then its line on the receipt) to BC. */
+export async function bcSandboxSendContainer(receiptId: string, containerId: string, confirm?: unknown): Promise<Result<BcStep[]>> {
   try {
     const { environment, token, userName } = await check()
+    liveGate(confirm, receiptId)
     const r = await loadReceipt(receiptId)
     const c = r.containers.find(x => x.id === containerId)
     if (!c) return { ok: false, error: `${containerId} isn't on receipt ${receiptId} any more.` }
@@ -107,7 +145,7 @@ export async function bcSandboxSendContainer(receiptId: string, containerId: str
 // • One call per lot, driven by the browser, so the count moves and Stop works between lots.
 
 const LOT_FOR_BC_SELECT = {
-  id: true, barcode: true, title: true, description: true, estimateLow: true, estimateHigh: true, aiEstimateLow: true, aiEstimateHigh: true,
+  id: true, auctionId: true, barcode: true, title: true, description: true, estimateLow: true, estimateHigh: true, aiEstimateLow: true, aiEstimateHigh: true,
   notes: true, category: true, subCategory: true, tote: true, receipt: true, auction: { select: { code: true } },
 } as const
 
@@ -159,6 +197,8 @@ async function lotsOnReceipt(receiptId: string) {
 
 export type BcLotsStart = {
   environment: string
+  /** Writes go to LIVE Business Central (the production Hub): the screen asks for the typed confirmation. */
+  live: boolean
   receipt: BcStep
   /** Each lot with exactly what it will send (lotPreview of the same lotForBc the send uses). */
   lots: ({ id: string } & LotPreview)[]
@@ -171,7 +211,7 @@ export type BcLotsStart = {
 /** Checks the receipt is in BC and returns the lots catalogued onto it, to send one by one. */
 export async function bcLotsStart(receiptId: string): Promise<Result<BcLotsStart>> {
   try {
-    const { environment, token, userName } = await check()
+    const { environment, token, userName, live } = await check()
     const { mine, elsewhere } = await lotsOnReceipt(receiptId)
     const receipt = await receiptInBc(token, environment, receiptId)
     console.log(`[goods-in bc-lots] ${userName ?? "?"} → ${environment}: ${receipt.what} ${receipt.outcome}; ${mine.length} lots`)
@@ -179,6 +219,7 @@ export async function bcLotsStart(receiptId: string): Promise<Result<BcLotsStart
       ok: true,
       data: {
         environment,
+        live,
         receipt,
         lots: mine.map(l => ({ id: l.id, ...lotPreview(lotForBc(l)) })),
         elsewhere,
@@ -190,16 +231,19 @@ export async function bcLotsStart(receiptId: string): Promise<Result<BcLotsStart
   }
 }
 
-/** Sends one lot as a receipt line (on its receipt and its sale) to the BC test environment. */
-export async function bcLotSend(receiptId: string, lotId: string): Promise<Result<BcStep[]>> {
+/** Sends one lot as a receipt line (on its receipt and its sale) to BC. On LIVE BC, `confirm` must carry the
+ *  number of lots typed on the screen. */
+export async function bcLotSend(receiptId: string, lotId: string, confirm?: unknown): Promise<Result<BcStep[]>> {
   try {
-    const { environment, token, userName } = await check()
+    const { environment, token, userName, live } = await check()
+    liveGate(confirm)
     const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: LOT_FOR_BC_SELECT })
     if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
     if ((lot.receipt ?? "").trim().toUpperCase() !== receiptId.toUpperCase()) {
       return { ok: false, error: `This lot is catalogued onto ${lot.receipt || "no receipt"}, not ${receiptId}.` }
     }
     const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
+    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_receipt"))
     console.log(`[goods-in bc-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {
@@ -247,6 +291,8 @@ export type BcSaleReceipt = {
 
 export type BcSaleLotsStart = {
   environment: string
+  /** Writes go to LIVE Business Central (the production Hub): the screen asks for the typed confirmation. */
+  live: boolean
   saleCode: string
   receipts: BcSaleReceipt[]
   /** Lots with no receipt in the Hub — they have nowhere to go in BC, so they're never sent. */
@@ -256,7 +302,7 @@ export type BcSaleLotsStart = {
 /** The sale's lots, grouped by the receipt each was catalogued onto, with exactly what each sends. No BC call. */
 export async function bcSaleLotsStart(auctionId: string): Promise<Result<BcSaleLotsStart>> {
   try {
-    const { environment, userName } = await checkAdmin()
+    const { environment, userName, live } = await checkAdmin()
     const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { code: true } })
     if (!auction) return { ok: false, error: "That sale isn't in the Hub any more." }
     const lots = await prisma.catalogueLot.findMany({
@@ -285,7 +331,7 @@ export async function bcSaleLotsStart(auctionId: string): Promise<Result<BcSaleL
     }
     const receipts = [...groups.values()].sort((a, b) => a.receiptId.localeCompare(b.receiptId, "en", { numeric: true }))
     console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: sale ${auction.code} — ${lots.length} lots on ${receipts.length} receipts, ${noReceipt.length} with no receipt`)
-    return { ok: true, data: { environment, saleCode: auction.code, receipts, noReceipt } }
+    return { ok: true, data: { environment, live, saleCode: auction.code, receipts, noReceipt } }
   } catch (e) {
     return fail(e)
   }
@@ -304,10 +350,12 @@ export async function bcSaleReceiptCheck(auctionId: string, receiptId: string): 
   }
 }
 
-/** Sends one lot of the sale as a line on the receipt it was catalogued onto, allocated to the sale. */
-export async function bcSaleLotSend(auctionId: string, lotId: string): Promise<Result<BcStep[]>> {
+/** Sends one lot of the sale as a line on the receipt it was catalogued onto, allocated to the sale. On LIVE BC,
+ *  `confirm` must carry the number of lots typed on the screen. */
+export async function bcSaleLotSend(auctionId: string, lotId: string, confirm?: unknown): Promise<Result<BcStep[]>> {
   try {
-    const { environment, token, userName } = await checkAdmin()
+    const { environment, token, userName, live } = await checkAdmin()
+    liveGate(confirm)
     const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: SALE_LOT_SELECT })
     if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
     if (lot.auctionId !== auctionId) return { ok: false, error: "This lot has moved to another sale since the list was made." }
@@ -317,6 +365,7 @@ export async function bcSaleLotSend(auctionId: string, lotId: string): Promise<R
     const note = hubReceiptNote(hub?.status)
     if (note) return { ok: false, error: `${receiptId}: ${note}` }
     const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
+    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_sale"))
     console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {
@@ -335,8 +384,9 @@ export async function bcSaleLotSend(auctionId: string, lotId: string): Promise<R
 // • WHICH sale: each lot's own (as every other send here), or ONE sale code for every lot sent.
 //   eodLotForBc is the one place that is applied — the preview and the send both use it, so the list
 //   shown before sending is exactly what goes.
-// • Every guard of checkAdmin(): Hub admins only, never while viewing as someone else, a BC TEST
-//   environment only, signed in as the person pressing it. Nothing in the Hub is written.
+// • Every guard of checkAdmin(): Hub admins only, never while viewing as someone else, signed in as the
+//   person pressing it, live BC from the production Hub only and with the typed confirmation. A lot sent to
+//   LIVE BC is noted on its change log (noteLiveSend), which takes it off the sheet until the next sync.
 // • The browser drives it (RULES.md 7b): one call per receipt to check, one per lot to send.
 
 /** Which sale the lots go on: each lot's own, or one sale code for every lot sent. */
@@ -368,16 +418,16 @@ const cleanList = (v: unknown): string[] =>
 // Prisma `in` is case-sensitive, so original/upper/lower are asked for and compared in capitals in code.
 const caseVariants = (vals: string[]) => [...new Set(vals.flatMap(v => [v, v.toUpperCase(), v.toLowerCase()]))]
 
-export type BcEodAvailable = { environment: string | null; offReason: string | null }
+export type BcEodAvailable = { environment: string | null; offReason: string | null; live: boolean }
 
 /** Whether End of Day shows the tab to this person — the same test as the sale page's panel: the send
- *  is set up on this server (never production) and they are a Hub admin not viewing as someone else. */
+ *  is set up on this server (BC_WRITE_ENVIRONMENT) and they are a Hub admin not viewing as someone else. */
 export async function bcEodAvailable(): Promise<BcEodAvailable | null> {
   try {
     if (!bcSandboxConfigured()) return null
     const session = await getEffectiveSession()
     if (!session || session.isImpersonating || session.user.role !== "ADMIN") return null
-    return { environment: bcSandboxEnvironment(), offReason: bcSandboxOffReason() }
+    return { environment: bcSandboxEnvironment(), offReason: bcSandboxOffReason(), live: bcWriteIsLive() }
   } catch {
     return null
   }
@@ -457,6 +507,8 @@ export async function bcEodList(barcodes: string[]): Promise<Result<BcEodList>> 
 
 export type BcEodLotsStart = {
   environment: string
+  /** Writes go to LIVE Business Central (the production Hub): the screen asks for the typed confirmation. */
+  live: boolean
   /** The one sale every lot goes on, or null when each goes on its own. */
   saleCode: string | null
   receipts: BcSaleReceipt[]
@@ -467,7 +519,7 @@ export type BcEodLotsStart = {
 /** The ticked lots grouped by receipt, with exactly what each sends on the sale chosen. No BC call. */
 export async function bcEodLotsStart(lotIds: string[], sale: BcEodSale): Promise<Result<BcEodLotsStart>> {
   try {
-    const { environment, userName } = await checkAdmin()
+    const { environment, userName, live } = await checkAdmin()
     const chosen = saleFor(sale)
     const ids = cleanList(lotIds)
     if (!ids.length) return { ok: false, error: "Tick at least one vendor first." }
@@ -494,7 +546,7 @@ export async function bcEodLotsStart(lotIds: string[], sale: BcEodSale): Promise
     }
     const receipts = [...groups.values()].sort((a, b) => a.receiptId.localeCompare(b.receiptId, "en", { numeric: true }))
     console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: ${sendable.length} lots on ${receipts.length} receipts, sale ${chosen.mode === "one" ? chosen.code : "each lot's own"}`)
-    return { ok: true, data: { environment, saleCode: chosen.mode === "one" ? chosen.code : null, receipts, unsendable: ids.length - sendable.length } }
+    return { ok: true, data: { environment, live, saleCode: chosen.mode === "one" ? chosen.code : null, receipts, unsendable: ids.length - sendable.length } }
   } catch (e) {
     return fail(e)
   }
@@ -513,10 +565,12 @@ export async function bcEodReceiptCheck(receiptId: string): Promise<Result<BcSte
   }
 }
 
-/** Sends one lot from the End of Day sheet as a line on the receipt it was catalogued onto, on the sale chosen. */
-export async function bcEodLotSend(lotId: string, sale: BcEodSale): Promise<Result<BcStep[]>> {
+/** Sends one lot from the End of Day sheet as a line on the receipt it was catalogued onto, on the sale chosen.
+ *  On LIVE BC, `confirm` must carry the number of lots typed on the screen. */
+export async function bcEodLotSend(lotId: string, sale: BcEodSale, confirm?: unknown): Promise<Result<BcStep[]>> {
   try {
-    const { environment, token, userName } = await checkAdmin()
+    const { environment, token, userName, live } = await checkAdmin()
+    liveGate(confirm)
     const chosen = saleFor(sale)
     const lot = typeof lotId === "string" ? await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: SALE_LOT_SELECT }) : null
     if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
@@ -527,6 +581,7 @@ export async function bcEodLotSend(lotId: string, sale: BcEodSale): Promise<Resu
     const note = hubReceiptNote(hub?.status)
     if (note) return { ok: false, error: `${receiptId}: ${note}` }
     const steps = await sendLot(token, environment, receiptId, eodLotForBc(lot, chosen))
+    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_eod"))
     console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {

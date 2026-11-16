@@ -4,32 +4,37 @@ import { useRef, useState } from "react"
 import { bcSandboxSendContainer, bcSandboxStart } from "@/lib/actions/goods-in-bc-sandbox"
 import type { BcStep } from "@/lib/goods-in/bc-sandbox"
 import { ErrorBox, box, btn, btnGo, mono } from "../../_components/ui"
+import { LiveBanner, LiveConfirm, liveConfirmed } from "../../_components/bc-lot-parts"
 
-// Goods In → a receipt → "Send to a BC test environment" (never live BC) — Warehouse admins only. The
-// rules are in lib/goods-in/bc-sandbox.ts and lib/actions/goods-in-bc-sandbox.ts.
+// Goods In → a receipt → "Send to Business Central" — Warehouse admins only. A BC copy or sandbox, or LIVE
+// BC from the production Hub, where the receipt number is typed to confirm. The rules are in
+// lib/goods-in/bc-sandbox.ts and lib/actions/goods-in-bc-sandbox.ts.
 //
 // The browser drives it, one call per tote (RULES.md 7b): the count moves as each one goes, Stop
 // works between them, and the end says what happened in numbers. It asks in place before sending
-// (never window.confirm). Nothing in the Hub changes — only the BC test environment.
+// (never window.confirm). Nothing in the Hub changes — only Business Central.
 
 const MARK: Record<BcStep["outcome"], { sym: string; cls: string; word: string }> = {
-  made: { sym: "✓", cls: "text-emerald-700 dark:text-emerald-300", word: "made in the BC test environment now" },
+  made: { sym: "✓", cls: "text-emerald-700 dark:text-emerald-300", word: "made in Business Central now" },
   there: { sym: "=", cls: "text-gray-500 dark:text-gray-400", word: "it was already there, nothing sent" },
   failed: { sym: "✗", cls: "text-red-700 dark:text-red-300", word: "Business Central refused it (its words shown)" },
 }
 
 type Phase = "idle" | "confirm" | "running" | "done"
 
-export default function BcSandboxTest({ receiptId, vendorNo, containerCount, environment, offReason }: {
+export default function BcSandboxTest({ receiptId, vendorNo, containerCount, environment, offReason, live }: {
   receiptId: string
   vendorNo: string | null
   containerCount: number
-  /** The BC test environment writes go to (never live BC); null when switched off. */
+  /** The BC environment writes go to; null when switched off. */
   environment: string | null
   /** Why it's switched off, in words; null when it can run. */
   offReason: string | null
+  /** Writes go to LIVE Business Central (the production Hub only). */
+  live: boolean
 }) {
   const [phase, setPhase] = useState<Phase>("idle")
+  const [typed, setTyped] = useState("")
   const [steps, setSteps] = useState<BcStep[]>([])
   const [error, setError] = useState<string | null>(null)
   const [needsSignIn, setNeedsSignIn] = useState(false)
@@ -39,7 +44,15 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
 
   const off = offReason ?? (environment ? null : "Switched off on this server.")
 
+  function openConfirm() {
+    setTyped("")
+    setPhase("confirm")
+  }
+
   async function run() {
+    if (!liveConfirmed(live, typed, receiptId)) return
+    // On LIVE BC the server checks this on every call too.
+    const confirm = live ? { typed, expected: receiptId } : undefined
     stopRef.current = false
     setPhase("running")
     setSteps([])
@@ -48,7 +61,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
     setSummary(null)
     setProgress({ done: 0, total: containerCount, current: `receipt ${receiptId}` })
 
-    const start = await bcSandboxStart(receiptId).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+    const start = await bcSandboxStart(receiptId, confirm).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
     if (!start.ok) {
       if (start.error === "NO_BC_SIGN_IN") setNeedsSignIn(true)
       else setError(start.error)
@@ -73,7 +86,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
     for (let i = 0; i < list.length; i++) {
       if (stopRef.current) { stopped = true; break }
       setProgress({ done: i, total: list.length, current: list[i].id })
-      const res = await bcSandboxSendContainer(receiptId, list[i].id).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+      const res = await bcSandboxSendContainer(receiptId, list[i].id, confirm).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
       if (!res.ok) {
         all.push({ what: `Tote ${list[i].id}`, outcome: "failed", detail: res.error })
         failedTotes++
@@ -98,10 +111,13 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
 
   return (
     <section className={`${box} mb-6 px-4 py-3`} aria-labelledby="bc-sandbox-heading">
-      <h2 id="bc-sandbox-heading" className="text-sm font-semibold text-gray-900 dark:text-white">Business Central test</h2>
+      <h2 id="bc-sandbox-heading" className="text-sm font-semibold text-gray-900 dark:text-white">{live ? "Business Central — LIVE" : "Business Central test"}</h2>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-        Admins only. Sends this receipt and its totes and pallets to a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — signed in as you. Nothing in the Hub changes.
+        {live
+          ? <>Admins only. Sends this receipt and its totes and pallets to <b>live</b> Business Central, signed in as you. Nothing in the Hub changes.</>
+          : <>Admins only. Sends this receipt and its totes and pallets to a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — signed in as you. Nothing in the Hub changes.</>}
       </p>
+      {live && !off && <LiveBanner environment={environment} />}
 
       {off ? (
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{off}</p>
@@ -110,7 +126,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
       ) : (
         <>
           {phase === "idle" && (
-            <button type="button" className={`${btn} mt-3`} onClick={() => setPhase("confirm")}>Send to BC test environment…</button>
+            <button type="button" className={`${btn} mt-3`} onClick={openConfirm}>{live ? "Send to live BC…" : "Send to BC test environment…"}</button>
           )}
 
           {phase === "confirm" && (
@@ -121,8 +137,19 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
                 <b className={mono}>{environment}</b> environment, under the same numbers, with you as the person who made them.
                 Anything it already has is left alone.
               </p>
+              {live && (
+                <>
+                  <p className="mt-2">
+                    BC keeps the numbers it&apos;s sent. If BC is still handing out receipt and tote numbers itself, the two will clash one day —
+                    the Hub stops, and sends nothing more, if BC already has this receipt for another vendor or one of these totes on another receipt.
+                  </p>
+                  <LiveConfirm expected={receiptId} what={`receipt ${receiptId} and its totes`} value={typed} onChange={setTyped} />
+                </>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" className={btnGo} onClick={run}>Send to {environment}</button>
+                <button type="button" className={btnGo} onClick={run} disabled={!liveConfirmed(live, typed, receiptId)}>
+                  {live ? "Send to live BC" : `Send to ${environment}`}
+                </button>
                 <button type="button" className={btn} onClick={() => setPhase("idle")}>Cancel</button>
               </div>
             </div>
@@ -177,7 +204,7 @@ export default function BcSandboxTest({ receiptId, vendorNo, containerCount, env
                   ))}
                 </p>
               )}
-              <button type="button" className={btn} onClick={() => setPhase("confirm")}>Send again…</button>
+              <button type="button" className={btn} onClick={openConfirm}>Send again…</button>
             </div>
           )}
         </>

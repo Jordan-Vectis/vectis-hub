@@ -6,7 +6,7 @@ import AuctionTabs from "./auction-tabs"
 import { getDepartmentAccess, auctionWhere, canSeeAuction } from "@/lib/departments"
 import { logAccessDenied } from "@/lib/access-log"
 import { getEffectiveSession } from "@/lib/impersonation"
-import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason } from "@/lib/goods-in/bc-sandbox"
+import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason, bcWriteIsLive } from "@/lib/goods-in/bc-sandbox"
 
 export default async function AuctionDetailPage({
   params,
@@ -122,12 +122,12 @@ export default async function AuctionDetailPage({
     inBC = new Set(rows.map(r => r.id))
   } catch { /* the BC mirror is a convenience — never take the sale page down for it */ }
 
-  // Push to BC → "Send lots to BC" (a BC TEST environment only) — admins only, and not while viewing as
-  // someone else; the server actions check both again. Not shown at all where the test isn't set up
-  // (production), exactly like the receipt page's panel.
+  // Push to BC → "Send lots to BC" (a BC copy or sandbox, or LIVE BC from the production Hub) — admins only,
+  // and not while viewing as someone else; the server actions check both again. Not shown at all where the
+  // send isn't set up (no BC_WRITE_ENVIRONMENT), exactly like the receipt page's panel.
   const effective = isAdmin && bcSandboxConfigured() ? await getEffectiveSession() : null
   const bcSaleTest = effective && !effective.isImpersonating && effective.user.role === "ADMIN"
-    ? { environment: bcSandboxEnvironment(), offReason: bcSandboxOffReason() }
+    ? { environment: bcSandboxEnvironment(), offReason: bcSandboxOffReason(), live: bcWriteIsLive() }
     : null
 
   return (

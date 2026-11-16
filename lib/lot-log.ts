@@ -115,6 +115,20 @@ export async function writeLotEvents(rows: EventRow[]) {
   }
 }
 
+// Like writeLotEvents, but says whether the rows were written — for an event something else RELIES on, so a
+// failure can be told to the person instead of swallowed. (End of Day leaves a lot sent to live BC off the
+// overnight sheet by its "bc_sent" event — lib/actions/goods-in-bc-sandbox.ts.)
+export async function writeLotEventsChecked(rows: EventRow[]): Promise<boolean> {
+  if (!rows.length) return true
+  try {
+    await prisma.catalogueLotEvent.createMany({ data: rows })
+    return true
+  } catch (e) {
+    console.error("lot-log: failed to write change events:", e)
+    return false
+  }
+}
+
 // A short, human-readable summary of the details on a lot — used for the
 // "created" and "deleted" rows so you can see at a glance what was entered.
 export function summariseLot(lot: Record<string, any>): string {

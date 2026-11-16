@@ -17,7 +17,7 @@ import NotesEditor from "./notes-editor"
 import LotList from "./lot-list"
 import BcSandboxTest from "./bc-sandbox-test"
 import BcLotsTest from "./bc-lots-test"
-import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason } from "@/lib/goods-in/bc-sandbox"
+import { bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason, bcWriteIsLive } from "@/lib/goods-in/bc-sandbox"
 import { CATEGORY_LIST_ID, type ContainerView, type LotView } from "./types"
 
 // Goods In → one receipt. Everything about what a customer handed in on one visit: the customer as
@@ -265,8 +265,8 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
         )}
       </section>
 
-      {/* Test only: Goods In's one way into Business Central, and only into a sandbox (lib/goods-in/bc-sandbox.ts).
-          Not shown at all on a server without BC_WRITE_ENVIRONMENT (production). */}
+      {/* Goods In's one way into Business Central (lib/goods-in/bc-sandbox.ts): a BC copy or sandbox, or LIVE BC
+          from the production Hub. Not shown at all on a server without BC_WRITE_ENVIRONMENT. */}
       {bcSandboxConfigured() && atLeast(me, "admin") && !fromBc && !isDraft && !isVoid && (
         <BcSandboxTest
           receiptId={r.id}
@@ -274,13 +274,14 @@ export default async function ReceiptPage({ params, searchParams }: { params: Pr
           containerCount={containers.length}
           environment={bcSandboxEnvironment()}
           offReason={bcSandboxOffReason()}
+          live={bcWriteIsLive()}
         />
       )}
 
-      {/* Test only: the lots catalogued onto this receipt → BC receipt lines, on this receipt and their sale.
+      {/* The lots catalogued onto this receipt → BC receipt lines, on this receipt and their sale.
           For a receipt booked in BC as well as one booked here — the receipt must already be in BC. */}
       {bcSandboxConfigured() && atLeast(me, "admin") && !isDraft && !isVoid && (
-        <BcLotsTest receiptId={r.id} environment={bcSandboxEnvironment()} offReason={bcSandboxOffReason()} />
+        <BcLotsTest receiptId={r.id} environment={bcSandboxEnvironment()} offReason={bcSandboxOffReason()} live={bcWriteIsLive()} />
       )}
 
       {otherLots.length > 0 && (

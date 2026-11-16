@@ -1,11 +1,57 @@
 import type { BcStep, LotPreview } from "@/lib/goods-in/bc-sandbox"
-import { mono } from "./ui"
+import { input, mono } from "./ui"
 
-// The pieces both "Lots → Business Central test" panels show — the receipt page's (receipts/[id]/bc-lots-test.tsx)
-// and the sale page's (cataloguing/auctions/[id]/bc-sale-lots-test.tsx) — so a lot reads the same in both.
+// The pieces every "Send to Business Central" panel shows — the receipt page's (receipts/[id]/bc-sandbox-test.tsx
+// and bc-lots-test.tsx), the sale page's (cataloguing/auctions/[id]/bc-sale-lots-test.tsx) and End of Day's
+// (cataloguing/end-of-day/bc-send-tab.tsx) — so a lot, and a LIVE send, read the same in all of them.
+
+/** The red warning on every panel that writes to LIVE Business Central (the production Hub only). */
+export function LiveBanner({ environment }: { environment: string | null }) {
+  return (
+    <p className="mt-2 rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-800 dark:text-red-200">
+      <b>⚠ LIVE Business Central{environment ? <> (<span className={mono}>{environment}</span>)</> : null}.</b> Everything sent from here goes
+      into the real BC that staff and the sale use. The Hub can&apos;t undo it — anything sent by mistake has to be deleted in BC.
+    </p>
+  )
+}
+
+/** Type-to-confirm before a LIVE send. The Send button stays off until `expected` is typed; the server checks it
+ *  again on every call (bcLiveRefusal). */
+export function LiveConfirm({ expected, what, value, onChange }: {
+  expected: string
+  /** What typing it confirms, e.g. "12 lots" or "receipt R010300". */
+  what: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  const id = `bc-live-confirm-${expected}`
+  return (
+    <div className="mt-3 rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-800 dark:text-red-200">
+      <label htmlFor={id} className="font-medium">
+        This sends {what} to LIVE Business Central. Type <b className={mono}>{expected}</b> to confirm:
+      </label>
+      <input
+        id={id}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        autoComplete="off"
+        inputMode={/^\d+$/.test(expected) ? "numeric" : "text"}
+        className={`${input} ${mono} mt-2 max-w-xs`}
+        aria-describedby={`${id}-hint`}
+      />
+      <p id={`${id}-hint`} className="mt-1 text-xs">
+        {value.trim().toUpperCase() === expected.toUpperCase() ? "Confirmed — Send is on." : "Send stays off until it matches."}
+      </p>
+    </div>
+  )
+}
+
+/** Whether a LIVE confirmation matches (always true when the send isn't live). */
+export const liveConfirmed = (live: boolean, typed: string, expected: string) =>
+  !live || typed.trim().toUpperCase() === expected.trim().toUpperCase()
 
 export const MARK: Record<BcStep["outcome"], { sym: string; cls: string; word: string }> = {
-  made: { sym: "✓", cls: "text-emerald-700 dark:text-emerald-300", word: "made in the BC test environment now" },
+  made: { sym: "✓", cls: "text-emerald-700 dark:text-emerald-300", word: "made in Business Central now" },
   there: { sym: "=", cls: "text-gray-500 dark:text-gray-400", word: "it was already there, nothing sent" },
   failed: { sym: "✗", cls: "text-red-700 dark:text-red-300", word: "Business Central refused it (its words shown)" },
 }
@@ -62,7 +108,7 @@ export function LotCard({ n, lot }: { n: number; lot: LotPreview }) {
   )
 }
 
-/** BC's own Receipt Lines list for one receipt, in the test environment — where the lines can be seen. */
+/** BC's own Receipt Lines list for one receipt, in the environment written to — where the lines can be seen. */
 export function BcLink({ url, environment, receiptId }: { url: string; environment: string; receiptId: string }) {
   return (
     <p className="mt-3 text-sm">
@@ -106,11 +152,12 @@ export function StepKey() {
 /** How one lot's send came out, for the end-of-run numbers. A sale BC wouldn't take ("Sale …") and a Cleared
  *  For Sale tick it wouldn't take ("Cleared for sale …" — tickClearedForSale in bc-sandbox.ts) are each their
  *  own step: the lot is still on its receipt. A lot BC already had that only got the tick now counts as
- *  already in BC. */
+ *  already in BC. A "Hub note …" step (LIVE only — the Hub couldn't mark the lot as sent) is about the Hub,
+ *  not BC, so it doesn't change how the lot went; it shows in the list of what didn't go through. */
 export function lotOutcome(steps: BcStep[]): "full" | "already" | "refused" | "noSale" | "notCleared" {
   const isSale = (s: BcStep) => s.what.startsWith("Sale ")
   const isTick = (s: BcStep) => s.what.startsWith("Cleared for sale ")
-  const failed = steps.filter(s => s.outcome === "failed")
+  const failed = steps.filter(s => s.outcome === "failed" && !s.what.startsWith("Hub note"))
   if (failed.some(s => !isSale(s) && !isTick(s))) return "refused"
   if (failed.some(isSale)) return "noSale"
   if (failed.length) return "notCleared"

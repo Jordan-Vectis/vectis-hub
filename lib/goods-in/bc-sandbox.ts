@@ -1,9 +1,9 @@
 // Goods In → a receipt → "Send to a BC test environment" (Jack, 2026-11-10: "can we test making a receipt
 // and tote on the hub and giving it back to BC"). SERVER ONLY.
 //
-// The FIRST time Goods In writes to Business Central, and NEVER to the live environment — a deliberate,
-// test-only exception to "Goods In never touches BC" (RULES.md → Goods In). What it writes, and why it is
-// shaped like this, comes from BC's own AL source (IT Tools → BC Source):
+// The FIRST time Goods In writes to Business Central — a deliberate exception to "Goods In never touches BC"
+// (RULES.md → Goods In). It began test-only; since 2026-11-16 the PRODUCTION Hub writes to live BC (the guard
+// is below). What it writes, and why it is shaped like this, comes from BC's own AL source (IT Tools → BC Source):
 //
 //   1. the receipt      → api/evo/mob/v2.0  receiptHeaders  (page 76300, table EVA_ReceiptHeader)
 //   2. each tote/pallet → api/evo/mob/v2.0  totes           (page 76316, table EVA_Tote)
@@ -22,9 +22,10 @@
 //     number for a different vendor stops everything, and a tote BC holds on another receipt is never
 //     linked to this one. Silently attaching to someone else's record is the one outcome this must not have.
 //
-// ⚠⚠ The guard: nothing is sent unless BC_WRITE_ENVIRONMENT is set, and NEVER when it names the live
-// environment (LIVE_ENVIRONMENTS, hard-coded here so no setting can lift it). It is a separate setting
-// from BC_ENVIRONMENT (which every read in the Hub uses), so turning this on never moves the Hub's reads.
+// ⚠⚠ The guard: nothing is sent unless BC_WRITE_ENVIRONMENT is set, and the live environment
+// (LIVE_ENVIRONMENTS, hard-coded here) only ever from the PRODUCTION Hub, with a typed confirmation — see
+// bcWriteIsLive / bcLiveRefusal below. It is a separate setting from BC_ENVIRONMENT (which every read in
+// the Hub uses), so turning this on never moves the Hub's reads.
 // It began as "the name must contain sandbox"; the first real press found Vectis's sandbox doesn't have
 // Evosoft's EvoMobile pages at all, so Jack chose the copy of production (Production_Copy_20260622),
 // which has every extension live has.
@@ -36,30 +37,68 @@ const EVO_MOB = "api/evo/mob/v2.0"
 const VECTIS_WHSE = "api/vectis/whse/v2.0"
 const TIMEOUT_MS = 30_000
 
-/** BC's LIVE environment(s). Test writes never go here, whatever BC_WRITE_ENVIRONMENT says.
- *  BC environment names are case-insensitive. ⚠ Never take this list from a setting. */
+/** BC's LIVE environment(s). BC environment names are case-insensitive. ⚠ Never take this list from a setting. */
 const LIVE_ENVIRONMENTS = ["production"]
 
 const isLive = (env: string) => LIVE_ENVIRONMENTS.includes(env.trim().toLowerCase())
 
-/** The BC environment test writes go to, or null when they are switched off / it names live BC. */
+// ⚠⚠ LIVE BC — from the PRODUCTION Hub only (Jack, 2026-11-16: "when it goes to main i need it to go to
+// production BC same with the receipt creation in warehouse"). BC_WRITE_ENVIRONMENT may name the live
+// environment ONLY when this Hub is the production site: RAILWAY_ENVIRONMENT_NAME exactly "production". It's
+// an allowlist, so staging, sandbox, a dev machine or a missing name can never write to live BC; they stay on
+// a copy or a sandbox. Every live write also needs the person's typed confirmation, checked on the server on
+// EVERY call (bcLiveRefusal), not just the first. Unsetting BC_WRITE_ENVIRONMENT on Railway switches it off.
+const LIVE_HUB_SITE = "production"
+
+const hubSite = () => (process.env.RAILWAY_ENVIRONMENT_NAME ?? "").trim().toLowerCase()
+
+/** The BC environment writes go to, or null when they are switched off (or it names live BC on a Hub other
+ *  than production). */
 export function bcSandboxEnvironment(): string | null {
   const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
-  if (!env || isLive(env)) return null
+  if (!env) return null
+  if (isLive(env) && hubSite() !== LIVE_HUB_SITE) return null
   return env
 }
 
-/** Whether this server has the test set up at all. Unset (production) → the panel isn't shown. */
+/** Whether writes from this server go to LIVE Business Central (only ever true on the production Hub). */
+export function bcWriteIsLive(): boolean {
+  const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
+  return !!env && isLive(env) && hubSite() === LIVE_HUB_SITE
+}
+
+/** Whether this server has the send set up at all. Unset → the panels aren't shown. */
 export function bcSandboxConfigured(): boolean {
   return !!(process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
 }
 
-/** Why the test can't run here, in words for the screen — or null when it can. */
+/** Why the send can't run here, in words for the screen — or null when it can. */
 export function bcSandboxOffReason(): string | null {
   const env = (process.env.BC_WRITE_ENVIRONMENT ?? "").trim()
   if (!env) return "Switched off: BC_WRITE_ENVIRONMENT isn't set on this server."
-  if (isLive(env)) return `Switched off: BC_WRITE_ENVIRONMENT is "${env}", the LIVE environment — test writes never go there. Set it to a copy or a sandbox.`
+  if (isLive(env) && hubSite() !== LIVE_HUB_SITE) return `Switched off: BC_WRITE_ENVIRONMENT is "${env}", the LIVE environment — only the production Hub writes to live BC. Set it to a copy or a sandbox here.`
   if (!process.env.BC_TENANT_ID) return "Switched off: BC_TENANT_ID isn't set on this server."
+  return null
+}
+
+/** What the person typed to confirm a LIVE send, and what they were asked to type. */
+export type LiveConfirm = { typed: string; expected: string }
+
+/**
+ * For LIVE BC only: may this write go? A reason when not; null when it may. Always null on a copy or sandbox.
+ * A receipt's own send must be confirmed with its number (receiptId); a batch of lots with how many there are.
+ * It is a deliberate-act check, not a password: it stops a screen opened before live sending was switched on,
+ * or a stray press, from writing to live BC unasked.
+ */
+export function bcLiveRefusal(confirm: unknown, receiptId?: string): string | null {
+  if (!bcWriteIsLive()) return null
+  const c = (confirm ?? {}) as { typed?: unknown; expected?: unknown }
+  const typed = String(c.typed ?? "").trim().toUpperCase()
+  const expected = String(c.expected ?? "").trim().toUpperCase()
+  if (receiptId ? expected !== receiptId.trim().toUpperCase() : !/^[1-9]\d{0,5}$/.test(expected)) {
+    return "This writes to LIVE Business Central and needs confirming on the screen first — open the panel again."
+  }
+  if (typed !== expected) return `This writes to LIVE Business Central — type ${expected} in the box to confirm.`
   return null
 }
 

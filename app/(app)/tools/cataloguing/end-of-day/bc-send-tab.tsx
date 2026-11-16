@@ -7,18 +7,20 @@ import {
 } from "@/lib/actions/goods-in-bc-sandbox"
 import type { BcStep } from "@/lib/goods-in/bc-sandbox"
 import { ErrorBox, box, btn, btnGo, input, mono, td, th } from "../../warehouse/_components/ui"
-import { BcLink, LotCard, MARK, StepKey, StepList, lotOutcome } from "../../warehouse/_components/bc-lot-parts"
+import { BcLink, LiveBanner, LiveConfirm, LotCard, MARK, StepKey, StepList, liveConfirmed, lotOutcome } from "../../warehouse/_components/bc-lot-parts"
 
-// End of Day → BC → "Send to BC (test)" — admins only (Jordan, 2026-11-13). Jack's send (the receipt
-// page's and the sale page's "Lots → Business Central test"), started from the End of Day sheet: the lots
-// on the sheet ON SCREEN go to a BC TEST environment as lines on the receipts they were catalogued onto.
+// End of Day → BC → "Send to BC" — admins only (Jordan, 2026-11-13). Jack's send (the receipt page's and the
+// sale page's "Lots → Business Central"), started from the End of Day sheet: the lots on the sheet ON SCREEN
+// go to BC as lines on the receipts they were catalogued onto. A BC copy or sandbox, or LIVE BC from the
+// production Hub (Jack, 2026-11-16) — where the number of lots is typed to confirm, and each lot sent is noted
+// on its change log so the sheet leaves it off until the next BC data sync.
 // • By vendor or all at once: tick the vendors, or Tick all.
 // • The sale is chosen: each lot's own, or one sale for every lot sent.
 // The rules are in lib/actions/goods-in-bc-sandbox.ts (bcEodList / bcEodLotsStart / bcEodReceiptCheck /
 // bcEodLotSend) and lib/goods-in/bc-sandbox.ts (sendLot).
 //
 // ⚠ It is a tab BESIDE the sheet: it reads the sheet's barcodes and nothing else, and it changes nothing
-// about the sheet, the checks or the macro. Nothing in the Hub is written.
+// about the checks or the macro. The one thing it writes in the Hub is the LIVE "sent" note above.
 // Ticking and choosing send NOTHING. "Check and send…" lists exactly what each lot sends and checks each
 // receipt is in BC (a count that moves, with a Stop); only "Send N lots" sends — one call per lot, Stop
 // between lots, and the end says what happened in numbers (RULES.md 7b).
@@ -28,17 +30,20 @@ type Phase = "idle" | "preparing" | "checking" | "confirm" | "running" | "done"
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`
 const caught = (e: unknown) => ({ ok: false as const, error: String((e as { message?: string })?.message ?? e) })
 
-export default function BcSendTab({ active, receipts, environment, offReason }: {
+export default function BcSendTab({ active, receipts, environment, offReason, live }: {
   /** Whether this tab is the one on screen — the sheet's lots are only listed once it is. */
   active: boolean
   /** The End of Day sheet on screen (one row per receipt), or null while it is being pulled. */
   receipts: { receipt: string; barcodes: string[] }[] | null
-  /** The BC test environment writes go to (never live BC); null when switched off. */
+  /** The BC environment writes go to; null when switched off. */
   environment: string | null
   /** Why it's switched off, in words; null when it can run. */
   offReason: string | null
+  /** Writes go to LIVE Business Central (the production Hub only). */
+  live: boolean
 }) {
   const [phase, setPhase] = useState<Phase>("idle")
+  const [typed, setTyped] = useState("")
   const [listing, setListing] = useState(false)
   const [list, setList] = useState<BcEodList | null>(null)
   const [ticked, setTicked] = useState<Set<string>>(new Set())
@@ -134,10 +139,14 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
   const hubHeld = notGoing.filter(r => r.hubNote)
   const hubHeldLots = hubHeld.reduce((n, r) => n + r.lots.length, 0)
   const leftOut = notInBcLots + hubHeldLots + (plan?.unsendable ?? 0)
+  const isLive = plan?.live ?? live
+  const where = isLive ? "live BC" : "the BC test environment"
+  const sendReady = liveConfirmed(isLive, typed, String(goingLots))
 
   async function check() {
     if (!pickedLots || !saleReady) return
     const chosen = sale
+    setTyped("")
     setError(null)
     setNotice(null)
     setNeedsSignIn(false)
@@ -180,7 +189,9 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
   }
 
   async function run() {
-    if (!plan) return
+    if (!plan || !sendReady) return
+    // On LIVE BC the server checks this on every call too.
+    const confirm = plan.live ? { typed, expected: String(goingLots) } : undefined
     const lots = going.flatMap(r => r.lots.map(l => ({ ...l, receiptId: r.receiptId })))
     stopRef.current = false
     setPhase("running")
@@ -196,7 +207,7 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
       if (stopRef.current) { stopped = true; break }
       const lot = lots[i]
       setProgress({ done: i, total: lots.length, current: `${lot.barcode || lot.shortDescription.slice(0, 30)} on ${lot.receiptId}` })
-      const res = await bcEodLotSend(lot.id, planSale).catch(caught)
+      const res = await bcEodLotSend(lot.id, planSale, confirm).catch(caught)
       if (!res.ok) {
         all.push({ what: lot.barcode ? `Lot ${lot.barcode}` : `Lot "${lot.shortDescription.slice(0, 40)}"`, outcome: "failed", detail: res.error })
         refused++
@@ -236,7 +247,9 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
     return (
       <div className="mt-3 flex flex-wrap gap-2">
         {goingLots > 0 && plan && (
-          <button type="button" className={btnGo} onClick={run}>Send {plural(goingLots, "lot", "lots")} to {plan.environment}</button>
+          <button type="button" className={btnGo} onClick={run} disabled={!sendReady}>
+            Send {plural(goingLots, "lot", "lots")} to {plan.live ? "live BC" : plan.environment}
+          </button>
         )}
         <button type="button" className={btn} onClick={backToVendors}>Cancel — back to the vendors</button>
       </div>
@@ -270,14 +283,22 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
 
   return (
     <section className={`${box} px-4 py-4`} aria-labelledby="bc-eod-send-heading">
-      <h2 id="bc-eod-send-heading" className="text-base font-semibold text-gray-900 dark:text-white">Send the sheet&apos;s lots to Business Central (test)</h2>
+      <h2 id="bc-eod-send-heading" className="text-base font-semibold text-gray-900 dark:text-white">
+        {live ? "Send the sheet's lots to Business Central — LIVE" : "Send the sheet's lots to Business Central (test)"}
+      </h2>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 max-w-5xl">
-        Admins only. Sends the lots on the End of Day sheet to a BC <b>test</b> environment
-        {environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC — each as a line on the receipt it was
+        Admins only. Sends the lots on the End of Day sheet to{" "}
+        {live
+          ? <><b>live</b> Business Central</>
+          : <>a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC —</>}{" "}
+        each as a line on the receipt it was
         catalogued onto, on the sale you choose and ticked Cleared For Sale: short description, description, estimates, category,
-        subcategory, tote, size and internal barcode. Signed in as you. Nothing in the Hub changes, and the sheet and the macro
-        carry on exactly as they are.
+        subcategory, tote, size and internal barcode. Signed in as you.{" "}
+        {live
+          ? <>Each lot sent is noted on its change log and comes off tonight&apos;s sheet, so the overnight import doesn&apos;t bring it in a second time.</>
+          : <>Nothing in the Hub changes, and the sheet and the macro carry on exactly as they are.</>}
       </p>
+      {live && !off && <LiveBanner environment={environment} />}
 
       {off ? (
         <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">{off}</p>
@@ -449,12 +470,12 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
                   A lot whose barcode BC already has on its receipt isn&apos;t sent again — it&apos;s only ticked Cleared For Sale if it isn&apos;t yet.
                 </p>
               ) : (
-                <p className="font-medium">Nothing ticked can be sent — no lot is on a receipt the BC test environment has.</p>
+                <p className="font-medium">Nothing ticked can be sent — no lot is on a receipt {where} has.</p>
               )}
               {notInBcLots > 0 && (
                 <p className="mt-2">
-                  <b>{plural(notInBcLots, "lot", "lots")}</b> on {plural(notInBc.length, "receipt", "receipts")} won&apos;t be sent — the BC test
-                  environment doesn&apos;t have the receipt ({notInBc.map(r => r.receiptId).join(", ")}).
+                  <b>{plural(notInBcLots, "lot", "lots")}</b> on {plural(notInBc.length, "receipt", "receipts")} won&apos;t be sent — {where}{" "}
+                  doesn&apos;t have the receipt ({notInBc.map(r => r.receiptId).join(", ")}).
                 </p>
               )}
               {hubHeldLots > 0 && (
@@ -464,6 +485,9 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
                 <p className="mt-2"><b>{plural(plan.unsendable, "ticked lot", "ticked lots")}</b> can&apos;t be sent now — gone from the Hub, or no longer carrying a barcode and a receipt.</p>
               )}
 
+              {goingLots > 0 && plan.live && (
+                <LiveConfirm expected={String(goingLots)} what={plural(goingLots, "lot", "lots")} value={typed} onChange={setTyped} />
+              )}
               {goingLots > 0 && sendButtons()}
 
               <p className="mt-3 font-medium">What each lot sends, by receipt — nothing is sent until you press Send:</p>
@@ -486,7 +510,7 @@ export default function BcSendTab({ active, receipts, environment, offReason }: 
             <>
               {failed.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-sm font-medium text-red-700 dark:text-red-300">What BC refused ({failed.length}):</p>
+                  <p className="text-sm font-medium text-red-700 dark:text-red-300">What didn&apos;t go through ({failed.length}):</p>
                   <StepList steps={failed} />
                 </div>
               )}
