@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"a9b7f7bbc4e0a0bd717ccff77a35369a2055b693","author":"jack-vectis","date":"2026-11-13T12:10:09Z","subject":"Refunds and Paid, not collected now show under permissions"},
   {"sha":"47a6d0cd6fa5c026534f53143e8ef20ee9f0c3c7","author":"Jordan Orange","date":"2026-11-13T12:07:40Z","subject":"End of Day: Send to BC (test) tab, by vendor or all"},
   {"sha":"923e0c81751a50cf827bbdf0180b440b135ecf84","author":"jack-vectis","date":"2026-11-12T11:40:54Z","subject":"Fixes clear for sale tick on api import"},
   {"sha":"380ce2dbe390030ce152e50a4dcdc671f8ac87e4","author":"jack-vectis","date":"2026-11-12T10:58:52Z","subject":"Adds tick clear for sale on api import"},

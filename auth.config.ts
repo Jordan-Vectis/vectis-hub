@@ -1,5 +1,11 @@
 import type { NextAuthConfig } from "next-auth"
 
+// A login lasts 30 days from signing in, however often it is used (security review, 2026-11-16).
+// NextAuth's own 30 days start again on every visit, so a login in daily use never ended. The jwt
+// callback below refuses a login older than this, which logs the person out and sends them to /login.
+// ⚠ lib/auction-socket.js reads the login cookie directly and keeps its own copy of this number.
+export const LOGIN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
+
 // Lightweight config used in proxy (Edge runtime — no Prisma/Node.js modules)
 export const authConfig: NextAuthConfig = {
   trustHost: true,
@@ -72,7 +78,13 @@ export const authConfig: NextAuthConfig = {
         token.role = (user as { role: string }).role
         token.departmentId = (user as { departmentId: string | null }).departmentId
         token.appPermissions = (user as { appPermissions: Record<string, { role: string }> | null }).appPermissions ?? null
+        token.loginAt = Date.now()
       }
+      // A login from before this rule has no loginAt: its 30 days start now, rather than everyone
+      // being logged out on the day it ships.
+      if (typeof token.loginAt !== "number") token.loginAt = Date.now()
+      // null ends the login: NextAuth clears the cookie, and the proxy sends the person to /login.
+      if (Date.now() - (token.loginAt as number) > LOGIN_MAX_AGE_MS) return null
       return token
     },
     session({ session, token }) {

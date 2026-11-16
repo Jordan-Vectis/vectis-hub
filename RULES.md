@@ -151,6 +151,20 @@ The Hub's own public form (built 2026-10-26) and its open write `POST /api/publi
   commission figures ("Your bid stays confidential", as the live room promises). An online bid must be
   exactly the asking bid, and the WebRTC relays only ever connect a viewer and the camera.
 
+## A login lasts 30 days from signing in (security review, 2026-11-16)
+
+NextAuth's own 30 days start again on every visit, so a login in daily use never ended. The `jwt`
+callback in `auth.config.ts` now stamps `loginAt` at sign-in and refuses a login older than
+`LOGIN_MAX_AGE_MS` (30 days). The person is logged out and sent to `/login`.
+
+- A login from before the rule has no `loginAt`, so its 30 days start the first time it is used after
+  the deploy. Nobody was logged out on the day it shipped.
+- ⚠ `lib/auction-socket.js` decodes the login cookie itself, so the callback never runs there. It keeps
+  its own copy of the number. Change one, change both.
+- ⚠ This does NOT pick up a change to someone's role or apps sooner. Those are still copied into the
+  login once, at sign-in, so a demoted or deleted user keeps their old access until the login ends
+  (now at most 30 days). Rechecking them against the database was offered and not chosen.
+
 ## Design philosophy — read before building ANY screen
 
 Every rule here exists because it was got wrong, more than once. Each one names the failure.
