@@ -105,6 +105,14 @@ function fmtPulled(iso: string): string {
   return `${time} · ${Math.floor(m / 60)}h ${m % 60}m ago`
 }
 
+// Exactly the sheet the macro consumes: header row + ONE line per RECEIPT, barcodes pipe-separated.
+function sheetCsv(d: Data): string {
+  if (d.receipts.length === 0) return ""
+  const lines = ["ReceiptNumber,LotCount,Barcodes"]
+  for (const r of d.receipts) lines.push(`${r.receipt},${r.count},${r.barcodes.join("|")}`)
+  return lines.join("\r\n")
+}
+
 export default function EndOfDayPage() {
   const [data, setData]       = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
@@ -179,24 +187,67 @@ export default function EndOfDayPage() {
   // since 2026-08-07 (Jordan: the macro works receipt-by-receipt in BC — the
   // old tote grouping was wrong), and the filename must be BC_Import.csv
   // exactly, because that's the name the macro looks for.
-  const csv = useMemo(() => {
-    if (!data || data.receipts.length === 0) return ""
-    const lines = ["ReceiptNumber,LotCount,Barcodes"]
-    for (const r of data.receipts) lines.push(`${r.receipt},${r.count},${r.barcodes.join("|")}`)
-    return lines.join("\r\n")
-  }, [data])
+  const csv = useMemo(() => (data ? sheetCsv(data) : ""), [data])
 
-  function download() {
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "BC_Import.csv"
-    a.click()
-    URL.revokeObjectURL(url)
+  // ⚠ Download and Copy use the sheet AS IT IS NOW — pulled again the moment they're pressed (Jack, 2026-11-16).
+  // Lots sent to live BC from the sale page or the Send to BC tab since this page was opened are taken off the
+  // sheet by the route, and must never go on the import as well — BC would get them twice. The screen itself
+  // isn't refreshed (no auto-refresh — Jordan's call, above): when the fresh sheet differs from the one on screen,
+  // exportNote says so. If the fresh pull fails, NOTHING is downloaded or copied — never the old sheet.
+  const [exporting, setExporting] = useState(false)
+  const [exportNote, setExportNote] = useState<string | null>(null)
+
+  async function freshSheet(): Promise<Data> {
+    const r = await fetch(`/api/catalogue/end-of-day${includeComplete ? "?includeComplete=1" : ""}`)
+    const d = await r.json()
+    if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`)
+    return d
+  }
+
+  function noteIfDifferent(fresh: Data, what: string) {
+    if (!data || sheetCsv(fresh) === csv) return
+    setExportNote(`${what} the sheet as it is now — ${fresh.readyCount.toLocaleString()} lots on ${fresh.receipts.length.toLocaleString()} receipts`
+      + ` (the screen shows ${data.readyCount.toLocaleString()} on ${data.receipts.length.toLocaleString()}, from when it was last pulled)`
+      + `${fresh.sentByHub ? `; ${fresh.sentByHub.toLocaleString()} sent to live BC through the Hub are left out` : ""}. Press ⟳ Refresh to see it.`)
+  }
+
+  async function download() {
+    setExporting(true); setExportNote(null)
+    try {
+      const fresh = await freshSheet()
+      const text = sheetCsv(fresh)
+      if (!text) { setExportNote("Nothing is waiting on the sheet now — every lot is in BC or has been sent, so no file was made. Press ⟳ Refresh to see it."); return }
+      const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }))
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "BC_Import.csv"
+      a.click()
+      URL.revokeObjectURL(url)
+      noteIfDifferent(fresh, "Downloaded")
+    } catch (e) {
+      setError(`Couldn't pull the sheet as it is now, so nothing was downloaded: ${(e as Error)?.message ?? String(e)}`)
+    } finally { setExporting(false) }
   }
 
   async function copy() {
-    try { await navigator.clipboard.writeText(csv); setCopied(true); setTimeout(() => setCopied(false), 2500) } catch {}
+    setExporting(true); setExportNote(null)
+    const pulling = freshSheet()
+    try {
+      const text = pulling.then(sheetCsv)
+      // A ClipboardItem built from a promise keeps the write inside the click, while the sheet is still being
+      // pulled (Safari refuses a clipboard write made after an await); older browsers get writeText.
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then(t => new Blob([t], { type: "text/plain" })) })])
+      } else {
+        await navigator.clipboard.writeText(await text)
+      }
+      const fresh = await pulling
+      if (!sheetCsv(fresh)) { setExportNote("Nothing is waiting on the sheet now — every lot is in BC or has been sent. Press ⟳ Refresh to see it."); return }
+      setCopied(true); setTimeout(() => setCopied(false), 2500)
+      noteIfDifferent(fresh, "Copied")
+    } catch (e) {
+      setError(`Couldn't copy the sheet as it is now: ${(e as Error)?.message ?? String(e)}`)
+    } finally { setExporting(false) }
   }
 
   async function runLookup() {
@@ -482,14 +533,14 @@ export default function EndOfDayPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={download}
-              disabled={!csv}
+              disabled={exporting}
               className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
             >
-              ⬇ Download BC_Import.csv{data.receipts.length ? ` (${data.receipts.length} receipts)` : ""}
+              {exporting ? "⬇ Pulling the sheet as it is now…" : `⬇ Download BC_Import.csv${data.receipts.length ? ` (${data.receipts.length} receipts)` : ""}`}
             </button>
             <button
               onClick={copy}
-              disabled={!csv}
+              disabled={exporting}
               className="px-4 py-2.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 hover:border-emerald-500 disabled:opacity-40 text-gray-700 dark:text-gray-300 text-sm rounded-lg transition-colors"
             >
               {copied ? "✓ Copied" : "Copy to clipboard"}
@@ -504,6 +555,14 @@ export default function EndOfDayPage() {
               Include completed sales
             </label>
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+            Download and Copy always use the sheet as it is at that moment, so lots sent to live BC through the Hub since this page was opened are never in the file.
+          </p>
+          {exportNote && (
+            <p role="status" className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800/40 text-sm text-amber-800 dark:text-amber-300">
+              {exportNote}
+            </p>
+          )}
 
           {/* ── Checks — same engine as the Tote Check tab ── */}
           {data.checks.length > 0 && (
