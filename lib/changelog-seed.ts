@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-12, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-13, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"9e1840a17fcf2017826e9423f9e76f9fd9368735","author":"Jordan Orange","date":"2026-11-13T12:07:40Z","subject":"End of Day: Send to BC (test) tab, by vendor or all"},
   {"sha":"c81f1d618e8a55b17da1c8f012fe22d1086fba59","author":"jack-vectis","date":"2026-11-12T11:40:54Z","subject":"Fixes clear for sale tick on api import"},
   {"sha":"bc27564edc75f40ebedf8ebebcdfa379e1d74f0b","author":"jack-vectis","date":"2026-11-12T10:58:52Z","subject":"Adds tick clear for sale on api import"},
   {"sha":"dc3308e8c905f5d6e37f7b6c26978779b263adda","author":"jack-vectis","date":"2026-11-12T09:12:37Z","subject":"Push to BC: send a sale's lots to the BC test environment (admins only)"},
