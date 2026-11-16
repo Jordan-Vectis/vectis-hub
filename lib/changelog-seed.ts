@@ -19,6 +19,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"98441e4df317602709dff2826401b6db48865095","author":"jack-vectis","date":"2026-11-16T14:56:36Z","subject":"Merge main into staging"},
+  {"sha":"10f17f9c5b8d3efbb585e4a5d0cda8a9b970adb0","author":"jack-vectis","date":"2026-11-16T14:56:09Z","subject":"End of Day download always uses the sheet as it is now"},
   {"sha":"b96f8bb12d05f9de0149e5c3feda28a293320386","author":"jack-vectis","date":"2026-11-16T11:55:51Z","subject":"Merge main into staging"},
   {"sha":"d6b154cf7bb23fe4564fe6f5be8797da83c627b5","author":"jack-vectis","date":"2026-11-16T11:53:15Z","subject":"Mirror Api change based on staging"},
   {"sha":"be2cecc75614c8b19726d78940026d4b99a5fe5e","author":"jack-vectis","date":"2026-11-16T10:58:21Z","subject":"Merging main to work with new APIs"},

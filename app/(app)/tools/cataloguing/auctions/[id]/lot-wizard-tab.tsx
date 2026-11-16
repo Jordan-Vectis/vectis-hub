@@ -14,6 +14,8 @@ import { useConditionWordings } from "@/lib/use-condition-wordings"
 import { identityWarning, checkIdentityTrio } from "@/lib/lot-identity"
 import { describeActionError } from "@/lib/action-error"
 import { isDbReadOnlyBlock, DB_READ_ONLY_MESSAGE } from "@/lib/db-readonly"
+import { bcAutoSendAvailable, bcAutoSendLot } from "@/lib/actions/goods-in-bc-sandbox"
+import { lotOutcome } from "../../../warehouse/_components/bc-lot-parts"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -391,6 +393,16 @@ type DupeHit = {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
+
+/** One saved lot's trip to BC (the X999 staging test), as the wizard lists it. */
+type BcAutoRow = { key: string; barcode: string; tone: "busy" | "good" | "warn" | "bad" | "signIn"; text: string }
+const BC_TONE: Record<BcAutoRow["tone"], string> = {
+  busy:   "text-gray-600 dark:text-gray-300",
+  good:   "text-green-700 dark:text-green-400",
+  warn:   "text-amber-700 dark:text-amber-300",
+  signIn: "text-amber-700 dark:text-amber-300",
+  bad:    "text-red-700 dark:text-red-400",
+}
 
 export default function LotWizardTab({
   auctionId,
@@ -923,6 +935,43 @@ export default function LotWizardTab({
   // reloaded it by hand. We do NOT auto-reload here: the lot on screen, including photos already
   // taken, would go with it. Say plainly what happened, that nothing was saved, and let them choose.
   const [staleDeploy,      setStaleDeploy]      = useState(false)
+
+  // ── Each saved lot goes straight to BC on sales allocation X999 (a STAGING TEST — Jack, 2026-11-16) ──
+  // bcAutoSendAvailable says whether it is set up on this server (never on live BC). The send runs AFTER
+  // the save and is never waited on, so BC can't slow or stop cataloguing; each lot's outcome is listed in
+  // a box at the foot of the wizard (the last few, newest first).
+  const [bcAuto, setBcAuto] = useState<{ environment: string; saleCode: string } | null>(null)
+  const [bcRows, setBcRows] = useState<BcAutoRow[]>([])
+  useEffect(() => {
+    let live = true
+    bcAutoSendAvailable().then(a => { if (live) setBcAuto(a) }).catch(() => { /* not set up — the wizard is as it was */ })
+    return () => { live = false }
+  }, [])
+  function sendToBc(lotId: string, lotBarcode: string) {
+    const key = `${lotId}-${Date.now()}`
+    const put = (row: Omit<BcAutoRow, "key" | "barcode">) =>
+      setBcRows(rows => rows.map(r => r.key === key ? { ...r, ...row } : r))
+    setBcRows(rows => [{ key, barcode: lotBarcode, tone: "busy" as const, text: "sending to Business Central…" }, ...rows].slice(0, 4))
+    bcAutoSendLot(lotId).then(res => {
+      if (!res.ok) {
+        put(res.error === "NO_BC_SIGN_IN"
+          ? { tone: "signIn", text: "not sent — the Hub doesn't have a Business Central sign-in for you." }
+          : { tone: "bad", text: `not sent — ${res.error}` })
+        return
+      }
+      if (!res.data) { setBcRows(rows => rows.filter(r => r.key !== key)); return }
+      const { steps, receiptId, saleCode } = res.data
+      const firstFailed = steps.find(s => s.outcome === "failed" && !s.what.startsWith("Hub note"))
+      const lotStep = steps.find(s => s.what.startsWith("Lot "))
+      switch (lotOutcome(steps)) {
+        case "full":       put({ tone: "good", text: `in BC on receipt ${receiptId}, sales allocation ${saleCode}, cleared for sale.` }); break
+        case "already":    put({ tone: "good", text: `already in BC — nothing sent. ${lotStep?.detail ?? ""}`.trim() }); break
+        case "noSale":     put({ tone: "warn", text: `in BC on receipt ${receiptId}, but NOT on ${saleCode}: ${firstFailed?.detail ?? ""}`.trim() }); break
+        case "notCleared": put({ tone: "warn", text: `in BC on receipt ${receiptId}, but not cleared for sale: ${firstFailed?.detail ?? ""}`.trim() }); break
+        default:           put({ tone: "bad", text: `not sent — ${firstFailed?.detail ?? "Business Central refused it."}` })
+      }
+    }).catch(e => put({ tone: "bad", text: `not sent — ${describeActionError(e).message}` }))
+  }
 
   // ⚠ These are remembered on the USER, not the sale, so they follow the person to a different
   // sale and a different iPad. Restoring them silently is how a batch gets catalogued under
@@ -1522,6 +1571,9 @@ export default function LotWizardTab({
       // says so on screen instead of vanishing.
       rememberBatch({ vendor, tote, receipt })
       setSaveStatus(`✓ Lot #${n} saved — ${vendor} / ${tote} / ${barcode}`)
+      // Straight to BC on X999 (staging test) — not waited on, so the next lot starts now.
+      const savedId = res && typeof res === "object" ? (res as { lotId?: unknown }).lotId : undefined
+      if (bcAuto && typeof savedId === "string") sendToBc(savedId, barcode.trim())
       // Tote / Vendor / Receipt stay locked for the whole batch — leave them (and the
       // vendor name hint) as-is so the next lot keeps the same identity.
       // ⚠ Back to the person's DEFAULT, not to false. For someone set to write their own
@@ -2795,6 +2847,35 @@ export default function LotWizardTab({
           ✕ a foot away from the sentence it dismisses and lines up with nothing on the page. The
           full-width rule in RULES.md is about DATA (tables, plans, comparisons); this is a label
           beside a form. */}
+      {/* Each saved lot → BC on X999 (staging test). Words, not just colours: every row says what happened. */}
+      {bcAuto && (
+        <div className="mt-4 max-w-lg desk:max-w-none rounded-xl border border-indigo-500/50 bg-indigo-500/10 px-4 py-2.5">
+          <p className="text-sm text-indigo-800 dark:text-indigo-200">
+            Saving a lot also sends it to Business Central (<span className="font-mono">{bcAuto.environment}</span>) on
+            sales allocation <strong>{bcAuto.saleCode}</strong>, as you.
+          </p>
+          {bcRows.length > 0 && (
+            <ul className="mt-1.5 space-y-1">
+              {bcRows.map(r => (
+                <li key={r.key} className={`text-sm ${BC_TONE[r.tone]}`}>
+                  <span className="font-mono font-semibold">{r.barcode || "(no barcode)"}</span> — {r.text}
+                  {r.tone === "signIn" && (
+                    <>
+                      {" "}
+                      <a className="font-medium underline text-indigo-700 dark:text-indigo-300 inline-flex items-center min-h-11"
+                        href={`/api/bc/auth?return=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/")}`}>
+                        Sign in to Business Central
+                      </a>
+                      , then save your next lot.
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {staleDeploy && (
         <div className="mt-4 max-w-lg desk:max-w-none rounded-xl border border-amber-500 bg-amber-500/10 px-4 py-3">
           <p className="text-sm font-bold text-amber-700 dark:text-amber-300">The app has been updated</p>

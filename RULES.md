@@ -1903,6 +1903,20 @@ the same way, never as an export of an actions file.
       - Otherwise identical to the sale panel: ticking sends nothing; "Check and send…" lists every lot and
         checks each receipt is in BC (a count that moves, Stop); only "Send N lots" sends, one call per lot;
         the end says what happened in numbers. Every guard above holds.
+    - **Every lot saved in the Add Lot wizard goes straight to BC on sales allocation X999 — a STAGING
+      TEST** (Jack, 2026-11-16 — *"when a cataloguer saves a lot it automatically sends on the API down BC so
+      it instantly creates lots but they all upon save need to go to X999"*, *"just a test for staging"*).
+      The wizard saves the lot (`createLot`, which now returns its id), then calls `bcAutoSendLot` WITHOUT
+      waiting, so BC never slows or stops a save; each lot's outcome is listed in a box at the foot of the
+      wizard. The SAME `sendLot` as the other panels, onto the lot's own receipt, with `saleCode` X999 for
+      every lot whatever sale it is in. Each cataloguer's OWN BC sign-in (Jack's choice) — someone not signed
+      in is told so with the sign-in link, and nothing is sent. Only the person who saved the lot can send it
+      this way (their `CatalogueTimingLog` for it). ⚠ **It never writes to LIVE BC**: on the production Hub
+      (`bcWriteIsLive`) `bcAutoSendAvailable` returns null and the wizard shows nothing. Taking it live is
+      Jack's decision, and doing so must add the `bc_sent` note (next rule) — that write is not in it today.
+      ⚠ At save most lots have key points and no description yet (the AI writes it later), and a line BC
+      already has is never changed by `sendLot`, so a description or estimate added after the save does NOT
+      reach BC this way.
     - ⚠⚠ **A lot sent to LIVE BC never goes on the overnight sheet as well** (2026-11-16). The Hub's BC
       copy (`WarehouseItem`) doesn't have it until the next data sync, so the sheet would import it a
       SECOND time. Every live lot send — receipt, sale or End of Day — that leaves the lot's line in BC

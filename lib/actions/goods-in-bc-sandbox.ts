@@ -588,3 +588,77 @@ export async function bcEodLotSend(lotId: string, sale: BcEodSale, confirm?: unk
     return fail(e)
   }
 }
+
+// ── A lot saved in the Add Lot wizard → straight into BC on sales allocation X999 (a STAGING TEST) ──
+//
+// Jack, 2026-11-16: "when a cataloguer saves a lot it automatically sends on the API down BC so it instantly
+// creates lots but they all upon save need to go to X999" — "just a test for staging", on each cataloguer's
+// OWN BC sign-in.
+// • The wizard saves the lot first (createLot) and then calls this without waiting for it, so BC never slows or
+//   stops a save. What happened is shown in a box at the foot of the wizard, lot by lot.
+// • The SAME sendLot as every other panel, onto the receipt the lot was catalogued onto, with the sales
+//   allocation X999 for every lot (AUTO_SEND_SALE) whatever sale it was catalogued in.
+// • The person's OWN BC sign-in (getBCToken), never the background one. Not signed in → nothing is sent and the
+//   wizard says so, with the sign-in link.
+// • Only the person who saved the lot can send it this way (their timing log for it) — it isn't a way to send
+//   any lot by its id.
+// • A staging test: it never writes to LIVE BC. On the production Hub (bcWriteIsLive) it sends nothing and the
+//   wizard shows nothing — taking it live is Jack's call.
+
+const AUTO_SEND_SALE = "X999"
+
+export type BcAutoSend = {
+  environment: string
+  receiptId: string
+  /** The sales allocation every lot goes on (X999). */
+  saleCode: string
+  steps: BcStep[]
+}
+
+/** Whether the wizard sends each lot it saves to BC here (the send is set up on this server and isn't live). */
+export async function bcAutoSendAvailable(): Promise<{ environment: string; saleCode: string } | null> {
+  try {
+    const environment = bcSandboxEnvironment()
+    if (!environment || !process.env.BC_TENANT_ID || bcWriteIsLive()) return null
+    if (!(await getEffectiveSession())) return null
+    return { environment, saleCode: AUTO_SEND_SALE }
+  } catch {
+    return null
+  }
+}
+
+/** Sends the lot this person has just saved to BC on X999. `data: null` = not set up here (or live): show nothing. */
+export async function bcAutoSendLot(lotId: string): Promise<Result<BcAutoSend | null>> {
+  try {
+    const environment = bcSandboxEnvironment()
+    if (!environment || !process.env.BC_TENANT_ID || bcWriteIsLive()) return { ok: true, data: null }
+    const session = await getEffectiveSession()
+    if (!session) return { ok: false, error: "You're not signed in to the Hub." }
+    if (session.isImpersonating) return { ok: false, error: "Not sent — you're viewing as someone else, and this writes to Business Central as you." }
+    const id = typeof lotId === "string" ? lotId : ""
+    const saved = id
+      ? await prisma.catalogueTimingLog.findFirst({ where: { lotId: id, userId: session.user.id }, select: { id: true } })
+      : null
+    if (!saved) return { ok: false, error: "Only the person who saved a lot can send it to BC this way." }
+    const token = await getBCToken()
+    if (!token) return { ok: false, error: NO_BC_SIGN_IN }
+
+    const lot = await prisma.catalogueLot.findUnique({ where: { id }, select: SALE_LOT_SELECT })
+    if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
+    if (!lot.barcode?.trim()) return { ok: false, error: "It has no barcode, and BC finds a lot by its barcode." }
+    const receiptId = receiptOf(lot.receipt)
+    if (!receiptId) return { ok: false, error: "It has no receipt, so it has nowhere to go in BC." }
+    const hub = await prisma.goodsInReceipt.findFirst({ where: { id: { equals: receiptId, mode: "insensitive" } }, select: { status: true } })
+    const note = hubReceiptNote(hub?.status)
+    if (note) return { ok: false, error: `${receiptId}: ${note}` }
+
+    const receipt = await receiptInBc(token, environment, receiptId)
+    const steps = receipt.outcome === "failed"
+      ? [receipt]
+      : [receipt, ...await sendLot(token, environment, receiptId, { ...lotForBc(lot), saleCode: AUTO_SEND_SALE })]
+    console.log(`[goods-in bc-auto] ${session.user.name ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
+    return { ok: true, data: { environment, receiptId, saleCode: AUTO_SEND_SALE, steps } }
+  } catch (e) {
+    return fail(e)
+  }
+}

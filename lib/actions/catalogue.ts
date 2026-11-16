@@ -1431,6 +1431,8 @@ async function createLotInner(auctionId: string, formData: FormData) {
   })
 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  // The wizard sends the new lot to BC after this returns (bcAutoSendLot, staging test) — it needs the id.
+  return { lotId: lot.id }
 }
 
 export async function createPhotoOnlyLot(auctionId: string, formData: FormData) {
