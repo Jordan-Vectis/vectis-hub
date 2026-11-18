@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-16, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-18, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"f8f2308156a3d75f2f97e869758d8ed469f8b359","author":"jack-vectis","date":"2026-11-18T09:31:48Z","subject":"Push to BC: update lots already in BC and choose the sale"},
   {"sha":"6c4fab168b6e9ac4f14aa6199831a1e9e8d47341","author":"jack-vectis","date":"2026-11-16T15:35:23Z","subject":"STAGING TEST AUTO SAVE BUTTON HOOK CHANGE"},
   {"sha":"98441e4df317602709dff2826401b6db48865095","author":"jack-vectis","date":"2026-11-16T14:56:36Z","subject":"Merge main into staging"},
   {"sha":"10f17f9c5b8d3efbb585e4a5d0cda8a9b970adb0","author":"jack-vectis","date":"2026-11-16T14:56:09Z","subject":"End of Day download always uses the sheet as it is now"},

@@ -111,6 +111,11 @@ export const DESTINATIONS: Destination[] = [
     also: ["send to business central", "export to bc"],
   },
   {
+    name: "A sale → 📸 Pull photos", href: "/tools/cataloguing/auctions", app: "CATALOGUING", section: "AUCTION_MANAGER", adminOnly: true,
+    what: "The button at the top of a sale page: finds each lot's photos in Business Central by barcode and copies them onto lots that have no photos in the Hub yet.",
+    also: ["photos from bc", "get photos out of business central", "copy bc photos"],
+  },
+  {
     name: "A sale → BC Match & Import", href: "/tools/cataloguing/auctions", app: "CATALOGUING", section: "AUCTION_MANAGER",
     what: "Upload BC's Lines export and it writes BC's own unique IDs onto our lots, matched by barcode. This is the only thing that fills in a lot's unique ID.",
     also: ["unique ids blank", "match bc", "import ids"],

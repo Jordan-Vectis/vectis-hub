@@ -1544,6 +1544,31 @@ the Hub top bar is there), gated on Cataloguing like the route, a refusal logged
   panel through a `hub:website-search` window event.
 - Gate: the Cataloguing app, read fresh from the database.
 
+## 📸 A sale → Pull photos (photos out of Business Central, 2026-11-18)
+
+A **📸 Pull photos** button at the top of the sale page (beside BC Match) copies each lot's photos out of BC
+onto the Hub lot with the same barcode. Code: `lib/actions/bc-photo-pull.ts`, pop-up
+`cataloguing/auctions/[id]/bc-photo-pull-modal.tsx`.
+
+- **Where BC keeps them** (BC's own AL source): "Advanced Media" (table 80433 `EVO_MED_Entry`), files in Azure
+  Blob Storage, each tied to its receipt line (table 75002) by the line's SystemId. Read through
+  `api/evo/base/v1.0 relatedMedia` (page 75612, read-only), whose `publicMediaPath` is the blob address with
+  BC's storage access key added. ⚠ If BC's container has no access key, the download is refused — the pop-up
+  says so; that is a BC/IT setting, not a Hub fix.
+- **Matching is by BARCODE**, like every BC↔Hub join: lot barcode → `Receipt_Lines_Excel.PTE_InternalBarcode`
+  → the EvoMobile `receiptLines` API (systemId) → `relatedMedia` (tableNo 75002, relatedSystemId). A barcode
+  BC has on two lines is refused, never guessed.
+- **READ ONLY on BC**, in `BC_ENVIRONMENT`, with the pressing person's own BC sign-in. **Hub admins only**
+  (role read fresh, never while viewing as someone else); the button isn't shown to anyone else.
+- ⚠ **Only lots with NO photos of their own are filled.** A lot with any Hub photo is left alone, so the same
+  pictures never arrive twice from two places. Copies are stored as `lot-photos/<sale>/<lot>/bc-<BC photo
+  id>.<ext>` — that name is how "already copied" is told apart from the Hub's own photos (`isBcCopy`), so
+  pressing it again only adds what's missing. Don't rename them.
+- Two steps, one lot per call, a moving count and Stop (rule 7b): **Find** is read-only; **Copy** finds the
+  lot's photos AGAIN on the server before copying, so nothing comes from a stale list. A download is kept only
+  if its first bytes are a JPEG, PNG, WebP or GIF (so a storage error page is never saved as a photo), 25 MB
+  at most. Every photo added is logged (`logLotPhoto`, source `bc_photo_pull`).
+
 ## Hardcoded Constants
 
 | Constant | Value | Location |
