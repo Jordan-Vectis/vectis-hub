@@ -3,9 +3,10 @@
 import { useMemo, useRef, useState } from "react"
 import { bcPhotoBatch, bcPhotoPlan, type BcPhotoLot, type BcPhotoResult } from "@/lib/actions/bc-photo-pull"
 
-// 📸 Pull photos (top of a sale page, admins only — 2026-11-18). Copies photos out of Business Central onto the
-// Hub lots with the same barcode, for lots that have no photos in the Hub yet — this sale, or EVERY sale at once.
-// The rules are in lib/actions/bc-photo-pull.ts.
+// 📸 Pull photos (top of a sale page, and the Photography page's header — admins only, 2026-11-18). Copies photos
+// out of Business Central onto the Hub lots with the same barcode, for lots that have no photos in the Hub yet —
+// this sale, or EVERY sale at once. Opened without a sale (Photography), it is every sale. The rules are in
+// lib/actions/bc-photo-pull.ts.
 //
 // Two steps, each driven from here in batches with a count that moves and a Stop (RULES.md 7b):
 //   1. "Find photos in BC" — READ ONLY. Says what BC has, lot by lot (one sale) or sale by sale (every sale).
@@ -32,14 +33,16 @@ function failedBatch(lots: BcPhotoLot[], error: string): Checked[] {
 }
 
 export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopied }: {
-  auctionId: string
-  saleCode: string
+  /** The sale it was opened from; absent (the Photography page) = every sale, with no choice to make. */
+  auctionId?: string
+  saleCode?: string
   onClose: () => void
-  /** Called after any photo was copied, so the sale page can show them. */
+  /** Called after any photo was copied, so the page behind can show them. */
   onCopied: () => void
 }) {
-  const [scope, setScope] = useState<Scope>("sale")
-  const [planScope, setPlanScope] = useState<Scope>("sale")
+  const [scope, setScope] = useState<Scope>(auctionId ? "sale" : "all")
+  const [planScope, setPlanScope] = useState<Scope>(auctionId ? "sale" : "all")
+  const backTo = auctionId ? `/tools/cataloguing/auctions/${auctionId}` : "/tools/cataloguing/photography"
   const [phase, setPhase] = useState<Phase>("idle")
   const [environment, setEnvironment] = useState<string | null>(null)
   const [leftOut, setLeftOut] = useState<{ noBarcode: number; hasPhotos: number } | null>(null)
@@ -88,7 +91,7 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
   async function find() {
     setPhase("loading"); setError(null); setNeedsSignIn(false); setNotice(null); setChecked([]); setCopied([]); setSummary(null); setProgress(null)
     setPlanScope(scope)
-    const plan = await bcPhotoPlan(scope === "sale" ? auctionId : null).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+    const plan = await bcPhotoPlan(scope === "sale" && auctionId ? auctionId : null).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
     if (!plan.ok) {
       if (plan.error === "NO_BC_SIGN_IN") setNeedsSignIn(true)
       else setError(plan.error)
@@ -145,17 +148,23 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
         <div className="flex-1 overflow-y-auto p-5 space-y-4 text-sm text-gray-800 dark:text-gray-200">
           {phase === "idle" && (
             <>
-              <fieldset className="rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3">
-                <legend className="px-1 font-semibold text-gray-900 dark:text-white">Which lots?</legend>
-                <label className="flex items-center gap-3 min-h-11 cursor-pointer">
-                  <input type="radio" name="bc-photo-scope" className="h-5 w-5 accent-sky-600" checked={scope === "sale"} onChange={() => setScope("sale")} />
-                  <span>This sale — <b className="font-mono">{saleCode}</b></span>
-                </label>
-                <label className="flex items-center gap-3 min-h-11 cursor-pointer">
-                  <input type="radio" name="bc-photo-scope" className="h-5 w-5 accent-sky-600" checked={scope === "all"} onChange={() => setScope("all")} />
-                  <span><b>All sales</b> — every lot in the Hub without photos</span>
-                </label>
-              </fieldset>
+              {auctionId ? (
+                <fieldset className="rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3">
+                  <legend className="px-1 font-semibold text-gray-900 dark:text-white">Which lots?</legend>
+                  <label className="flex items-center gap-3 min-h-11 cursor-pointer">
+                    <input type="radio" name="bc-photo-scope" className="h-5 w-5 accent-sky-600" checked={scope === "sale"} onChange={() => setScope("sale")} />
+                    <span>This sale — <b className="font-mono">{saleCode}</b></span>
+                  </label>
+                  <label className="flex items-center gap-3 min-h-11 cursor-pointer">
+                    <input type="radio" name="bc-photo-scope" className="h-5 w-5 accent-sky-600" checked={scope === "all"} onChange={() => setScope("all")} />
+                    <span><b>All sales</b> — every lot in the Hub without photos</span>
+                  </label>
+                </fieldset>
+              ) : (
+                <p className="rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3">
+                  <b>All sales</b> — every lot in the Hub without photos. To do one sale, use Pull photos at the top of that sale&apos;s page.
+                </p>
+              )}
               <ul className="list-disc pl-5 space-y-1">
                 <li>Only lots with <b>no photos in the Hub</b> are filled. A lot with any photo of its own is left alone.</li>
                 <li>A lot is matched to BC by its <b>barcode</b>; its photos come in BC&apos;s own order.</li>
@@ -184,7 +193,7 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
             <p className="text-amber-800 dark:text-amber-200">
               The Hub doesn&apos;t have a Business Central sign-in for you.{" "}
               <a className="font-medium underline text-indigo-700 dark:text-indigo-300 inline-flex items-center min-h-11"
-                href={`/api/bc/auth?return=${encodeURIComponent(`/tools/cataloguing/auctions/${auctionId}`)}`}>
+                href={`/api/bc/auth?return=${encodeURIComponent(backTo)}`}>
                 Sign in to Business Central
               </a>
               , then press Pull photos again.

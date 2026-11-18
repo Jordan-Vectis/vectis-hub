@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { auctionTypeEmoji, auctionTypeLabel, AUCTION_TYPES } from "@/lib/auction-types"
+import BcPhotoPullModal from "../auctions/[id]/bc-photo-pull-modal"
 
 export interface PhotographyAuctionRow {
   id: string
@@ -19,6 +20,8 @@ export interface PhotographyAuctionRow {
 interface Props {
   active:    PhotographyAuctionRow[]
   completed: PhotographyAuctionRow[]
+  /** Show 📸 Pull photos from BC (every sale) — admins only. */
+  canPullFromBc?: boolean
 }
 
 function fmtDate(iso: string | null): string {
@@ -230,8 +233,9 @@ function sortRows(rows: PhotographyAuctionRow[], sort: Sort): PhotographyAuction
   })
 }
 
-export default function PhotographyAuctionList({ active, completed }: Props) {
+export default function PhotographyAuctionList({ active, completed, canPullFromBc = false }: Props) {
   const router = useRouter()
+  const [showPull, setShowPull] = useState(false)
   const [search, setSearch]   = useState("")
   const [type, setType]       = useState("")
   const [showDone, setShowDone] = useState(false)
@@ -288,6 +292,12 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {canPullFromBc && (
+            <button type="button" onClick={() => setShowPull(true)}
+              className="text-sm font-semibold px-3.5 py-2 rounded-lg border border-sky-400 dark:border-sky-600/70 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors whitespace-nowrap">
+              📸 Pull photos from BC
+            </button>
+          )}
           <Link href="/tools/cataloguing/photography/any-sale"
             className="text-sm font-semibold px-3.5 py-2 rounded-lg border border-purple-400 dark:border-purple-500/70 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors whitespace-nowrap">
             📷 Upload without picking a sale
@@ -385,6 +395,10 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
             <div className="mt-4">{showRows(shownCompleted)}</div>
           )}
         </div>
+      )}
+
+      {showPull && (
+        <BcPhotoPullModal onClose={() => setShowPull(false)} onCopied={() => router.refresh()} />
       )}
     </div>
   )

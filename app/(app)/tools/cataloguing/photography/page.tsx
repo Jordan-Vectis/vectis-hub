@@ -55,6 +55,8 @@ export default async function PhotographyPage() {
 
   return (
     <PhotographyAuctionList
+      // 📸 Pull photos from BC, every sale (lib/actions/bc-photo-pull.ts) — admins only; the server checks again.
+      canPullFromBc={dbUser?.role === "ADMIN"}
       // Soonest first — the next sale to photograph is at the top.
       active={rows.filter(r => !r.complete)}
       // Completed sales are in the past, so "soonest" means nothing there: newest first,

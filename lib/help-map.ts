@@ -112,7 +112,7 @@ export const DESTINATIONS: Destination[] = [
   },
   {
     name: "A sale → 📸 Pull photos", href: "/tools/cataloguing/auctions", app: "CATALOGUING", section: "AUCTION_MANAGER", adminOnly: true,
-    what: "The button at the top of a sale page: finds lots' photos in Business Central by barcode and copies them onto lots that have no photos in the Hub yet — for that sale or every sale at once.",
+    what: "The button at the top of a sale page (or Photography → Pull photos from BC for every sale): finds lots' photos in Business Central by barcode and copies them onto lots that have no photos in the Hub yet.",
     also: ["photos from bc", "get photos out of business central", "copy bc photos"],
   },
   {
