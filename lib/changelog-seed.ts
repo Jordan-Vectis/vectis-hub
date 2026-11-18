@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"8211f794313340557aa2210f101fa54644cf6414","author":"jack-vectis","date":"2026-11-18T10:11:40Z","subject":"Pull photos from BC onto a sale's lots"},
   {"sha":"f8f2308156a3d75f2f97e869758d8ed469f8b359","author":"jack-vectis","date":"2026-11-18T09:31:48Z","subject":"Push to BC: update lots already in BC and choose the sale"},
   {"sha":"6c4fab168b6e9ac4f14aa6199831a1e9e8d47341","author":"jack-vectis","date":"2026-11-16T15:35:23Z","subject":"STAGING TEST AUTO SAVE BUTTON HOOK CHANGE"},
   {"sha":"98441e4df317602709dff2826401b6db48865095","author":"jack-vectis","date":"2026-11-16T14:56:36Z","subject":"Merge main into staging"},

@@ -1546,9 +1546,14 @@ the Hub top bar is there), gated on Cataloguing like the route, a refusal logged
 
 ## 📸 A sale → Pull photos (photos out of Business Central, 2026-11-18)
 
-A **📸 Pull photos** button at the top of the sale page (beside BC Match) copies each lot's photos out of BC
-onto the Hub lot with the same barcode. Code: `lib/actions/bc-photo-pull.ts`, pop-up
-`cataloguing/auctions/[id]/bc-photo-pull-modal.tsx`.
+A **📸 Pull photos** button at the top of the sale page (beside BC Match) copies lots' photos out of BC
+onto the Hub lot with the same barcode — for **this sale or ALL sales** (the pop-up's first choice). Code:
+`lib/actions/bc-photo-pull.ts`, pop-up `cataloguing/auctions/[id]/bc-photo-pull-modal.tsx`.
+
+- **Batched:** `bcPhotoPlan` lists the lots to check (barcode, no photos of their own — one raw query), then
+  `bcPhotoBatch` takes 12 lots per call (3 when copying) with **three BC requests per batch** — an "or" filter
+  on each of Receipt_Lines_Excel, receiptLines and relatedMedia. ⚠ Keep batches small: the "or" filters go in
+  the URL. The same error three batches running stops the run by itself. All sales shows a per-sale table.
 
 - **Where BC keeps them** (BC's own AL source): "Advanced Media" (table 80433 `EVO_MED_Entry`), files in Azure
   Blob Storage, each tied to its receipt line (table 75002) by the line's SystemId. Read through
@@ -1564,8 +1569,8 @@ onto the Hub lot with the same barcode. Code: `lib/actions/bc-photo-pull.ts`, po
   pictures never arrive twice from two places. Copies are stored as `lot-photos/<sale>/<lot>/bc-<BC photo
   id>.<ext>` — that name is how "already copied" is told apart from the Hub's own photos (`isBcCopy`), so
   pressing it again only adds what's missing. Don't rename them.
-- Two steps, one lot per call, a moving count and Stop (rule 7b): **Find** is read-only; **Copy** finds the
-  lot's photos AGAIN on the server before copying, so nothing comes from a stale list. A download is kept only
+- Two steps, a moving count and Stop (rule 7b): **Find** is read-only; **Copy** finds the lots' photos AGAIN
+  on the server before copying, so nothing comes from a stale list. A download is kept only
   if its first bytes are a JPEG, PNG, WebP or GIF (so a storage error page is never saved as a photo), 25 MB
   at most. Every photo added is logged (`logLotPhoto`, source `bc_photo_pull`).
 
