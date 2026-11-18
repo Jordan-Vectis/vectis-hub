@@ -1552,9 +1552,13 @@ pop-up opens from **Photography → 📸 Pull photos from BC** (header, admins o
 Code: `lib/actions/bc-photo-pull.ts`, pop-up `cataloguing/auctions/[id]/bc-photo-pull-modal.tsx`.
 
 - **Batched:** `bcPhotoPlan` lists the lots to check (barcode, no photos of their own — one raw query), then
-  `bcPhotoBatch` takes 12 lots per call (3 when copying) with **three BC requests per batch** — an "or" filter
-  on each of Receipt_Lines_Excel, receiptLines and relatedMedia. ⚠ Keep batches small: the "or" filters go in
-  the URL. The same error three batches running stops the run by itself. All sales shows a per-sale table.
+  `bcPhotoBatch` takes 12 lots per call (3 when copying) with **three BC requests per batch** — barcode on
+  Receipt_Lines_Excel, UniqueID on receiptLines, SystemId on relatedMedia (`bcGetAnyOf`). ⚠⚠ **BC only takes
+  an "or" between values of the SAME field** — `(a eq 1 and b eq 2) or (…)` answers "The OData filter
+  expression is not supported" (the first version did that and every batch failed). If BC refuses even a
+  one-field "or", it falls back to one request per lot. ⚠ Keep batches small: the "or" filters go in the URL.
+  The same error three batches running stops the run by itself — compared WITHOUT BC's CorrelationId, which
+  differs on every answer. All sales shows a per-sale table.
 
 - **Where BC keeps them** (BC's own AL source): "Advanced Media" (table 80433 `EVO_MED_Entry`), files in Azure
   Blob Storage, each tied to its receipt line (table 75002) by the line's SystemId. Read through

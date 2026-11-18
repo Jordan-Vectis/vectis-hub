@@ -24,7 +24,8 @@ import { logLotPhoto } from "@/lib/lot-log"
 //   Hub lot barcode → Receipt_Lines_Excel PTE_InternalBarcode (receipt no. + article no.) → the EvoMobile
 //   receiptLines API (its systemId) → relatedMedia where tableNo = 75002 and relatedSystemId = that systemId.
 //
-// • BATCHES: one call handles up to BATCH_MAX lots with THREE BC requests in all (an "or" filter on each), so
+// • BATCHES: one call handles up to BATCH_MAX lots with THREE BC requests in all — an "or" on ONE field each
+//   (barcode, UniqueID, the line's SystemId; BC refuses an "or" across different fields — bcGetAnyOf), so
 //   checking every sale is a few hundred requests, not three per lot. The browser drives the batches (RULES.md
 //   7b — a count that moves, and Stop).
 // • READS from BC only — never writes to it — in BC_ENVIRONMENT (the environment every Hub read uses), as the
@@ -107,6 +108,28 @@ async function bcGetAll(token: string, firstUrl: string): Promise<Json[]> {
     url = json["@odata.nextLink"] ?? null
   }
   return rows
+}
+
+const UNSUPPORTED_FILTER = /filter expression is not supported/i
+
+/**
+ * Rows where ONE field is any of `literals` (already quoted for OData where needed).
+ * ⚠ BC turns an OData filter into its own table filters, so "or" works only between values of the SAME field —
+ * "(a eq 1 and b eq 2) or (a eq 3 and b eq 4)" is refused with "The OData filter expression is not supported"
+ * (the first version did exactly that, 2026-11-18, and every batch failed). If this BC refuses even a one-field
+ * "or", it asks once per value instead, so the check still finishes — slower, never wrong.
+ */
+async function bcGetAnyOf(token: string, url: string, field: string, literals: string[], select: string): Promise<Json[]> {
+  if (!literals.length) return []
+  const one = (filter: string) => bcGetAll(token, `${url}?$filter=${encodeURIComponent(filter)}&$select=${select}`)
+  try {
+    return await one(literals.map(v => `${field} eq ${v}`).join(" or "))
+  } catch (e) {
+    if (!(e instanceof PullError) || !UNSUPPORTED_FILTER.test(e.message) || literals.length === 1) throw e
+    const rows: Json[] = []
+    for (const v of literals) rows.push(...await one(`${field} eq ${v}`))
+    return rows
+  }
 }
 
 const isPicture = (mediaType: string, filename: string) =>
@@ -254,45 +277,41 @@ export async function bcPhotoBatch(lotIds: string[], copy: boolean): Promise<Res
     }
 
     if (eligible.length) {
-      // 1. Barcode → receipt line.
+      // 1. Barcode → receipt line (one field, so one "or").
       const barcodes = [...new Set(eligible.map(l => l.barcode!.trim().toUpperCase()))]
-      const lineRows = await bcGetAll(token, `${bcODataUrl("Receipt_Lines_Excel")}?$filter=${encodeURIComponent(barcodes.map(b => `PTE_InternalBarcode eq ${quote(b)}`).join(" or "))}&$select=PTE_InternalBarcode,EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID`)
+      const lineRows = await bcGetAnyOf(token, bcODataUrl("Receipt_Lines_Excel"), "PTE_InternalBarcode", barcodes.map(quote), "PTE_InternalBarcode,EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID")
       const linesByBarcode = new Map<string, Json[]>()
       for (const r of lineRows) {
         const b = String(r.PTE_InternalBarcode ?? "").trim().toUpperCase()
         linesByBarcode.set(b, [...(linesByBarcode.get(b) ?? []), r])
       }
 
-      // 2. Receipt line → its SystemId (the API page; the web service doesn't publish it).
-      const keyOf = (receiptNo: string, articleNo: number) => `${receiptNo.toUpperCase()}|${articleNo}`
-      const wanted = new Map<string, { receiptNo: string; articleNo: number }>()
+      // 2. Receipt line → its SystemId (the API page; the web service doesn't publish it), by its UniqueID —
+      // one field, as sendLot in lib/goods-in/bc-sandbox.ts already finds lines.
+      const uniqueIds = new Set<string>()
       for (const b of barcodes) {
         const ls = linesByBarcode.get(b) ?? []
-        if (ls.length !== 1) continue
-        const receiptNo = String(ls[0].EVA_ReceiptNo ?? "")
-        const articleNo = Number(ls[0].EVA_ArticleNo)
-        if (receiptNo && Number.isFinite(articleNo)) wanted.set(keyOf(receiptNo, articleNo), { receiptNo, articleNo })
+        const u = ls.length === 1 ? String(ls[0].EVA_UniqueID ?? "").trim() : ""
+        if (u) uniqueIds.add(u)
       }
       const systemIdOf = new Map<string, string>()
-      if (wanted.size) {
-        const filter = [...wanted.values()].map(w => `(receiptNo eq ${quote(w.receiptNo)} and articleNo eq ${w.articleNo})`).join(" or ")
-        const apiRows = await bcGetAll(token, `${await bcApiUrl(token, "api/evo/mob/v2.0", "receiptLines")}?$filter=${encodeURIComponent(filter)}&$select=systemId,receiptNo,articleNo`)
-        for (const r of apiRows) {
-          const sid = String(r.systemId ?? "")
-          if (GUID.test(sid)) systemIdOf.set(keyOf(String(r.receiptNo ?? ""), Number(r.articleNo)), sid.toLowerCase())
-        }
+      const apiRows = await bcGetAnyOf(token, await bcApiUrl(token, "api/evo/mob/v2.0", "receiptLines"), "uniqueID", [...uniqueIds].map(quote), "systemId,uniqueID")
+      for (const r of apiRows) {
+        const sid = String(r.systemId ?? "")
+        if (GUID.test(sid)) systemIdOf.set(String(r.uniqueID ?? "").trim().toUpperCase(), sid.toLowerCase())
       }
 
-      // 3. SystemId → photos.
+      // 3. SystemId → photos. The "or" is on relatedSystemId alone; the table (75002 = receipt line) is checked
+      // here rather than in the filter.
       type Photo = { id: string; sortNo: number; filename: string; link: string }
       const photosOf = new Map<string, Photo[]>()
       const sids = [...new Set(systemIdOf.values())]
       if (sids.length) {
-        const select = `systemId,relatedSystemId,sortNo,mediaType,filename,softDeleted${copy ? ",publicMediaPath" : ""}`
-        const filter = `tableNo eq 75002 and (${sids.map(s => `relatedSystemId eq ${s}`).join(" or ")})`
-        const media = await bcGetAll(token, `${await bcApiUrl(token, "api/evo/base/v1.0", "relatedMedia")}?$filter=${encodeURIComponent(filter)}&$select=${select}`)
+        const select = `systemId,tableNo,relatedSystemId,sortNo,mediaType,filename,softDeleted${copy ? ",publicMediaPath" : ""}`
+        const media = await bcGetAnyOf(token, await bcApiUrl(token, "api/evo/base/v1.0", "relatedMedia"), "relatedSystemId", sids, select)
         for (const m of media) {
           const id = String(m.systemId ?? "")
+          if (Number(m.tableNo) !== 75002) continue
           if (m.softDeleted === true || !GUID.test(id) || !isPicture(String(m.mediaType ?? ""), String(m.filename ?? ""))) continue
           const rel = String(m.relatedSystemId ?? "").toLowerCase()
           photosOf.set(rel, [...(photosOf.get(rel) ?? []), { id: id.toLowerCase(), sortNo: Number(m.sortNo) || 0, filename: String(m.filename ?? ""), link: String(m.publicMediaPath ?? "") }])
@@ -311,7 +330,7 @@ export async function bcPhotoBatch(lotIds: string[], copy: boolean): Promise<Res
         }
         const receiptNo = String(ls[0].EVA_ReceiptNo ?? "")
         const uniqueId = String(ls[0].EVA_UniqueID ?? "")
-        const sid = systemIdOf.get(keyOf(receiptNo, Number(ls[0].EVA_ArticleNo)))
+        const sid = uniqueId ? systemIdOf.get(uniqueId.trim().toUpperCase()) : undefined
         if (!sid) {
           results.set(l.id, { ...blank(l.id, "failed", `BC has barcode ${barcode}${uniqueId ? ` as ${uniqueId}` : ""}, but its receipt lines API didn't return the line.`), uniqueId, receiptNo })
           continue

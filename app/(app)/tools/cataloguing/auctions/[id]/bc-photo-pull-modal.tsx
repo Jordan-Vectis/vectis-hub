@@ -27,6 +27,9 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en
 const btn = "inline-flex items-center justify-center min-h-11 px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const btnGo = "inline-flex items-center justify-center min-h-11 px-4 py-2 text-sm font-semibold rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
 const SHOW_MAX = 200
+/** An error as words only — BC puts a different CorrelationId on every answer, so without this the same
+ *  refusal never looked "the same" and the three-in-a-row stop never fired (2026-11-18). */
+const sameError = (e: string) => e.replace(/\s*CorrelationId:\s*[0-9a-f-]+\.?/gi, "").trim()
 
 function failedBatch(lots: BcPhotoLot[], error: string): Checked[] {
   return lots.map(lot => ({ lot, r: { lotId: lot.id, outcome: "failed", uniqueId: "", receiptNo: "", photos: 0, notCopied: 0, added: 0, problems: [], detail: error } }))
@@ -74,9 +77,10 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
       if (!res.ok) {
         if (res.error === "NO_BC_SIGN_IN") return "signIn"
         onBatch(failedBatch(batch, res.error))
-        sameErrors = res.error === lastError ? sameErrors + 1 : 1
-        lastError = res.error
-        if (sameErrors >= 3) { setNotice(`Stopped by itself: Business Central gave the same error three times running — “${res.error}”`); return "repeated" }
+        const words = sameError(res.error)
+        sameErrors = words === lastError ? sameErrors + 1 : 1
+        lastError = words
+        if (sameErrors >= 3) { setNotice(`Stopped by itself: Business Central gave the same error three times running — “${words}”`); return "repeated" }
         continue
       }
       sameErrors = 0
