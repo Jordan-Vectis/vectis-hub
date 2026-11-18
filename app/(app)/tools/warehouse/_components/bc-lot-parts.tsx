@@ -153,13 +153,17 @@ export function StepKey() {
  *  For Sale tick it wouldn't take ("Cleared for sale …" — tickClearedForSale in bc-sandbox.ts) are each their
  *  own step: the lot is still on its receipt. A lot BC already had that only got the tick now counts as
  *  already in BC. A "Hub note …" step (LIVE only — the Hub couldn't mark the lot as sent) is about the Hub,
- *  not BC, so it doesn't change how the lot went; it shows in the list of what didn't go through. */
-export function lotOutcome(steps: BcStep[]): "full" | "already" | "refused" | "noSale" | "notCleared" {
+ *  not BC, so it doesn't change how the lot went; it shows in the list of what didn't go through.
+ *  A lot BC already had that was brought up to date ("Updated …" — updateLine in bc-sandbox.ts) is "updated" when
+ *  anything on it changed, otherwise "already" (it already matched the Hub). */
+export function lotOutcome(steps: BcStep[]): "full" | "updated" | "already" | "refused" | "noSale" | "notCleared" {
   const isSale = (s: BcStep) => s.what.startsWith("Sale ")
   const isTick = (s: BcStep) => s.what.startsWith("Cleared for sale ")
   const failed = steps.filter(s => s.outcome === "failed" && !s.what.startsWith("Hub note"))
   if (failed.some(s => !isSale(s) && !isTick(s))) return "refused"
   if (failed.some(isSale)) return "noSale"
   if (failed.length) return "notCleared"
-  return steps.some(s => s.outcome === "made" && !isTick(s)) ? "full" : "already"
+  const changed = steps.some(s => s.outcome === "made" && !isTick(s))
+  if (steps.some(s => s.what.startsWith("Updated "))) return changed ? "updated" : "already"
+  return changed ? "full" : "already"
 }

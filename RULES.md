@@ -1864,6 +1864,21 @@ the same way, never as an export of an actions file.
       booked in or void, or on a receipt BC doesn't have are listed and LEFT OUT, and the end says how
       many. The two panels share their lot card and step list (`warehouse/_components/bc-lot-parts.tsx`),
       so a lot reads the same in both. ⚠ Claude never presses Send on this panel for Jack either.
+      - **The sale is CHOSEN (2026-11-18):** this sale, or one other sale code for every lot — the End of
+        Day tab's `BcEodSale`, checked by `saleFor` and applied by `lotForBcOnSale` (the preview and the
+        send alike). An older screen that sends no choice gets this sale.
+      - **"Update lots BC already has" (2026-11-18), OFF by default.** Without it a lot BC already has on its
+        receipt is left as it is (only ticked Cleared For Sale), as before. Ticked, `sendLot(…, { updateExisting })`
+        runs `updateLine`: the line is read back from BC and ONLY what differs from the Hub is sent — short
+        description, category/subcategory, description (compared as plain words, `htmlToText`), estimates, sale,
+        the Cleared For Sale tick and size. A blank in the Hub never blanks BC. ⚠ The TOTE and barcode are never
+        changed (a tote change moves the line's location in BC). ⚠ Estimates go in their own PATCH, and when the
+        new high is under BC's current low the LOW goes first in a PATCH of its own — BC validates high before
+        low (page order) and refuses a high below the current low (table 75002). ⚠ A sale change is BC's own
+        re-allocation: it refuses a lot that has sold, and takes the lot off a still-to-come old sale's auction
+        lines and clears its lot number; the confirm box says so whenever the chosen sale isn't this one. A
+        barcode BC has on a DIFFERENT receipt is still refused, ticked or not. Only this panel offers it — the
+        receipt panel, End of Day and the wizard's X999 send never update a line.
     - **End of Day → "📤 Send to BC (test)" tab** (Jordan, 2026-11-13 — *"transfer to the end of day with
       options to do it per vendor or in mass and the ability to chose sales allocation … an extra addition
       or maybe another tab as to not interfere with the current end of day"*). The same `sendLot`, started

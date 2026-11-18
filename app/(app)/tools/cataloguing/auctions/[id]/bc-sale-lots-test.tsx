@@ -1,9 +1,9 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { bcSaleLotSend, bcSaleLotsStart, bcSaleReceiptCheck, type BcSaleLotsStart, type BcSaleReceipt } from "@/lib/actions/goods-in-bc-sandbox"
+import { bcSaleLotSend, bcSaleLotsStart, bcSaleReceiptCheck, type BcEodSale, type BcSaleLotsStart, type BcSaleReceipt } from "@/lib/actions/goods-in-bc-sandbox"
 import type { BcStep } from "@/lib/goods-in/bc-sandbox"
-import { ErrorBox, box, btn, btnGo, mono } from "../../../warehouse/_components/ui"
+import { ErrorBox, box, btn, btnGo, input, mono } from "../../../warehouse/_components/ui"
 import { BcLink, LiveBanner, LiveConfirm, LotCard, MARK, StepKey, StepList, liveConfirmed, lotOutcome } from "../../../warehouse/_components/bc-lot-parts"
 
 // A sale → 📤 Push to BC → "Send lots to BC" — admins only (Jack, 2026-11-12). The receipt page's
@@ -17,12 +17,18 @@ import { BcLink, LiveBanner, LiveConfirm, LotCard, MARK, StepKey, StepList, live
 // Stop between lots, and the end says what happened in numbers (RULES.md 7b). On LIVE BC (the production Hub)
 // the number of lots is typed to confirm, and each lot sent is noted on its change log so End of Day leaves it
 // off the overnight sheet.
+//
+// 2026-11-18 — lots already in BC can take the Hub's new details, and the sale is chosen. Before pressing it:
+// which sale the lots go on (this one, or one other sale code for all of them),
+// and "Update lots BC already has" — off by default, so a lot staff have edited in BC is never written over
+// without someone choosing to. Both are fixed at the moment it's pressed (planSale / planUpdate), so changing
+// them afterwards can't change what goes without a fresh check.
 
 type Phase = "idle" | "listing" | "checking" | "confirm" | "running" | "done"
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-export default function BcSaleLotsTest({ auctionId, saleCode, environment, offReason, live }: {
+export default function BcSaleLotsTest({ auctionId, saleCode, environment, offReason, live, otherSales = [] }: {
   auctionId: string
   saleCode: string
   /** The BC environment writes go to; null when switched off. */
@@ -31,9 +37,16 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
   offReason: string | null
   /** Writes go to LIVE Business Central (the production Hub only). */
   live: boolean
+  /** The Hub's sales, offered when the lots go on another sale (any BC sale code can be typed). */
+  otherSales?: { code: string; name: string }[]
 }) {
   const [phase, setPhase] = useState<Phase>("idle")
   const [typed, setTyped] = useState("")
+  const [saleMode, setSaleMode] = useState<"own" | "one">("own")
+  const [otherCode, setOtherCode] = useState("")
+  const [update, setUpdate] = useState(false)
+  const [planSale, setPlanSale] = useState<BcEodSale>({ mode: "own" })
+  const [planUpdate, setPlanUpdate] = useState(false)
   const [plan, setPlan] = useState<BcSaleLotsStart | null>(null)
   const [inBc, setInBc] = useState<Record<string, BcStep>>({})
   const [steps, setSteps] = useState<BcStep[]>([])
@@ -59,8 +72,12 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
   const isLive = plan?.live ?? live
   const where = isLive ? "live BC" : "the BC test environment"
   const sendReady = liveConfirmed(isLive, typed, String(goingLots))
+  const sale: BcEodSale = saleMode === "one" ? { mode: "one", code: otherCode.trim().toUpperCase() } : { mode: "own" }
+  const saleReady = saleMode === "own" || !!otherCode.trim()
+  const elsewhere = !!plan && plan.saleCode.toUpperCase() !== plan.ownSaleCode.toUpperCase()
 
   async function check() {
+    if (!saleReady) return
     setPhase("listing")
     setTyped("")
     setError(null)
@@ -69,7 +86,9 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
     setSteps([])
     setSummary(null)
     setInBc({})
-    const res = await bcSaleLotsStart(auctionId).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+    setPlanSale(sale)
+    setPlanUpdate(update)
+    const res = await bcSaleLotsStart(auctionId, sale).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
     if (!res.ok) {
       if (res.error === "NO_BC_SIGN_IN") setNeedsSignIn(true)
       else setError(res.error)
@@ -112,6 +131,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
     const all: BcStep[] = []
     setSteps([])
     let full = 0
+    let updated = 0
     let already = 0
     let refused = 0
     let noSale = 0
@@ -121,7 +141,7 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
       if (stopRef.current) { stopped = true; break }
       const lot = lots[i]
       setProgress({ done: i, total: lots.length, current: `${lot.barcode || lot.shortDescription.slice(0, 30)} on ${lot.receiptId}` })
-      const res = await bcSaleLotSend(auctionId, lot.id, confirm).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+      const res = await bcSaleLotSend(auctionId, lot.id, confirm, { sale: planSale, update: planUpdate }).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
       if (!res.ok) {
         all.push({ what: lot.barcode ? `Lot ${lot.barcode}` : `Lot "${lot.shortDescription.slice(0, 40)}"`, outcome: "failed", detail: res.error })
         refused++
@@ -132,17 +152,20 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
         else if (outcome === "noSale") noSale++
         else if (outcome === "notCleared") notCleared++
         else if (outcome === "full") full++
+        else if (outcome === "updated") updated++
         else already++
       }
       setSteps([...all])
     }
     setProgress(null)
     setPhase("done")
-    const done = full + already + refused + noSale + notCleared
+    const done = full + updated + already + refused + noSale + notCleared
     setSummary(`${stopped ? `Stopped after ${done} of ${lots.length} lots — the rest weren't sent. ` : ""}`
-      + `${full} sent in full, ${noSale ? `${noSale} on their receipt but not the sale, ` : ""}${notCleared ? `${notCleared} sent but not cleared for sale, ` : ""}${already} already in BC, ${refused} refused`
+      + `${full} sent in full, ${planUpdate ? `${updated} already in BC and updated, ` : ""}${noSale ? `${noSale} in BC but not on ${plan.saleCode}, ` : ""}${notCleared ? `${notCleared} in BC but not cleared for sale, ` : ""}`
+      + `${already} already in BC ${planUpdate ? "and already matching the Hub" : "and not updated"}, ${refused} refused`
       + `${stopped ? "" : ` — of ${plural(lots.length, "lot", "lots")}`}.`
-      + (leftOut ? ` ${plural(leftOut, "lot was", "lots were")} left out before sending (no receipt, or a receipt BC doesn't have).` : ""))
+      + (leftOut ? ` ${plural(leftOut, "lot was", "lots were")} left out before sending (no receipt, or a receipt BC doesn't have).` : "")
+      + (!planUpdate && already ? ` To change lots BC already has, tick "Update lots BC already has" and press it again.` : ""))
   }
 
   const failed = steps.filter(s => s.outcome === "failed")
@@ -196,8 +219,9 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
           ? <><b>live</b> Business Central</>
           : <>a BC <b>test</b> environment{environment ? <> — <b className={mono}>{environment}</b></> : null} — never live BC —</>}{" "}
         as a line on the receipt it was
-        catalogued onto, allocated to this sale and ticked Cleared For Sale: short description, description, estimates, category,
-        subcategory, tote, size and internal barcode. BC gives each its UniqueID. Signed in as you.{" "}
+        catalogued onto, allocated to the sale you choose below and ticked Cleared For Sale: short description, description, estimates,
+        category, subcategory, tote, size and internal barcode. BC gives each its UniqueID. Lots BC already has are left as they are
+        unless you tick &ldquo;Update lots BC already has&rdquo;. Signed in as you.{" "}
         {live
           ? <>Each lot sent is noted on its change log, and End of Day leaves it off the overnight sheet.</>
           : <>Nothing in the Hub changes.</>}
@@ -209,7 +233,50 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
       ) : (
         <>
           {phase === "idle" && (
-            <button type="button" className={`${btn} mt-3`} onClick={check}>Send lots to BC…</button>
+            <div className="mt-3 space-y-3">
+              <fieldset className="rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3">
+                <legend className="px-1 text-sm font-semibold text-gray-900 dark:text-white">Which sale do the lots go on in BC?</legend>
+                <label className="flex items-center gap-3 min-h-11 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+                  <input type="radio" name="bc-sale-lots-sale" className="h-5 w-5 accent-indigo-600" checked={saleMode === "own"} onChange={() => setSaleMode("own")} />
+                  <span>This sale — <b className={mono}>{saleCode}</b></span>
+                </label>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <label className="flex items-center gap-3 min-h-11 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+                    <input type="radio" name="bc-sale-lots-sale" className="h-5 w-5 accent-indigo-600" checked={saleMode === "one"} onChange={() => setSaleMode("one")} />
+                    <span>Another sale, for every lot:</span>
+                  </label>
+                  <input
+                    list="bc-sale-lots-other-sales"
+                    value={otherCode}
+                    onChange={e => { setOtherCode(e.target.value); setSaleMode("one") }}
+                    placeholder="Sale code, e.g. F159"
+                    aria-label="Sale code every lot goes on"
+                    maxLength={20}
+                    className={`${input} ${mono} max-w-xs`}
+                  />
+                  <datalist id="bc-sale-lots-other-sales">
+                    {otherSales.filter(s => s.code !== saleCode).map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                  </datalist>
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  This is BC&apos;s Sales Allocation. Pick a sale from the list or type any BC sale code. A sale BC won&apos;t take leaves the
+                  lot on its receipt, and the result says so.
+                </p>
+              </fieldset>
+
+              <label className="flex items-start gap-3 min-h-11 rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+                <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-indigo-600" checked={update} onChange={e => setUpdate(e.target.checked)} />
+                <span>
+                  <b className="text-gray-900 dark:text-white">Update lots BC already has</b> with the Hub&apos;s short description, description,
+                  estimate, category, size and sale. Only what&apos;s different is sent, and a blank in the Hub never blanks BC. The tote and
+                  barcode are never changed.{" "}
+                  <span className="text-amber-800 dark:text-amber-200">Anything changed in BC by hand is replaced by the Hub&apos;s version.</span>
+                </span>
+              </label>
+
+              <button type="button" className={btn} onClick={check} disabled={!saleReady}>Send lots to BC…</button>
+              {!saleReady && <p className="text-xs text-amber-800 dark:text-amber-200">Type the sale code the lots should go on, or choose this sale.</p>}
+            </div>
           )}
           {phase === "listing" && (
             <p className="mt-3 text-sm text-gray-700 dark:text-gray-200" role="status">Finding {saleCode}&apos;s lots and their receipts…</p>
@@ -228,11 +295,35 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
           {phase === "confirm" && plan && (
             <div className="mt-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-3 text-sm text-amber-900 dark:text-amber-100">
               {goingLots > 0 ? (
-                <p>
-                  This makes <b>{goingLots}</b> {goingLots === 1 ? "line" : "lines"} on <b>{plural(going.length, "receipt", "receipts")}</b> in
-                  Business Central&apos;s <b className={mono}>{plan.environment}</b> environment, each allocated to sale <b className={mono}>{plan.saleCode}</b> and cleared for sale.
-                  A lot whose barcode BC already has on its receipt isn&apos;t sent again — it&apos;s only ticked Cleared For Sale if it isn&apos;t yet.
-                </p>
+                <>
+                  <p>
+                    This sends <b>{plural(goingLots, "lot", "lots")}</b> on <b>{plural(going.length, "receipt", "receipts")}</b> to
+                    Business Central&apos;s <b className={mono}>{plan.environment}</b> environment, each allocated to sale <b className={mono}>{plan.saleCode}</b> and
+                    cleared for sale. A lot BC doesn&apos;t have yet is made as a new line.
+                  </p>
+                  {planUpdate ? (
+                    <p className="mt-2">
+                      <b>A lot BC already has on its receipt is UPDATED to match the Hub:</b> its short description, description, estimate,
+                      category, size and sale — only what&apos;s different. Its tote and barcode stay as they are. Anything changed in BC by hand
+                      on those lots is replaced.
+                    </p>
+                  ) : (
+                    <p className="mt-2">
+                      A lot BC already has on its receipt is <b>left as it is</b> — it&apos;s only ticked Cleared For Sale if it isn&apos;t yet. To
+                      send the Hub&apos;s new descriptions and estimates for those, press Cancel, tick &ldquo;Update lots BC already has&rdquo;,
+                      and check again.
+                    </p>
+                  )}
+                  {elsewhere && (
+                    <p className="mt-2">
+                      ⚠ <b className={mono}>{plan.saleCode}</b> isn&apos;t this sale ({plan.ownSaleCode}).{" "}
+                      {planUpdate
+                        ? <>A lot BC already has on another sale is moved: BC takes it off that sale (and clears its lot number there) if that
+                          sale hasn&apos;t happened yet, and refuses to move a lot that has sold.</>
+                        : <>Only lots BC doesn&apos;t have yet go on it — lots BC already has stay on their current sale.</>}
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="font-medium">Nothing on {plan.saleCode} can be sent — no lot is on a receipt {where} has.</p>
               )}
@@ -325,7 +416,9 @@ export default function BcSaleLotsTest({ auctionId, saleCode, environment, offRe
                   {going.map(r => r.bcLinesUrl && <BcLink key={r.receiptId} url={r.bcLinesUrl} environment={plan.environment} receiptId={r.receiptId} />)}
                 </details>
               )}
-              <button type="button" className={btn} onClick={check}>Check and send again…</button>
+              <button type="button" className={btn} onClick={() => { setPhase("idle"); setPlan(null); setSteps([]); setSummary(null) }}>
+                Start again…
+              </button>
             </div>
           )}
         </>

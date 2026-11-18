@@ -262,6 +262,11 @@ export async function bcLotSend(receiptId: string, lotId: string, confirm?: unkn
 //   booked in or is void. A receipt BC doesn't have is found by the per-receipt check before anything is
 //   sent, and its lots are left out.
 // • The browser drives it, one call per receipt to check and one per lot to send (RULES.md 7b).
+// • WHICH sale (2026-11-18 — the sale is chosen, not fixed): this sale, or ONE other sale code for every lot — the same BcEodSale choice as End of Day, checked by saleFor and applied by
+//   lotForBcOnSale, for the preview and the send alike.
+// • Lots BC ALREADY has on their receipt are left alone unless "Update lots BC already has" is ticked
+//   (`update`) — then sendLot brings each up to date with the Hub, sending only what differs (updateLine in
+//   lib/goods-in/bc-sandbox.ts).
 
 async function checkAdmin(): Promise<Checked> {
   const u = await getGoodsInUser()
@@ -293,16 +298,24 @@ export type BcSaleLotsStart = {
   environment: string
   /** Writes go to LIVE Business Central (the production Hub): the screen asks for the typed confirmation. */
   live: boolean
+  /** The sale the lots go on in BC — this sale's code, or the other sale chosen. */
   saleCode: string
+  /** This sale's own code, to say when the lots are going on a different one. */
+  ownSaleCode: string
   receipts: BcSaleReceipt[]
   /** Lots with no receipt in the Hub — they have nowhere to go in BC, so they're never sent. */
   noReceipt: ({ id: string } & LotPreview)[]
 }
 
-/** The sale's lots, grouped by the receipt each was catalogued onto, with exactly what each sends. No BC call. */
-export async function bcSaleLotsStart(auctionId: string): Promise<Result<BcSaleLotsStart>> {
+/** The sale choice from the sale page: none given (an older screen) = this sale. */
+const saleChoice = (sale: unknown): BcEodSale => (sale === undefined || sale === null ? { mode: "own" } : saleFor(sale))
+
+/** The sale's lots, grouped by the receipt each was catalogued onto, with exactly what each sends on the sale
+ *  chosen. No BC call. */
+export async function bcSaleLotsStart(auctionId: string, sale?: BcEodSale): Promise<Result<BcSaleLotsStart>> {
   try {
     const { environment, userName, live } = await checkAdmin()
+    const chosen = saleChoice(sale)
     const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { code: true } })
     if (!auction) return { ok: false, error: "That sale isn't in the Hub any more." }
     const lots = await prisma.catalogueLot.findMany({
@@ -319,7 +332,7 @@ export async function bcSaleLotsStart(auctionId: string): Promise<Result<BcSaleL
     const groups = new Map<string, BcSaleReceipt>()
     const noReceipt: BcSaleLotsStart["noReceipt"] = []
     for (const l of lots) {
-      const preview = { id: l.id, ...lotPreview(lotForBc(l)) }
+      const preview = { id: l.id, ...lotPreview(lotForBcOnSale(l, chosen)) }
       const receiptId = receiptOf(l.receipt)
       if (!receiptId) { noReceipt.push(preview); continue }
       let g = groups.get(receiptId)
@@ -330,8 +343,9 @@ export async function bcSaleLotsStart(auctionId: string): Promise<Result<BcSaleL
       g.lots.push(preview)
     }
     const receipts = [...groups.values()].sort((a, b) => a.receiptId.localeCompare(b.receiptId, "en", { numeric: true }))
-    console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: sale ${auction.code} — ${lots.length} lots on ${receipts.length} receipts, ${noReceipt.length} with no receipt`)
-    return { ok: true, data: { environment, live, saleCode: auction.code, receipts, noReceipt } }
+    const saleCode = chosen.mode === "one" ? chosen.code : auction.code
+    console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: sale ${auction.code} — ${lots.length} lots on ${receipts.length} receipts, ${noReceipt.length} with no receipt, going on ${saleCode}`)
+    return { ok: true, data: { environment, live, saleCode, ownSaleCode: auction.code, receipts, noReceipt } }
   } catch (e) {
     return fail(e)
   }
@@ -350,12 +364,15 @@ export async function bcSaleReceiptCheck(auctionId: string, receiptId: string): 
   }
 }
 
-/** Sends one lot of the sale as a line on the receipt it was catalogued onto, allocated to the sale. On LIVE BC,
- *  `confirm` must carry the number of lots typed on the screen. */
-export async function bcSaleLotSend(auctionId: string, lotId: string, confirm?: unknown): Promise<Result<BcStep[]>> {
+/** Sends one lot of the sale as a line on the receipt it was catalogued onto, allocated to the sale chosen. On
+ *  LIVE BC, `confirm` must carry the number of lots typed on the screen. `opts.update` = bring a line BC already
+ *  has up to date with the Hub, rather than leave it as it is. */
+export async function bcSaleLotSend(auctionId: string, lotId: string, confirm?: unknown, opts?: { sale?: BcEodSale; update?: boolean }): Promise<Result<BcStep[]>> {
   try {
     const { environment, token, userName, live } = await checkAdmin()
     liveGate(confirm)
+    const chosen = saleChoice(opts?.sale)
+    const updateExisting = opts?.update === true
     const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: SALE_LOT_SELECT })
     if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
     if (lot.auctionId !== auctionId) return { ok: false, error: "This lot has moved to another sale since the list was made." }
@@ -364,7 +381,7 @@ export async function bcSaleLotSend(auctionId: string, lotId: string, confirm?: 
     const hub = await prisma.goodsInReceipt.findFirst({ where: { id: { equals: receiptId, mode: "insensitive" } }, select: { status: true } })
     const note = hubReceiptNote(hub?.status)
     if (note) return { ok: false, error: `${receiptId}: ${note}` }
-    const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
+    const steps = await sendLot(token, environment, receiptId, lotForBcOnSale(lot, chosen), { updateExisting })
     if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_sale"))
     console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
@@ -382,7 +399,7 @@ export async function bcSaleLotSend(auctionId: string, lotId: string, confirm?: 
 //   (as "Fix what BC can prove" does), so "not in BC yet" keeps ONE definition — the End of Day route's.
 //   ⚠ Never work the pending list out again here: two definitions would drift.
 // • WHICH sale: each lot's own (as every other send here), or ONE sale code for every lot sent.
-//   eodLotForBc is the one place that is applied — the preview and the send both use it, so the list
+//   lotForBcOnSale is the one place that is applied — the preview and the send both use it, so the list
 //   shown before sending is exactly what goes.
 // • Every guard of checkAdmin(): Hub admins only, never while viewing as someone else, signed in as the
 //   person pressing it, live BC from the production Hub only and with the typed confirmation. A lot sent to
@@ -406,7 +423,8 @@ function saleFor(sale: unknown): BcEodSale {
   throw new GoodsInAccessError("Choose which sale the lots go on first.")
 }
 
-function eodLotForBc(lot: LotRow, sale: BcEodSale): LotForBc {
+/** A lot as it goes to BC on the sale chosen — End of Day's tab and the sale page's panel both use it. */
+function lotForBcOnSale(lot: LotRow, sale: BcEodSale): LotForBc {
   const forBc = lotForBc(lot)
   return sale.mode === "one" ? { ...forBc, saleCode: sale.code } : forBc
 }
@@ -542,7 +560,7 @@ export async function bcEodLotsStart(lotIds: string[], sale: BcEodSale): Promise
         g = { receiptId, hubNote: hubReceiptNote(status.get(receiptId)), bcLinesUrl: bcReceiptLinesUrl(environment, receiptId), lots: [] }
         groups.set(receiptId, g)
       }
-      g.lots.push({ id: l.id, ...lotPreview(eodLotForBc(l, chosen)) })
+      g.lots.push({ id: l.id, ...lotPreview(lotForBcOnSale(l, chosen)) })
     }
     const receipts = [...groups.values()].sort((a, b) => a.receiptId.localeCompare(b.receiptId, "en", { numeric: true }))
     console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: ${sendable.length} lots on ${receipts.length} receipts, sale ${chosen.mode === "one" ? chosen.code : "each lot's own"}`)
@@ -580,7 +598,7 @@ export async function bcEodLotSend(lotId: string, sale: BcEodSale, confirm?: unk
     const hub = await prisma.goodsInReceipt.findFirst({ where: { id: { equals: receiptId, mode: "insensitive" } }, select: { status: true } })
     const note = hubReceiptNote(hub?.status)
     if (note) return { ok: false, error: `${receiptId}: ${note}` }
-    const steps = await sendLot(token, environment, receiptId, eodLotForBc(lot, chosen))
+    const steps = await sendLot(token, environment, receiptId, lotForBcOnSale(lot, chosen))
     if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_eod"))
     console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }

@@ -32,6 +32,8 @@
 // ⚠ It signs in as the PERSON pressing it (their own BC sign-in, getBCToken) — BC records them as the
 // one who made the records. Never the background sign-in (that is Jordan's, for reads).
 
+import { htmlToText } from "@/lib/html-text"
+
 const API_HOST = "https://api.businesscentral.dynamics.com/v2.0"
 const EVO_MOB = "api/evo/mob/v2.0"
 const VECTIS_WHSE = "api/vectis/whse/v2.0"
@@ -456,8 +458,155 @@ async function tickClearedForSale(token: string, environment: string, systemId: 
   }
 }
 
-/** Sends one lot as a receipt line on receiptId (and its sale). */
-export async function sendLot(token: string, environment: string, receiptId: string, lot: LotForBc): Promise<BcStep[]> {
+// ── Updating a line BC ALREADY has (2026-11-18: lots already in BC must be able to take the Hub's new
+// descriptions and estimates — until then the send only said "already in BC" and left them as they were) ──
+//
+// Only when the person ticks "Update lots BC already has" (sendLot's updateExisting). The line is found by its
+// barcode on THIS receipt (a barcode on another receipt is still refused), read back as BC has it now, and only
+// what DIFFERS from the Hub is sent — a blank in the Hub never blanks BC. Read off BC's own AL source
+// (table 75002, page 76301):
+//   • Short description, category/subcategory and the description go in one PATCH. The description is compared
+//     as plain words, so BC holding the same words in different HTML isn't "changed".
+//   • Estimates go in their OWN PATCH: BC validates high before low (page order), and refuses a high below the
+//     CURRENT low ("High Estimate is less then Low Estimate") — so when the new high is under the old low, the
+//     low goes first in a PATCH of its own. Each estimate's OnValidate also copies both onto the sale's auction
+//     line, so the catalogue follows.
+//   • The sale (auctionNo) in its own PATCH, only when it differs. ⚠ Moving a lot to another sale is BC's own
+//     re-allocation: it refuses a lot that has sold, and takes the lot off its old sale's auction lines (and
+//     clears its lot number) when that sale is still to come. The screen says so before anything is sent.
+//   • Cleared For Sale is ticked if it isn't, as for a new line.
+//   • Size on Receipt_Lines_Excel (the API page has none), only when it differs.
+//   • The TOTE and barcode are never touched: a tote change moves the line's location in BC.
+
+/** The words of a description, to tell a real change from the same words kept in different HTML. */
+const descriptionWords = (text: string) => htmlToText(text).replace(/\s+/g, " ").trim()
+
+async function updateLine(
+  token: string, environment: string,
+  line: { receiptNo: string; articleNo: number; uniqueId: string; sizeNow: string },
+  lot: LotForBc, label: string,
+): Promise<BcStep[]> {
+  const steps: BcStep[] = []
+  const name = line.uniqueId || label
+  const what = `Updated ${name}`
+  let mob = ""
+  let row: Json | null = null
+  try {
+    mob = await companyRoot(token, EVO_MOB, environment)
+    row = await findFirst(token, mob, "receiptLines", `receiptNo eq ${quote(line.receiptNo)} and articleNo eq ${line.articleNo}`)
+  } catch (e) {
+    steps.push(await failedWithRoute(token, environment, EVO_MOB, "receiptLines", what, e))
+    return steps
+  }
+  if (!row?.systemId) {
+    steps.push({ what, outcome: "failed", detail: `BC's receipt lines API didn't find ${name}, so nothing on it was updated.` })
+    return steps
+  }
+  const line_ = `${mob}receiptLines(${String(row.systemId)})`
+  const now = (k: string) => String(row?.[k] ?? "").trim()
+  const same = (a: string, b: string) => a.trim().toUpperCase() === b.trim().toUpperCase()
+  const patch = (body: Json) => call(token, "PATCH", line_, body, { "If-Match": "*" })
+
+  // Short description, category and description — one PATCH, one BC transaction.
+  const details: Json = {}
+  const changed: string[] = []
+  const short = lot.title.trim().slice(0, 250)
+  if (short && short !== now("shortDescription")) { details.shortDescription = short; changed.push("short description") }
+  if (lot.category && !same(lot.category, now("articleCategoryCode"))) {
+    // A new category clears the subcategory in BC, so it goes again with it.
+    details.articleCategoryCode = lot.category
+    if (lot.subCategory) details.articleSubcategoryCode = lot.subCategory
+    changed.push(`category ${lot.category}${lot.subCategory ? ` / ${lot.subCategory}` : ""}`)
+  } else if (lot.subCategory && !same(lot.subCategory, now("articleSubcategoryCode"))) {
+    details.articleSubcategoryCode = lot.subCategory
+    changed.push(`subcategory ${lot.subCategory}`)
+  }
+  if (lot.description.trim() && descriptionWords(lot.description) !== descriptionWords(now("catalogueDescription"))) {
+    details.catalogueDescription = descriptionHtml(lot.description)
+    changed.push("description")
+  }
+  if (changed.length) {
+    try {
+      await patch(details)
+      steps.push({ what, outcome: "made", detail: `Changed the ${changed.join(", ")} to the Hub's.` })
+    } catch (e) {
+      steps.push({ what, outcome: "failed", detail: `${failed("", e).detail} — none of ${changed.join(", ")} was changed.` })
+    }
+  } else {
+    steps.push({ what, outcome: "there", detail: "Short description, description and category already match the Hub — not sent." })
+  }
+
+  // Estimates — their own PATCH (or two), in the order BC will take them.
+  const loNow = Number(row.lowEstimate) || 0
+  const hiNow = Number(row.highEstimate) || 0
+  const lo = lot.estimateLow
+  const hi = lot.estimateHigh
+  if ((lo != null && lo !== loNow) || (hi != null && hi !== hiNow)) {
+    const estWhat = `Estimate ${name}`
+    let lowDone = false
+    try {
+      if (lo != null && hi != null && hi < loNow) {
+        // Coming down below the current low: low first, or BC refuses the high.
+        await patch({ lowEstimate: lo })
+        lowDone = true
+        await patch({ highEstimate: hi })
+      } else {
+        const body: Json = {}
+        if (hi != null) body.highEstimate = hi
+        if (lo != null) body.lowEstimate = lo
+        await patch(body)
+      }
+      steps.push({ what: estWhat, outcome: "made", detail: `Was £${loNow}–£${hiNow}, now £${lo ?? loNow}–£${hi ?? hiNow}.` })
+    } catch (e) {
+      steps.push({
+        what: estWhat, outcome: "failed",
+        detail: lowDone
+          ? `${failed("", e).detail} — BC took the low (£${lo}) but kept the high at £${hiNow}; pressing again tries the high again.`
+          : `${failed("", e).detail} — BC kept £${loNow}–£${hiNow}.`,
+      })
+    }
+  }
+
+  // The sale, on its own.
+  if (lot.saleCode) {
+    const saleWhat = `Sale ${name}`
+    const saleNow = now("auctionNo")
+    if (same(lot.saleCode, saleNow)) {
+      steps.push({ what: saleWhat, outcome: "there", detail: `Already on sale ${saleNow}.` })
+    } else {
+      try {
+        await patch({ auctionNo: lot.saleCode })
+        steps.push({ what: saleWhat, outcome: "made", detail: saleNow ? `Moved from ${saleNow} to ${lot.saleCode}.` : `On sale ${lot.saleCode}.` })
+      } catch (e) {
+        steps.push({ what: saleWhat, outcome: "failed", detail: `${failed("", e).detail} — it stays on ${saleNow || "no sale"}.` })
+      }
+    }
+  }
+
+  // Cleared For Sale, if it isn't yet.
+  if (row.clearedForSale !== true) steps.push(await tickClearedForSale(token, environment, String(row.systemId), name))
+
+  // Size — Receipt_Lines_Excel, only when it differs.
+  const size = bcSizeFor(lot.size)
+  if (size && !same(size, line.sizeNow)) {
+    const sizeWhat = `Size ${name}`
+    try {
+      await call(token, "PATCH", `${odataRoot(environment)}Receipt_Lines_Excel(EVA_ReceiptNo=${quote(line.receiptNo)},EVA_ArticleNo=${line.articleNo})`,
+        { EVA_SHIP_EVA_SizeClassification: size }, { "If-Match": "*" })
+      steps.push({ what: sizeWhat, outcome: "made", detail: `Set size ${size}.` })
+    } catch (e) {
+      steps.push({ what: sizeWhat, outcome: "failed", detail: `${failed("", e).detail} — the size wasn't changed.` })
+    }
+  }
+  return steps
+}
+
+/** Sends one lot as a receipt line on receiptId (and its sale). With updateExisting, a line BC already has
+ *  for the lot on this receipt is brought up to date with the Hub (updateLine) instead of being left alone. */
+export async function sendLot(
+  token: string, environment: string, receiptId: string, lot: LotForBc,
+  opts: { updateExisting?: boolean } = {},
+): Promise<BcStep[]> {
   const label = lot.barcode ? `Lot ${lot.barcode}` : `Lot "${lot.title.slice(0, 40)}"`
   const steps: BcStep[] = []
   const odata = odataRoot(environment)
@@ -473,13 +622,22 @@ export async function sendLot(token: string, environment: string, receiptId: str
   let untickedLine = ""
   try {
     if (lot.barcode) {
-      const json = await call(token, "GET", `${lines}?$filter=${encodeURIComponent(`PTE_InternalBarcode eq ${quote(lot.barcode)}`)}&$select=EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID,EVA_ClearedForSale&$top=1`)
+      const select = `EVA_ReceiptNo,EVA_ArticleNo,EVA_UniqueID,EVA_ClearedForSale${opts.updateExisting ? ",EVA_SHIP_EVA_SizeClassification" : ""}`
+      const json = await call(token, "GET", `${lines}?$filter=${encodeURIComponent(`PTE_InternalBarcode eq ${quote(lot.barcode)}`)}&$select=${select}&$top=1`)
       const hit = ((json.value as Json[] | undefined) ?? [])[0]
       if (hit) {
         const where = String(hit.EVA_ReceiptNo ?? "")
         const hitId = String(hit.EVA_UniqueID ?? "?")
         if (where.toUpperCase() !== receiptId.toUpperCase()) {
           steps.push({ what: label, outcome: "failed", detail: `BC already has barcode ${lot.barcode} on ${hitId} (receipt ${where}) — a different receipt, so it wasn't sent.` })
+          return steps
+        }
+        const hitArticle = Number(hit.EVA_ArticleNo)
+        if (opts.updateExisting && Number.isFinite(hitArticle) && hitArticle > 0) {
+          steps.push({ what: label, outcome: "there", detail: `BC already has it as ${hitId} — bringing it up to date with the Hub.` })
+          steps.push(...await updateLine(token, environment,
+            { receiptNo: where, articleNo: hitArticle, uniqueId: String(hit.EVA_UniqueID ?? ""), sizeNow: String(hit.EVA_SHIP_EVA_SizeClassification ?? "") },
+            lot, label))
           return steps
         }
         if (hit.EVA_ClearedForSale === true || !hit.EVA_UniqueID) {

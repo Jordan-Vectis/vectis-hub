@@ -1008,7 +1008,8 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
         )}
 
         {tab === "bc-fill" && bcSaleTest && (
-          <BcSaleLotsTest auctionId={auction.id} saleCode={auction.code} environment={bcSaleTest.environment} offReason={bcSaleTest.offReason} live={bcSaleTest.live} />
+          <BcSaleLotsTest auctionId={auction.id} saleCode={auction.code} environment={bcSaleTest.environment} offReason={bcSaleTest.offReason} live={bcSaleTest.live}
+            otherSales={allAuctions.map(a => ({ code: a.code, name: a.name }))} />
         )}
 
         {tab === "bc-fill" && (
