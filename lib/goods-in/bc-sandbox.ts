@@ -445,6 +445,43 @@ export async function receiptInBc(token: string, environment: string, receiptId:
   }
 }
 
+/** A receipt line as BC has it now, found by its internal barcode — to check a lot the Hub sent. */
+export type SentLine = { receiptNo: string; uniqueId: string; cleared: boolean; sale: string }
+
+/**
+ * What BC has now for each barcode (Receipt_Lines_Excel), in the environment written to. READ ONLY — End of
+ * Day's "Check lots already sent". One request with an "or" on the barcode (BC takes "or" between values of ONE
+ * field only), or one per barcode if this BC refuses even that. Keys are barcodes in capitals.
+ */
+export async function readSentLines(token: string, environment: string, barcodes: string[]): Promise<Map<string, SentLine[]>> {
+  const out = new Map<string, SentLine[]>()
+  const codes = [...new Set(barcodes.map(b => b.trim().toUpperCase()).filter(Boolean))]
+  if (!codes.length) return out
+  const base = `${odataRoot(environment)}Receipt_Lines_Excel`
+  const select = "PTE_InternalBarcode,EVA_ReceiptNo,EVA_UniqueID,EVA_ClearedForSale,EVA_SalesAllocation"
+  const get = async (filter: string) =>
+    ((await call(token, "GET", `${base}?$filter=${encodeURIComponent(filter)}&$select=${select}`)).value as Json[] | undefined) ?? []
+  let rows: Json[]
+  try {
+    rows = await get(codes.map(c => `PTE_InternalBarcode eq ${quote(c)}`).join(" or "))
+  } catch (e) {
+    if (!(e instanceof BcCallError) || !/filter expression is not supported/i.test(e.message) || codes.length === 1) throw e
+    rows = []
+    for (const c of codes) rows.push(...await get(`PTE_InternalBarcode eq ${quote(c)}`))
+  }
+  for (const r of rows) {
+    const b = String(r.PTE_InternalBarcode ?? "").trim().toUpperCase()
+    const line: SentLine = {
+      receiptNo: String(r.EVA_ReceiptNo ?? ""),
+      uniqueId: String(r.EVA_UniqueID ?? ""),
+      cleared: r.EVA_ClearedForSale === true,
+      sale: String(r.EVA_SalesAllocation ?? "").trim(),
+    }
+    out.set(b, [...(out.get(b) ?? []), line])
+  }
+  return out
+}
+
 /** Ticks Cleared For Sale on one receipt line (by its SystemId on the EvoMobile receiptLines page). The step
  *  is named "Cleared for sale …" — lotOutcome (bc-lot-parts.tsx) reads that prefix, so keep the two in step. */
 async function tickClearedForSale(token: string, environment: string, systemId: string, line: string): Promise<BcStep> {

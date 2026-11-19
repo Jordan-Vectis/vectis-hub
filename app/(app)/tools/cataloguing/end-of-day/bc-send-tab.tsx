@@ -8,6 +8,7 @@ import {
 import type { BcStep } from "@/lib/goods-in/bc-sandbox"
 import { ErrorBox, box, btn, btnGo, input, mono, td, th } from "../../warehouse/_components/ui"
 import { BcLink, LiveBanner, LiveConfirm, LotCard, MARK, StepKey, StepList, liveConfirmed, lotOutcome } from "../../warehouse/_components/bc-lot-parts"
+import BcAmendPanel from "./bc-amend-panel"
 
 // End of Day → BC → "Send to BC" — admins only (Jordan, 2026-11-13). Jack's send (the receipt page's and the
 // sale page's "Lots → Business Central"), started from the End of Day sheet: the lots on the sheet ON SCREEN
@@ -59,6 +60,8 @@ export default function BcSendTab({ active, receipts, environment, offReason, li
   const [needsSignIn, setNeedsSignIn] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
+  /** Bumped after every send, so "Sent to BC but needs amending" reads afresh (bc-amend-panel.tsx). */
+  const [amendKey, setAmendKey] = useState(0)
   const stopRef = useRef(false)
   const listedFor = useRef<string[] | null>(null)
 
@@ -224,11 +227,15 @@ export default function BcSendTab({ active, receipts, environment, offReason, li
     }
     setProgress(null)
     setPhase("done")
+    setAmendKey(k => k + 1)
     const done = full + already + refused + noSale + notCleared
     setSummary(`${stopped ? `Stopped after ${done} of ${lots.length} lots — the rest weren't sent. ` : ""}`
       + `${full} sent in full, ${noSale ? `${noSale} on their receipt but not the sale, ` : ""}${notCleared ? `${notCleared} sent but not cleared for sale, ` : ""}${already} already in BC, ${refused} refused`
       + `${stopped ? "" : ` — of ${plural(lots.length, "lot", "lots")}`}.`
-      + (leftOut ? ` ${plural(leftOut, "lot was", "lots were")} left out before sending (a receipt BC doesn't have, or one that isn't booked in).` : ""))
+      + (leftOut ? ` ${plural(leftOut, "lot was", "lots were")} left out before sending (a receipt BC doesn't have, or one that isn't booked in).` : "")
+      + (plan.live && (refused || noSale || notCleared)
+        ? " Any that reached BC with something missing are listed under “Sent to BC but needs amending” above; any refused before reaching BC stay on the sheet."
+        : ""))
   }
 
   function backToVendors() {
@@ -316,6 +323,10 @@ export default function BcSendTab({ active, receipts, environment, offReason, li
           )}
           {notice && <p className="mt-3 text-sm text-gray-700 dark:text-gray-200">{notice}</p>}
           {error && <div className="mt-3"><ErrorBox onDismiss={() => setError(null)}>{error}</ErrorBox></div>}
+
+          {/* ── Lots sent to BC that need amending — they're off the sheet, so this is where they show ──
+              Only between sends, so two sends never run at once. */}
+          {(phase === "idle" || phase === "done") && <BcAmendPanel active={active} live={live} reloadKey={amendKey} />}
 
           {/* ── Pick the vendors and the sale ── */}
           {phase === "idle" && (

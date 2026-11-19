@@ -6,8 +6,8 @@ import { getEffectiveSession } from "@/lib/impersonation"
 import { getBCToken } from "@/lib/bc"
 import { isFromBc } from "@/lib/goods-in/source"
 import {
-  bcLiveRefusal, bcReceiptLinesUrl, bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason, bcWriteIsLive, lotPreview, receiptInBc,
-  sendContainer, sendLot, sendReceiptHeader,
+  bcLiveRefusal, bcReceiptLinesUrl, bcSandboxConfigured, bcSandboxEnvironment, bcSandboxOffReason, bcWriteIsLive, lotPreview, readSentLines,
+  receiptInBc, sendContainer, sendLot, sendReceiptHeader,
   type BcStep, type LotForBc, type LotPreview,
 } from "@/lib/goods-in/bc-sandbox"
 import { buildLotEventRow, writeLotEventsChecked } from "@/lib/lot-log"
@@ -58,15 +58,29 @@ function liveGate(confirm: unknown, receiptId?: string) {
  * won't have the lot until the next data sync, so without this the sheet would import it a SECOND time.
  * "In BC" = the lot's own step ("Lot …") made or found the line, even if a later step failed (a line without
  * its barcode is still a line). A note that can't be written is said on screen, never swallowed.
+ *
+ * ⚠ NEEDS AMENDING (2026-11-18 — a lot whose sale, details, tick or barcode failed was marked sent, left End of
+ * Day, and was never seen again, half-made in BC). When any step after the line failed, the event's field is
+ * AMEND_FIELD and its value says what failed, in BC's words. End of Day's Send to BC tab lists every lot whose
+ * NEWEST bc_sent event is that (bcEodToAmend) until a later send goes through cleanly or someone marks it fixed.
+ * The value always carries the sale it was sent for (" · sale X · "), so trying again can't move it to another.
  */
+const SENT_FIELD = "Sent to Business Central"
+const AMEND_FIELD = "Sent to Business Central — needs amending"
+
 async function noteLiveSend(
   lot: { id: string; auctionId: string; barcode: string | null; title: string; auction: { code: string | null } | null },
-  receiptId: string, steps: BcStep[], environment: string, userName: string | null, source: string,
+  receiptId: string, steps: BcStep[], environment: string, userName: string | null, source: string, saleCode: string | null,
 ): Promise<BcStep[]> {
   if (!steps.some(s => s.what.startsWith("Lot ") && s.outcome !== "failed")) return []
+  const problems = steps
+    .filter(s => s.outcome === "failed" && !s.what.startsWith("Hub note"))
+    .map(s => `${s.what}: ${s.detail}`)
+    .join(" | ")
+  const value = `Receipt ${receiptId} · sale ${saleCode || "none"} · ${environment}${problems ? ` — ${problems}` : ""}`.slice(0, 2000)
   const ok = await writeLotEventsChecked([buildLotEventRow(
     { id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "",
-    "bc_sent", "Sent to Business Central", "", `Receipt ${receiptId} in ${environment}`,
+    "bc_sent", problems ? AMEND_FIELD : SENT_FIELD, "", value,
     { changedBy: userName ?? "?", source },
   )])
   return ok ? [] : [{
@@ -242,8 +256,9 @@ export async function bcLotSend(receiptId: string, lotId: string, confirm?: unkn
     if ((lot.receipt ?? "").trim().toUpperCase() !== receiptId.toUpperCase()) {
       return { ok: false, error: `This lot is catalogued onto ${lot.receipt || "no receipt"}, not ${receiptId}.` }
     }
-    const steps = await sendLot(token, environment, receiptId, lotForBc(lot))
-    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_receipt"))
+    const forBc = lotForBc(lot)
+    const steps = await sendLot(token, environment, receiptId, forBc)
+    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_receipt", forBc.saleCode))
     console.log(`[goods-in bc-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {
@@ -381,8 +396,9 @@ export async function bcSaleLotSend(auctionId: string, lotId: string, confirm?: 
     const hub = await prisma.goodsInReceipt.findFirst({ where: { id: { equals: receiptId, mode: "insensitive" } }, select: { status: true } })
     const note = hubReceiptNote(hub?.status)
     if (note) return { ok: false, error: `${receiptId}: ${note}` }
-    const steps = await sendLot(token, environment, receiptId, lotForBcOnSale(lot, chosen), { updateExisting })
-    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_sale"))
+    const forBc = lotForBcOnSale(lot, chosen)
+    const steps = await sendLot(token, environment, receiptId, forBc, { updateExisting })
+    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_sale", forBc.saleCode))
     console.log(`[goods-in bc-sale-lots] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
   } catch (e) {
@@ -584,8 +600,9 @@ export async function bcEodReceiptCheck(receiptId: string): Promise<Result<BcSte
 }
 
 /** Sends one lot from the End of Day sheet as a line on the receipt it was catalogued onto, on the sale chosen.
- *  On LIVE BC, `confirm` must carry the number of lots typed on the screen. */
-export async function bcEodLotSend(lotId: string, sale: BcEodSale, confirm?: unknown): Promise<Result<BcStep[]>> {
+ *  On LIVE BC, `confirm` must carry the number of lots typed on the screen. `opts.update` (trying again from the
+ *  "needs amending" list) brings a line BC already has up to date instead of leaving it as it is. */
+export async function bcEodLotSend(lotId: string, sale: BcEodSale, confirm?: unknown, opts?: { update?: boolean }): Promise<Result<BcStep[]>> {
   try {
     const { environment, token, userName, live } = await checkAdmin()
     liveGate(confirm)
@@ -598,10 +615,194 @@ export async function bcEodLotSend(lotId: string, sale: BcEodSale, confirm?: unk
     const hub = await prisma.goodsInReceipt.findFirst({ where: { id: { equals: receiptId, mode: "insensitive" } }, select: { status: true } })
     const note = hubReceiptNote(hub?.status)
     if (note) return { ok: false, error: `${receiptId}: ${note}` }
-    const steps = await sendLot(token, environment, receiptId, lotForBcOnSale(lot, chosen))
-    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_eod"))
+    const forBc = lotForBcOnSale(lot, chosen)
+    // Trying a lot again from the "needs amending" list brings a line BC already has up to date (opts.update) —
+    // otherwise a line whose sale or details failed would just be found by its barcode and left as it was.
+    const steps = await sendLot(token, environment, receiptId, forBc, { updateExisting: opts?.update === true })
+    if (live) steps.push(...await noteLiveSend(lot, receiptId, steps, environment, userName, "bc_live_eod", forBc.saleCode))
     console.log(`[goods-in bc-eod] ${userName ?? "?"} → ${environment}: ${steps.map(s => `${s.what} ${s.outcome}`).join("; ")}`)
     return { ok: true, data: steps }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+// ── Lots sent to LIVE BC that NEED AMENDING (End of Day → Send to BC, 2026-11-18) ──
+//
+// A lot whose line reached BC but whose sale, details, Cleared For Sale tick or barcode failed is off the
+// overnight sheet (it IS in BC — importing it again would double it), so without this it was never seen again.
+// The list is every lot whose NEWEST "bc_sent" event is AMEND_FIELD (noteLiveSend). It leaves the list when a
+// later send goes through cleanly, or when someone marks it fixed after correcting it in BC by hand.
+// • bcEodToAmend / bcEodMarkFixed write nothing to BC. Trying again is bcEodLotSend with `update`, on the sale it
+//   was first sent for, with the usual typed confirmation.
+// • Lots sent BEFORE this marker existed carry no record of a failure, so bcEodSentToCheck / bcEodCheckSent read
+//   BC (only reads) for lots sent recently and mark any whose line is missing, on another receipt or sale, or not
+//   cleared for sale.
+
+/** Hub admins, not viewing as someone else — for the parts that don't touch BC. */
+async function adminOnly(): Promise<{ userName: string | null }> {
+  const u = await getGoodsInUser()
+  if (u?.role !== "ADMIN") throw new GoodsInAccessError("Only an admin can see what was sent to Business Central.")
+  const session = await getEffectiveSession()
+  if (session?.isImpersonating) throw new GoodsInAccessError("Stop viewing as someone else first.")
+  return { userName: u.name }
+}
+
+type LatestSent = { lotId: string; field: string; newValue: string | null; changedAt: Date; changedBy: string }
+
+/** Each lot's NEWEST bc_sent event — that alone says whether it needs amending now. */
+async function latestSent(lotIds?: string[]): Promise<LatestSent[]> {
+  if (lotIds && !lotIds.length) return []
+  // `field` is indexed and `action` isn't: the change log is large, so filter on both.
+  return lotIds
+    ? prisma.$queryRaw<LatestSent[]>`
+        SELECT DISTINCT ON ("lotId") "lotId", field, "newValue", "changedAt", "changedBy"
+        FROM "CatalogueLotEvent"
+        WHERE field IN (${SENT_FIELD}, ${AMEND_FIELD}) AND action = 'bc_sent' AND "lotId" = ANY(${lotIds})
+        ORDER BY "lotId", "changedAt" DESC`
+    : prisma.$queryRaw<LatestSent[]>`
+        SELECT DISTINCT ON ("lotId") "lotId", field, "newValue", "changedAt", "changedBy"
+        FROM "CatalogueLotEvent"
+        WHERE field IN (${SENT_FIELD}, ${AMEND_FIELD}) AND action = 'bc_sent'
+        ORDER BY "lotId", "changedAt" DESC`
+}
+
+/** "Receipt R · sale X · env — what failed" → its parts. Older events ("Receipt R in env") have no sale. */
+function readSentValue(v: string | null): { receipt: string | null; sale: string | null; head: string; problem: string } {
+  const s = v ?? ""
+  const dash = s.indexOf(" — ")
+  const head = dash >= 0 ? s.slice(0, dash) : s
+  const sale = /· sale (\S+) ·/.exec(head)?.[1] ?? null
+  return {
+    receipt: /^Receipt (\S+)/.exec(head)?.[1] ?? null,
+    sale: sale && sale !== "none" ? sale : null,
+    head,
+    problem: dash >= 0 ? s.slice(dash + 3) : "",
+  }
+}
+
+export type BcAmendLot = {
+  lotId: string
+  barcode: string | null
+  title: string
+  /** The receipt and sale it was SENT for (trying again uses the same sale). */
+  receipt: string | null
+  saleCode: string | null
+  /** What went wrong, in BC's words. */
+  problem: string
+  at: string
+  by: string
+}
+
+/** Every lot sent to BC whose newest send left something to put right. No BC call. */
+export async function bcEodToAmend(): Promise<Result<BcAmendLot[]>> {
+  try {
+    await adminOnly()
+    const latest = (await latestSent()).filter(e => e.field === AMEND_FIELD)
+    if (!latest.length) return { ok: true, data: [] }
+    const lots = await prisma.catalogueLot.findMany({
+      where: { id: { in: latest.map(e => e.lotId) } },
+      select: { id: true, barcode: true, title: true, receipt: true },
+    })
+    const byId = new Map(lots.map(l => [l.id, l]))
+    const data: BcAmendLot[] = []
+    for (const e of latest.sort((a, b) => b.changedAt.getTime() - a.changedAt.getTime())) {
+      const l = byId.get(e.lotId)
+      if (!l) continue // deleted from the Hub since
+      const v = readSentValue(e.newValue)
+      data.push({
+        lotId: l.id, barcode: l.barcode, title: l.title, receipt: v.receipt ?? l.receipt,
+        saleCode: v.sale, problem: v.problem || "Something didn't go through.", at: e.changedAt.toISOString(), by: e.changedBy,
+      })
+    }
+    return { ok: true, data }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Takes a lot off the "needs amending" list after it was put right in BC by hand. Writes only the Hub's note. */
+export async function bcEodMarkFixed(lotId: string): Promise<Result<null>> {
+  try {
+    const { userName } = await adminOnly()
+    const [e] = typeof lotId === "string" ? await latestSent([lotId]) : []
+    if (!e || e.field !== AMEND_FIELD) return { ok: true, data: null } // already off the list
+    const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: { id: true, auctionId: true, barcode: true, title: true, auction: { select: { code: true } } } })
+    if (!lot) return { ok: false, error: "That lot isn't in the Hub any more." }
+    const ok = await writeLotEventsChecked([buildLotEventRow(
+      { id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "",
+      "bc_sent", SENT_FIELD, "", `${readSentValue(e.newValue).head} — marked as fixed in BC by hand`,
+      { changedBy: userName ?? "?", source: "bc_amend_fixed" },
+    )])
+    return ok ? { ok: true, data: null } : { ok: false, error: "The Hub couldn't save that — try again." }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Lots sent to BC in the last `days` days whose newest send looked clean — the ones "Check lots already sent"
+ *  reads BC for. No BC call. */
+export async function bcEodSentToCheck(days = 14): Promise<Result<{ lotId: string; barcode: string }[]>> {
+  try {
+    await adminOnly()
+    const since = Date.now() - Math.min(Math.max(Number(days) || 14, 1), 90) * 86_400_000
+    const latest = (await latestSent()).filter(e => e.field === SENT_FIELD && e.changedAt.getTime() >= since)
+    if (!latest.length) return { ok: true, data: [] }
+    const lots = await prisma.catalogueLot.findMany({ where: { id: { in: latest.map(e => e.lotId) } }, select: { id: true, barcode: true } })
+    return { ok: true, data: lots.filter(l => l.barcode?.trim()).map(l => ({ lotId: l.id, barcode: l.barcode!.trim() })) }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Up to 12 lots sent earlier: does BC have each line as it should be? READS BC only; a lot that isn't right is
+ *  put on the "needs amending" list (a Hub note). Returns what was found per lot. */
+export async function bcEodCheckSent(lotIds: string[]): Promise<Result<{ lotId: string; problem: string | null }[]>> {
+  try {
+    const { environment, token, userName } = await checkAdmin()
+    const ids = cleanList(lotIds).slice(0, 12)
+    if (!ids.length) return { ok: true, data: [] }
+    const lots = await prisma.catalogueLot.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, auctionId: true, barcode: true, title: true, auction: { select: { code: true } } },
+    })
+    const latest = new Map((await latestSent(lots.map(l => l.id))).map(e => [e.lotId, e]))
+    const found = await readSentLines(token, environment, lots.map(l => l.barcode ?? "").filter(Boolean))
+    const rows: ReturnType<typeof buildLotEventRow>[] = []
+    const out: { lotId: string; problem: string | null }[] = []
+    for (const l of lots) {
+      const e = latest.get(l.id)
+      if (!e || e.field !== SENT_FIELD || !l.barcode?.trim()) { out.push({ lotId: l.id, problem: null }); continue }
+      const sent = readSentValue(e.newValue)
+      const lines = found.get(l.barcode.trim().toUpperCase()) ?? []
+      const line = lines[0]
+      const problems: string[] = []
+      if (!line) problems.push(`BC has no line with barcode ${l.barcode.trim()} — its barcode step may not have finished, or the line was deleted in BC`)
+      else {
+        if (lines.length > 1) problems.push(`BC has barcode ${l.barcode.trim()} on ${lines.length} lines (${lines.map(x => x.uniqueId).join(", ")})`)
+        if (sent.receipt && line.receiptNo.toUpperCase() !== sent.receipt.toUpperCase()) problems.push(`BC has it on receipt ${line.receiptNo}, not ${sent.receipt}`)
+        if (sent.sale && line.sale.toUpperCase() !== sent.sale.toUpperCase()) problems.push(`BC has it on ${line.sale ? `sale ${line.sale}` : "no sale"}, not ${sent.sale}`)
+        if (!line.cleared) problems.push(`${line.uniqueId || "It"} isn't ticked Cleared For Sale in BC`)
+      }
+      const problem = problems.length ? `Check: ${problems.join(" | ")}` : null
+      out.push({ lotId: l.id, problem })
+      if (problem) {
+        // A send from before the sale was recorded ("Receipt R in env") has none — record the sale BC has it on
+        // NOW, so trying again keeps it there rather than moving it to the lot's own sale.
+        const head = sent.sale
+          ? sent.head
+          : `Receipt ${sent.receipt ?? line?.receiptNo ?? "?"} · sale ${line?.sale || "none"} · ${environment}`
+        rows.push(buildLotEventRow(
+          { id: l.id, auctionId: l.auctionId, barcode: l.barcode, title: l.title }, l.auction?.code ?? "",
+          "bc_sent", AMEND_FIELD, "", `${head} — ${problem}`.slice(0, 2000),
+          { changedBy: userName ?? "?", source: "bc_sent_check" },
+        ))
+      }
+    }
+    if (rows.length && !(await writeLotEventsChecked(rows))) {
+      return { ok: false, error: "BC was checked, but the Hub couldn't note which lots need amending — try again." }
+    }
+    return { ok: true, data: out }
   } catch (e) {
     return fail(e)
   }

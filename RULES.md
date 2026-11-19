@@ -1976,6 +1976,20 @@ the same way, never as an export of an actions file.
       If the note can't be written the send says so on screen ("leave it out of the import"); if the
       route can't read the notes it still makes the sheet and warns plainly (`sentByHubUnknown`). ⚠ A
       lot deleted from BC after being sent stays off the sheet — send it again from the tab.
+      - ⚠⚠ **A lot that reached BC with something missing must never just vanish** (2026-11-18). A send whose
+        line was made but whose details, sale, Cleared For Sale tick or barcode then failed is still off the
+        sheet (BC has the line), and until this it was seen nowhere again — half-made in BC. Now `noteLiveSend`
+        writes the `bc_sent` event with field **"Sent to Business Central — needs amending"** and BC's words for
+        what failed; its value always carries the sale it was sent for (`Receipt R · sale X · env — …`). End of
+        Day → Send to BC lists every lot whose NEWEST `bc_sent` event is that (`bcEodToAmend`, panel
+        `end-of-day/bc-amend-panel.tsx`, shown between sends and re-read after every send):
+        **Try them all again** (`bcEodLotSend` with `update`, on the stored sale, typed confirm — finishes a
+        line missing its barcode, brings an existing one up to date, never touches the tote); **Mark fixed**
+        after putting it right in BC by hand (`bcEodMarkFixed`, a Hub note only); **Check lots already sent**
+        (`bcEodSentToCheck` / `bcEodCheckSent` — READS BC by barcode for lots sent in the last 14 days and lists
+        any whose line is missing, on another receipt or sale, or not cleared; a send from before the sale was
+        recorded gets BC's current sale written in, so trying again can't move it). ⚠ Any new live send path
+        must pass its sale to `noteLiveSend`. Lots refused before reaching BC write nothing and stay on the sheet.
     - The decision on live BC was taken 2026-11-16 (above). **Which system owns the receipt and tote
       numbering is still open** — Jack and Jordan's call.
 - **Numbering** (`lib/goods-in/numbers.ts`): one `GoodsInCounter` row per series, each number taken
