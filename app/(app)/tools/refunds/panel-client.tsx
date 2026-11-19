@@ -7,15 +7,15 @@ import { listRefunds, type RefundPanelItem, type RefundPanelList } from "@/lib/a
 import {
   CLOSED_REFUND_STATUSES, OPEN_REFUND_STATUSES, REFUND_LIMITS, REFUND_PARTIES, REFUND_PARTY_LABELS, REFUND_REASONS,
   REFUND_REASON_LABELS, REFUND_SOLUTIONS, REFUND_SOLUTION_LABELS, REFUND_SORTS, REFUND_SORT_LABELS, REFUND_STATUSES,
-  REFUND_STATUS_META, REFUNDS_PATH, formatPence, isRefundSort, refundFilterQuery, refundRefWords,
-  type RefundFilter, type RefundStatus,
+  REFUND_STATUS_META, REFUNDS_PATH, formatPence, isRefundSort, paidRangeParam, refundFilterQuery, refundRefWords, thisMonthRange,
+  type RefundFilter, type RefundPaidRange, type RefundStatus,
 } from "@/lib/refunds"
-import { formatDay } from "@/lib/uncollected"
+import { addDays, formatDay } from "@/lib/uncollected"
 import AddRequest from "./add-request"
 import { AccountsMark, ColourKey, PartyBadge, SourceBadge, StatusChip, SuspectBadge } from "./bits"
 import { downloadCsv, refundsCsv } from "./export"
 import {
-  Flash, Spinner, btn, btnGo, card, cardTitle, clearListNote, inlineLink, input, muted, parseListNote, plural, readListNote, td, th,
+  Flash, Spinner, btn, btnGo, card, cardTitle, clearListNote, field, inlineLink, input, muted, parseListNote, plural, readListNote, td, th,
   type FlashMessage,
 } from "./ui"
 
@@ -141,9 +141,10 @@ export default function RefundsPanel({ list }: { list: RefundPanelList }) {
     setQ(next)
     writeSearch(next)
   }
+  /** Clears the list's filters and the search — the Paid tile keeps its dates (they aren't a list filter). */
   function clearAll() {
     setSearch("")
-    startTransition(() => router.replace(REFUNDS_PATH, { scroll: false }))
+    startTransition(() => router.replace(`${REFUNDS_PATH}${refundFilterQuery({ paid: filter.paid })}`, { scroll: false }))
   }
   /** A tile: the requests it counts — every request, whatever the filters — so the list it opens
    *  matches its number. The other filters and the search are cleared; the order stays. */
@@ -164,7 +165,6 @@ export default function RefundsPanel({ list }: { list: RefundPanelList }) {
   const dealers = filter.dealt && !shown.dealers.some(d => d.toLowerCase() === filter.dealt!.toLowerCase()) ? [filter.dealt, ...shown.dealers] : shown.dealers
   // Each request's address carries the filter (never the search), so its Back link returns to this list.
   const hrefFor = (id: string) => `${REFUNDS_PATH}/${id}${filterKey}`
-  const month = new Date(`${list.today}T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", timeZone: "Europe/London" })
 
   function exportCsv() {
     if (!items.length || stale) return
@@ -176,18 +176,21 @@ export default function RefundsPanel({ list }: { list: RefundPanelList }) {
       {note && <div className="-mt-3 mb-4"><Flash msg={note} /></div>}
 
       {/* ── Tiles: every request, whatever the filters ───────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 desk:grid-cols-7 gap-3">
+      {/* The Paid tile is two wide (it holds its dates); dense packing fills the gap it can leave. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 desk:grid-cols-8 grid-flow-row-dense gap-3">
         <Tile label="Open" value={totals.open} sub={totals.open ? "not paid, declined or closed" : "Nothing open"} onClick={() => showTile({ statuses: [...OPEN_REFUND_STATUSES] })} />
         <Tile label="New" value={totals.new} sub="nobody has picked them up" valueClass={totals.new ? "text-sky-700 dark:text-sky-300" : undefined} onClick={() => showTile({ statuses: ["new"] })} />
         <Tile label="Awaiting return" value={totals.awaitingReturn} sub="waiting for the item back" onClick={() => showTile({ statuses: ["awaiting_return"] })} />
         <Tile label="To pay" value={totals.toPay} sub="agreed — to be paid" valueClass={totals.toPay ? "text-orange-700 dark:text-orange-300" : undefined} onClick={() => showTile({ statuses: ["agreed"] })} />
         <Tile label="Paid, not complete for accounts" value={totals.accountsToDo} sub="not ticked complete for accounts" valueClass={totals.accountsToDo ? "text-amber-700 dark:text-amber-300" : undefined} onClick={() => showTile({ statuses: ["paid"], accounts: "todo" })} />
-        <Tile
-          label="Paid this month"
-          text={more.paidThisMonth ? formatPence(totals.paidThisMonthPence) : "£0.00"}
-          sub={more.paidThisMonth
-            ? `${plural(more.paidThisMonth, "request")} processed in ${month}${more.paidThisMonthNoTotal ? ` · at least — ${more.paidThisMonthNoTotal} with no total yet` : ""}`
-            : `Nothing processed in ${month} yet`}
+        <PaidTile
+          pence={totals.paidPence}
+          count={more.paidCount}
+          noTotal={more.paidNoTotal}
+          paid={filter.paid}
+          today={list.today}
+          busy={navigating}
+          onPick={(paid) => go({ paid })}
         />
         <Tile
           label="Median days to pay"
@@ -197,6 +200,7 @@ export default function RefundsPanel({ list }: { list: RefundPanelList }) {
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
         The tiles count every request, whatever the filters below — tap one to list just those (it clears the other filters and the search).
+        Pick the dates for the Paid total on its tile.
         A total that can&apos;t be worked out yet — a lot with no hammer or % — counts as having none.
       </p>
       {more.suspectOpen > 0 && (
@@ -502,6 +506,125 @@ function Tile({ label, value, text, sub, valueClass, onClick }: {
     <button type="button" onClick={onClick} className={`${card} p-4 min-w-0 text-left hover:border-emerald-500/60 transition-colors`}>
       {body}
     </button>
+  )
+}
+
+// ─── The Paid tile and its dates ────────────────────────────────────────────────────────────
+// The £ refunded / paid out with a date processed in the dates picked here — this month unless others
+// are picked. The dates go in the address bar (?paid=, lib/refunds.ts), so Back from a request and a
+// refresh keep them.
+
+const PAID_CHOICES = ["month", "last-month", "year", "last-year", "all", "dates"] as const
+type PaidChoice = (typeof PAID_CHOICES)[number]
+const PAID_CHOICE_LABELS: Record<PaidChoice, string> = {
+  month: "This month", "last-month": "Last month", year: "This year", "last-year": "Last year", all: "All time", dates: "Choose dates…",
+}
+
+/** The dates a quick choice stands for (null = this month, the default); undefined for Choose dates. */
+function choiceRange(c: PaidChoice, today: string): RefundPaidRange | null | undefined {
+  const y = Number(today.slice(0, 4))
+  switch (c) {
+    case "month": return null
+    case "last-month": {
+      const end = addDays(`${today.slice(0, 7)}-01`, -1)
+      return { from: `${end.slice(0, 7)}-01`, to: end }
+    }
+    case "year": return { from: `${y}-01-01`, to: `${y}-12-31` }
+    case "last-year": return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31` }
+    case "all": return { from: null, to: null }
+    case "dates": return undefined
+  }
+}
+
+const sameRange = (a: RefundPaidRange | null, b: RefundPaidRange | null) => a === b || (!!a && !!b && a.from === b.from && a.to === b.to)
+
+/** Which choice the dates in the address bar are — Choose dates when they're none of the quick ones. */
+function choiceOf(paid: RefundPaidRange | null, today: string): PaidChoice {
+  return PAID_CHOICES.find((c) => c !== "dates" && sameRange(choiceRange(c, today) ?? null, paid)) ?? "dates"
+}
+
+/** "1 Oct 2026" for a YYYY-MM-DD London day. */
+const dayWords = (d: string) => formatDay(`${d}T12:00:00Z`)
+const monthWords = (d: string, withYear: boolean) =>
+  new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", ...(withYear ? { year: "numeric" } : {}), timeZone: "Europe/London" })
+
+/** The dates in words, to follow "processed" — "in November", "from 1 Oct 2026 to 15 Nov 2026", "since…". */
+function paidWhen(c: PaidChoice, r: RefundPaidRange, today: string): string {
+  if (c === "month") return `in ${monthWords(today, false)}`
+  if (c === "last-month") return `in ${monthWords(r.from!, true)}`
+  if (c === "year" || c === "last-year") return `in ${r.from!.slice(0, 4)}`
+  if (r.from && r.to) return r.from === r.to ? `on ${dayWords(r.from)}` : `from ${dayWords(r.from)} to ${dayWords(r.to)}`
+  if (r.from) return `since ${dayWords(r.from)}`
+  if (r.to) return `up to ${dayWords(r.to)}`
+  return "in all"
+}
+
+function PaidTile({ pence, count, noTotal, paid, today, busy, onPick }: {
+  pence: number; count: number; noTotal: number; paid: RefundPaidRange | null; today: string; busy: boolean
+  onPick: (paid: RefundPaidRange | null) => void
+}) {
+  const choice = choiceOf(paid, today)
+  // Choose dates picked from the list, before any dates are shown — nothing changes until Show.
+  const [picking, setPicking] = useState(false)
+  const showDates = picking || choice === "dates"
+  const range = paid ?? thisMonthRange(today)
+  const when = paidWhen(choice, range, today)
+  const sub = count
+    ? `${plural(count, "request")} processed ${when}${noTotal ? ` · at least — ${noTotal} with no total yet` : ""}`
+    : choice === "all" ? "Nothing processed yet" : `Nothing processed ${when}${choice === "month" ? " yet" : ""}`
+
+  return (
+    <div className={`${card} p-4 min-w-0 col-span-2`}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Paid</span>
+        <select
+          aria-label="Which dates the Paid total covers"
+          value={showDates ? "dates" : choice}
+          onChange={(e) => {
+            const c = e.target.value as PaidChoice
+            if (c === "dates") { setPicking(true); return }
+            setPicking(false)
+            onPick(choiceRange(c, today) ?? null)
+          }}
+          className={field}
+        >
+          {PAID_CHOICES.map((c) => <option key={c} value={c}>{PAID_CHOICE_LABELS[c]}</option>)}
+        </select>
+      </div>
+      <span className={`block text-xl sm:text-2xl font-bold tabular-nums mt-1 break-words text-gray-900 dark:text-white transition-opacity ${busy ? "opacity-50" : ""}`}>
+        {count ? formatPence(pence) : "£0.00"}
+      </span>
+      <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">{sub}</span>
+      {/* Keyed on the dates shown, so the boxes start from them again after each Show. */}
+      {showDates && <PaidDates key={paidRangeParam(range)} start={range} busy={busy} onShow={(r) => { setPicking(false); onPick(r) }} />}
+    </div>
+  )
+}
+
+/** From / To boxes for the Paid total. Either may be left blank (since… / up to…); both blank is all time. */
+function PaidDates({ start, busy, onShow }: { start: RefundPaidRange; busy: boolean; onShow: (r: RefundPaidRange) => void }) {
+  const [from, setFrom] = useState(start.from ?? "")
+  const [to, setTo] = useState(start.to ?? "")
+  const box = "block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1"
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2 mt-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        const f = from || null, t = to || null
+        onShow(f && t && f > t ? { from: t, to: f } : { from: f, to: t })
+      }}
+    >
+      <label className="min-w-0">
+        <span className={box}>From</span>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={field} />
+      </label>
+      <label className="min-w-0">
+        <span className={box}>To</span>
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={field} />
+      </label>
+      <button type="submit" disabled={busy} className={btn}>Show</button>
+    </form>
   )
 }
 

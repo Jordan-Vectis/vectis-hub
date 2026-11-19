@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-18, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-19, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"70127f2c9cb9247c4c701657e6eafe511dcb885c","author":"jack-vectis","date":"2026-11-19T12:14:37Z","subject":"fix log"},
   {"sha":"c1ca678ae99f76e780158904410412436baf5de2","author":"jack-vectis","date":"2026-11-18T11:37:12Z","subject":"Pull photos: fix \"OData filter expression is not supported\""},
   {"sha":"f7470fee5c9f8fcc6fe43c0429c709cad782f7d9","author":"jack-vectis","date":"2026-11-18T10:56:13Z","subject":"Pull photos from BC on the Photography page"},
   {"sha":"017151966690098342c42dc5857b62d1981466f3","author":"jack-vectis","date":"2026-11-18T10:31:08Z","subject":"Pull photos: check every sale at once"},

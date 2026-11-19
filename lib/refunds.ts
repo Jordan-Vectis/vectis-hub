@@ -19,7 +19,7 @@
 // a lot looked up in BC takes the commission BC actually charged (lib/refunds-bc.ts bcCommissionOf —
 // Jack, 2026-10-28); a blank commission box is still worked out at 27% (commissionFor).
 
-import { formatPence, looksLikeBankDetails } from "@/lib/uncollected"
+import { formatPence, isDay, looksLikeBankDetails } from "@/lib/uncollected"
 
 export { formatPence, looksLikeBankDetails }
 
@@ -345,8 +345,9 @@ export type RefundTotals = {
   toPay: number
   /** Paid (or agreed?) but not ticked "complete for accounts". */
   accountsToDo: number
-  /** £ refunded / paid out with a processed date in this London month. */
-  paidThisMonthPence: number
+  /** £ refunded / paid out with a processed date in the Paid tile's dates (this London month unless
+   *  other dates are picked — RefundFilterRead.paid). */
+  paidPence: number
   /** Median London days from coming in to paid, over the last 90 days; null when none. */
   medianDaysToPay: number | null
 }
@@ -367,8 +368,47 @@ export type RefundList = {
 // ─── The filter in the address bar ──────────────────────────────────────────────────────────
 // ?status=open (default, left out) | closed | all | new,looking…  ?reason=…  ?party=buyer|vendor
 // ?solution=refund|return|payout  ?accounts=todo|done  ?dealt=<name>  ?sort=newest|oldest|amount|ref
+// ?paid=2026-10-01..2026-10-31 — the Paid tile's dates, not a list filter (left out = this month;
+// either end may be blank, so ?paid=.. is all time)
 // ⚠ Never the search: it is usually a customer's name or email (an address ends up in the browser's
 // history and the server's logs). The panel sends it to listRefunds itself.
+
+/** The dates the Paid tile's total covers: London days (YYYY-MM-DD), either end open. */
+export type RefundPaidRange = { from: string | null; to: string | null }
+
+/** A paid range as sent by the browser (the address bar, or a server action's input), or null for
+ *  the default (this month). A day that isn't a real date makes the whole thing the default — never a
+ *  wider range than was asked for. The ends are swapped when they're the wrong way round. */
+export function tidyPaidRange(v: unknown): RefundPaidRange | null {
+  let from: string | null, to: string | null
+  if (typeof v === "string") {
+    const m = /^([^.]*)\.\.([^.]*)$/.exec(v.trim())
+    if (!m) return null
+    from = m[1] || null
+    to = m[2] || null
+  } else if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>
+    from = o.from == null || o.from === "" ? null : (o.from as string)
+    to = o.to == null || o.to === "" ? null : (o.to as string)
+  } else return null
+  if ((from !== null && !isDay(from)) || (to !== null && !isDay(to))) return null
+  return from && to && from > to ? { from: to, to: from } : { from, to }
+}
+
+/** The same dates, as ?paid= carries them. */
+export const paidRangeParam = (r: RefundPaidRange) => `${r.from ?? ""}..${r.to ?? ""}`
+
+/** The dates the default covers — the London month `today` is in. */
+export function thisMonthRange(today: string): RefundPaidRange {
+  return { from: `${today.slice(0, 7)}-01`, to: lastDayOfMonth(today) }
+}
+
+/** The last day of the month a YYYY-MM-DD day is in. */
+export function lastDayOfMonth(day: string): string {
+  const [y, m] = day.split("-").map(Number)
+  const t = new Date(Date.UTC(y, m, 0))
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`
+}
 
 export const REFUND_SORTS = ["newest", "oldest", "amount", "ref"] as const
 export type RefundSort = (typeof REFUND_SORTS)[number]
@@ -385,12 +425,14 @@ export type RefundFilter = {
   accounts?: "todo" | "done" | null
   dealt?: string | null
   sort?: RefundSort
+  /** The Paid tile's dates — null for this month. Only the tile; the list ignores it. */
+  paid?: RefundPaidRange | null
   /** ⚠ Never in the address bar. */
   q?: string
 }
 export type RefundFilterRead = {
   statuses: RefundStatus[]; reason: RefundReason | null; party: RefundParty | null; solution: RefundSolution | null
-  accounts: "todo" | "done" | null; dealt: string | null; sort: RefundSort; q: string
+  accounts: "todo" | "done" | null; dealt: string | null; sort: RefundSort; paid: RefundPaidRange | null; q: string
 }
 
 type Params = URLSearchParams | Record<string, string | string[] | undefined>
@@ -420,6 +462,7 @@ export function parseRefundFilter(sp: Params): RefundFilterRead {
     accounts: accounts === "todo" || accounts === "done" ? accounts : null,
     dealt: dealt || null,
     sort: isRefundSort(sort) ? sort : "newest",
+    paid: tidyPaidRange(param(sp, "paid")),
     q: "",
   }
 }
@@ -437,6 +480,7 @@ export function refundFilterQuery(f: RefundFilter): string {
   if (f.accounts) p.set("accounts", f.accounts)
   if (f.dealt) p.set("dealt", f.dealt)
   if (f.sort && f.sort !== "newest") p.set("sort", f.sort)
+  if (f.paid) p.set("paid", paidRangeParam(f.paid))
   const s = p.toString()
   return s ? `?${s}` : ""
 }

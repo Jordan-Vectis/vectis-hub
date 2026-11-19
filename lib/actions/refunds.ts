@@ -19,7 +19,7 @@ import {
   REFUNDS_NOT_READY, REFUNDS_PATH,
   commissionDiffers, commissionFor, commissionUsed, formatPence, isRefundBasis, isRefundParty, isRefundReason, isRefundSolution, isRefundSort,
   isRefundStatus, isSaleCode, looksLikeBankDetails, lotRefundPence, oldLogCell, poundsToPence, refundRefWords, refundStatusOf,
-  refundTotalPence, refundTotalToSave,
+  refundTotalPence, refundTotalToSave, thisMonthRange, tidyPaidRange,
   type RefundBasis, type RefundDetail, type RefundFilter, type RefundFilterRead, type RefundList, type RefundListItem,
   type RefundLotMoney, type RefundParty, type RefundReason, type RefundResult, type RefundSolution, type RefundSort,
   type RefundSource, type RefundStatus, type RefundTotals,
@@ -183,10 +183,10 @@ export type RefundPanelItem = RefundListItem & {
 export type RefundPanelList = Omit<RefundList, "items"> & {
   items: RefundPanelItem[]
   more: {
-    /** Paid requests with a date processed in this London month, and how many of them have no total
-     *  yet (so the tile's £ is a minimum — said, never hidden). */
-    paidThisMonth: number
-    paidThisMonthNoTotal: number
+    /** Paid requests with a date processed in the Paid tile's dates, and how many of them have no
+     *  total yet (so the tile's £ is a minimum — said, never hidden). */
+    paidCount: number
+    paidNoTotal: number
     /** How many paid requests the median days to pay is over. */
     medianOver: number
     /** Open requests from the public form flagged as suspect (the honeypot, or over the hourly limit). */
@@ -390,7 +390,8 @@ export async function listRefunds(filter: RefundFilter = {}): Promise<RefundResu
     const dealt = typeof filter.dealt === "string" && filter.dealt.trim() ? filter.dealt.trim().slice(0, 60) : null
     const sort: RefundSort = isRefundSort(filter.sort) ? filter.sort : "newest"
     const q = typeof filter.q === "string" ? filter.q.trim().slice(0, REFUND_LIMITS.search) : ""
-    const read: RefundFilterRead = { statuses, reason, party, solution, accounts, dealt, sort, q }
+    const paid = tidyPaidRange(filter.paid)
+    const read: RefundFilterRead = { statuses, reason, party, solution, accounts, dealt, sort, paid, q }
 
     const rows = await prisma.refund.findMany({ select: ROW_SELECT })
     const all = rows.map((r) => toItem(r, today))
@@ -424,10 +425,12 @@ export async function listRefunds(filter: RefundFilter = {}): Promise<RefundResu
     }
     matchedItems.sort(sorters[sort])
 
-    // The tiles — every request, whatever the filters.
-    const month = today.slice(0, 7)
-    const totals: RefundTotals = { open: 0, new: 0, awaitingReturn: 0, toPay: 0, accountsToDo: 0, paidThisMonthPence: 0, medianDaysToPay: null }
-    const more = { paidThisMonth: 0, paidThisMonthNoTotal: 0, medianOver: 0, suspectOpen: 0 }
+    // The tiles — every request, whatever the filters. The Paid total covers the dates picked on its
+    // tile (this London month unless others are picked); the rest don't take dates.
+    const range = paid ?? thisMonthRange(today)
+    const inPaidRange = (day: string) => (!range.from || day >= range.from) && (!range.to || day <= range.to)
+    const totals: RefundTotals = { open: 0, new: 0, awaitingReturn: 0, toPay: 0, accountsToDo: 0, paidPence: 0, medianDaysToPay: null }
+    const more = { paidCount: 0, paidNoTotal: 0, medianOver: 0, suspectOpen: 0 }
     const toPayDays: number[] = []
     const dealers = new Map<string, string>()
     for (const i of all) {
@@ -442,10 +445,10 @@ export async function listRefunds(filter: RefundFilter = {}): Promise<RefundResu
         if (!i.accountsDoneAt) totals.accountsToDo++
         if (i.processedAt) {
           const paidDay = londonDay(i.processedAt)
-          if (paidDay.slice(0, 7) === month) {
-            more.paidThisMonth++
-            if (i.totalPence == null) more.paidThisMonthNoTotal++
-            else totals.paidThisMonthPence += i.totalPence
+          if (inPaidRange(paidDay)) {
+            more.paidCount++
+            if (i.totalPence == null) more.paidNoTotal++
+            else totals.paidPence += i.totalPence
           }
           const ago = daysBetween(paidDay, today)
           if (ago >= 0 && ago <= 90) toPayDays.push(Math.max(0, daysBetween(londonDay(i.receivedAt), paidDay)))
