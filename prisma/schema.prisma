@@ -3742,3 +3742,103 @@ model AuctionScheduleDefault {
   data      Json
   updatedAt DateTime @updatedAt
 }
+
+// ─── Admin & Operations → Collection bookings (2026-11-23) ───────────────────
+// Trips out to collect a vendor's items: where and when, what's being collected (with photos),
+// any special requirements, the driver(s) and van, and the hotel when it's an overnight. Admin staff
+// pick a booking up, amend it and leave notes; every change is logged in CollectionBookingEvent.
+
+/// A collection trip to a vendor. `ref` is the number people quote (CB-0001). `vanId` is Facilities →
+/// Vans' Van row — a plain id, no foreign key, so a van removed later never breaks the booking.
+model CollectionBooking {
+  id          String    @id @default(cuid())
+  ref         Int       @unique @default(autoincrement())
+  /// NEW | IN_HAND | BOOKED | COLLECTED | CANCELLED (COLLECTION_STATUSES in lib/collection-bookings.ts)
+  status      String    @default("NEW")
+
+  /// The admin dealing with it ("picked up"). Null = nobody has it yet.
+  ownerId     String?
+  ownerName   String?
+  pickedUpAt  DateTime?
+
+  vendorName  String    @default("")
+  vendorNo    String    @default("")
+  phone       String    @default("")
+  email       String    @default("")
+  address     String    @default("") @db.Text
+  postcode    String    @default("")
+  /// Where the postcode is, from postcodes.io (only the postcode is sent), for the miles between
+  /// bookings. geoPostcode = the postcode these were looked up for: equal to `postcode` with lat null
+  /// means postcodes.io doesn't know it; different means it still needs looking up.
+  lat         Float?
+  lng         Float?
+  area        String?
+  geoPostcode String?
+
+  /// Date-only (midnight UTC). collectTo is set only when the collection runs over more than one day.
+  collectFrom DateTime?
+  collectTo   DateTime?
+  timeWindow  String    @default("")
+
+  description  String   @default("") @db.Text
+  size         String   @default("")
+  requirements String   @default("") @db.Text
+  photoKeys    String[] @default([])
+
+  drivers     String[]  @default([])
+  vanId       String?
+  needsHotel  Boolean   @default(false)
+
+  createdById   String?
+  createdByName String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  closedAt      DateTime?
+
+  hotels CollectionHotel[]
+  events CollectionBookingEvent[]
+
+  @@index([status])
+  @@index([collectFrom])
+  @@index([ownerId])
+}
+
+/// A hotel stay on a collection trip — usually one, more when the trip runs over several nights.
+/// `fileKeys` hold the booking confirmation (R2, collection-bookings/…, served only to the app).
+model CollectionHotel {
+  id             String            @id @default(cuid())
+  bookingId      String
+  booking        CollectionBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  name           String            @default("")
+  address        String            @default("") @db.Text
+  phone          String            @default("")
+  checkIn        DateTime?
+  checkOut       DateTime?
+  rooms          String            @default("")
+  guests         String            @default("")
+  confirmationNo String            @default("")
+  bookedVia      String            @default("")
+  costPence      Int?
+  payment        String            @default("")
+  notes          String            @default("") @db.Text
+  fileKeys       String[]          @default([])
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([bookingId])
+}
+
+/// Everything that happened on a collection booking — created, picked up, a note, a change (with the
+/// before and after), a status change, a photo or file — with who and when.
+model CollectionBookingEvent {
+  id        String            @id @default(cuid())
+  bookingId String
+  booking   CollectionBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  kind      String
+  text      String            @default("") @db.Text
+  byId      String?
+  byName    String            @default("")
+  at        DateTime          @default(now())
+
+  @@index([bookingId, at])
+}

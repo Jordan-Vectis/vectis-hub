@@ -3735,6 +3735,50 @@ template to fit on the sheets — we print around 600 per sale"*.
 - Listed in `lib/data-map.ts` (Facilities) and in `lib/help-map.ts` as "Barcode Labels" (not the word
   "labels" alone — Packing owns it). ⚠ `/tools/barcode-sorter` is an unrelated old stub.
 
+## 🚚 Collection bookings (2026-11-23)
+
+Admin & Operations → **Collection bookings** (`/tools/collection-bookings`, app key
+`COLLECTION_BOOKINGS`, its own grant — admins always have it). The trips out to collect a vendor's
+items: the vendor's details, address and postcode, the date(s) and time, what's being collected and how
+much, special requirements, photos of the collection, the driver(s) and van, and the hotel stay(s) when
+it's an overnight — with the booking confirmation number and file.
+- **Picking up:** a booking starts **New** with nobody on it. "✋ Pick this up" puts your name on it
+  (New → Being arranged); "Take it over" moves it from someone else; "Put it back" leaves it for anyone.
+  Marking it Booked or Being arranged with nobody on it puts the presser's name on it, so it's never
+  anonymous. Statuses: NEW · IN_HAND · BOOKED · COLLECTED · CANCELLED (`lib/collection-bookings-shared.ts`).
+- **Every change is logged** in `CollectionBookingEvent` with who and when — each amended field with
+  its before → after (`describeChanges`), status changes, pick-ups, hotel and photo changes, and notes.
+  Notes are a record: never edited or deleted. The page sends **only the fields that changed** and keeps
+  what's typed on top of the saved booking (`edits`), so two people on one booking don't undo each
+  other and a reload (a hotel added sets `needsHotel`) never wipes or fakes an unsaved change.
+- **Van** = Facilities → Vans' `Van` row, a plain id (no foreign key). **Drivers** are free-text names
+  (suggested from Hub staff, van sign-outs and past collections) — drivers need no Hub account.
+- The page warns when a driver or van is on another open booking on overlapping days, when an open
+  booking's date has passed, and lists what's still to sort (no date, address, phone, driver, van,
+  hotel, confirmation number, hotel dates). Marking Booked with things still to sort asks first.
+- **Nearby** (2026-11-23 — so if someone cancels, a job nearby can take the slot, and nearby jobs can
+  share a trip): open collections within `NEARBY_MILES` (30) of each other are marked on the list
+  ("📍 Nearby: CB-0007 12 mi") and listed on the booking with the miles and how the dates line up.
+  Cancelled bookings show the open jobs near them. Miles are STRAIGHT LINE between postcodes
+  (`milesBetween`, haversine) and the page says so — road distance would need a routing service.
+- ⚠ **postcodes.io** places the postcode (`locatePostcode` / `geoFor` in lib/collection-bookings.ts) —
+  chosen over a bundled postcode-district table on 2026-11-23 for street-level accuracy. ONLY the
+  postcode is sent, from the server, when a booking is made or its postcode changes; the full postcode
+  first, then its district (LS1) if postcodes.io doesn't know it. Kept on the booking as `lat`, `lng`,
+  `area`, `geoPostcode`. `geoPostcode` = the postcode those were looked up for: equal with no `lat` =
+  not found (the page says check it); different/empty = couldn't ask (postcodes.io down) — the GET
+  retries up to 10 per load. A failed lookup never stops a save. Listed as a processor on Admin →
+  Data & Compliance and the DPIA page. (Ideal Postcodes, who run postcodes.io, already do the paid
+  address lookup — that's per-credit, so it isn't used for this.)
+- ⚠ **Files** (`collection-bookings/<booking id>/…` in R2 — vendors' items at their homes, staff hotel
+  bookings) are served ONLY by `/api/collection-bookings/file` (app-gated, 15-minute signed link, exact
+  key shape `COLLECTION_FILE_RE`). `/api/catalogue/photo-proxy`, `/api/catalogue/signed-url` and
+  `/api/image` refuse that prefix, like refund photos. iPhone HEIC is stored as JPEG on upload.
+- Only an admin can **delete** a booking (it removes its files); everyone else Cancels, which keeps it.
+- Tables `CollectionBooking` / `CollectionHotel` / `CollectionBookingEvent` (migration
+  20261123120000_collection_bookings + the MIGRATIONS array — **needs Run Migrations**). Listed in
+  `lib/data-map.ts` and `lib/help-map.ts`. Nothing touches Business Central.
+
 ## 🔐 Two-factor login (2026-10-22)
 
 Jordan: a tick box per person — *"Could we set it up as a tick box in the user panel would make

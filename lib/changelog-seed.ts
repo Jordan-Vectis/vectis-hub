@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2e48c36993b00e6a3bd61aa22cc6179f3c9f1ed5","author":"jack-vectis","date":"2026-11-19T14:43:01Z","subject":"refunds paid date filter"},
   {"sha":"70127f2c9cb9247c4c701657e6eafe511dcb885c","author":"jack-vectis","date":"2026-11-19T12:14:37Z","subject":"fix log"},
   {"sha":"c1ca678ae99f76e780158904410412436baf5de2","author":"jack-vectis","date":"2026-11-18T11:37:12Z","subject":"Pull photos: fix \"OData filter expression is not supported\""},
   {"sha":"f7470fee5c9f8fcc6fe43c0429c709cad782f7d9","author":"jack-vectis","date":"2026-11-18T10:56:13Z","subject":"Pull photos from BC on the Photography page"},

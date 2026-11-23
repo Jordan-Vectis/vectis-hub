@@ -566,6 +566,22 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     appKey:             "VANS",
   },
   {
+    // Trips out to collect a vendor's items (2026-11-23): where and when, photos of the collection,
+    // special requirements, the driver(s) and van, and the hotel. Admin staff pick a booking up,
+    // amend it and leave notes. Its own grant (COLLECTION_BOOKINGS); admins always have it.
+    key:                "COLLECTION_BOOKINGS",
+    href:               "/tools/collection-bookings",
+    defaultLabel:       "Collection bookings",
+    defaultDescription: "Collections from vendors: dates, location, photos of the collection, special requirements, the driver and van, and the hotel booking and confirmation. Pick one up, amend it and leave notes.",
+    icon:               "🚚",
+    border:             "border-lime-500",
+    iconBg:             "text-lime-400",
+    btnBg:              "bg-lime-600 hover:bg-lime-500",
+    glow:               "hover:shadow-lime-900/40",
+    group:              "OPERATIONS",
+    appKey:             "COLLECTION_BOOKINGS",
+  },
+  {
     // Lot ID barcode labels for a sale on Avery sheets — the Word mail merge's job (Jack, 2026-10-28:
     // "it currently uses a mail merge and it confuses most people"). Granted per person (BARCODES).
     key:                "BARCODES",

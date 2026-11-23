@@ -317,6 +317,19 @@ export const DESTINATIONS: Destination[] = [
       "lot labels not lining up", "move the lot labels", "line up the lot labels",
     ],
   },
+  // Collection bookings (2026-11-23) — trips out to collect a vendor's items. Not "collection" alone:
+  // Paid, not collected and Packing both answer questions about buyers collecting.
+  {
+    ask: "Where do I book a collection from a vendor?",
+    name: "Collection bookings", href: "/tools/collection-bookings", app: "COLLECTION_BOOKINGS",
+    what: "🚚 Collection bookings (Admin & Operations): every trip out to collect a vendor's items. Make a booking with the vendor's details, the address and postcode, the date(s) and time, what's being collected and any special requirements, and add photos of the collection. Pick a booking up to take it on (or take it over from someone), put the drivers and the van on it, and when it's an overnight add the hotel stay — check-in and out, rooms, who's staying, the confirmation number, cost and the booking confirmation file. Every change and note is kept on its history with who made it. It warns when a driver or van is already on another collection the same day, marks collections within 30 miles of each other with the miles between them (so a cancelled slot can go to a job nearby, or nearby jobs share a trip), lists what's still to sort, and copies everything the driver needs in one tap. Mark it Booked, Collected or Cancelled.",
+    also: [
+      "collection booking", "collection bookings", "book a collection", "vendor collection", "collect from a vendor",
+      "collection trip", "assign a driver", "which driver", "driver for a collection", "book a hotel", "hotel booking",
+      "hotel confirmation", "overnight collection", "collection photos", "special requirements", "pick up a collection",
+      "collections nearby", "nearby collection", "how far apart", "miles between collections", "collection cancelled",
+    ],
+  },
   {
     name: "Goods In → Number series & email", href: "/tools/warehouse/settings", app: "WAREHOUSE",
     what: "Where the receipt, tote, pallet and (optional) vendor number series carry on from, and the connection to the mailbox receipts are emailed from. Only a Warehouse admin can change them.",
