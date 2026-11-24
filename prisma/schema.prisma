@@ -3789,6 +3789,10 @@ model CollectionBooking {
   vanId       String?
   needsHotel  Boolean   @default(false)
 
+  /// The CRM submission this collection was booked from (its Logistics was set to Collection) — a plain
+  /// id, no foreign key, so deleting a submission never breaks the booking. Null = made directly here.
+  submissionId String?
+
   createdById   String?
   createdByName String    @default("")
   createdAt     DateTime  @default(now())
@@ -3801,6 +3805,7 @@ model CollectionBooking {
   @@index([status])
   @@index([collectFrom])
   @@index([ownerId])
+  @@index([submissionId])
 }
 
 /// A hotel stay on a collection trip — usually one, more when the trip runs over several nights.

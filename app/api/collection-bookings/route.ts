@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { deleteObjectsFromR2 } from "@/lib/r2"
 import {
   requireCollections, missingTable, logEvent, describeChanges, ref, str, day, names, geoFor,
+  crmCollectionsToBook, bookingFromSubmission, crmRef,
   BOOKING_FIELDS, COLLECTION_STATUSES, COLLECTION_STATUS_LABEL, type CollectionStatus,
 } from "@/lib/collection-bookings"
 
@@ -54,7 +55,10 @@ export async function GET(req: NextRequest) {
         include: { hotels: { orderBy: [{ checkIn: "asc" }, { createdAt: "asc" }] }, events: { orderBy: { at: "desc" }, take: 500 } },
       })
       if (!booking) return NextResponse.json({ error: "That booking isn't there — it may have been deleted." }, { status: 404 })
-      return NextResponse.json({ booking })
+      const sub = booking.submissionId
+        ? await prisma.submission.findUnique({ where: { id: booking.submissionId }, select: { reference: true } }).catch(() => null)
+        : null
+      return NextResponse.json({ booking, crmRef: sub ? crmRef(sub.reference) : null })
     }
 
     const bookings = await prisma.collectionBooking.findMany({
@@ -89,7 +93,16 @@ export async function GET(req: NextRequest) {
     }
     const driverNames = [...seen.values()].sort((a, b) => a.localeCompare(b))
 
-    return NextResponse.json({ bookings, vans, driverNames, me: { userId: who.userId, name: who.name, isAdmin: who.isAdmin } })
+    // Collections set up in the CRM that have no booking yet, and the CRM reference of each booking made
+    // from one. A CRM read that fails never stops the bookings showing.
+    const crm = await crmCollectionsToBook().catch(e => { console.error("collection-bookings GET: CRM list", e); return [] })
+    const subIds = bookings.map(b => b.submissionId).filter((x): x is string => !!x)
+    const crmRefs: Record<string, string> = {}
+    if (subIds.length) {
+      for (const s of await prisma.submission.findMany({ where: { id: { in: subIds } }, select: { id: true, reference: true } })) crmRefs[s.id] = crmRef(s.reference)
+    }
+
+    return NextResponse.json({ bookings, vans, driverNames, crm, crmRefs, me: { userId: who.userId, name: who.name, isAdmin: who.isAdmin, canCrm: who.canCrm } })
   } catch (e: any) {
     if (missingTable(e)) return NextResponse.json({ bookings: [], vans: [], driverNames: [], needsMigration: true })
     if (!e?.http) console.error("collection-bookings GET:", e)
@@ -101,6 +114,21 @@ export async function POST(req: NextRequest) {
   try {
     const who = await requireCollections()
     const b = await req.json()
+
+    // From a CRM collection: its contact, address, phone, email and items copied in, linked back to it.
+    if (b.fromSubmission) {
+      const made = await bookingFromSubmission(String(b.fromSubmission))
+      const data: Record<string, any> = { ...made.data }
+      if (data.postcode) Object.assign(data, await geoFor(data.postcode))
+      const booking = await prisma.collectionBooking.create({
+        data: { ...(data as any), status: "NEW", createdById: who.userId, createdByName: who.name },
+        select: { id: true, ref: true },
+      })
+      await logEvent(booking.id, who, "created", `Booking ${ref(booking.ref)} made from CRM submission ${made.crmRef}`)
+      if (made.notes) await logEvent(booking.id, who, "note", `Collection notes from the CRM: ${made.notes}`)
+      return NextResponse.json({ id: booking.id, ref: booking.ref })
+    }
+
     const data = bookingData(b)
     if (!data.vendorName && !data.address && !data.postcode) {
       return NextResponse.json({ error: "Give it at least the vendor's name or where the collection is." }, { status: 400 })

@@ -32,10 +32,16 @@ type Booking = {
   drivers: string[]; vanId: string | null; needsHotel: boolean
   createdByName: string; createdAt: string; updatedAt: string; closedAt: string | null
   hotels: Hotel[]
+  submissionId: string | null
 }
 type Ev  = { id: string; kind: string; text: string; byName: string; at: string }
 type Van = { id: string; name: string; reg: string; active: boolean }
-type Me  = { userId: string; name: string; isAdmin: boolean }
+type Me  = { userId: string; name: string; isAdmin: boolean; canCrm: boolean }
+/** A CRM submission set to Collection with no booking yet (lib/collection-bookings.ts crmCollectionsToBook). */
+type Crm = {
+  submissionId: string; crmRef: string; status: string; name: string; customerNo: string
+  phone: string; email: string; address: string; postcode: string; notes: string; items: number; createdAt: string
+}
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 const fileUrl = (key: string) => `/api/collection-bookings/file?key=${encodeURIComponent(key)}`
@@ -151,22 +157,28 @@ const FILTERS = [
   { key: "collected", label: "Collected" },
   { key: "cancelled", label: "Cancelled" },
   { key: "all",       label: "All" },
+  { key: "crm",       label: "From the CRM" },
 ] as const
 type FilterKey = typeof FILTERS[number]["key"]
 
 // ── The page ─────────────────────────────────────────────────────────────────
-export default function CollectionBookingsClient({ initialId }: { initialId: string }) {
+export default function CollectionBookingsClient({ initialId, initialFilter }: { initialId: string; initialFilter?: string }) {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [vans, setVans]         = useState<Van[]>([])
   const [driverNames, setDriverNames] = useState<string[]>([])
-  const [me, setMe]             = useState<Me>({ userId: "", name: "", isAdmin: false })
+  const [crm, setCrm]           = useState<Crm[]>([])
+  const [crmRefs, setCrmRefs]   = useState<Record<string, string>>({})
+  const [me, setMe]             = useState<Me>({ userId: "", name: "", isAdmin: false, canCrm: false })
   const [loading, setLoading]   = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [error, setError]       = useState<string | null>(null)
-  const [filter, setFilter]     = useState<FilterKey>("open")
+  const [filter, setFilter]     = useState<FilterKey>(FILTERS.some(f => f.key === initialFilter) ? (initialFilter as FilterKey) : "open")
   const [q, setQ]               = useState("")
   const [openId, setOpenId]     = useState<string>(initialId)
   const [creating, setCreating] = useState(false)
+  // "📍 Show nearby collections" on a booking: the list becomes that booking plus the open collections
+  // within NEARBY_MILES of it, nearest first, each with its miles.
+  const [nearOf, setNearOf]     = useState<string | null>(null)
   const [dirty, setDirty]       = useState(false)
 
   const load = useCallback(async () => {
@@ -176,6 +188,7 @@ export default function CollectionBookingsClient({ initialId }: { initialId: str
       if (!r.ok) throw new Error(j.error ?? "Couldn't load the collection bookings")
       setNeedsMigration(!!j.needsMigration)
       setBookings(j.bookings ?? []); setVans(j.vans ?? []); setDriverNames(j.driverNames ?? [])
+      setCrm(j.crm ?? []); setCrmRefs(j.crmRefs ?? {})
       if (j.me) setMe(j.me)
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
@@ -204,7 +217,11 @@ export default function CollectionBookingsClient({ initialId }: { initialId: str
     overdue: bookings.filter(b => OPEN_COLLECTION_STATUSES.includes(b.status) && b.collectFrom && lastDay(b) < today).length,
   }), [bookings, today])
 
+  const nearCentre = nearOf ? bookings.find(b => b.id === nearOf) ?? null : null
+  const nearList = useMemo(() => (nearCentre ? nearbyTo(nearCentre, bookings) : []), [nearCentre, bookings])
+
   const shown = useMemo(() => {
+    if (nearCentre) return [nearCentre, ...nearList.map(n => n.o)]
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
     const list = bookings.filter(b => {
       if (filter === "open" && !OPEN_COLLECTION_STATUSES.includes(b.status)) return false
@@ -230,7 +247,18 @@ export default function CollectionBookingsClient({ initialId }: { initialId: str
       const ka = da || a.createdAt, kb = db || b.createdAt
       return ka < kb ? 1 : -1
     })
-  }, [bookings, filter, q, me.userId, vans])
+  }, [bookings, filter, q, me.userId, vans, nearCentre, nearList])
+  const milesAway = (id: string): number | "centre" | undefined =>
+    !nearCentre ? undefined : id === nearCentre.id ? "centre" : nearList.find(n => n.o.id === id)?.miles
+
+  /** Shows the nearby list. Under xl the list is hidden while a booking is open, so the booking closes. */
+  function showNearby(id: string) {
+    if (!window.matchMedia("(min-width: 1280px)").matches) {
+      if (dirty && !confirm("You have changes on this booking that aren't saved. Leave them?")) return
+      setDirty(false); setOpenId("")
+    }
+    setNearOf(id)
+  }
 
   const selected = bookings.find(b => b.id === openId) ?? null
   const split = !!(openId || creating)
@@ -250,41 +278,56 @@ export default function CollectionBookingsClient({ initialId }: { initialId: str
       )}
 
       {/* The numbers that matter, each one a shortcut to its list. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <Stat n={counts.new} label="Need picking up" tone={counts.new ? "text-amber-600 dark:text-amber-400" : ""} onClick={() => setFilter("new")} />
         <Stat n={counts.inHand} label="Being arranged" onClick={() => setFilter("open")} />
         <Stat n={counts.booked} label="Booked" onClick={() => setFilter("booked")} />
         <Stat n={counts.week} label="Going out in the next 7 days" onClick={() => setFilter("open")} />
         <Stat n={counts.overdue} label="Date passed, not marked collected" tone={counts.overdue ? "text-red-600 dark:text-red-400" : ""} onClick={() => setFilter("open")} />
+        <Stat n={crm.length} label="From the CRM, not booked yet" tone={crm.length ? "text-indigo-600 dark:text-indigo-400" : ""} onClick={() => { setNearOf(null); setFilter("crm") }} />
       </div>
 
       <div className={split ? "grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start" : ""}>
         {/* The list — hidden under xl while a booking is open, so a tablet gets the whole width for it. */}
         <div className={`space-y-3 ${split ? "hidden xl:block xl:sticky xl:top-4 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:pr-1" : ""}`}>
-          <div className="flex flex-wrap items-center gap-2">
+          {nearCentre && (
+            <div className="rounded-lg border border-lime-500 bg-lime-50 dark:bg-lime-950/30 px-4 py-3 text-sm text-lime-900 dark:text-lime-200 flex flex-wrap items-center gap-3">
+              <span className="flex-1 min-w-48">
+                📍 Open collections within {NEARBY_MILES} miles of <b>{cbRef(nearCentre.ref)}</b>{nearCentre.vendorName ? ` (${nearCentre.vendorName})` : ""} —{" "}
+                {nearList.length === 0 ? "none found" : `${nearList.length} found, nearest first`}. Straight-line miles between postcodes.
+              </span>
+              <button className={btn} onClick={() => setNearOf(null)}>✕ Show all bookings</button>
+            </div>
+          )}
+          <div className={`flex flex-wrap items-center gap-2 ${nearCentre ? "hidden" : ""}`}>
             {FILTERS.map(f => (
               <button key={f.key} onClick={() => setFilter(f.key)}
                 className={`min-h-11 px-3 text-sm rounded-lg border transition-colors ${filter === f.key
                   ? "border-lime-500 bg-lime-50 text-lime-800 dark:bg-lime-900/30 dark:text-lime-300"
                   : "border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
-                {f.label}
+                {f.label}{f.key === "crm" ? ` (${crm.length})` : ""}
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className={`flex flex-wrap gap-2 ${nearCentre ? "hidden" : ""}`}>
             <input value={q} onChange={e => setQ(e.target.value)} className={`${input} flex-1 min-w-48`} placeholder="Search vendor, postcode, CB number, driver, hotel, confirmation…" />
             <button className={btnGo} onClick={() => { if (dirty && !confirm("You have changes on this booking that aren't saved. Leave them?")) return; setDirty(false); setOpenId(""); setCreating(true) }}>+ New collection</button>
           </div>
 
           {loading ? <p className={`text-sm ${muted}`}>Loading…</p>
-            : shown.length === 0 ? (
+            : filter === "crm" && !nearCentre ? (
+              <CrmList items={crm} q={q} canCrm={me.canCrm} onError={setError} onMade={async id => {
+                await load()
+                setFilter("open"); setCreating(false); setDirty(false); setOpenId(id)
+              }} />
+            ) : shown.length === 0 ? (
               <p className={`text-sm ${muted} ${box} px-4 py-6 text-center`}>
                 {bookings.length === 0 ? "No collection bookings yet — press + New collection to add the first." : `Nothing here under “${FILTERS.find(f => f.key === filter)?.label}”${q ? " matching that search" : ""}.`}
               </p>
             ) : (
               <div className="space-y-2">
                 <p className={`text-xs ${muted}`}>{shown.length} booking{shown.length === 1 ? "" : "s"}</p>
-                {shown.map(b => <Row key={b.id} b={b} vans={vans} all={bookings} me={me} today={today} active={b.id === openId} onOpen={() => open(b.id)} />)}
+                {shown.map(b => <Row key={b.id} b={b} vans={vans} all={bookings} me={me} today={today} active={b.id === openId} milesAway={milesAway(b.id)} crmRef={b.submissionId ? crmRefs[b.submissionId] : undefined} onOpen={() => open(b.id)} />)}
               </div>
             )}
         </div>
@@ -295,7 +338,7 @@ export default function CollectionBookingsClient({ initialId }: { initialId: str
             {creating
               ? <NewBooking onCancel={() => setCreating(false)} onError={setError} onCreated={id => { setCreating(false); setOpenId(id); void load() }} />
               : openId && (
-                <Detail key={openId} id={openId} summary={selected} all={bookings} vans={vans} driverNames={driverNames} me={me} onOpen={open}
+                <Detail key={openId} id={openId} summary={selected} all={bookings} vans={vans} driverNames={driverNames} me={me} onOpen={open} onShowNearby={showNearby}
                   onListChanged={load} onError={setError} onDirty={setDirty}
                   onClose={() => { if (dirty && !confirm("You have changes on this booking that aren't saved. Leave them?")) return; setDirty(false); setOpenId("") }}
                   onDeleted={() => { setDirty(false); setOpenId(""); void load() }} />
@@ -321,7 +364,7 @@ function Stat({ n, label: l, tone, onClick }: { n: number; label: string; tone?:
   )
 }
 
-function Row({ b, vans, all, me, today, active, onOpen }: { b: Booking; vans: Van[]; all: Booking[]; me: Me; today: string; active: boolean; onOpen: () => void }) {
+function Row({ b, vans, all, me, today, active, milesAway, crmRef, onOpen }: { b: Booking; vans: Van[]; all: Booking[]; me: Me; today: string; active: boolean; milesAway?: number | "centre"; crmRef?: string; onOpen: () => void }) {
   const todo = stillToSort(b)
   const hotel = hotelState(b)
   const clash = OPEN_COLLECTION_STATUSES.includes(b.status) ? clashes(b, all, vans) : []
@@ -332,10 +375,16 @@ function Row({ b, vans, all, me, today, active, onOpen }: { b: Booking; vans: Va
   return (
     <button onClick={onOpen} className={`w-full text-left ${box} px-4 py-3 transition-colors hover:border-lime-500 ${active ? "border-lime-500 ring-1 ring-lime-500" : ""}`}>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {milesAway !== undefined && (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300">
+            {milesAway === "centre" ? "📍 This one" : `📍 ${milesLabel(milesAway)} away`}
+          </span>
+        )}
         <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{cbRef(b.ref)}</span>
         <StatusPill status={b.status} />
         <span className="font-semibold text-gray-900 dark:text-white">{b.vendorName || "No vendor name"}</span>
         {b.vendorNo && <span className={`text-xs ${muted}`}>{b.vendorNo}</span>}
+        {b.submissionId && <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">CRM {crmRef ?? ""}</span>}
         <span className={`ml-auto text-xs ${b.ownerId ? (b.ownerId === me.userId ? "text-lime-700 dark:text-lime-400 font-semibold" : muted) : "text-amber-600 dark:text-amber-400 font-semibold"}`}>
           {b.ownerId ? `✋ ${b.ownerId === me.userId ? "You" : b.ownerName}` : OPEN_COLLECTION_STATUSES.includes(b.status) ? "Nobody has it" : ""}
         </span>
@@ -430,12 +479,13 @@ function changedFields(f: Form, base: Form): Partial<Form> {
   return out
 }
 
-function Detail({ id, summary, all, vans, driverNames, me, onOpen, onListChanged, onError, onDirty, onClose, onDeleted }: {
-  id: string; summary: Booking | null; all: Booking[]; vans: Van[]; driverNames: string[]; me: Me; onOpen: (id: string) => void
+function Detail({ id, summary, all, vans, driverNames, me, onOpen, onShowNearby, onListChanged, onError, onDirty, onClose, onDeleted }: {
+  id: string; summary: Booking | null; all: Booking[]; vans: Van[]; driverNames: string[]; me: Me; onOpen: (id: string) => void; onShowNearby: (id: string) => void
   onListChanged: () => void; onError: (m: string) => void; onDirty: (d: boolean) => void; onClose: () => void; onDeleted: () => void
 }) {
   const [b, setB]           = useState<Booking | null>(null)
   const [events, setEvents] = useState<Ev[]>([])
+  const [fromCrm, setFromCrm] = useState<string | null>(null) // the CRM submission's reference, when made from one
   const [missing, setMissing] = useState(false)
   // Only what's been typed sits here, on top of the saved booking. So when the booking reloads — a
   // hotel added, someone else's save — the untouched fields take the new values and nothing typed is lost.
@@ -450,7 +500,7 @@ function Detail({ id, summary, all, vans, driverNames, me, onOpen, onListChanged
       const j = await r.json()
       if (r.status === 404) { setMissing(true); return }
       if (!r.ok) throw new Error(j.error ?? "Couldn't open that booking")
-      setB(j.booking); setEvents(j.booking.events ?? [])
+      setB(j.booking); setEvents(j.booking.events ?? []); setFromCrm(j.crmRef ?? null)
     } catch (e: any) { onError(e.message) }
   }, [id, onError])
   useEffect(() => { void load() }, [load])
@@ -532,9 +582,24 @@ function Detail({ id, summary, all, vans, driverNames, me, onOpen, onListChanged
           {!closed && <button className={btn} onClick={() => status("COLLECTED")} disabled={!!busy}>📦 Mark collected</button>}
           {!closed && <button className={`${btn} hover:border-red-500 hover:text-red-500`} onClick={() => status("CANCELLED")} disabled={!!busy}>Cancel collection</button>}
           {closed && <button className={btn} onClick={() => status(b.ownerId ? "IN_HAND" : "NEW")} disabled={!!busy}>↺ Reopen</button>}
+          <button className={btn} onClick={() => onShowNearby(b.id)} disabled={b.lat == null}
+            title={b.lat == null ? "Needs a postcode that can be found first" : undefined}>
+            📍 Show nearby collections{b.lat != null ? ` (${nearbyTo(b, all).length})` : ""}
+          </button>
+          {/* What's SAVED is printed — say so when there are changes not saved yet. */}
+          <a className={`${btn} inline-flex items-center`} href={`/api/collection-bookings/pdf?id=${encodeURIComponent(b.id)}`} target="_blank" rel="noreferrer"
+            onClick={e => { if (dirty && !confirm("The PDF shows what's saved — your changes here aren't saved yet. Open it anyway?")) e.preventDefault() }}>
+            🖨 Print / PDF
+          </a>
           <button className={btn} onClick={copyForDriver}>{copied ? "✓ Copied" : "📋 Copy details for the driver"}</button>
           {me.isAdmin && <button className={`${btn} ml-auto hover:border-red-500 hover:text-red-500`} onClick={remove} disabled={!!busy}>Delete</button>}
         </div>
+        {b.submissionId && (
+          <p className="text-sm text-indigo-700 dark:text-indigo-300">
+            📋 Made from CRM submission <b>{fromCrm ?? "(no longer in the CRM)"}</b>
+            {me.canCrm && fromCrm && <> · <a className="underline" href={`/submissions/${b.submissionId}`} target="_blank" rel="noreferrer">Open in the CRM ↗</a></>}
+          </p>
+        )}
         <p className={`text-xs ${muted}`}>Made by {b.createdByName || "—"} · {when(b.createdAt)}{b.closedAt ? ` · ${b.status === "CANCELLED" ? "cancelled" : "collected"} ${when(b.closedAt)}` : ""}</p>
         {sheet !== null && (
           <div className="space-y-2">
@@ -618,6 +683,56 @@ function Detail({ id, summary, all, vans, driverNames, me, onOpen, onListChanged
   )
 }
 
+/** CRM submissions set to Collection that have no booking yet — one press makes the booking from it. */
+function CrmList({ items, q, canCrm, onError, onMade }: { items: Crm[]; q: string; canCrm: boolean; onError: (m: string) => void; onMade: (id: string) => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const list = items.filter(c => {
+    if (!words.length) return true
+    const hay = [c.crmRef, c.name, c.customerNo, c.phone, c.email, c.address, c.postcode, c.notes].join(" ").toLowerCase()
+    return words.every(w => hay.includes(w))
+  })
+  async function make(c: Crm) {
+    setBusy(c.submissionId)
+    try { const j = await api("/api/collection-bookings", { fromSubmission: c.submissionId }); await onMade(j.id) }
+    catch (e: any) { onError(e.message) } finally { setBusy(null) }
+  }
+  return (
+    <div className="space-y-2">
+      <p className={`text-xs ${muted}`}>
+        CRM submissions whose logistics are set to Collection and that haven&apos;t arrived, with no booking made yet ({list.length}).
+        Making a booking copies the contact, address, phone, email, items and collection notes across and links the two.
+      </p>
+      {list.length === 0 ? (
+        <p className={`text-sm ${muted} ${box} px-4 py-6 text-center`}>{items.length === 0 ? "Nothing waiting — every CRM collection has a booking." : "None matching that search."}</p>
+      ) : list.map(c => (
+        <div key={c.submissionId} className={`${box} px-4 py-3 space-y-1`}>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">CRM {c.crmRef}</span>
+            <span className={`text-xs ${muted}`}>{c.status}</span>
+            <span className="font-semibold text-gray-900 dark:text-white">{c.name || "No name"}</span>
+            {c.customerNo && <span className={`text-xs ${muted}`}>{c.customerNo}</span>}
+            <span className={`ml-auto text-xs ${muted}`}>since {new Date(c.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
+            <span>📍 {[c.address.replace(/\s*\r?\n\s*/g, ", "), c.address.toUpperCase().includes(c.postcode) ? "" : c.postcode].filter(Boolean).join(", ") || <span className={muted}>no address</span>}</span>
+          </div>
+          <div className={`flex flex-wrap gap-x-4 gap-y-1 text-xs ${muted}`}>
+            {c.phone && <span>☎ {c.phone}</span>}
+            {c.email && <span>✉ {c.email}</span>}
+            <span>📦 {c.items} item{c.items === 1 ? "" : "s"}</span>
+          </div>
+          {c.notes && <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">📝 {c.notes}</p>}
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button className={btnGo} onClick={() => make(c)} disabled={!!busy}>{busy === c.submissionId ? "Making it…" : "＋ Make a booking"}</button>
+            {canCrm && <a className={`${btn} inline-flex items-center`} href={`/submissions/${c.submissionId}`} target="_blank" rel="noreferrer">Open in the CRM ↗</a>}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Whether the postcode was placed on the map — the nearby miles depend on it. */
 function PostcodeFound({ b, typed }: { b: Booking; typed: string }) {
   const saved = b.postcode.trim().toUpperCase()
@@ -650,7 +765,7 @@ function Nearby({ b, all, vans, onOpen }: { b: Booking; all: Booking[]; vans: Va
               <StatusPill status={o.status} />
               <span className="font-semibold text-gray-900 dark:text-white">{o.vendorName || "No vendor name"}</span>
               <span className={muted}>{[o.area, o.postcode].filter(Boolean).join(", ")}</span>
-              <span className="text-gray-700 dark:text-gray-300">📅 {o.collectFrom ? `${dayLabel(o.collectFrom)} (${dayGap(b.collectFrom, o.collectFrom)})` : "no date"}</span>
+              <span className="text-gray-700 dark:text-gray-300">📅 {o.collectFrom ? `${dayLabel(o.collectFrom)}${b.collectFrom ? ` (${dayGap(b.collectFrom, o.collectFrom)})` : ""}` : "no date"}</span>
               <span className={`text-xs ${muted}`}>🧑‍✈️ {o.drivers.join(", ") || "no driver"} · 🚐 {vanLabel(vans.find(v => v.id === o.vanId)) || "no van"}</span>
             </button>
           ))}

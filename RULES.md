@@ -3759,7 +3759,9 @@ it's an overnight — with the booking confirmation number and file.
 - **Nearby** (2026-11-23 — so if someone cancels, a job nearby can take the slot, and nearby jobs can
   share a trip): open collections within `NEARBY_MILES` (30) of each other are marked on the list
   ("📍 Nearby: CB-0007 12 mi") and listed on the booking with the miles and how the dates line up.
-  Cancelled bookings show the open jobs near them. Miles are STRAIGHT LINE between postcodes
+  Cancelled bookings show the open jobs near them. **📍 Show nearby collections** on a booking turns the
+  list into that booking plus the open jobs within 30 miles, nearest first, each badged "8 mi away"
+  (under xl the booking closes so the list can show; ✕ Show all bookings goes back). Miles are STRAIGHT LINE between postcodes
   (`milesBetween`, haversine) and the page says so — road distance would need a routing service.
 - ⚠ **postcodes.io** places the postcode (`locatePostcode` / `geoFor` in lib/collection-bookings.ts) —
   chosen over a bundled postcode-district table on 2026-11-23 for street-level accuracy. ONLY the
@@ -3774,6 +3776,25 @@ it's an overnight — with the booking confirmation number and file.
   bookings) are served ONLY by `/api/collection-bookings/file` (app-gated, 15-minute signed link, exact
   key shape `COLLECTION_FILE_RE`). `/api/catalogue/photo-proxy`, `/api/catalogue/signed-url` and
   `/api/image` refuse that prefix, like refund photos. iPhone HEIC is stored as JPEG on upload.
+- **🖨 Print / PDF** (`/api/collection-bookings/pdf?id=`, `lib/collection-booking-pdf.ts`, pdf-lib) — the
+  booking as an A4 sheet with the Vectis logo header and company footer (same as the Goods In receipt):
+  when/where/status box, special requirements in an amber box, vendor, the collection, drivers and van,
+  every hotel stay (with confirmation, cost and payment), nearby open collections, the notes (oldest
+  first, last 30), then the photos two across on their own pages (up to 12, made print-sized with sharp;
+  PDFs on the booking are counted, not drawn). It prints what's SAVED — the button warns if there are
+  unsaved changes. "Printed <date> by <name>" in the header.
+- **From the CRM** (2026-11-24 — the CRM's own collections brought in): a CRM submission whose
+  Logistics is set to Collection, not arrived, not Declined/Completed/Arrived, and with no booking
+  (`CollectionBooking.submissionId`, plain id) is listed under the "From the CRM" filter and stat box
+  (`crmCollectionsToBook`). **＋ Make a booking** (`POST { fromSubmission }`, `bookingFromSubmission`)
+  copies the collection contact (else the customer's name), customer C-number, phone, email, address,
+  the postcode found in the address (`postcodeIn`, for the miles), and the items into "What's being
+  collected"; the CRM's collection notes become the first note. One booking per submission (409 after).
+  The booking says "Made from CRM submission ABCD1234" (link only for CRM users, `canCrm`), and the CRM
+  submission page's Logistics box shows its booking or "make one in Collection bookings" (only for
+  COLLECTION_BOOKINGS users; that query is caught so the CRM page opens before Run Migrations).
+  ⚠ Collection bookings users see these CRM collection details without the CRM app — the details a
+  collection needs, nothing else from the submission. Nothing is written back to the CRM.
 - Only an admin can **delete** a booking (it removes its files); everyone else Cancels, which keeps it.
 - Tables `CollectionBooking` / `CollectionHotel` / `CollectionBookingEvent` (migration
   20261123120000_collection_bookings + the MIGRATIONS array — **needs Run Migrations**). Listed in

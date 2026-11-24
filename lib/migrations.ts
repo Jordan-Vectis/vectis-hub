@@ -2815,6 +2815,9 @@ END $$`,
     CONSTRAINT "CollectionBookingEvent_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "CollectionBooking"("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`,
   `CREATE INDEX IF NOT EXISTS "CollectionBookingEvent_bookingId_at_idx" ON "CollectionBookingEvent"("bookingId", "at")`,
+  // Collection bookings (2026-11-24): which CRM submission a booking was made from.
+  `ALTER TABLE "CollectionBooking" ADD COLUMN IF NOT EXISTS "submissionId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "CollectionBooking_submissionId_idx" ON "CollectionBooking"("submissionId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

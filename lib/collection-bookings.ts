@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import { getEffectiveSession } from "@/lib/impersonation"
+import { WHO_INCLUDE, whoFor } from "@/lib/customers/who"
+import { ref } from "@/lib/collection-bookings-shared"
 
 // Admin & Operations → Collection bookings (2026-11-23). A trip out to collect a vendor's items:
 // where and when, what's being collected (with photos), special requirements, the driver(s) and van,
@@ -13,7 +15,7 @@ export * from "@/lib/collection-bookings-shared"
 
 export const COLLECTIONS_NO_ACCESS = "You don't have Collection bookings — ask an admin to give it to you in Users & Permissions."
 
-export type CollectionsUser = { userId: string; name: string; isAdmin: boolean }
+export type CollectionsUser = { userId: string; name: string; isAdmin: boolean; canCrm: boolean }
 
 /** Who is asking, checked fresh from the database (a login token can be hours old), and whether they
  *  hold the COLLECTION_BOOKINGS app. Admins always do. */
@@ -27,7 +29,87 @@ export async function requireCollections(): Promise<CollectionsUser> {
   if (!hasAppAccess(u?.role ?? "", u?.allowedApps ?? [], "COLLECTION_BOOKINGS")) {
     throw Object.assign(new Error(COLLECTIONS_NO_ACCESS), { http: 403 })
   }
-  return { userId: session.user.id, name: u?.name || u?.email || "Unknown", isAdmin: u?.role === "ADMIN" }
+  return {
+    userId: session.user.id, name: u?.name || u?.email || "Unknown", isAdmin: u?.role === "ADMIN",
+    // Same rule as the CRM's own pages (the legacy COLLECTIONS role still counts), so "Open in CRM" only
+    // shows to people the CRM will let in.
+    canCrm: u?.role === "COLLECTIONS" || hasAppAccess(u?.role ?? "", u?.allowedApps ?? [], "CRM"),
+  }
+}
+
+// ── Collections from the CRM ─────────────────────────────────────────────────
+// A CRM submission whose Logistics is set to "Collection" (address, contact name, phone, email, notes)
+// and that hasn't arrived yet is a collection to book. They're listed here until a booking is made
+// from one (CollectionBooking.submissionId), which copies those details in and links the two.
+
+const SUBMISSION_STATUS_LABEL: Record<string, string> = {
+  PENDING_ASSIGNMENT: "Pending assignment", PENDING_VALUATION: "Pending valuation", VALUATION_COMPLETE: "Valuation complete",
+  PENDING_CUSTOMER_DECISION: "Customer deciding", APPROVED: "Approved", DECLINED: "Declined", FOLLOW_UP: "Follow up",
+  COLLECTION_PENDING: "Collection pending", ARRIVED: "Arrived", COMPLETED: "Completed",
+}
+export const crmRef = (reference: string) => reference.slice(0, 8).toUpperCase()
+
+/** The last UK postcode written in a free-text address, so a CRM collection lands on the map. "" if none. */
+export function postcodeIn(text: string | null | undefined): string {
+  const all = [...String(text ?? "").toUpperCase().matchAll(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/g)]
+  const m = all[all.length - 1]
+  return m ? `${m[1]} ${m[2]}` : ""
+}
+
+export type CrmCollection = {
+  submissionId: string; crmRef: string; status: string; name: string; customerNo: string
+  phone: string; email: string; address: string; postcode: string; notes: string; items: number; createdAt: Date
+}
+
+/** CRM submissions set to Collection, not arrived, not declined or finished, with no booking made yet. */
+export async function crmCollectionsToBook(): Promise<CrmCollection[]> {
+  const booked = new Set((await prisma.collectionBooking.findMany({ where: { submissionId: { not: null } }, select: { submissionId: true } })).map(b => b.submissionId!))
+  const subs = await prisma.submission.findMany({
+    where: { logistics: { is: { type: "COLLECTION", arrived: false } }, status: { notIn: ["DECLINED", "COMPLETED", "ARRIVED"] } },
+    orderBy: { createdAt: "asc" },
+    take: 300,
+    select: { id: true, reference: true, status: true, createdAt: true, logistics: true, ...WHO_INCLUDE, _count: { select: { items: true } } },
+  })
+  return subs.filter(s => !booked.has(s.id)).map(s => {
+    const who = whoFor(s), l = s.logistics!
+    return {
+      submissionId: s.id, crmRef: crmRef(s.reference), status: SUBMISSION_STATUS_LABEL[s.status] ?? s.status,
+      name: l.collectionName?.trim() || who.name, customerNo: who.customerNo ?? "",
+      phone: l.collectionPhone?.trim() || who.phone || "", email: l.collectionEmail?.trim() || who.email || "",
+      address: l.collectionAddress ?? "", postcode: postcodeIn(l.collectionAddress), notes: l.collectionNotes ?? "",
+      items: s._count.items, createdAt: s.createdAt,
+    }
+  })
+}
+
+/** What a new booking made from a CRM submission starts with. Refuses (409) if one already exists. */
+export async function bookingFromSubmission(submissionId: string) {
+  const s = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, reference: true, logistics: true, ...WHO_INCLUDE, items: { select: { name: true }, orderBy: { createdAt: "asc" }, take: 12 }, _count: { select: { items: true } } },
+  })
+  if (!s) throw Object.assign(new Error("That CRM submission isn't there any more."), { http: 404 })
+  const already = await prisma.collectionBooking.findFirst({ where: { submissionId: s.id }, select: { ref: true } })
+  if (already) throw Object.assign(new Error(`There's already a booking for that submission — ${ref(already.ref)}.`), { http: 409 })
+  const who = whoFor(s), l = s.logistics
+  const names = s.items.map(i => i.name.trim()).filter(Boolean)
+  const itemsLine = s._count.items
+    ? `${s._count.items} item${s._count.items === 1 ? "" : "s"} on CRM submission ${crmRef(s.reference)}: ${names.join(", ")}${s._count.items > names.length ? ", …" : ""}`
+    : ""
+  return {
+    crmRef: crmRef(s.reference),
+    notes: l?.collectionNotes?.trim() ?? "",
+    data: {
+      submissionId: s.id,
+      vendorName: (l?.collectionName?.trim() || who.name).slice(0, 120),
+      vendorNo: (who.customerNo ?? "").slice(0, 30),
+      phone: (l?.collectionPhone?.trim() || who.phone || "").slice(0, 60),
+      email: (l?.collectionEmail?.trim() || who.email || "").slice(0, 160),
+      address: (l?.collectionAddress ?? "").slice(0, 1000),
+      postcode: postcodeIn(l?.collectionAddress),
+      description: itemsLine.slice(0, 6000),
+    },
+  }
 }
 
 export function missingTable(e: any): boolean {

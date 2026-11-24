@@ -14,6 +14,7 @@ import StatusSelect from "./status-select"
 import FollowUpToggle from "./follow-up-toggle"
 import NotesSection from "./notes-section"
 import { WHO_INCLUDE, whoFor } from "@/lib/customers/who"
+import { COLLECTION_STATUS_LABEL, ref as cbRef, type CollectionStatus } from "@/lib/collection-bookings-shared"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -62,6 +63,12 @@ export default async function SubmissionDetailPage({
   const crmUser = session ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true, allowedApps: true } }) : null
   const isCollectionsOrAdmin = !!crmUser && (crmUser.role === "COLLECTIONS" || hasAppAccess(crmUser.role, crmUser.allowedApps, "CRM"))
   const isCataloguer = session?.user.role === "CATALOGUER" || session?.user.role === "ADMIN"
+  // Admin & Operations → Collection bookings: the booking made from this submission, for people who have
+  // that app. ⚠ Caught: until Run Migrations adds the table/column, the CRM page must still open.
+  const canBook = !!crmUser && hasAppAccess(crmUser.role, crmUser.allowedApps, "COLLECTION_BOOKINGS")
+  const collectionBooking = canBook && submission.logistics?.type === "COLLECTION"
+    ? await prisma.collectionBooking.findFirst({ where: { submissionId: submission.id }, orderBy: { createdAt: "desc" }, select: { id: true, ref: true, status: true, collectFrom: true } }).catch(() => null)
+    : null
 
   const totalEstimate = submission.items
     .filter((i) => i.valuation)
@@ -295,6 +302,21 @@ export default async function SubmissionDetailPage({
                   </>
                 )}
               </dl>
+              {submission.logistics.type === "COLLECTION" && canBook && (
+                <p className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 text-base text-gray-800 dark:text-gray-100">
+                  🚚{" "}
+                  {collectionBooking ? (
+                    <>
+                      Collection booking{" "}
+                      <Link href={`/tools/collection-bookings?id=${collectionBooking.id}`} className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">{cbRef(collectionBooking.ref)}</Link>
+                      {" · "}{COLLECTION_STATUS_LABEL[collectionBooking.status as CollectionStatus] ?? collectionBooking.status}
+                      {collectionBooking.collectFrom ? ` · ${new Date(collectionBooking.collectFrom).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}` : ""}
+                    </>
+                  ) : (
+                    <>No collection booking yet — <Link href="/tools/collection-bookings?filter=crm" className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">make one in Collection bookings</Link></>
+                  )}
+                </p>
+              )}
             </section>
           )}
 

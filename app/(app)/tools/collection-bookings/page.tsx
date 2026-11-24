@@ -4,8 +4,8 @@ import CollectionBookingsClient from "./collection-bookings-client"
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Collection bookings" }
 
-export default async function CollectionBookingsPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
-  const { id } = await searchParams
+export default async function CollectionBookingsPage({ searchParams }: { searchParams: Promise<{ id?: string; filter?: string }> }) {
+  const { id, filter } = await searchParams
   return (
     <div className="p-4 sm:p-8">
       <div className="mb-5">
@@ -17,7 +17,7 @@ export default async function CollectionBookingsPage({ searchParams }: { searchP
           note is kept on its history with who made it.
         </p>
       </div>
-      <CollectionBookingsClient initialId={id ?? ""} />
+      <CollectionBookingsClient initialId={id ?? ""} initialFilter={filter} />
     </div>
   )
 }
