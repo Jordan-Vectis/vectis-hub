@@ -1530,6 +1530,41 @@ the Hub top bar is there), gated on Cataloguing like the route, a refusal logged
   panel through a `hub:website-search` window event.
 - Gate: the Cataloguing app, read fresh from the database.
 
+## 📸 A sale → Pull photos (photos out of Business Central, 2026-11-18)
+
+A **📸 Pull photos** button at the top of the sale page (beside BC Match) copies lots' photos out of BC
+onto the Hub lot with the same barcode — for **this sale or ALL sales** (the pop-up's first choice). The same
+pop-up opens from **Photography → 📸 Pull photos from BC** (header, admins only), where it is always all sales.
+Code: `lib/actions/bc-photo-pull.ts`, pop-up `cataloguing/auctions/[id]/bc-photo-pull-modal.tsx`.
+
+- **Batched:** `bcPhotoPlan` lists the lots to check (barcode, no photos of their own — one raw query), then
+  `bcPhotoBatch` takes 12 lots per call (3 when copying) with **three BC requests per batch** — barcode on
+  Receipt_Lines_Excel, UniqueID on receiptLines, SystemId on relatedMedia (`bcGetAnyOf`). ⚠⚠ **BC only takes
+  an "or" between values of the SAME field** — `(a eq 1 and b eq 2) or (…)` answers "The OData filter
+  expression is not supported" (the first version did that and every batch failed). If BC refuses even a
+  one-field "or", it falls back to one request per lot. ⚠ Keep batches small: the "or" filters go in the URL.
+  The same error three batches running stops the run by itself — compared WITHOUT BC's CorrelationId, which
+  differs on every answer. All sales shows a per-sale table.
+
+- **Where BC keeps them** (BC's own AL source): "Advanced Media" (table 80433 `EVO_MED_Entry`), files in Azure
+  Blob Storage, each tied to its receipt line (table 75002) by the line's SystemId. Read through
+  `api/evo/base/v1.0 relatedMedia` (page 75612, read-only), whose `publicMediaPath` is the blob address with
+  BC's storage access key added. ⚠ If BC's container has no access key, the download is refused — the pop-up
+  says so; that is a BC/IT setting, not a Hub fix.
+- **Matching is by BARCODE**, like every BC↔Hub join: lot barcode → `Receipt_Lines_Excel.PTE_InternalBarcode`
+  → the EvoMobile `receiptLines` API (systemId) → `relatedMedia` (tableNo 75002, relatedSystemId). A barcode
+  BC has on two lines is refused, never guessed.
+- **READ ONLY on BC**, in `BC_ENVIRONMENT`, with the pressing person's own BC sign-in. **Hub admins only**
+  (role read fresh, never while viewing as someone else); the button isn't shown to anyone else.
+- ⚠ **Only lots with NO photos of their own are filled.** A lot with any Hub photo is left alone, so the same
+  pictures never arrive twice from two places. Copies are stored as `lot-photos/<sale>/<lot>/bc-<BC photo
+  id>.<ext>` — that name is how "already copied" is told apart from the Hub's own photos (`isBcCopy`), so
+  pressing it again only adds what's missing. Don't rename them.
+- Two steps, a moving count and Stop (rule 7b): **Find** is read-only; **Copy** finds the lots' photos AGAIN
+  on the server before copying, so nothing comes from a stale list. A download is kept only
+  if its first bytes are a JPEG, PNG, WebP or GIF (so a storage error page is never saved as a photo), 25 MB
+  at most. Every photo added is logged (`logLotPhoto`, source `bc_photo_pull`).
+
 ## Hardcoded Constants
 
 | Constant | Value | Location |
@@ -3657,6 +3692,71 @@ template to fit on the sheets — we print around 600 per sale"*.
   for the new tab. Nothing touches Business Central.
 - Listed in `lib/data-map.ts` (Facilities) and in `lib/help-map.ts` as "Barcode Labels" (not the word
   "labels" alone — Packing owns it). ⚠ `/tools/barcode-sorter` is an unrelated old stub.
+
+## 🚚 Collection bookings (2026-11-23)
+
+Admin & Operations → **Collection bookings** (`/tools/collection-bookings`, app key
+`COLLECTION_BOOKINGS`, its own grant — admins always have it). The trips out to collect a vendor's
+items: the vendor's details, address and postcode, the date(s) and time, what's being collected and how
+much, special requirements, photos of the collection, the driver(s) and van, and the hotel stay(s) when
+it's an overnight — with the booking confirmation number and file.
+- **Picking up:** a booking starts **New** with nobody on it. "✋ Pick this up" puts your name on it
+  (New → Being arranged); "Take it over" moves it from someone else; "Put it back" leaves it for anyone.
+  Marking it Booked or Being arranged with nobody on it puts the presser's name on it, so it's never
+  anonymous. Statuses: NEW · IN_HAND · BOOKED · COLLECTED · CANCELLED (`lib/collection-bookings-shared.ts`).
+- **Every change is logged** in `CollectionBookingEvent` with who and when — each amended field with
+  its before → after (`describeChanges`), status changes, pick-ups, hotel and photo changes, and notes.
+  Notes are a record: never edited or deleted. The page sends **only the fields that changed** and keeps
+  what's typed on top of the saved booking (`edits`), so two people on one booking don't undo each
+  other and a reload (a hotel added sets `needsHotel`) never wipes or fakes an unsaved change.
+- **Van** = Facilities → Vans' `Van` row, a plain id (no foreign key). **Drivers** are free-text names
+  (suggested from Hub staff, van sign-outs and past collections) — drivers need no Hub account.
+- The page warns when a driver or van is on another open booking on overlapping days, when an open
+  booking's date has passed, and lists what's still to sort (no date, address, phone, driver, van,
+  hotel, confirmation number, hotel dates). Marking Booked with things still to sort asks first.
+- **Nearby** (2026-11-23 — so if someone cancels, a job nearby can take the slot, and nearby jobs can
+  share a trip): open collections within `NEARBY_MILES` (30) of each other are marked on the list
+  ("📍 Nearby: CB-0007 12 mi") and listed on the booking with the miles and how the dates line up.
+  Cancelled bookings show the open jobs near them. **📍 Show nearby collections** on a booking turns the
+  list into that booking plus the open jobs within 30 miles, nearest first, each badged "8 mi away"
+  (under xl the booking closes so the list can show; ✕ Show all bookings goes back). Miles are STRAIGHT LINE between postcodes
+  (`milesBetween`, haversine) and the page says so — road distance would need a routing service.
+- ⚠ **postcodes.io** places the postcode (`locatePostcode` / `geoFor` in lib/collection-bookings.ts) —
+  chosen over a bundled postcode-district table on 2026-11-23 for street-level accuracy. ONLY the
+  postcode is sent, from the server, when a booking is made or its postcode changes; the full postcode
+  first, then its district (LS1) if postcodes.io doesn't know it. Kept on the booking as `lat`, `lng`,
+  `area`, `geoPostcode`. `geoPostcode` = the postcode those were looked up for: equal with no `lat` =
+  not found (the page says check it); different/empty = couldn't ask (postcodes.io down) — the GET
+  retries up to 10 per load. A failed lookup never stops a save. Listed as a processor on Admin →
+  Data & Compliance and the DPIA page. (Ideal Postcodes, who run postcodes.io, already do the paid
+  address lookup — that's per-credit, so it isn't used for this.)
+- ⚠ **Files** (`collection-bookings/<booking id>/…` in R2 — vendors' items at their homes, staff hotel
+  bookings) are served ONLY by `/api/collection-bookings/file` (app-gated, 15-minute signed link, exact
+  key shape `COLLECTION_FILE_RE`). `/api/catalogue/photo-proxy`, `/api/catalogue/signed-url` and
+  `/api/image` refuse that prefix, like refund photos. iPhone HEIC is stored as JPEG on upload.
+- **🖨 Print / PDF** (`/api/collection-bookings/pdf?id=`, `lib/collection-booking-pdf.ts`, pdf-lib) — the
+  booking as an A4 sheet with the Vectis logo header and company footer (same as the Goods In receipt):
+  when/where/status box, special requirements in an amber box, vendor, the collection, drivers and van,
+  every hotel stay (with confirmation, cost and payment), nearby open collections, the notes (oldest
+  first, last 30), then the photos two across on their own pages (up to 12, made print-sized with sharp;
+  PDFs on the booking are counted, not drawn). It prints what's SAVED — the button warns if there are
+  unsaved changes. "Printed <date> by <name>" in the header.
+- **From the CRM** (2026-11-24 — the CRM's own collections brought in): a CRM submission whose
+  Logistics is set to Collection, not arrived, not Declined/Completed/Arrived, and with no booking
+  (`CollectionBooking.submissionId`, plain id) is listed under the "From the CRM" filter and stat box
+  (`crmCollectionsToBook`). **＋ Make a booking** (`POST { fromSubmission }`, `bookingFromSubmission`)
+  copies the collection contact (else the customer's name), customer C-number, phone, email, address,
+  the postcode found in the address (`postcodeIn`, for the miles), and the items into "What's being
+  collected"; the CRM's collection notes become the first note. One booking per submission (409 after).
+  The booking says "Made from CRM submission ABCD1234" (link only for CRM users, `canCrm`), and the CRM
+  submission page's Logistics box shows its booking or "make one in Collection bookings" (only for
+  COLLECTION_BOOKINGS users; that query is caught so the CRM page opens before Run Migrations).
+  ⚠ Collection bookings users see these CRM collection details without the CRM app — the details a
+  collection needs, nothing else from the submission. Nothing is written back to the CRM.
+- Only an admin can **delete** a booking (it removes its files); everyone else Cancels, which keeps it.
+- Tables `CollectionBooking` / `CollectionHotel` / `CollectionBookingEvent` (migration
+  20261123120000_collection_bookings + the MIGRATIONS array — **needs Run Migrations**). Listed in
+  `lib/data-map.ts` and `lib/help-map.ts`. Nothing touches Business Central.
 
 ## 🔐 Two-factor login (2026-10-22)
 

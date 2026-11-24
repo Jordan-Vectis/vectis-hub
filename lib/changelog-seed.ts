@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-11-13, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-11-18, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"5ce5ac9bc07b646fa41b4e6903c0122ecabbcb1b","author":"jack-vectis","date":"2026-11-18T09:41:12Z","subject":"Push to BC: update lots already in BC and choose the sale"},
   {"sha":"f996a3223a18da913329f4905331663e70a8df20","author":"jack-vectis","date":"2026-11-13T12:10:09Z","subject":"refund fix"},
   {"sha":"3b07884be13f7a7d466ca09a577acef14e13c2a8","author":"jack-vectis","date":"2026-11-06T11:58:17Z","subject":"Refunds: a new Microsoft Form feeds the Hub directly through Power Automate"},
   {"sha":"10f17f9c5b8d3efbb585e4a5d0cda8a9b970adb0","author":"jack-vectis","date":"2026-11-16T14:56:09Z","subject":"End of Day download always uses the sheet as it is now"},

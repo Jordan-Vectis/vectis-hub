@@ -25,6 +25,7 @@ import BcCheckTab from "./bc-check-tab"
 import CatchupSheetTab from "./catchup-sheet-tab"
 import BcFillTab from "./bc-fill-tab"
 import BcSaleLotsTest from "./bc-sale-lots-test"
+import BcPhotoPullModal from "./bc-photo-pull-modal"
 import * as XLSX from "xlsx"
 import JSZip from "jszip"
 
@@ -731,6 +732,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
   const [pubPending, startPub]    = useTransition()
   const [showDupeChecker,  setShowDupeChecker]  = useState(false)
   const [showBCMatch,      setShowBCMatch]      = useState(false)
+  const [showPhotoPull,    setShowPhotoPull]    = useState(false)
   const [transferLotIds,   setTransferLotIds]   = useState<string[]>([])
 
   // Count duplicate unique ID groups for badge
@@ -825,6 +827,14 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
             className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-blue-50 dark:bg-blue-900/20 border border-blue-400 dark:border-blue-700/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40">
             🔗 BC Match
           </button>
+          {/* 📸 Pull photos — copies BC's photos onto lots with none (lib/actions/bc-photo-pull.ts). Admins only:
+              it reads BC with the person's own BC sign-in, and the server checks the role again. */}
+          {userRole === "ADMIN" && (
+            <button onClick={() => setShowPhotoPull(true)}
+              className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-sky-50 dark:bg-sky-900/20 border border-sky-400 dark:border-sky-700/40 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40">
+              📸 Pull photos
+            </button>
+          )}
           <button onClick={() => {
             const data = lots.map(l => ({
               Folder:               l.receiptUniqueId || l.barcode || "",
@@ -1064,6 +1074,15 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
           lots={lots}
           auctionId={auction.id}
           onClose={() => setShowBCMatch(false)}
+        />
+      )}
+
+      {showPhotoPull && (
+        <BcPhotoPullModal
+          auctionId={auction.id}
+          saleCode={auction.code}
+          onClose={() => setShowPhotoPull(false)}
+          onCopied={() => router.refresh()}
         />
       )}
 

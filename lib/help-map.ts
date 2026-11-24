@@ -111,6 +111,11 @@ export const DESTINATIONS: Destination[] = [
     also: ["send to business central", "export to bc"],
   },
   {
+    name: "A sale → 📸 Pull photos", href: "/tools/cataloguing/auctions", app: "CATALOGUING", section: "AUCTION_MANAGER", adminOnly: true,
+    what: "The button at the top of a sale page (or Photography → Pull photos from BC for every sale): finds lots' photos in Business Central by barcode and copies them onto lots that have no photos in the Hub yet.",
+    also: ["photos from bc", "get photos out of business central", "copy bc photos"],
+  },
+  {
     name: "A sale → BC Match & Import", href: "/tools/cataloguing/auctions", app: "CATALOGUING", section: "AUCTION_MANAGER",
     what: "Upload BC's Lines export and it writes BC's own unique IDs onto our lots, matched by barcode. This is the only thing that fills in a lot's unique ID.",
     also: ["unique ids blank", "match bc", "import ids"],
@@ -310,6 +315,21 @@ export const DESTINATIONS: Destination[] = [
       "lot id labels", "lot labels", "lot barcode labels", "lot id barcodes", "sale barcode labels", "sale barcodes",
       "avery labels", "avery sheets", "barcode mail merge", "lot stickers", "print lot ids",
       "lot labels not lining up", "move the lot labels", "line up the lot labels",
+    ],
+  },
+  // Collection bookings (2026-11-23) — trips out to collect a vendor's items. Not "collection" alone:
+  // Paid, not collected and Packing both answer questions about buyers collecting.
+  {
+    ask: "Where do I book a collection from a vendor?",
+    name: "Collection bookings", href: "/tools/collection-bookings", app: "COLLECTION_BOOKINGS",
+    what: "🚚 Collection bookings (Admin & Operations): every trip out to collect a vendor's items. Make a booking with the vendor's details, the address and postcode, the date(s) and time, what's being collected and any special requirements, and add photos of the collection. Pick a booking up to take it on (or take it over from someone), put the drivers and the van on it, and when it's an overnight add the hotel stay — check-in and out, rooms, who's staying, the confirmation number, cost and the booking confirmation file. Every change and note is kept on its history with who made it. It warns when a driver or van is already on another collection the same day, marks collections within 30 miles of each other with the miles between them (so a cancelled slot can go to a job nearby, or nearby jobs share a trip), lists what's still to sort, copies everything the driver needs in one tap, and prints the whole booking (hotel stay, notes and photos included) as a Vectis-headed PDF with 🖨 Print / PDF. 📍 Show nearby collections lists the open jobs within 30 miles of a booking, nearest first. The From the CRM filter lists CRM submissions set to Collection that have no booking yet — ＋ Make a booking copies the contact, address, items and collection notes across. Mark it Booked, Collected or Cancelled.",
+    also: [
+      "collection booking", "collection bookings", "book a collection", "vendor collection", "collect from a vendor",
+      "collection trip", "assign a driver", "which driver", "driver for a collection", "book a hotel", "hotel booking",
+      "hotel confirmation", "overnight collection", "collection photos", "special requirements", "pick up a collection",
+      "collections nearby", "nearby collection", "how far apart", "miles between collections", "collection cancelled",
+      "print a collection", "collection pdf", "collection sheet", "driver sheet", "print the hotel booking",
+      "crm collection", "collections from the crm", "book a crm collection", "submission collection",
     ],
   },
   {
