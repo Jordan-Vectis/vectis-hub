@@ -1534,7 +1534,10 @@ the Hub top bar is there), gated on Cataloguing like the route, a refusal logged
 
 A **📸 Pull photos** button at the top of the sale page (beside BC Match) copies lots' photos out of BC
 onto the Hub lot with the same barcode — for **this sale or ALL sales** (the pop-up's first choice). The same
-pop-up opens from **Photography → 📸 Pull photos from BC** (header, admins only), where it is always all sales.
+pop-up opens from **Photography → 📸 Pull photos from BC** (header, admins only), where it checks **only the sales
+in that page's list** (2026-11-24): the active sales as the search and type filter show them when the button is
+pressed, never the Completed ones. The pop-up names them, and `bcPhotoPlan` takes their ids (at most 500). "All
+sales" stays on the sale page's pop-up only.
 Code: `lib/actions/bc-photo-pull.ts`, pop-up `cataloguing/auctions/[id]/bc-photo-pull-modal.tsx`.
 
 - **Batched:** `bcPhotoPlan` lists the lots to check (barcode, no photos of their own — one raw query), then
