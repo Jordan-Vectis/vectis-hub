@@ -5,8 +5,8 @@ import { bcPhotoBatch, bcPhotoPlan, type BcPhotoLot, type BcPhotoResult } from "
 
 // 📸 Pull photos (top of a sale page, and the Photography page's header — admins only, 2026-11-18). Copies photos
 // out of Business Central onto the Hub lots with the same barcode, for lots that have no photos in the Hub yet —
-// this sale, or EVERY sale at once. Opened without a sale (Photography), it is every sale. The rules are in
-// lib/actions/bc-photo-pull.ts.
+// this sale, or EVERY sale at once. Opened from Photography it is handed the sales in that page's list and checks
+// only those (2026-11-24). The rules are in lib/actions/bc-photo-pull.ts.
 //
 // Two steps, each driven from here in batches with a count that moves and a Stop (RULES.md 7b):
 //   1. "Find photos in BC" — READ ONLY. Says what BC has, lot by lot (one sale) or sale by sale (every sale).
@@ -20,7 +20,8 @@ const FIND_BATCH = 12
 const COPY_BATCH = 3
 
 type Phase = "idle" | "loading" | "finding" | "review" | "copying" | "done"
-type Scope = "sale" | "all"
+/** sale = the sale it was opened from · listed = the sales the Photography list shows · all = every sale */
+type Scope = "sale" | "listed" | "all"
 type Checked = { lot: BcPhotoLot; r: BcPhotoResult }
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`
@@ -35,16 +36,20 @@ function failedBatch(lots: BcPhotoLot[], error: string): Checked[] {
   return lots.map(lot => ({ lot, r: { lotId: lot.id, outcome: "failed", uniqueId: "", receiptNo: "", photos: 0, notCopied: 0, added: 0, problems: [], detail: error } }))
 }
 
-export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopied }: {
-  /** The sale it was opened from; absent (the Photography page) = every sale, with no choice to make. */
+export default function BcPhotoPullModal({ auctionId, saleCode, sales, onClose, onCopied }: {
+  /** The sale it was opened from (the sale page): "this sale" or "all sales" to choose from. */
   auctionId?: string
   saleCode?: string
+  /** The sales listed on the page it was opened from (Photography) — only these are checked, no choice to make. */
+  sales?: { id: string; code: string }[]
   onClose: () => void
   /** Called after any photo was copied, so the page behind can show them. */
   onCopied: () => void
 }) {
-  const [scope, setScope] = useState<Scope>(auctionId ? "sale" : "all")
-  const [planScope, setPlanScope] = useState<Scope>(auctionId ? "sale" : "all")
+  const first: Scope = auctionId ? "sale" : sales ? "listed" : "all"
+  const [scope, setScope] = useState<Scope>(first)
+  const [planScope, setPlanScope] = useState<Scope>(first)
+  const listedCodes = (sales ?? []).map(s => s.code).join(", ")
   const backTo = auctionId ? `/tools/cataloguing/auctions/${auctionId}` : "/tools/cataloguing/photography"
   const [phase, setPhase] = useState<Phase>("idle")
   const [environment, setEnvironment] = useState<string | null>(null)
@@ -95,7 +100,8 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
   async function find() {
     setPhase("loading"); setError(null); setNeedsSignIn(false); setNotice(null); setChecked([]); setCopied([]); setSummary(null); setProgress(null)
     setPlanScope(scope)
-    const plan = await bcPhotoPlan(scope === "sale" && auctionId ? auctionId : null).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
+    const which = scope === "sale" && auctionId ? auctionId : scope === "listed" ? (sales ?? []).map(s => s.id) : null
+    const plan = await bcPhotoPlan(which).catch(e => ({ ok: false as const, error: String(e?.message ?? e) }))
     if (!plan.ok) {
       if (plan.error === "NO_BC_SIGN_IN") setNeedsSignIn(true)
       else setError(plan.error)
@@ -164,6 +170,22 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
                     <span><b>All sales</b> — every lot in the Hub without photos</span>
                   </label>
                 </fieldset>
+              ) : sales ? (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3 space-y-1">
+                  {sales.length ? (
+                    <>
+                      <p>
+                        <b>The {plural(sales.length, "sale", "sales")} in the list</b> — every lot in {sales.length === 1 ? "it" : "them"} without photos:{" "}
+                        <span className="font-mono">{listedCodes}</span>
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Completed sales, and any the search or type filter is hiding, are left out. To do one sale, use Pull photos at the top of that sale&apos;s page.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-amber-800 dark:text-amber-200">No sales are in the list — clear the search or type filter, then open this again.</p>
+                  )}
+                </div>
               ) : (
                 <p className="rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3">
                   <b>All sales</b> — every lot in the Hub without photos. To do one sale, use Pull photos at the top of that sale&apos;s page.
@@ -175,12 +197,15 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
                 <li>It only <b>reads</b> from BC — nothing in BC changes. Each photo added is noted on the lot&apos;s change log.</li>
                 <li>Pressing it again only adds photos that weren&apos;t copied before.</li>
               </ul>
-              <button type="button" className={btnGo} onClick={find}>Find photos in BC</button>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Finding copies nothing — it shows what BC has first.{scope === "all" ? " Every sale takes a few minutes; keep this window open." : ""}</p>
+              <button type="button" className={btnGo} onClick={find} disabled={scope === "listed" && !sales?.length}>Find photos in BC</button>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Finding copies nothing — it shows what BC has first.
+                {scope === "all" ? " Every sale takes a few minutes; keep this window open." : scope === "listed" && (sales?.length ?? 0) > 1 ? " Several sales take a few minutes; keep this window open." : ""}
+              </p>
             </>
           )}
 
-          {phase === "loading" && <p role="status">Finding {planScope === "all" ? "every sale's" : `${saleCode}'s`} lots without photos…</p>}
+          {phase === "loading" && <p role="status">Finding {planScope === "all" ? "every sale's" : planScope === "listed" ? "the listed sales'" : `${saleCode}'s`} lots without photos…</p>}
 
           {(phase === "finding" || phase === "copying") && progress && (
             <div className="flex flex-wrap items-center gap-3" role="status" aria-live="polite">
@@ -210,7 +235,7 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
             <>
               <div className="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-4 py-3 space-y-1">
                 <p>
-                  {planScope === "all" ? "Every sale" : <b className="font-mono">{saleCode}</b>}: checked <b>{checked.length.toLocaleString("en-GB")}</b>
+                  {planScope === "all" ? "Every sale" : planScope === "listed" ? `The ${plural(sales?.length ?? 0, "listed sale", "listed sales")}` : <b className="font-mono">{saleCode}</b>}: checked <b>{checked.length.toLocaleString("en-GB")}</b>
                   {total !== checked.length ? <> of {total.toLocaleString("en-GB")}</> : null} lots without photos
                   {environment ? <> in BC&apos;s <b className="font-mono">{environment}</b> environment</> : null} —{" "}
                   <b>{plural(found.length, "lot has", "lots have")} photos in BC</b>
@@ -237,7 +262,7 @@ export default function BcPhotoPullModal({ auctionId, saleCode, onClose, onCopie
                   </div>
                 )}
               </div>
-              {planScope === "all" ? <BySale rows={checked} /> : <ByLot rows={checked} />}
+              {planScope === "sale" ? <ByLot rows={checked} /> : <BySale rows={checked} />}
             </>
           )}
 

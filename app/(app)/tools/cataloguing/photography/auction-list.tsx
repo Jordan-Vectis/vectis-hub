@@ -235,7 +235,9 @@ function sortRows(rows: PhotographyAuctionRow[], sort: Sort): PhotographyAuction
 
 export default function PhotographyAuctionList({ active, completed, canPullFromBc = false }: Props) {
   const router = useRouter()
-  const [showPull, setShowPull] = useState(false)
+  // 📸 Pull photos checks only the sales in the list as it stands when the button is pressed (2026-11-24):
+  // the active sales after the search and type filter — never the Completed ones, even when they're open.
+  const [pullSales, setPullSales] = useState<{ id: string; code: string }[] | null>(null)
   const [search, setSearch]   = useState("")
   const [type, setType]       = useState("")
   const [showDone, setShowDone] = useState(false)
@@ -293,7 +295,7 @@ export default function PhotographyAuctionList({ active, completed, canPullFromB
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {canPullFromBc && (
-            <button type="button" onClick={() => setShowPull(true)}
+            <button type="button" onClick={() => setPullSales(shownActive.map(a => ({ id: a.id, code: a.code })))}
               className="text-sm font-semibold px-3.5 py-2 rounded-lg border border-sky-400 dark:border-sky-600/70 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors whitespace-nowrap">
               📸 Pull photos from BC
             </button>
@@ -397,8 +399,8 @@ export default function PhotographyAuctionList({ active, completed, canPullFromB
         </div>
       )}
 
-      {showPull && (
-        <BcPhotoPullModal onClose={() => setShowPull(false)} onCopied={() => router.refresh()} />
+      {pullSales && (
+        <BcPhotoPullModal sales={pullSales} onClose={() => setPullSales(null)} onCopied={() => router.refresh()} />
       )}
     </div>
   )

@@ -9,7 +9,8 @@ import { logLotPhoto } from "@/lib/lot-log"
 
 // 📸 Pull photos (top of a sale page, admins only — 2026-11-18). Copies lots' photos out of Business Central onto
 // the Hub lot with the same barcode, for lots that have NO photos in the Hub yet — for one sale, or for EVERY sale
-// at once (2026-11-18, the same day: "upload them in mass … just checks all sales").
+// at once (2026-11-18, the same day: "upload them in mass … just checks all sales"). From the Photography page it
+// checks only the sales in that page's list (2026-11-24).
 //
 // Read off BC's own AL source (IT Tools → BC Source):
 //   • BC keeps photos in "Advanced Media" (table 80433 EVO_MED_Entry), the files in Azure Blob Storage, each
@@ -157,17 +158,32 @@ export type BcPhotoPlan = {
 }
 
 const BC_COPY_RE = "/bc-[0-9a-f-]{36}[.][a-z]+$"
+/** Most sales one plan may name — the Photography list is a few dozen at most. */
+const SALES_MAX = 500
 
-/** The lots to check — `auctionId` for one sale, null for EVERY sale. No BC call. */
-export async function bcPhotoPlan(auctionId: string | null): Promise<Result<BcPhotoPlan>> {
+/**
+ * The lots to check, with no BC call:
+ *   • a sale's id — that one sale (the sale page's "This sale");
+ *   • a list of sale ids — just those sales (the Photography page: the sales in its list, 2026-11-24 — "it only
+ *     needs to look for photos of the sales listed in the list behind it");
+ *   • null — EVERY sale (the sale page's "All sales").
+ */
+export async function bcPhotoPlan(scope: string | string[] | null): Promise<Result<BcPhotoPlan>> {
   try {
     await checkAdmin()
-    if (auctionId !== null && typeof auctionId !== "string") return { ok: false, error: "Choose a sale, or every sale." }
-    if (auctionId) {
-      const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { id: true } })
+    let onSale = Prisma.empty
+    if (Array.isArray(scope)) {
+      const ids = [...new Set(scope.filter((x): x is string => typeof x === "string" && !!x))]
+      if (!ids.length) return { ok: false, error: "No sales are listed — clear the search or type filter, then try again." }
+      if (ids.length > SALES_MAX) return { ok: false, error: `At most ${SALES_MAX} sales at a time.` }
+      onSale = Prisma.sql`AND l."auctionId" = ANY(${ids}::text[])`
+    } else if (typeof scope === "string" && scope) {
+      const auction = await prisma.catalogueAuction.findUnique({ where: { id: scope }, select: { id: true } })
       if (!auction) return { ok: false, error: "That sale isn't in the Hub any more." }
+      onSale = Prisma.sql`AND l."auctionId" = ${scope}`
+    } else if (scope !== null) {
+      return { ok: false, error: "Choose a sale, or every sale." }
     }
-    const onSale = auctionId ? Prisma.sql`AND l."auctionId" = ${auctionId}` : Prisma.empty
     // "Own" photos = every photo that isn't one this tool copied from BC.
     const rows = await prisma.$queryRaw<{ id: string; auctionId: string; code: string; barcode: string | null; title: string; receipt: string | null; own: bigint }[]>`
       SELECT l.id, l."auctionId", a.code, l.barcode, l.title, l.receipt,
