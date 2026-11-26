@@ -39,6 +39,8 @@ type Result = {
   keptWhole?: boolean
   /** Lot only: the crop was absurdly small and was thrown away. */
   cropRejected?: boolean
+  /** Lot only: not shot on a plain sweep, so there was nothing to crop to and the whole photo was kept. */
+  offSweep?: boolean
   rotateDeg?: number
 }
 
@@ -381,7 +383,7 @@ export default function PhotoPrepPage() {
               brightened: !!res.brightened, backdropLuma: res.backdropLuma,
               kind: res.kind, barcode: res.barcode, verified: res.verified,
               keptWhole: res.keptWhole, cropRejected: res.cropRejected,
-              rotateDeg: res.rotateDeg,
+              offSweep: res.offSweep, rotateDeg: res.rotateDeg,
             })
           } else {
             out.push({ name: src.name, status: "error", error: res.error })
@@ -764,6 +766,8 @@ export default function PhotoPrepPage() {
                       ? " · ⚠ couldn't re-read it after cropping, so the whole photo was kept"
                       : " · barcode still scans after cropping"}
                   </>
+                ) : previewInfo.offSweep ? (
+                  <>Not on a plain sweep (a close-up, a box, a bench or the floor) — <strong>left uncropped</strong>, as there&apos;s no backdrop to crop to.</>
                 ) : (
                   <>Treated as a <strong>lot photo</strong> — cropped to the product.</>
                 )}
@@ -812,7 +816,7 @@ export default function PhotoPrepPage() {
             <div className="text-sm space-y-2">
               <p className="text-green-700 dark:text-green-400 font-medium">
                 ✓ Done — {results.filter(r => r.status === "done").length.toLocaleString()} photo
-                {results.filter(r => r.status === "done").length === 1 ? "" : "s"} cropped
+                {results.filter(r => r.status === "done").length === 1 ? "" : "s"} processed
                 {fsa ? " and saved to your folder." : " and downloaded."}
               </p>
               {settings.brighten && (
@@ -845,6 +849,22 @@ export default function PhotoPrepPage() {
                   {results.filter(r => r.cropRejected).length === 1 ? " was" : "s were"} left uncropped —
                   the crop came out implausibly small, so the full photo was kept instead.
                 </p>
+              )}
+
+              {results.filter(r => r.offSweep).length > 0 && (
+                <details>
+                  <summary className="text-amber-600 dark:text-amber-500 cursor-pointer">
+                    {results.filter(r => r.offSweep).length.toLocaleString()} photo
+                    {results.filter(r => r.offSweep).length === 1 ? " wasn't" : "s weren't"} shot on a plain sweep
+                    (close-ups, boxes, a bench or the floor), so {results.filter(r => r.offSweep).length === 1 ? "it was" : "they were"} left
+                    uncropped — click to see which
+                  </summary>
+                  <ul className="mt-2 space-y-0.5 max-h-48 overflow-y-auto">
+                    {results.filter(r => r.offSweep).map(r => (
+                      <li key={r.name} className="text-xs font-mono text-gray-600 dark:text-gray-400">{r.name}</li>
+                    ))}
+                  </ul>
+                </details>
               )}
 
               {errors.length > 0 && (

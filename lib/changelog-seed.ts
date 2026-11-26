@@ -19,6 +19,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4b807952b6904fdc6d9ed835307c1993d29a665a","author":"jack-vectis","date":"2026-11-24T12:32:30Z","subject":"photo pull listed sales"},
   {"sha":"1e0136940e2513ed6c6201febcc632dab44986ee","author":"jack-vectis","date":"2026-11-24T09:09:44Z","subject":"Collection bookings: nearby, PDF and CRM collections"},
   {"sha":"72bd9b08c624f19fc756cfdd9a0cd6db97502290","author":"jack-vectis","date":"2026-11-23T16:43:43Z","subject":"Collection bookings: new Admin & Operations panel for collections from vendors"},
   {"sha":"2e48c36993b00e6a3bd61aa22cc6179f3c9f1ed5","author":"jack-vectis","date":"2026-11-19T14:43:01Z","subject":"refunds paid date filter"},

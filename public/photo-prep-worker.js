@@ -8,19 +8,22 @@
  *   3. Mark a pixel as product if it is far enough off that colour — OR if it
  *      sits on a crisp edge, which is the only clue white packaging on a white
  *      sweep gives. Pixels that are just the backdrop with the light taken away
- *      (a cast shadow: same colour, scaled down, soft-edged) are excluded even
- *      when they are the highest-contrast thing in the frame.
+ *      (a cast shadow: same colour, scaled down, soft-edged, smooth) are
+ *      excluded even when they are the highest-contrast thing in the frame.
  *   4. Group what's left into connected blobs, keep the biggest plus anything of
- *      comparable size, and take their combined bounds. Blobs (not raw min/max)
- *      mean a stray speck or a price tag at the edge can't blow the box out.
+ *      comparable size — and anything smaller that lies close to those, so a
+ *      lot's accessories stay in — and take their combined bounds. Blobs (not
+ *      raw min/max) mean a stray speck far out on the sweep can't blow the box out.
  *   5. Creep that box outwards, up to a limit, while pale-but-not-backdrop
  *      pixels keep running along its edge — this is the rest of the white lid.
  *   6. Scale the box back to full resolution and add an even margin.
+ *   A photo NOT shot on a plain sweep is left whole: there is no backdrop to
+ *   crop to (see offSweep below).
  *
  * CONFIDENCE. The same pass scores how much it trusts the result — how uniform
  * the border was, how much of the frame the product covers, and how many edges
- * the box runs off. The page sends anything low-confidence to Gemini for a
- * proper look and re-runs it with mode "box".
+ * the box runs off. Reported to the page; nothing acts on it since the Gemini
+ * second look was removed (29 July).
  *
  * BRIGHTEN. Exposure is measured over the PRODUCT pixels only. Measuring the
  * whole frame reads the backdrop instead — a dark item on a white sweep averages
@@ -28,7 +31,7 @@
  *
  * Message in:  { id, name, buffer, type, settings, forcedBox? }
  * Message out: { id, name, ok, buffer?, width?, height?, box?, confidence?,
- *                subjectLuma?, brightened?, error? }
+ *                subjectLuma?, brightened?, cropRejected?, offSweep?, error? }
  */
 
 const LR = 0.2126, LG = 0.7152, LB = 0.0722
@@ -61,6 +64,16 @@ const SHADOW_RESID    = 18   // max L1 away from a pure darkening of the backdro
 const SHADOW_MIN_K    = 0.28 // darker than this is an object, not a shadow
 const SHADOW_MAX_K    = 0.97 // above this it is effectively the backdrop itself
 const SHADOW_MAX_EDGE = 34   // soft-edged; a product edge is far crisper
+// ⚠ A shadow is also SMOOTH across its whole area, not just at its edge. Grey-
+// white FUR passes every other test — the colour of the sweep, a little darker,
+// no crisp outline at analysis size — and was being thrown away as shadow: a
+// white Jellycat rabbit lost both ears, 29% of the frame called "shadow". Its
+// texture gives it away. Measured on real batches, the 7x7 mean edge energy of a
+// real cast shadow sits with the sweep's own (median ~8 against the border's ~9),
+// while fur reads ~25 against a border of ~7. So a pixel only counts as shadow
+// when its neighbourhood is no busier than the sweep around the edge of the frame.
+const SHADOW_TEX_RADIUS = 3  // 7x7 neighbourhood
+const SHADOW_TEX_BASE   = 12 // the bar never drops below this on a very clean sweep
 
 // A silhouette counts as product even when its colour barely differs from the
 // backdrop. This is what keeps WHITE PACKAGING on a white sweep: the lit face
@@ -80,6 +93,11 @@ const GROW_MAX_FRAC = 0.18  // per side, as a share of the short edge
 // scattered pixels that happen to be off-backdrop. Counting them the same way
 // let the box wander out across the bench — measured, not theoretical.
 const GROW_MIN_RUN  = 0.25  // longest unbroken run, as a share of the box's own side
+
+// A blob smaller than the size bar still belongs to the lot when it lies this
+// close to it — see "SMALL IS NOT THE SAME AS STRAY" below.
+const NEAR_GAP_FRAC = 0.10    // gap to the kept box, as a share of the short edge
+const NEAR_MIN_AREA = 0.0008  // smaller than this (share of the frame) is a speck
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v))
 
@@ -150,6 +168,34 @@ function blur3(src, w, h) {
       const a = y > 0 ? t[p - w] : t[p]
       const b = y < h - 1 ? t[p + w] : t[p]
       out[p] = (a + t[p] + b) / 3
+    }
+  }
+  return out
+}
+
+/** Mean over a (2r+1)x(2r+1) square, clipped at the frame edge. Separable running sums. */
+function boxMean(src, w, h, r) {
+  const t = new Float32Array(w * h)
+  for (let y = 0; y < h; y++) {
+    let s = 0
+    const row = y * w
+    for (let x = 0; x <= Math.min(r, w - 1); x++) s += src[row + x]
+    for (let x = 0; x < w; x++) {
+      const a = Math.max(0, x - r), b = Math.min(w - 1, x + r)
+      t[row + x] = s / (b - a + 1)
+      if (x + r + 1 < w) s += src[row + x + r + 1]
+      if (x - r >= 0)    s -= src[row + x - r]
+    }
+  }
+  const out = new Float32Array(w * h)
+  for (let x = 0; x < w; x++) {
+    let s = 0
+    for (let y = 0; y <= Math.min(r, h - 1); y++) s += t[y * w + x]
+    for (let y = 0; y < h; y++) {
+      const a = Math.max(0, y - r), b = Math.min(h - 1, y + r)
+      out[y * w + x] = s / (b - a + 1)
+      if (y + r + 1 < h) s += t[(y + r + 1) * w + x]
+      if (y - r >= 0)    s -= t[(y - r) * w + x]
     }
   }
   return out
@@ -257,9 +303,9 @@ function detect(bmp, sensitivity) {
   const tol  = Math.max(12, base + mad * 1.5)
 
   // Is this a plain, near-white sweep at all? Drives the exposure decision,
-  // confidence, and whether the box is allowed to creep — a shot on a floor or
-  // bench is neither a white reference nor a clean crop, and is better sent to
-  // the AI pass than nudged about locally.
+  // confidence, whether the box is allowed to creep, and whether the photo is
+  // cropped at all — a shot on a floor or bench, or a close-up, is neither a
+  // white reference nor a clean crop, and is left whole (see offSweep).
   const backdropLuma = LR * mR + LG * mG + LB * mB
   const chroma = Math.max(mR, mG, mB) - Math.min(mR, mG, mB)
   const sweepLike = chroma <= MAX_SWEEP_CHROMA && backdropLuma >= MIN_SWEEP_LUMA
@@ -297,6 +343,19 @@ function detect(bmp, sensitivity) {
     percentile(borderEdge, 0.90) * 1.6 + 8,
   )
 
+  // How busy each pixel's neighbourhood is, and how busy the sweep itself is
+  // (median of the border ring, so a product crossing the ring can't raise it).
+  // Read only by the shadow test — see SHADOW_TEX_*.
+  const tex = boxMean(edge, aw, ah, SHADOW_TEX_RADIUS)
+  const borderTex = []
+  for (let y = 0; y < ah; y++) {
+    for (let x = 0; x < aw; x++) {
+      if (x >= band && x < aw - band && y >= band && y < ah - band) continue
+      borderTex.push(tex[y * aw + x])
+    }
+  }
+  const shadowTexMax = Math.max(SHADOW_TEX_BASE, percentile(borderTex, 0.5) * 2 + 6)
+
   // 3. Foreground mask.
   //    Three ways a pixel is judged, not one:
   //      - far enough off the backdrop in COLOUR (the original test), or
@@ -319,10 +378,11 @@ function detect(bmp, sensitivity) {
       const bc   = clusters[nearIdx]
       const bl   = clusterLum[nearIdx]
 
-      // Shadow: this backdrop, scaled down, with nothing crisp nearby.
+      // Shadow: this backdrop, scaled down, with nothing crisp nearby and no
+      // more texture than the sweep has (fur is the same colour, but busy).
       let isShadow = false
       const k = bl > 1 ? lum[p] / bl : 1
-      if (k >= SHADOW_MIN_K && k <= SHADOW_MAX_K && edge[p] < SHADOW_MAX_EDGE) {
+      if (k >= SHADOW_MIN_K && k <= SHADOW_MAX_K && edge[p] < SHADOW_MAX_EDGE && tex[p] <= shadowTexMax) {
         isShadow = Math.abs(r - bc.r * k) + Math.abs(g - bc.g * k) + Math.abs(b - bc.b * k) <= SHADOW_RESID
       }
 
@@ -413,6 +473,15 @@ function detect(bmp, sensitivity) {
     const w = c.x1 - c.x0 + 1, h = c.y1 - c.y0 + 1
     return (w >= aw * 0.85 && h <= ah * 0.02) || (h >= ah * 0.85 && w <= aw * 0.02)
   }
+  // A PIECE of a seam: a sliver lying along the frame's axis. A whole seam is
+  // dropped above, but a seam that comes out dashed is a row of these, and the
+  // "near the lot" rule below would happily chain along it to the frame edge —
+  // measured, it pulled the box out to the edge on hundreds of tidy shots.
+  const isSliver = (c) => {
+    const w = c.x1 - c.x0 + 1, h = c.y1 - c.y0 + 1
+    const thin = Math.max(3, Math.round(Math.min(aw, ah) * 0.015))
+    return (h <= thin && w >= h * 4) || (w <= thin && h >= w * 4)
+  }
 
   // Keep the biggest blob plus anything of comparable size — several items in
   // one lot must all survive — while dropping specks and small strays.
@@ -421,17 +490,41 @@ function detect(bmp, sensitivity) {
   // seam. Measuring it against the biggest survivor instead lowers the bar the
   // moment a seam is dropped, which lets in specks that were previously too
   // small and widens the box — the opposite of what dropping it was for.
+  //
+  // ⚠⚠ SMALL IS NOT THE SAME AS STRAY. On its own the size bar threw away the
+  // accessories of a lot: an Action Man's rifle, helmet and binoculars, the
+  // manual above the figure, the little biplane beside its boxes, the end column
+  // of a card of badges — each one a fraction of the main item's size, so each
+  // one cropped off, at full confidence. Measured on 4,415 real lot photos. So
+  // anything that is more than a speck AND lies close to what is already kept
+  // joins the lot too, repeatedly, so a row of small pieces chains on. A stray
+  // far out on the sweep is still dropped. Erring loose is the safe side: a
+  // little extra sweep is a nuisance, a missing accessory is a reshoot.
   let x0 = -1, x1 = -1, y0 = -1, y1 = -1
   if (comps.length > 0) {
     const biggest = comps.reduce((m, c) => (c.area > m.area ? c : m), comps[0])
     const keepFrom = Math.max(total * 0.0015, biggest.area * 0.12)
-    for (const c of comps) {
-      if (isSeam(c) || c.area < keepFrom) continue
-      if (x0 < 0) { x0 = c.x0; y0 = c.y0; x1 = c.x1; y1 = c.y1; continue }
+    const nearFrom = total * NEAR_MIN_AREA
+    const near     = Math.max(4, Math.round(Math.min(aw, ah) * NEAR_GAP_FRAC))
+    const kept     = new Uint8Array(comps.length)
+    const take = (c, k) => {
+      kept[k] = 1
+      if (x0 < 0) { x0 = c.x0; y0 = c.y0; x1 = c.x1; y1 = c.y1; return }
       if (c.x0 < x0) x0 = c.x0
       if (c.y0 < y0) y0 = c.y0
       if (c.x1 > x1) x1 = c.x1
       if (c.y1 > y1) y1 = c.y1
+    }
+    comps.forEach((c, k) => { if (!isSeam(c) && c.area >= keepFrom) take(c, k) })
+
+    for (let changed = x0 >= 0; changed; ) {
+      changed = false
+      comps.forEach((c, k) => {
+        if (kept[k] || isSeam(c) || isSliver(c) || c.area < nearFrom) return
+        const gapX = Math.max(0, c.x0 - x1, x0 - c.x1)
+        const gapY = Math.max(0, c.y0 - y1, y0 - c.y1)
+        if (Math.max(gapX, gapY) <= near) { take(c, k); changed = true }
+      })
     }
   }
 
@@ -445,8 +538,8 @@ function detect(bmp, sensitivity) {
   //    far — recovers the lid without letting a single noisy pixel drag the
   //    crop out. Shadows are excluded from `weak`, so this never grows onto one.
   //    Only on a sweep. On a bench or a floor the backdrop has texture of its
-  //    own for the creep to walk out across, and the shot is going to the AI
-  //    pass anyway — this step exists for pale product on a plain sweep.
+  //    own for the creep to walk out across, and the shot is left whole
+  //    anyway — this step exists for pale product on a plain sweep.
   let grew = 0
   if (found && sweepLike) {
     // Longest unbroken stretch of product down a column / along a row.
@@ -567,6 +660,22 @@ self.onmessage = async (e) => {
       cropRejected = true
     }
 
+    // ⚠⚠ Not shot on a plain sweep — a close-up of a signature, a box of teddies
+    // on the floor, a framed print — so there is no backdrop to crop TO, and the
+    // crop lands wherever the colour happens to change. Measured on 4,415 real
+    // lot photos: of the 62 such shots the crop trimmed by more than a tenth, not
+    // one was worth keeping — most cut into the lot (bears off the bottom of a box,
+    // the "SIGNED BY" line off a COA, a poster cut down to a strip), the rest only
+    // trimmed a frame's mount. These used to go on to
+    // Gemini for a second look; since the AI crop was removed (29 July) the
+    // unchecked local crop was being written out instead. Keep the whole frame.
+    let offSweep = false
+    if (!forcedBox && !cropRejected && !sweepLike) {
+      box = { x0: 0, y0: 0, x1: 1, y1: 1 }
+      confidence = 0
+      offSweep = true
+    }
+
     // ── Apply the margin, in pixels, equal on all sides ────────────────────
     const m = Math.max(0, Math.min(50, settings.marginPct)) / 100
     let left   = box.x0 * W
@@ -654,7 +763,7 @@ self.onmessage = async (e) => {
     // gets delivered to the newer request's handler.
     self.postMessage(
       { rid, id, name, ok: true, buffer: outBuf, width: sw, height: sh, box, confidence,
-        subjectLuma, backdropLuma, sweepLike, brightened, cropRejected, rotated: rot,
+        subjectLuma, backdropLuma, sweepLike, brightened, cropRejected, offSweep, rotated: rot,
         shadowFrac: d.shadowFrac, edgeOnlyFrac: d.edgeOnlyFrac, grew: d.grew },
       [outBuf],
     )
